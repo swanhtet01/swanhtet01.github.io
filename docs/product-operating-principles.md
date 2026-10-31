@@ -1,6 +1,6 @@
 # SuperMega product and operating principles
 
-Status: maintained decision guide, 28 September 2026. Current execution state and authority live in `../supergoal.md`; this document does not authorize spending or deployment.
+Status: maintained decision guide, 22 October 2026. Current execution state and authority live in `../supergoal.md`; this document does not authorize spending or deployment.
 
 ## Product promise
 
@@ -9,7 +9,7 @@ Help a business complete real work with fewer steps and reliable records. Sell t
 ## Design decisions
 
 - Use the established white, graphite and cobalt system. No public theme selector or promotional demo/trial detours.
-- Public pages explain Shop, Sites and Commerce with real product screenshots, concrete capabilities and one clear next action. Login stays easy to find.
+- During the Shop-only launch cycle, public pages explain only verified Shop capability with real product screenshots, concrete tasks and one clear next action. Parked products do not appear as current launch promises.
 - Screenshots must come from the implemented product. Illustrative data must be identified; never imply invented customers or sales are real.
 - Each working screen has a primary task. Put secondary controls in context and advanced controls behind disclosure. Preserve keyboard access, focus visibility, readable contrast and mobile touch targets.
 - Collect business facts, not implementation decisions. Preserve inputs after failures and distinguish a draft, a submitted request and a durable saved record.
@@ -48,4 +48,4 @@ For every proposed change, answer: What observed problem does it solve? What exi
 
 Local checks, CI, hosted acceptance and customer acceptance are different evidence levels. Public availability and marketing claims follow the weakest required level. Do not claim ISO certification, guaranteed universal latency, automatic settlement or a functioning workforce without the corresponding evidence.
 
-Founder acceptance requires private login, assigned workspaces, create/save/reload, access isolation and recovery. Commercial readiness additionally needs a clear offer, delivery scope, support owner, cost basis and an accepted customer outcome. Production release, spending and customer contact retain their explicit approval gates.
+Shop acceptance requires the agreed catalog-to-restore merchant journey, installed-device and peripheral evidence, and honest recovery boundaries. Commercial readiness additionally needs a clear offer, delivery scope, support owner, cost basis and an accepted customer outcome. Production release, spending and customer contact retain their explicit approval gates.

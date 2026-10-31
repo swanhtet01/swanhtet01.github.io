@@ -39,8 +39,8 @@ const REQUIRED_QUARANTINE_CHECKS = [
 ]
 const NEXT_ACTION_REQUIREMENTS = ['approve_runtime_role_provisioning', 'approve_first_named_owner_identity', 'approve_exact_production_release', 'approve_managed_activation_window']
 const NEXT_ACTION_DECISION_ID = 'managed-production-activation'
-const CURRENT_DATABASE_SCHEMA = 13
-const CURRENT_SECURITY_NEXT_ACTION = 'Obtain fresh schema v13, privilege/RLS and session/billing evidence for this candidate on an owner-approved isolated target; retain the prior security audit only as history.'
+const CURRENT_DATABASE_SCHEMA = 14
+const CURRENT_SECURITY_NEXT_ACTION = 'Obtain fresh schema v14, privilege/RLS, session/billing and Shop correction-consumption evidence for this candidate on an owner-approved isolated target; retain prior security audits only as history.'
 const REQUIRED_SOURCE_RECEIPT_COUNT = 10
 const REQUIRED_ACCEPTED_PILOT_RUNS = 20
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
@@ -48,7 +48,7 @@ const REQUIRED_PILOT_CALENDAR_DATES = 5
 export const STORAGE_PRIVACY_PROOF_CONTRACT = 'supermega.hosted-storage-privacy-proof.v1'
 export const MANAGED_PERSISTENCE_PROOF_CONTRACT = 'supermega.managed-persistence-proof.v1'
 export const SELF_SERVE_PILOT_PROOF_CONTRACT = 'supermega.self-serve-pilot-proof.v1'
-// The accepted v11 proof is historical evidence, never a current v13 activation gate.
+// The accepted v11 proof is historical evidence, never a current v14 activation gate.
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -97,7 +97,7 @@ function hostedGateReady(audit) {
 
 function persistenceGateEvidence(historicalComplete) {
   return historicalComplete
-    ? 'Historical seven-proof hosted audit is retained for its deleted branch; it does not bind current schema v13, billing, durable signup limits or this candidate.'
+    ? 'Historical seven-proof hosted audit is retained for its deleted branch; it does not bind current schema v14, billing, durable signup limits, Shop correction consumption or this candidate.'
     : 'Current managed persistence proof is absent.'
 }
 
@@ -198,7 +198,7 @@ export function buildManagedPilotReadiness(input = {}) {
   // calls, schema v11 observed, no secrets, no tenant rows, writes confined to fixtures, exactly
   // six proofs, the cross-actor collision surfaced as claim_code_conflict, and the branch deleted.
   // Retain that historical result without asserting the current production state or satisfying
-  // this candidate's v13 hosted, pilot or separate production-activation gates.
+  // this candidate's v14 hosted, pilot or separate production-activation gates.
   const selfServeProof = input.selfServePilotEvidence ?? null
   if (selfServeProof !== null) {
     const proofs = Array.isArray(selfServeProof.audit?.proofs) ? selfServeProof.audit.proofs : []
@@ -458,8 +458,8 @@ export function validateManagedPilotReadiness(value) {
   if (value.pilotMode !== PILOT_MODE) fail('managed_pilot_readiness_pilot_mode_invalid')
   const localDatabase = value.localDatabase
   if (!isRecord(localDatabase) || localDatabase.contract !== 'supermega.hq.database-rehearsal.v3'
-    || localDatabase.schemaVersion !== CURRENT_DATABASE_SCHEMA || localDatabase.schemaProfile !== 'v13-self-serve'
-    || localDatabase.migrationCount !== 23 || localDatabase.behaviorChecks !== 74
+    || localDatabase.schemaVersion !== CURRENT_DATABASE_SCHEMA || localDatabase.schemaProfile !== 'v14-shop-correction'
+    || localDatabase.migrationCount !== 24 || localDatabase.behaviorChecks !== 79
     || localDatabase.catalogChecksBefore !== 33 || localDatabase.catalogChecksAfter !== 33
     || !/^[0-9a-f]{40}$/.test(localDatabase.implementationCommit || '')
     || !/^[0-9a-f]{40}$/.test(localDatabase.implementationTree || '')

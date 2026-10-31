@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
+import { verifyPythonDependencyContract } from './verify_python_dependency_contract.mjs'
 
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const readFile = async (...args) => {
@@ -18,6 +19,10 @@ const workflow = await readFile(resolve(root, '.github/workflows/supermega-publi
 const ciWorkflow = await readFile(resolve(root, '.github/workflows/showroom-ci.yml'), 'utf8')
 const renderedJourneyVerifier = await readFile(resolve(root, 'tools/verify_app_entry_rendered.mjs'), 'utf8')
 const dependencyAuditWorkflow = await readFile(resolve(root, '.github/workflows/dependency-security.yml'), 'utf8')
+const pyproject = await readFile(resolve(root, 'pyproject.toml'), 'utf8')
+const uvLock = await readFile(resolve(root, 'uv.lock'), 'utf8')
+const requirements = await readFile(resolve(root, 'requirements.txt'), 'utf8')
+const requirementsTest = await readFile(resolve(root, 'requirements-test.txt'), 'utf8')
 const publicHealthWorkflow = await readFile(resolve(root, '.github/workflows/supermega-public-live-health.yml'), 'utf8')
 const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-deploy.yml'), 'utf8')
 const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mjs'), 'utf8')
@@ -47,6 +52,22 @@ const agentConnectorMap = previewServer.slice(
 )
 const failures = []
 const checks = []
+const pythonDependencyContract = verifyPythonDependencyContract({
+  pyproject,
+  uvLock,
+  requirements,
+  requirementsTest,
+  workflows: {
+    appCi: ciWorkflow,
+    security: dependencyAuditWorkflow,
+    coordinatedRelease: appWorkflow,
+    publicRelease: workflow,
+  },
+})
+requireContract(
+  'required Python workflows consume the frozen hashed dependency graph',
+  pythonDependencyContract.ok,
+)
 
 // Exact supported PR event shape has no path, branch, or draft exclusions.
 const allPullRequests = source => {
@@ -72,7 +93,7 @@ requireContract('push and PR CI cannot cancel each other and fork branches remai
 const budgetSqlStep = ciWorkflow.split('      - name: Verify durable signup budgets on disposable PostgreSQL\n')[1]?.split('      - name:')[0] || ''
 requireContract('app CI executes real disposable PostgreSQL signup budget tests',
   budgetSqlStep.includes("SUPERMEGA_TEST_DISPOSABLE_PG17: '1'")
-  && budgetSqlStep.includes('run: python -m unittest tests.test_self_serve_durable_budget -v')
+  && budgetSqlStep.includes('run: uv run --frozen --group test python -m unittest tests.test_self_serve_durable_budget -v')
   && !/^        (?:if|continue-on-error):/m.test(budgetSqlStep))
 const appCiName = "    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'Same-repository PR uses push checks' || 'SuperMega App CI' }}"
 const appCiCondition = "    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}"
@@ -93,7 +114,7 @@ requireContract('all dependency audit packages remain covered',
   ['platform\n            directory: .\n', 'app\n            directory: showroom\n', 'kernel\n            directory: kernel\n']
     .every(entry => dependencyAuditWorkflow.includes(`          - package: ${entry}`))
   && dependencyAuditWorkflow.includes('      fail-fast: false\n')
-  && dependencyAuditWorkflow.includes('run: pip-audit -r requirements-test.txt'))
+  && dependencyAuditWorkflow.includes('run: uv run --frozen --group test --group audit pip-audit --local --skip-editable'))
 
 for (const filter of ['paths', 'paths-ignore', 'branches', 'branches-ignore']) {
   requireContract(`all-PR guard rejects ${filter}`, !allPullRequests(ciWorkflow.replace('  workflow_dispatch:', `    ${filter}: [main]\n  workflow_dispatch:`)))
@@ -103,22 +124,33 @@ requireContract('all-PR guard rejects missing or duplicate trigger',
   && !allPullRequests(ciWorkflow.replace('  workflow_dispatch:', '  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n  workflow_dispatch:')))
 const aggregate = dependencyAuditWorkflow.split('  required-audits:\n')[1]
 const aggregateScript = aggregate?.match(/^        run: node -e "([^\n]+)"$/m)?.[1]
-requireContract('audit aggregate always requires both actual results',
+requireContract('audit aggregate always requires every actual result',
   Boolean(aggregateScript)
   && aggregate.includes('    name: Dependency Security Audit\n')
-  && aggregate.includes('    needs: [npm-audit, pip-audit]\n')
+  && aggregate.includes('    needs: [npm-audit, pip-audit, secret-diff]\n')
   && aggregate.includes('    if: ${{ always() }}\n')
   && aggregate.includes('      NPM_RESULT: ${{ needs.npm-audit.result }}\n')
   && aggregate.includes('      PIP_RESULT: ${{ needs.pip-audit.result }}\n')
+  && aggregate.includes('      SECRET_DIFF_RESULT: ${{ needs.secret-diff.result }}\n')
   && aggregate.includes('    timeout-minutes: 2\n')
   && !dependencyAuditWorkflow.includes('continue-on-error:')
   && !dependencyAuditWorkflow.includes('secrets.'))
 if (aggregateScript) {
   for (const npmResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
     for (const pipResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
-      const result = spawnSync(process.execPath, ['-e', aggregateScript], { env: { ...process.env, NPM_RESULT: npmResult, PIP_RESULT: pipResult }, timeout: 5000 })
-      requireContract(`audit aggregate truth table ${npmResult || 'missing'}/${pipResult || 'missing'}`,
-        result.status === (npmResult === 'success' && pipResult === 'success' ? 0 : 1))
+      for (const secretDiffResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
+        const result = spawnSync(process.execPath, ['-e', aggregateScript], {
+          env: {
+            ...process.env,
+            NPM_RESULT: npmResult,
+            PIP_RESULT: pipResult,
+            SECRET_DIFF_RESULT: secretDiffResult,
+          },
+          timeout: 5000,
+        })
+        requireContract(`audit aggregate truth table ${npmResult || 'missing'}/${pipResult || 'missing'}/${secretDiffResult || 'missing'}`,
+          result.status === (npmResult === 'success' && pipResult === 'success' && secretDiffResult === 'success' ? 0 : 1))
+      }
     }
   }
 }
@@ -375,7 +407,8 @@ try { appRuntimeEvidence = JSON.parse(appRuntimeBundle.stdout) } catch { /* Miss
 requireContract('actual app entrypoint imports from isolated source with pinned dependencies',
   appRuntimeBundle.status === 0 && appRuntimeEvidence?.ok === true
   && appRuntimeEvidence.evidence === 'isolated_source_cold_import'
-  && appRuntimeEvidence.requiredRoutes === 8 && appRuntimeEvidence.dependencyPins === 9
+  && appRuntimeEvidence.requiredRoutes === 8 && appRuntimeEvidence.dependencyPins === 10
+  && appRuntimeEvidence.correctionReceiptModule === true
   && appRuntimeEvidence.providerPackage === false && appRuntimeEvidence.hostedAcceptance === false)
 if (appRuntimeBundle.status !== 0) console.error('Isolated app runtime probe failed; run tools/test_app_runtime_bundle.py for details.')
 
@@ -433,11 +466,12 @@ requireContract('coordinated release avoids redundant local app install',
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
-  config.routes?.length === 4
+  config.routes?.length === 5
   && config.routes[0]?.src === '/(.*)' && config.routes[0]?.continue === true && !config.routes[0]?.dest
-  && config.routes[1]?.src === '/api/(.*)' && config.routes[1]?.dest === '/api/app.py'
-  && config.routes[2]?.handle === 'filesystem'
-  && config.routes[3]?.src === '/(.*)' && config.routes[3]?.dest === '/index.html')
+  && config.routes[1]?.src === '/api/shop/menu-import' && config.routes[1]?.dest === '/api/shop/menu-import.js'
+  && config.routes[2]?.src === '/api/(.*)' && config.routes[2]?.dest === '/api/app.py'
+  && config.routes[3]?.handle === 'filesystem'
+  && config.routes[4]?.src === '/(.*)' && config.routes[4]?.dest === '/index.html')
 // The app keeps a client's catalog, orders, and evidence in browser storage. It
 // shipped with no response headers at all while the kernel already had a full
 // set, so it was framable and ran under no content policy.
@@ -481,7 +515,17 @@ requireContract('app shell carries the same policy for hosts that cannot set hea
   && !appShellPolicy.includes('frame-ancestors'))
 requireContract('app shell carries no inline script the policy would refuse',
   ![...appShell.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].some((match) => match[1].trim().length))
-requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical Python and Shop menu API functions',
+  config.routes?.[1]?.dest === '/api/shop/menu-import.js'
+  && config.routes?.[2]?.dest === '/api/app.py'
+  && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py', 'api/shop/menu-import.js'])
+  && config.functions?.['api/app.py']?.maxDuration === 60
+  && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**'
+  && config.functions?.['api/shop/menu-import.js']?.maxDuration === 60
+  && generator.includes("'api/shop/menu-import.js': {")
+  && generator.includes("src: '/api/shop/menu-import'")
+  && generator.includes('maxDuration: 60')
+  && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('Python dependencies and entrypoint probe trigger app review',
@@ -577,7 +621,8 @@ requireContract('managed database audit uses the exact app runtime environment b
   && workflow.includes('python tools/validate_supermega_database_url.py')
   && workflow.includes('--env-key SUPERMEGA_DATABASE_URL')
   && workflow.includes('--storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL')
-  && workflow.includes('--schema-profile v13-self-serve')
+  && workflow.includes('--schema-profile v14-shop-correction')
+  && !workflow.includes('--schema-profile v13-self-serve')
   && workflow.includes('--ensure-schema')
   && workflow.includes('--require-ready')
   && workflow.includes('EXPECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}')
@@ -647,6 +692,8 @@ requireContract('production release requires an exact manual owner instruction b
   && workflow.indexOf('Require exact owner release instruction') < workflow.indexOf('Checkout the release commit')
   && workflow.indexOf('Require exact owner release instruction') < workflow.indexOf('Require production deploy credential')
   && !/^\s*push:/m.test(workflow))
+requireContract('production release checkout retains gallery capture-source history',
+  /Checkout the release commit[\s\S]*?fetch-depth:\s*0/.test(workflow))
 requireContract('deployment metadata uses the guarded runtime ref', (workflow.match(/githubCommitRef=\$\{\{ github\.ref_name \}\}/g) || []).length === 2 && !workflow.includes('githubCommitRef=main'))
 const coreWorkflowActions = `${workflow}\n${appWorkflow}\n${ciWorkflow}\n${publicHealthWorkflow}\n${kernelWorkflow}`
 requireContract('core actions are commit-pinned', !/uses:\s+[^\s#]+@v\d+/m.test(coreWorkflowActions) && /uses:\s+actions\/checkout@[0-9a-f]{40}/.test(workflow))
@@ -655,11 +702,13 @@ requireContract('core workflows use Node 24 action revisions',
   && (coreWorkflowActions.match(/actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/g) || []).length === 6
   && (coreWorkflowActions.match(/actions\/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97/g) || []).length === 3
   && !/(?:11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|a26af69be951a213d495a4c3e4e4022e16d87065)/.test(coreWorkflowActions))
-requireContract('coordinated release caches python verifier dependencies',
-  workflow.includes("cache: 'pip'")
-  && workflow.includes('cache-dependency-path: requirements-test.txt')
-  && workflow.indexOf("cache: 'pip'") < workflow.indexOf('python -m pip install --disable-pip-version-check -r requirements-test.txt'))
-requireContract('uv build tool is immutable', workflow.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9') && workflow.includes("version: '0.11.30'"))
+requireContract('coordinated release caches frozen python verifier dependencies',
+  workflow.includes('cache-dependency-glob: uv.lock')
+  && workflow.indexOf('cache-dependency-glob: uv.lock') < workflow.indexOf('uv sync --frozen --group test'))
+requireContract('uv build tool is immutable',
+  [workflow, appWorkflow, ciWorkflow, dependencyAuditWorkflow].every(source =>
+    source.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9')
+    && source.includes("version: '0.11.30'")))
 requireContract('stale Cloud Run release authority is retired', !existsSync(resolve(root, '.github/workflows/supermega-app-cloud-run.yml')))
 requireContract('orphan enterprise and free-mode gates are retired',
   !existsSync(resolve(root, '.github/workflows/supermega-enterprise-gate.yml'))

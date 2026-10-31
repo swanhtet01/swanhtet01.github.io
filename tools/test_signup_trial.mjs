@@ -309,12 +309,16 @@ const loginSource = readFileSync('showroom/src/core/ManagedLoginPage.tsx', 'utf8
 check(!shellSource.includes('href={assistedSetupHref}') && !shellSource.includes('>Setup help</a>'), 'desktop and mobile entry omit setup detours')
 check(!shellSource.includes('>Free trial</Link>'), 'assigned company portal does not advertise a trial')
 check(!loginSource.includes('to={signupPath}') && !loginSource.includes('Try the local demo'), 'managed login avoids local demo detours')
-check(loginSource.includes('href={managedAccountRequestUrl(productIntent)}>Contact support</a>'), 'managed login offers product-specific setup when self serve is unavailable')
+check(loginSource.includes('const accountRequestUrl = accountHubReturnPath')
+  && loginSource.includes('managedAccountRequestUrl(supportProductIntent)')
+  && loginSource.includes('managedAccountRequestUrl(accountProductIntent)'), 'managed login derives assisted setup from the bounded account context')
+check(loginSource.includes("href={accountRequestUrl}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>"), 'managed login offers product-specific setup when self serve is unavailable')
+check(loginSource.includes("publicPortalEntry && shopAccessIntent ? 'For existing assigned pilot accounts. Native Shop is installed separately during assisted setup.'"), 'public Shop login distinguishes assigned portal access from native installation')
 const unavailableLogin = loginSource.slice(loginSource.indexOf('aria-label="Login unavailable"'))
 check(unavailableLogin.includes('to="/?choose=1">Saved work on this device</Link>'), 'unavailable login preserves access to existing device work')
 check(!unavailableLogin.includes('to={signupPath}'), 'unavailable login does not duplicate sample access with a signup detour')
-check(unavailableLogin.includes('Contact support for account access. Your saved work is still available on this device.'), 'saved-work access keeps the device boundary visible')
-check(unavailableLogin.includes('href={managedAccountRequestUrl(productIntent)}'), 'assisted setup preserves product intent separately from samples')
+check(unavailableLogin.includes('Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.'), 'saved-work access keeps the pilot and device boundaries visible')
+check(unavailableLogin.includes('href={accountRequestUrl}'), 'assisted setup preserves the bounded account context separately from samples')
 
 const coreCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
 check(coreCss.includes('.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0;'), 'signup controls cannot overflow the mobile content width')
@@ -363,5 +367,5 @@ check(submission.includes('...identity,') && submission.includes('shopIndustryPa
 
 console.log(`signup trial contract: ${checks} checks passed`)
 
-check(unavailableLogin.includes('className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>'), 'unavailable login has product-aware setup as primary action')
+check(unavailableLogin.includes("{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>"), 'unavailable login labels Shop and retained product setup honestly')
 check(!unavailableLogin.includes('Try a sample'), 'unavailable login does not promise a removed sample chooser')

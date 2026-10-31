@@ -1,0 +1,3 @@
+#include "Generated.xcconfig"
+SHOP_DISPLAY_NAME=Shop
+SHOP_BUNDLE_NAME=supermega_shop

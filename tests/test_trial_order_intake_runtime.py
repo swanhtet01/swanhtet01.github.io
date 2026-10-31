@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from hashlib import sha256
 import unittest
 from uuid import uuid4
@@ -88,11 +89,26 @@ class FakeOrderIntakeProvider:
         )
 
 
+class PremiumTestStore(InMemoryTrialStore):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.premium_workspaces: set[str] = set()
+
+    def readiness(self, principal: TrialPrincipal | None):
+        readiness = super().readiness(principal)
+        workspace_id = principal.normalized().workspace_id if principal is not None else ""
+        return replace(
+            readiness,
+            premium_unlocked=workspace_id in self.premium_workspaces,
+        )
+
+
 class TrialOrderIntakeRuntimeTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.store = InMemoryTrialStore(reducer=MergeReducer())
+        self.store = PremiumTestStore(reducer=MergeReducer())
         self.human = TrialPrincipal("workspace-a", "actor-human", "human")
         self.agent = TrialPrincipal("workspace-a", "actor-agent", "agent")
+        self.store.premium_workspaces.add("workspace-a")
         for principal in (self.human, self.agent):
             self.store.provision_membership(
                 workspace_id=principal.workspace_id,
@@ -193,6 +209,56 @@ class TrialOrderIntakeRuntimeTests(unittest.TestCase):
             )
         self.assertEqual(unavailable.status_code, 503)
         self.assertEqual(unavailable.json()["detail"]["code"], "order_intake_provider_not_configured")
+
+    def test_paid_provider_requires_exact_active_workspace_entitlement(self) -> None:
+        provider = FakeOrderIntakeProvider()
+        self.store.premium_workspaces.clear()
+        with self._client(provider) as client:
+            absent = client.post(
+                "/api/trial/v1/commerce/order-intake/drafts",
+                headers={"x-test-session": "human"},
+                json={"source_label": "MSG-001", "message": MESSAGE},
+            )
+        self.assertEqual(absent.status_code, 403)
+        self.assertEqual(
+            absent.json()["detail"]["code"],
+            "trial_premium_entitlement_required",
+        )
+        self.assertEqual(provider.calls, [])
+
+        self.store.premium_workspaces.add("workspace-other")
+        with self._client(provider) as client:
+            wrong_workspace = client.post(
+                "/api/trial/v1/commerce/order-intake/drafts",
+                headers={"x-test-session": "human"},
+                json={"source_label": "MSG-001", "message": MESSAGE},
+            )
+        self.assertEqual(wrong_workspace.status_code, 403)
+        self.assertEqual(
+            wrong_workspace.json()["detail"]["code"],
+            "trial_premium_entitlement_required",
+        )
+        self.assertEqual(provider.calls, [])
+
+        self.store.premium_workspaces.add("workspace-a")
+        with self._client(provider) as client:
+            granted = client.post(
+                "/api/trial/v1/commerce/order-intake/drafts",
+                headers={"x-test-session": "human"},
+                json={"source_label": "MSG-001", "message": MESSAGE},
+            )
+        self.assertEqual(granted.status_code, 200)
+        self.assertEqual(len(provider.calls), 1)
+
+        self.store.premium_workspaces.remove("workspace-a")
+        with self._client(provider) as client:
+            revoked = client.post(
+                "/api/trial/v1/commerce/order-intake/drafts",
+                headers={"x-test-session": "human"},
+                json={"source_label": "MSG-001", "message": MESSAGE},
+            )
+        self.assertEqual(revoked.status_code, 403)
+        self.assertEqual(len(provider.calls), 1)
 
     def test_company_budget_denial_maps_to_retryable_http_429(self) -> None:
         provider = FakeOrderIntakeProvider("order_intake_company_budget_reached")

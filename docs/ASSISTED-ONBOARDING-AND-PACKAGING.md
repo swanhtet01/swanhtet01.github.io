@@ -1,6 +1,11 @@
 # Assisted onboarding and packaging
 
-18 September 2026. Proposed strategy and implementation queue, not public pricing or completed capability claims. Current primary task owns implementation and review; no additional background agents dispatched.
+18 September 2026. Historical proposed strategy and implementation queue, not
+public pricing or completed capability claims. The one-time quote and separate
+setup-recovery pricing below are unapproved proposals and are superseded by the
+current subscription-only, no-setup-fee direction in `supergoal.md`. Current
+coordination and authority come from `supergoal.md`, `CURRENT.md`, and the
+applicable `AGENTS.md`, not this historical task note.
 
 ## One setup, three useful outputs
 

@@ -92,15 +92,18 @@ const validSubmission = {
   name: 'Trial Operator',
   email: 'operator@example.com',
   company: 'Example Works',
-  product: 'production',
-  template: 'production-control',
-  goal: 'Make shift output and exceptions visible.',
-  source_url: 'https://supermega.dev/contact/?product=production',
+  product: 'shop',
+  plan: 'shop-pilot',
+  template: 'mini-mart',
+  service: '',
+  goal: 'Make sales and stock exceptions visible.',
+  source_url: 'https://supermega.dev/contact/?product=shop',
 }
+const guideSubmission = { ...validSubmission, product: 'guide', plan: '', template: '', service: '' }
 
 function trialProofFields({
-  product = 'plant',
-  template = 'production-control',
+  product = 'shop',
+  template = 'mini-mart',
   readiness = 67,
   sources = 12,
   behavior = 4,
@@ -203,7 +206,7 @@ try {
   const readyStatus = await invoke({ method: 'GET' })
   assert.equal(readyStatus.body.accepting, true)
 
-  const accepted = await invoke({ body: { ...validSubmission, product: 'guide' }, headers: withKey(3) })
+  const accepted = await invoke({ body: guideSubmission, headers: withKey(3) })
   assert.equal(accepted.status, 202)
   assert.match(accepted.body.request_id, /^LEAD-[A-F0-9]{16}$/)
   assert.equal(fetchCalls, 1)
@@ -218,41 +221,112 @@ try {
   assert.equal(event.record.next_step, 'Choose the smallest suitable product path and return one scoped setup recommendation.')
   assert.equal(accepted.body.proof_bound, false)
 
-  const replay = await invoke({ body: { ...validSubmission, product: 'guide' }, headers: withKey(3) })
+  const replay = await invoke({ body: guideSubmission, headers: withKey(3) })
   assert.equal(replay.status, 202)
   assert.equal(replay.body.request_id, accepted.body.request_id)
   assert.equal(replay.headers['x-idempotent-replay'], 'true')
   assert.equal(fetchCalls, 1)
 
-  const conflict = await invoke({ body: { ...validSubmission, product: 'guide', goal: 'Different request.' }, headers: withKey(3) })
+  const conflict = await invoke({ body: { ...guideSubmission, goal: 'Different request.' }, headers: withKey(3) })
   assert.equal(conflict.status, 409)
   assert.equal(conflict.body.reason, 'idempotency_conflict')
 
-  const websiteAccepted = await invoke({
+  const longCampaign = 'p'.repeat(200)
+  const attributed = await invoke({
     body: {
       ...validSubmission,
-      product: 'website',
-      template: 'lead-generation',
-      source_url: 'https://supermega.dev/contact/?product=website&template=lead-generation&utm_source=linkedin&utm_medium=social&utm_campaign=website-launch&utm_content=carousel&utm_term=myanmar',
+      source_url: `https://url-user:url-password@supermega.dev/contact/?product=shop&utm_source=facebook&utm_medium=social&utm_campaign=${longCampaign}&utm_content=hero&utm_term=pos&token=private-query&email=private-contact&password=private-password#private-fragment`,
     },
-    headers: withKey(4, { 'x-forwarded-for': '203.0.113.11' }),
+    headers: withKey(204, { 'x-forwarded-for': '203.0.113.204' }),
   })
-  assert.equal(websiteAccepted.status, 202)
-  const websiteEvent = JSON.parse(delivered.options.body)
-  assert.equal(websiteEvent.record.workflow, 'website')
-  assert.equal(websiteEvent.record.requested_package, 'lead-generation')
-  assert.equal(websiteEvent.record.next_step, 'Validate the public source material and desired contact action; prepare the page plan and preview scope.')
-  for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) assert.equal(websiteEvent.record[key], '')
+  assert.equal(attributed.status, 202)
+  const attributedEvent = JSON.parse(delivered.options.body)
+  assert.equal(attributedEvent.record.source_url, 'https://supermega.dev/contact/')
+  assert.equal(attributedEvent.record.page_path, '/contact/')
+  assert.deepEqual(
+    Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((field) => [field, attributedEvent.record[field]])),
+    { utm_source: '', utm_medium: '', utm_campaign: '', utm_content: '', utm_term: '' },
+  )
+  assert.doesNotMatch(
+    JSON.stringify(attributedEvent.record),
+    /url-user|url-password|private-query|private-contact|private-password|private-fragment/,
+  )
 
-  const ecommerceAccepted = await invoke({
-    body: { ...validSubmission, product: 'ecommerce', template: 'social-storefront' },
-    headers: withKey(5, { 'x-forwarded-for': '203.0.113.12' }),
+  const trustedAttribution = await invoke({
+    body: {
+      ...validSubmission,
+      source_url: `https://supermega.dev/shop/?utm_source=facebook&utm_medium=social&utm_campaign=${longCampaign}&utm_content=hero&utm_term=pos`,
+    },
+    headers: withKey(205, { 'x-forwarded-for': '203.0.113.205' }),
   })
-  assert.equal(ecommerceAccepted.status, 202)
-  const ecommerceEvent = JSON.parse(delivered.options.body)
-  assert.equal(ecommerceEvent.record.workflow, 'ecommerce')
-  assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
-  assert.equal(ecommerceEvent.record.next_step, 'Validate the catalog source, request flow and Shop handoff; prepare the catalog cleanup scope.')
+  assert.equal(trustedAttribution.status, 202)
+  const trustedEvent = JSON.parse(delivered.options.body)
+  assert.equal(trustedEvent.record.page_path, '/shop/')
+  assert.deepEqual(
+    Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((field) => [field, trustedEvent.record[field]])),
+    { utm_source: 'facebook', utm_medium: 'social', utm_campaign: longCampaign.slice(0, 160), utm_content: 'hero', utm_term: 'pos' },
+  )
+
+  for (const [index, source_url] of [
+    'https://outside.example/contact/?utm_source=forged',
+    'http://supermega.dev/contact/?utm_source=insecure',
+    'https://supermega.dev/private/admin/?utm_source=wrong-route',
+  ].entries()) {
+    const rejectedAttribution = await invoke({
+      body: { ...validSubmission, source_url },
+      headers: withKey(206 + index, { 'x-forwarded-for': `203.0.113.${206 + index}` }),
+    })
+    assert.equal(rejectedAttribution.status, 202)
+    const rejectedEvent = JSON.parse(delivered.options.body)
+    assert.equal(rejectedEvent.record.page_path, '/contact/')
+    assert.equal(rejectedEvent.record.utm_source, '')
+  }
+
+  const previewAttribution = await invoke({
+    body: { ...validSubmission, source_url: 'https://preview.example.vercel.app/contact/?utm_source=preview' },
+    headers: withKey(209, {
+      host: 'preview.example.vercel.app',
+      origin: 'https://preview.example.vercel.app',
+      'x-forwarded-for': '203.0.113.209',
+    }),
+  })
+  assert.equal(previewAttribution.status, 202)
+  const previewEvent = JSON.parse(delivered.options.body)
+  assert.equal(previewEvent.record.page_path, '/contact/')
+  assert.equal(previewEvent.record.utm_source, 'preview')
+
+  for (const [index, product] of ['production', 'plant', 'website', 'ecommerce', 'commerce'].entries()) {
+    const retired = await invoke({ body: { ...validSubmission, product }, headers: withKey(4 + index, { 'x-forwarded-for': `203.0.113.${11 + index}` }) })
+    assert.equal(retired.status, 400)
+    assert.equal(retired.body.reason, 'product_not_supported')
+  }
+
+  for (const [index, template] of ['mini-mart', 'tea-coffee', 'fashion', 'beauty-spa'].entries()) {
+    const acceptedTemplate = await invoke({ body: { ...validSubmission, template }, headers: withKey(30 + index, { 'x-forwarded-for': `203.0.113.${70 + index}` }) })
+    assert.equal(acceptedTemplate.status, 202)
+    const templateEvent = JSON.parse(delivered.options.body)
+    assert.equal(templateEvent.record.workflow, 'commerce')
+    assert.equal(templateEvent.record.raw.plan, 'shop-pilot')
+    assert.equal(templateEvent.record.requested_package, template)
+    assert.equal(templateEvent.record.raw.service, '')
+  }
+
+  const assisted = await invoke({ body: { ...validSubmission, service: 'assisted-launch' }, headers: withKey(34, { 'x-forwarded-for': '203.0.113.74' }) })
+  assert.equal(assisted.status, 202)
+  assert.equal(JSON.parse(delivered.options.body).record.raw.service, 'assisted-launch')
+
+  for (const [index, body] of [
+    { ...validSubmission, plan: 'managed' },
+    { ...validSubmission, template: 'production-control' },
+    { ...validSubmission, service: 'managed-cloud' },
+    { ...guideSubmission, plan: 'shop-pilot' },
+    { ...guideSubmission, template: 'mini-mart' },
+    { ...guideSubmission, service: 'assisted-launch' },
+  ].entries()) {
+    const rejected = await invoke({ body, headers: withKey(40 + index, { 'x-forwarded-for': `203.0.113.${80 + index}` }) })
+    assert.equal(rejected.status, 400)
+    assert.equal(rejected.body.reason, 'invalid_request')
+  }
 
   const claimAccepted = await invoke({
     body: { ...validSubmission, trial_claim_code: 'sm-7hk2-9mt4' },
@@ -278,23 +352,23 @@ try {
       ...validSubmission,
       ...attachedProof,
       ...attachedContext,
-      source_url: `https://supermega.dev/contact/?product=plant&template=production-control#${new URLSearchParams({ ...attachedProof, ...attachedContext })}`,
-      referrer: 'https://app.supermega.dev/settings/?product=plant#private-fragment',
+      source_url: `https://supermega.dev/contact/?product=shop&template=mini-mart#${new URLSearchParams({ ...attachedProof, ...attachedContext })}`,
+      referrer: 'https://app.supermega.dev/settings/?product=shop#private-fragment',
     },
     headers: withKey(6, { 'x-forwarded-for': '203.0.113.13' }),
   })
   assert.equal(proofAccepted.status, 202)
   assert.equal(proofAccepted.body.proof_bound, true)
   const proofEvent = JSON.parse(delivered.options.body)
-  assert.equal(proofEvent.record.workflow, 'production')
+  assert.equal(proofEvent.record.workflow, 'commerce')
   assert.equal(proofEvent.record.source_url, 'https://supermega.dev/contact/')
   assert.equal(proofEvent.record.referrer, 'https://app.supermega.dev/settings/')
   assert.deepEqual(proofEvent.record.raw.trial_proof, {
     contract: 'supermega.managed_trial_proof.v2',
     version: 2,
     summary_digest: attachedProof.proof_digest,
-    product: 'plant',
-    template: 'production-control',
+    product: 'shop',
+    template: 'mini-mart',
     readiness_score: 67,
     source_record_count: 12,
     behavior_signal_count: 4,
@@ -313,7 +387,7 @@ try {
       verification: 'client_provided_digest',
     },
   })
-  assert.equal(proofEvent.record.raw.contact_idempotency.version, 3)
+  assert.equal(proofEvent.record.raw.contact_idempotency.version, 4)
   assert.equal(JSON.stringify(proofEvent.record.raw).includes('private-fragment'), false)
 
   const tamperedProof = await invoke({
@@ -330,7 +404,7 @@ try {
   assert.equal(partialProof.status, 400)
   assert.equal(partialProof.body.reason, 'trial_proof_invalid')
 
-  const wrongProductProof = trialProofFields({ product: 'shop' })
+  const wrongProductProof = trialProofFields({ product: 'plant' })
   const mismatchedProof = await invoke({
     body: { ...validSubmission, ...wrongProductProof },
     headers: withKey(9, { 'x-forwarded-for': '203.0.113.16' }),
@@ -442,7 +516,7 @@ try {
   assert.deepEqual(founderNotify.body.to, ['swanhtet@supermega.dev'])
   assert.equal(founderNotify.body.reply_to, validSubmission.email)
   assert.ok(founderNotify.body.text.includes('Trial claim code: SM-2CDE-4FGH'))
-  assert.match(founderNotify.body.text, /Operator next step: Validate the operating workflow, accountable roles and sample boundary/)
+  assert.match(founderNotify.body.text, /Operator next step: Validate the Shop trade, import source and first-sale workflow/)
   assert.match(founderNotify.body.text, /Customer brief:/)
   assert.deepEqual(customerAck.body.to, [validSubmission.email])
   assert.equal(customerAck.body.reply_to, 'swanhtet@supermega.dev')
@@ -457,12 +531,11 @@ try {
 
   const productAcknowledgements = {
     shop: /your catalog, stock and sales workflow/,
-    website: /your pages, content and responsive layout/,
-    ecommerce: /your catalog, storefront and order workflow/,
+    guide: /review the brief and recommend the suitable product/,
   }
   for (const [index, [product, expectedPlan]] of Object.entries(productAcknowledgements).entries()) {
     const before = resendMail.length
-    const accepted = await invoke({ body: { ...validSubmission, product, template: '', goal: 'Prepare our setup for review' }, headers: withKey(410 + index, { 'x-forwarded-for': '203.0.113.' + (50 + index) }), activeHandler: resendHandler })
+    const accepted = await invoke({ body: { ...(product === 'guide' ? guideSubmission : validSubmission), goal: 'Prepare our setup for review' }, headers: withKey(410 + index, { 'x-forwarded-for': '203.0.113.' + (50 + index) }), activeHandler: resendHandler })
     assert.equal(accepted.status, 202)
     assert.equal(resendMail.length, before + 2)
     const acknowledgement = resendMail.at(-1)
@@ -474,6 +547,42 @@ try {
     assert.doesNotMatch(acknowledgement.body.text, /Prepare our setup for review/)
     assert.doesNotMatch(acknowledgement.body.text, /Your trial claim code|one business day|founder|trial keeps working/)
   }
+
+  const burmeseAcknowledged = await invoke({
+    body: {
+      ...validSubmission,
+      goal: 'မြန်မာဘာသာဖြင့် Shop ကို စမ်းသပ်မည်။',
+      source_url: 'https://supermega.dev/my/contact/?product=shop',
+    },
+    headers: withKey(420, { 'x-forwarded-for': '203.0.113.60' }),
+    activeHandler: resendHandler,
+  })
+  assert.equal(burmeseAcknowledged.status, 202)
+  const burmeseAcknowledgement = resendMail.at(-1)
+  assert.equal(
+    burmeseAcknowledgement.body.subject,
+    'သင့်တောင်းဆိုချက်ကို လက်ခံရရှိပါပြီ - SuperMega',
+  )
+  assert.match(burmeseAcknowledgement.body.text, /သင့်တောင်းဆိုချက်ကို လက်ခံရရှိပါပြီ/)
+  assert.match(burmeseAcknowledgement.body.text, /https:\/\/supermega\.dev\/my\/shop\//)
+
+  const forgedAcknowledged = await invoke({
+    body: {
+      ...validSubmission,
+      goal: 'Keep an external source from selecting the acknowledgement locale.',
+      source_url: 'https://outside.example/my/contact/?utm_source=forged',
+    },
+    headers: withKey(421, { 'x-forwarded-for': '203.0.113.61' }),
+    activeHandler: resendHandler,
+  })
+  assert.equal(forgedAcknowledged.status, 202)
+  const forgedAcknowledgement = resendMail.at(-1)
+  assert.equal(
+    forgedAcknowledgement.body.subject,
+    'We received your request - SuperMega',
+  )
+  assert.match(forgedAcknowledgement.body.text, /confirm scope, price and timing/)
+  assert.doesNotMatch(forgedAcknowledgement.body.text, /https:\/\/supermega\.dev\/my\/shop\//)
 
   // The acknowledgement is best-effort: its failure must never fail a delivered lead.
   let ackAttempted = false
@@ -576,7 +685,7 @@ try {
   const durableRecord = storeRequests[0].record
   assert.equal(durableRecord.lead_id, durableAccepted.body.request_id)
   assert.deepEqual(durableRecord.raw.contact_idempotency, {
-    version: 3,
+    version: 4,
     algorithm: 'sha256',
     payload_fingerprint: durableRecord.raw.contact_idempotency.payload_fingerprint,
   })
@@ -612,7 +721,7 @@ try {
     ...validSubmission,
     ...trialProofFields(),
     ...approvedContextFields(),
-    source_url: 'https://supermega.dev/contact/?product=plant&template=production-control#proof_digest=must-not-persist',
+    source_url: 'https://supermega.dev/contact/?product=shop&template=mini-mart#proof_digest=must-not-persist',
   }
   const durableProofAccepted = await invoke({
     activeHandler: loadHandler({ fresh: true }),
@@ -622,7 +731,7 @@ try {
   assert.equal(durableProofAccepted.status, 202)
   assert.equal(durableProofAccepted.body.proof_bound, true)
   const durableProofRecord = persistedLeads.get(durableProofAccepted.body.request_id)
-  assert.equal(durableProofRecord.raw.contact_idempotency.version, 3)
+  assert.equal(durableProofRecord.raw.contact_idempotency.version, 4)
   assert.equal(durableProofRecord.raw.trial_proof.verification, 'client_provided_summary')
   assert.equal(durableProofRecord.raw.trial_proof.summary_digest, durableProofSubmission.proof_digest)
   assert.equal(durableProofRecord.raw.trial_proof.raw_records_included, false)
@@ -641,20 +750,21 @@ try {
   assert.equal(durableProofReplay.body.proof_bound, true)
   assert.equal(durableProofReplay.headers['x-idempotent-replay'], 'true')
 
-  // Frozen pre-privacy v1/v2 fingerprints must replay without notifying or
-  // rewriting the original retained row. A changed business brief conflicts.
-  for (const [version, submission, row, key] of [[1, validSubmission, persistedLeads.get(durableAccepted.body.request_id), 200], [2, durableProofSubmission, durableProofRecord, 203]]) {
+  // Frozen v1/v2 and pre-offer-contract v3 fingerprints must replay without
+  // notifying or rewriting the original retained row. A changed brief conflicts.
+  for (const [version, submission, row, key] of [[1, validSubmission, persistedLeads.get(durableAccepted.body.request_id), 200], [2, durableProofSubmission, durableProofRecord, 203], [3, validSubmission, persistedLeads.get(durableAccepted.body.request_id), 200]]) {
+    const historicalSource = version === 3 ? new URL(submission.source_url).origin + new URL(submission.source_url).pathname : submission.source_url.split('#')[0]
     const projection = {
       name: submission.name, email: submission.email.toLowerCase(), company: submission.company,
-      product: submission.product, template: submission.template, goal: submission.goal,
-      source_url: submission.source_url.split('#')[0], referrer: '',
-      ...(version === 2 ? { trial_proof: row.raw.trial_proof } : {}),
+      product: 'commerce', template: submission.template, goal: submission.goal,
+      source_url: historicalSource, referrer: '',
+      ...(version === 2 ? { trial_proof: row.raw.trial_proof } : version === 3 ? { trial_proof: null } : {}),
     }
     row.raw.contact_idempotency = { version, algorithm: 'sha256', payload_fingerprint: createHash('sha256').update('supermega.contact.payload.v' + version + '\n' + JSON.stringify(projection)).digest('hex') }
     assert.equal(persistedLeads.get(row.lead_id).raw.contact_idempotency.version, version)
     const before = JSON.stringify(row)
     const replay = await invoke({ activeHandler: loadHandler({ fresh: true }), body: submission, headers: withKey(key) })
-    assert.equal(replay.status, 202)
+    assert.equal(replay.status, 202, `historical v${version} fingerprint replays`)
     assert.equal(replay.headers['x-idempotent-replay'], 'true')
     assert.equal(JSON.stringify(persistedLeads.get(row.lead_id)), before)
     const conflict = await invoke({ activeHandler: loadHandler({ fresh: true }), body: { ...submission, goal: 'changed' }, headers: withKey(key) })
@@ -666,8 +776,8 @@ try {
   assert.equal(legacyAccepted.status, 202)
   const legacyRecord = persistedLeads.get(legacyAccepted.body.request_id)
   delete legacyRecord.raw.contact_idempotency
-  legacyRecord.workflow = 'plant'
-  legacyRecord.raw.product = 'plant'
+  legacyRecord.workflow = 'commerce'
+  legacyRecord.raw.product = 'commerce'
   const legacyReplay = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(201, { 'x-forwarded-for': '203.0.113.92' }) })
   assert.equal(legacyReplay.status, 202)
   assert.equal(legacyReplay.headers['x-idempotent-replay'], 'true')
@@ -678,6 +788,25 @@ try {
   })
   assert.equal(legacyConflict.status, 409)
   assert.equal(legacyConflict.body.reason, 'idempotency_conflict')
+
+  // Retired workflow rows remain readable for safe collision resolution even
+  // though no new public request may select any of these runtime identities.
+  for (const [index, workflow] of ['commerce', 'production', 'website', 'ecommerce'].entries()) {
+    const key = 210 + index
+    const seeded = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(key, { 'x-forwarded-for': `203.0.113.${110 + index}` }) })
+    assert.equal(seeded.status, 202)
+    const row = persistedLeads.get(seeded.body.request_id)
+    delete row.raw.contact_idempotency
+    row.workflow = workflow
+    row.requested_package = workflow === 'commerce' ? 'social-commerce' : 'historical-template'
+    row.raw.product = workflow
+    row.raw.template = row.requested_package
+    delete row.raw.plan
+    delete row.raw.service
+    const collision = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(key, { 'x-forwarded-for': `203.0.113.${120 + index}` }) })
+    assert.equal(collision.status, 409, `${workflow} retained row stays readable and conflicts closed`)
+    assert.equal(collision.body.reason, 'idempotency_conflict')
+  }
 
   const ambiguousAccepted = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(202, { 'x-forwarded-for': '203.0.113.94' }) })
   assert.equal(ambiguousAccepted.status, 202)
@@ -718,7 +847,7 @@ try {
   process.env.SUPERMEGA_LEAD_WEBHOOK_URL = 'https://lead-router.example.test/events'
   const integrationRoot = await mkdtemp(resolve(tmpdir(), 'supermega-contact-handoff-'))
   try {
-    for (const product of ['shop', 'website', 'ecommerce']) {
+    for (const product of ['shop']) {
       let deliveredEvent
       let deliveryCount = 0
       globalThis.fetch = async (url, options) => {
@@ -733,7 +862,7 @@ try {
       }
       const response = await invoke({
         activeHandler: loadHandler({ fresh: true }),
-        body: { ...validSubmission, product, template: '', goal: 'Prepare our ' + product + ' for review', source_url: 'https://supermega.dev/contact/?product=' + product },
+        body: { ...validSubmission, product, goal: 'Prepare our ' + product + ' for review', source_url: 'https://supermega.dev/contact/?product=' + product },
         headers: { 'x-idempotency-key': randomUUID() },
       })
       assert.equal(response.status, 202)
@@ -748,9 +877,9 @@ try {
       }
       const directory = resolve(integrationRoot, product)
       const initialized = await initializeClientWorkspaceFromContact({ directory, event: deliveredEvent, review })
-      assert.equal(initialized.requestedProduct, product === 'shop' ? 'commerce' : product)
+      assert.equal(initialized.requestedProduct, 'commerce')
       const preparation = await prepareClientDemo({ dataDirectory: directory })
-      assert.deepEqual(preparation.products.map(item => item.product), product === 'ecommerce' ? ['commerce', 'ecommerce'] : [product === 'shop' ? 'commerce' : product])
+      assert.deepEqual(preparation.products.map(item => item.product), ['commerce'])
       assert.equal(preparation.client.owner, 'Synthetic reviewer')
       assert.equal(verifyClientDemoPreparation(preparation).status, 'verified_not_applied')
       assert.equal(preparation.controls.externalWritesPerformed, false)
@@ -761,7 +890,7 @@ try {
     await rm(integrationRoot, { recursive: true, force: true })
   }
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', assertions: 'all_passed', serviceHandoffJourneys: 3, independentInstanceRaceScenarios: 2, evidence: 'local_mocked_not_hosted' }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', assertions: 'all_passed', serviceHandoffJourneys: 1, independentInstanceRaceScenarios: 2, evidence: 'local_mocked_not_hosted' }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {

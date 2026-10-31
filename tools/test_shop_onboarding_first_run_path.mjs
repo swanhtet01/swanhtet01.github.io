@@ -13,13 +13,15 @@ function check(condition, label) {
 
 const requiredOnboardingCopy = [
   'Pick your business type',
-  'Load starter data or import your services/products',
+  'Add your products or services',
+  'Enter actual prices and opening stock, or import your catalog.',
   'Take one sale',
   'Reconcile payment and close day',
   'Cash, KBZPay, WavePay, AYA Pay, or MMQR',
-  'Choose your trade to start with a matching catalog and workflow.',
+  'What kind of business?',
+  'Choose a business type',
   'Yangon Wellness Spa',
-  'Use the current starter sample',
+  'Add your own products, prices and opening stock.',
 ]
 
 for (const copy of requiredOnboardingCopy) {
@@ -28,6 +30,10 @@ for (const copy of requiredOnboardingCopy) {
 
 for (const internalCopy of ['Shop pilot proof rule', 'Spa services vertical pack:', 'accepted order-to-close runs', 'Paid pilot only after']) {
   check(!onboardingSource.includes(internalCopy), `Internal pilot criteria stay out of customer setup: ${internalCopy}`)
+}
+
+for (const retiredSampleCopy of ['Load starter data or import your services/products', 'Use the current starter sample']) {
+  check(!onboardingSource.includes(retiredSampleCopy), `retired sample-first onboarding stays absent: ${retiredSampleCopy}`)
 }
 
 check(
@@ -47,7 +53,8 @@ check(
   'Shop pilot proof has dedicated compact styling',
 )
 check(
-  onboardingStyles.includes('grid-template-columns: 28px minmax(0,1fr)'),
+  onboardingStyles.includes('.product-onboarding-path li { display: grid; grid-template-columns: 1.75rem minmax(0,1fr);')
+    && onboardingStyles.includes('.product-onboarding-path li > span { display: grid; place-items: center; width: var(--space-6); height: var(--space-6);'),
   'first-run steps render as a compact numbered mobile-friendly list',
 )
 check(

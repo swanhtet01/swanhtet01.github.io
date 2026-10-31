@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { createServer } from 'node:http'
-import { startBrowser } from './browser_startup.mjs'
+import { BROWSER_STARTUP_TIMEOUT_MS, startBrowser } from './browser_startup.mjs'
 import { findBrowser } from './verify_app_entry_rendered.mjs'
 
 function child() {
@@ -17,6 +17,10 @@ const response = (url = endpoint) => ({ ok: true, json: async () => ({ webSocket
 function options(browser, fetchVersion) {
   return { spawnBrowser: () => browser, fetchVersion, timeoutMs: 100, probeTimeoutMs: 20, pollMs: 1 }
 }
+
+test('default startup budget tolerates a loaded CI browser while remaining bounded', () => {
+  assert.equal(BROWSER_STARTUP_TIMEOUT_MS, 60_000)
+})
 
 test('explicit missing browser fails closed instead of falling back', () => {
   assert.throws(() => findBrowser({ explicit: '/missing/browser', exists: () => false }), /explicit_browser_missing/)

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const root = process.cwd()
 const outputDir = resolve(root, '.vercel/output')
@@ -35,10 +36,10 @@ function walk(dir, visitor) {
 if (!existsSync(outputDir)) fail('public_output_missing', { path: outputDir })
 if (!existsSync(functionsApiDir)) fail('public_functions_missing', { path: functionsApiDir })
 
-// The social share cards (one generic plus one per customer product) are the
-// only binary static assets; keep each a small, bounded fraction of the budget.
+// Social share cards exist only for public customer products. Sites and
+// Commerce remain internal and must not create orphan public assets.
 const ogCardBytes = {}
-for (const cardFile of ['og-card.png', ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`)]) {
+for (const cardFile of ['og-card.png', ...activeProductContracts(manifest).map((product) => `og-card-${product.id}.png`)]) {
   const ogCardPath = resolve(outputDir, 'static', cardFile)
   if (!existsSync(ogCardPath)) fail('og_card_missing', { path: ogCardPath })
   const bytes = statSync(ogCardPath).size

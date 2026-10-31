@@ -709,7 +709,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
 export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
   if (scopedAccess && testCase.isolatedBrowserContext !== true) throw new Error('preview_browser_access_requires_isolation')
   if (testCase.pairedAppOrigin && (testCase.isolatedBrowserContext !== true
-    || testCase.expectedOrigin !== testCase.pairedAppOrigin || testCase.route !== '/'
+    || testCase.expectedOrigin !== testCase.pairedAppOrigin || testCase.route !== '/shop/'
     || !Array.isArray(testCase.pairedPublicExpectedText) || testCase.pairedPublicExpectedText.length < 1)) {
     throw new Error('paired_transition_case_invalid')
   }
@@ -793,7 +793,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     await load
     let pairedClick = null
     if (testCase.pairedAppOrigin) {
-      const publicState = await waitForRenderedState(cdp, sessionId, '/', testCase.pairedPublicExpectedText, testCase.timeoutMs)
+      const publicState = await waitForRenderedState(cdp, sessionId, '/shop/', testCase.pairedPublicExpectedText, testCase.timeoutMs)
       pairedClick = await activateReadyPairedTransition({ state: publicState, publicOrigin: origin,
         requiredText: testCase.pairedPublicExpectedText,
         activate: () => evalInPage(cdp, sessionId, pairedClickScript(origin, testCase.pairedAppOrigin)) })

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
@@ -18,6 +18,15 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
     restamp_latest_shop_inventory_command,
+)
+from supermega_runtime.shop_correction_receipts import (
+    SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
+    SHOP_CORRECTION_AUTHORIZATION_V2_CONTRACT,
+    SHOP_CORRECTION_RECEIPT_PUBLIC_KEYS,
+    ShopCorrectionReceiptSigner,
+    ShopCorrectionSigningError,
+    load_shop_correction_receipt_signer,
+    verify_shop_correction_signature,
 )
 
 
@@ -141,6 +150,30 @@ PRODUCT_ACCEPTANCE_SURFACES = {
 }
 PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"
 PRODUCT_ACCEPTANCE_EVENT_TYPE = "client.product_acceptance.recorded"
+SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE = (
+    "commerce.shop_correction_authorization.finalized"
+)
+SHOP_CORRECTION_AUTHORIZATION_SOURCE = "managed_membership_receipt_v1"
+SHOP_CORRECTION_AUTHORIZATION_COMMAND_NAMESPACE = (
+    "https://supermega.dev/contracts/shop-correction-finalization/v1"
+)
+SHOP_CORRECTION_AUTHORIZATION_TTL_MILLIS = 5 * 60 * 1000
+SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES = frozenset(
+    {"shop.sale.reverse", "shop.sale.reconcile_wallet"}
+)
+SHOP_CORRECTION_AUTHORIZATION_CONFIRMATIONS = {
+    "shop.sale.reverse": "AUTHORIZE FULL SALE REVERSAL",
+    "shop.sale.reconcile_wallet": "AUTHORIZE WALLET RECONCILIATION",
+}
+SHOP_CORRECTION_LINEAGE_CONTRACT = "supermega.shop.correction-lineage.v1"
+SHOP_CORRECTION_CONSUMPTION_CONTRACT = "supermega.shop.correction-consumption.v1"
+SHOP_CORRECTION_LINEAGE_EVENT_TYPE = "commerce.shop_correction_lineage.activated"
+SHOP_CORRECTION_CONSUMPTION_EVENT_TYPE = (
+    "commerce.shop_correction_consumption.committed"
+)
+SHOP_CORRECTION_CONSUMPTION_COMMAND_NAMESPACE = (
+    "https://supermega.dev/contracts/shop-correction-consumption/v1"
+)
 # TLS transit is enforced by connection configuration (finding 6): psycopg refuses
 # to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
 # authoritative client->server (or client->Supavisor-pooler) guarantee -- a
@@ -650,6 +683,22 @@ class TrialIdempotencyConflict(TrialStoreError):
         super().__init__(f"Command {command_id} was already used with different input.")
 
 
+class TrialAuthorizationExpired(TrialStoreError):
+    def __init__(self, authorization_request_id: str):
+        self.authorization_request_id = authorization_request_id
+        super().__init__(
+            "Shop correction authorization expired; the finalized command cannot be reauthorized."
+        )
+
+
+class TrialReconciliationRequired(TrialStoreError):
+    """The local correction watermark cannot safely become authoritative."""
+
+    def __init__(self, *, state: str):
+        self.state = str(state)
+        super().__init__("Shop correction history must be reconciled before this lineage can continue.")
+
+
 class TrialInvalidTransition(TrialStoreError):
     pass
 
@@ -879,6 +928,159 @@ class ProductAcceptanceRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ShopCorrectionAuthorizationReceipt:
+    receipt_id: str
+    receipt_digest: str
+    finalization_request_id: str
+    workspace_id: str
+    actor_id: str
+    actor_label: str
+    actor_role: str
+    capability: str
+    source: str
+    command_digest: str
+    finalized_at_millis: int
+    issued_at_millis: int
+    expires_at_millis: int
+    key_id: str
+    signature: str
+    idempotent_replay: bool = False
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "contract": SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
+            "receiptId": self.receipt_id,
+            "receiptDigest": self.receipt_digest,
+            "finalizationRequestId": self.finalization_request_id,
+            "workspaceId": self.workspace_id,
+            "actorId": self.actor_id,
+            "actorLabel": self.actor_label,
+            "actorRole": self.actor_role,
+            "capability": self.capability,
+            "source": self.source,
+            "commandDigest": self.command_digest,
+            "finalizedAtMillis": self.finalized_at_millis,
+            "issuedAtMillis": self.issued_at_millis,
+            "expiresAtMillis": self.expires_at_millis,
+            "keyId": self.key_id,
+            "signature": self.signature,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ShopCorrectionLineageRecord:
+    activation_request_id: str
+    workspace_id: str
+    actor_id: str
+    lineage_id: str
+    lineage_epoch: int
+    previous_lineage_id: str | None
+    previous_lineage_epoch: int | None
+    consumption_ordinal: int
+    consumption_digest: str | None
+    activated_at_millis: int
+    idempotent_replay: bool = False
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "contract": SHOP_CORRECTION_LINEAGE_CONTRACT,
+            "activationRequestId": self.activation_request_id,
+            "workspaceId": self.workspace_id,
+            "actorId": self.actor_id,
+            "lineageId": self.lineage_id,
+            "lineageEpoch": self.lineage_epoch,
+            "previousLineageId": self.previous_lineage_id,
+            "previousLineageEpoch": self.previous_lineage_epoch,
+            "consumptionOrdinal": self.consumption_ordinal,
+            "consumptionDigest": self.consumption_digest,
+            "activatedAtMillis": self.activated_at_millis,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ShopCorrectionConsumptionProof:
+    consumption_id: str
+    consumption_request_id: str
+    authorization_receipt_id: str
+    authorization_receipt_digest: str
+    workspace_id: str
+    actor_id: str
+    capability: str
+    semantic_target_id: str
+    command_digest: str
+    lineage_id: str
+    lineage_epoch: int
+    consumption_ordinal: int
+    previous_consumption_digest: str | None
+    history_digest: str
+    consumed_at_millis: int
+    key_id: str
+    signature: str
+    response_mode: str = "commit_new"
+
+    def signed_dict(self) -> JsonObject:
+        return {
+            "contract": SHOP_CORRECTION_CONSUMPTION_CONTRACT,
+            "consumptionId": self.consumption_id,
+            "consumptionRequestId": self.consumption_request_id,
+            "authorizationReceiptId": self.authorization_receipt_id,
+            "authorizationReceiptDigest": self.authorization_receipt_digest,
+            "workspaceId": self.workspace_id,
+            "actorId": self.actor_id,
+            "capability": self.capability,
+            "semanticTargetId": self.semantic_target_id,
+            "commandDigest": self.command_digest,
+            "lineageId": self.lineage_id,
+            "lineageEpoch": self.lineage_epoch,
+            "consumptionOrdinal": self.consumption_ordinal,
+            "previousConsumptionDigest": self.previous_consumption_digest,
+            "historyDigest": self.history_digest,
+            "consumedAtMillis": self.consumed_at_millis,
+            "keyId": self.key_id,
+            "signature": self.signature,
+            "moneyMovementPerformed": False,
+            "localMutationPerformed": False,
+        }
+
+    def to_dict(self) -> JsonObject:
+        # The caller derives reconstruction from the signed original request ID.
+        # response_mode is server-local observability and is never an authority field.
+        return self.signed_dict()
+
+
+@dataclass(frozen=True, slots=True)
+class ShopCorrectionReconciliationStatus:
+    workspace_id: str
+    requested_lineage_id: str
+    requested_lineage_epoch: int
+    active_lineage_id: str
+    active_lineage_epoch: int
+    server_consumption_ordinal: int
+    server_consumption_digest: str | None
+    local_consumption_ordinal: int
+    local_consumption_digest: str | None
+    state: str
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "contract": SHOP_CORRECTION_LINEAGE_CONTRACT,
+            "workspaceId": self.workspace_id,
+            "requestedLineageId": self.requested_lineage_id,
+            "requestedLineageEpoch": self.requested_lineage_epoch,
+            "activeLineageId": self.active_lineage_id,
+            "activeLineageEpoch": self.active_lineage_epoch,
+            "serverConsumptionOrdinal": self.server_consumption_ordinal,
+            "serverConsumptionDigest": self.server_consumption_digest,
+            "localConsumptionOrdinal": self.local_consumption_ordinal,
+            "localConsumptionDigest": self.local_consumption_digest,
+            "state": self.state,
+            "reconstructionRequired": self.state == "reconciliation_required",
+            "moneyMovementPerformed": False,
+            "localMutationPerformed": False,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ApprovalRecord:
     approval_id: str
     command_id: str
@@ -957,6 +1159,56 @@ class TrialStore(Protocol):
         *,
         probe_id: str | UUID,
     ) -> ProductAcceptanceRecord: ...
+
+    def issue_shop_correction_authorization(
+        self,
+        principal: TrialPrincipal,
+        *,
+        authorization_request_id: str | UUID,
+        capability: str,
+        command_digest: str,
+        request_fingerprint: str,
+        confirmation: str,
+    ) -> ShopCorrectionAuthorizationReceipt: ...
+
+    def shop_correction_authorization_signing_ready(self) -> bool: ...
+
+    def activate_shop_correction_lineage(
+        self,
+        principal: TrialPrincipal,
+        *,
+        activation_request_id: str | UUID,
+        lineage_id: str | UUID,
+        expected_previous_lineage_id: str | UUID | None,
+        expected_previous_lineage_epoch: int | None,
+        local_consumption_ordinal: int,
+        local_consumption_digest: str | None,
+    ) -> ShopCorrectionLineageRecord: ...
+
+    def consume_shop_correction_authorization(
+        self,
+        principal: TrialPrincipal,
+        *,
+        consumption_request_id: str | UUID,
+        authorization_receipt_id: str | UUID,
+        authorization_receipt_digest: str,
+        lineage_id: str | UUID,
+        lineage_epoch: int,
+        capability: str,
+        semantic_target_id: str,
+        command_digest: str,
+        allow_new_decision: bool,
+    ) -> ShopCorrectionConsumptionProof: ...
+
+    def get_shop_correction_reconciliation_status(
+        self,
+        principal: TrialPrincipal,
+        *,
+        lineage_id: str | UUID,
+        lineage_epoch: int,
+        local_consumption_ordinal: int,
+        local_consumption_digest: str | None,
+    ) -> ShopCorrectionReconciliationStatus: ...
 
     def apply_command(
         self,
@@ -3209,6 +3461,785 @@ def _canonical_fingerprint(kind: str, payload: Mapping[str, Any]) -> str:
     return sha256(encoded).hexdigest()
 
 
+def shop_correction_authorization_receipt_digest(
+    *,
+    source: str,
+    receipt_id: str,
+    workspace_id: str,
+    actor_id: str,
+    actor_label: str,
+    actor_role: str,
+    capability: str,
+    command_digest: str,
+    issued_at_millis: int,
+    expires_at_millis: int,
+) -> str:
+    """Digest the ordered cross-runtime receipt projection.
+
+    The order and domain separator are part of the native/server v2 contract.
+    This intentionally is not the store's sorted-key command fingerprint.
+    """
+
+    projection = {
+        "source": source,
+        "receiptId": receipt_id,
+        "workspaceId": workspace_id,
+        "actorId": actor_id,
+        "actorLabel": actor_label,
+        "actorRole": actor_role,
+        "capability": capability,
+        "commandDigest": command_digest,
+        "issuedAtMillis": issued_at_millis,
+        "expiresAtMillis": expires_at_millis,
+    }
+    encoded = (
+        SHOP_CORRECTION_AUTHORIZATION_V2_CONTRACT
+        + "\n"
+        + json.dumps(
+            projection,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    ).encode("utf-8")
+    return sha256(encoded).hexdigest()
+
+
+def shop_correction_authorization_receipt_v3_digest(
+    *,
+    source: str,
+    receipt_id: str,
+    finalization_request_id: str,
+    workspace_id: str,
+    actor_id: str,
+    actor_label: str,
+    actor_role: str,
+    capability: str,
+    command_digest: str,
+    finalized_at_millis: int,
+    issued_at_millis: int,
+    expires_at_millis: int,
+) -> str:
+    """Digest the ordered, server-finalized cross-runtime v3 projection."""
+
+    projection = {
+        "source": source,
+        "receiptId": receipt_id,
+        "finalizationRequestId": finalization_request_id,
+        "workspaceId": workspace_id,
+        "actorId": actor_id,
+        "actorLabel": actor_label,
+        "actorRole": actor_role,
+        "capability": capability,
+        "commandDigest": command_digest,
+        "finalizedAtMillis": finalized_at_millis,
+        "issuedAtMillis": issued_at_millis,
+        "expiresAtMillis": expires_at_millis,
+    }
+    encoded = (
+        SHOP_CORRECTION_AUTHORIZATION_CONTRACT
+        + "\n"
+        + json.dumps(
+            projection,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    ).encode("utf-8")
+    return sha256(encoded).hexdigest()
+
+
+def _configured_shop_correction_signer(
+    explicit: ShopCorrectionReceiptSigner | None,
+) -> ShopCorrectionReceiptSigner | None:
+    try:
+        signer = explicit or load_shop_correction_receipt_signer()
+        if signer is not None:
+            _shop_correction_verification_keys(signer)
+        return signer
+    except ShopCorrectionSigningError:
+        return None
+
+
+def _shop_correction_verification_keys(
+    signer: ShopCorrectionReceiptSigner,
+) -> dict[str, str]:
+    verification_keys = dict(SHOP_CORRECTION_RECEIPT_PUBLIC_KEYS)
+    configured_pin = verification_keys.get(signer.key_id)
+    if configured_pin is not None and configured_pin != signer.public_key_base64url:
+        raise ShopCorrectionSigningError(
+            "shop_correction_signing_public_pin_mismatch"
+        )
+    verification_keys.setdefault(signer.key_id, signer.public_key_base64url)
+    return verification_keys
+
+
+def _shop_correction_json_object(pairs: list[tuple[str, Any]]) -> JsonObject:
+    value: JsonObject = {}
+    for key, nested in pairs:
+        if key in value:
+            raise ValueError("duplicate JSON object key")
+        value[key] = nested
+    return value
+
+
+def _reject_shop_correction_json_constant(value: str) -> None:
+    raise ValueError(f"unsupported JSON constant: {value}")
+
+
+def _bounded_shop_correction_text(value: object, *, field: str, maximum: int) -> str:
+    if not isinstance(value, str):
+        raise TrialValidationError(f"{field} must be text.")
+    if (
+        not value
+        or value != value.strip()
+        or len(value) > maximum
+        or re.search(r"[\x00-\x1f\x7f]", value)
+    ):
+        raise TrialValidationError(f"{field} is invalid.")
+    return value
+
+
+def _shop_correction_command_facts(
+    *,
+    capability: object,
+    command_digest: object,
+    request_fingerprint: object,
+) -> tuple[str, str, str, JsonObject]:
+    if (
+        not isinstance(capability, str)
+        or capability not in SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES
+    ):
+        raise TrialValidationError("Shop correction capability is invalid.")
+    if not isinstance(command_digest, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", command_digest
+    ):
+        raise TrialValidationError("Shop correction command_digest is invalid.")
+    if not isinstance(request_fingerprint, str):
+        raise TrialValidationError("Shop correction request_fingerprint must be text.")
+    try:
+        encoded_fingerprint = request_fingerprint.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise TrialValidationError(
+            "Shop correction request_fingerprint is invalid."
+        ) from exc
+    if not encoded_fingerprint or len(encoded_fingerprint) > 4096:
+        raise TrialValidationError("Shop correction request_fingerprint is invalid.")
+    if sha256(encoded_fingerprint).hexdigest() != command_digest:
+        raise TrialValidationError(
+            "Shop correction command_digest does not match request_fingerprint."
+        )
+    try:
+        parsed = json.loads(
+            request_fingerprint,
+            object_pairs_hook=_shop_correction_json_object,
+            parse_constant=_reject_shop_correction_json_constant,
+        )
+    except (json.JSONDecodeError, ValueError, RecursionError) as exc:
+        raise TrialValidationError(
+            "Shop correction request_fingerprint is invalid JSON."
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise TrialValidationError(
+            "Shop correction request_fingerprint must be a JSON object."
+        )
+
+    operation_id = _bounded_shop_correction_text(
+        parsed.get("operationId"),
+        field="Shop correction operationId",
+        maximum=120,
+    )
+    if capability == "shop.sale.reverse":
+        expected_keys = {
+            "operationId",
+            "saleId",
+            "saleSnapshotDigest",
+            "restockItems",
+            "reason",
+            "cashReturnConfirmed",
+            "expectedCashShiftId",
+            "paymentResolution",
+        }
+        if set(parsed) != expected_keys:
+            raise TrialValidationError(
+                "Full-sale reversal request_fingerprint fields are invalid."
+            )
+        sale_id = _bounded_shop_correction_text(
+            parsed.get("saleId"), field="Shop correction saleId", maximum=120
+        )
+        snapshot_digest = parsed.get("saleSnapshotDigest")
+        if not isinstance(snapshot_digest, str) or not re.fullmatch(
+            r"[0-9a-f]{64}", snapshot_digest
+        ):
+            raise TrialValidationError("Shop correction saleSnapshotDigest is invalid.")
+        restock_items = parsed.get("restockItems")
+        cash_return_confirmed = parsed.get("cashReturnConfirmed")
+        if type(restock_items) is not bool or type(cash_return_confirmed) is not bool:
+            raise TrialValidationError("Shop correction boolean fields are invalid.")
+        reason = _bounded_shop_correction_text(
+            parsed.get("reason"), field="Shop correction reason", maximum=240
+        )
+        expected_cash_shift_id = parsed.get("expectedCashShiftId")
+        if expected_cash_shift_id is not None:
+            expected_cash_shift_id = _bounded_shop_correction_text(
+                expected_cash_shift_id,
+                field="Shop correction expectedCashShiftId",
+                maximum=120,
+            )
+        payment_resolution = parsed.get("paymentResolution")
+        if payment_resolution == "cash_returned_now":
+            if not cash_return_confirmed or expected_cash_shift_id is None:
+                raise TrialValidationError(
+                    "Cash reversal confirmation and shift binding are inconsistent."
+                )
+        elif payment_resolution == "external_pending":
+            if cash_return_confirmed or expected_cash_shift_id is not None:
+                raise TrialValidationError(
+                    "Wallet reversal must remain pending external reconciliation."
+                )
+        else:
+            raise TrialValidationError("Shop correction paymentResolution is invalid.")
+        facts: JsonObject = {
+            "operationId": operation_id,
+            "saleId": sale_id,
+            "saleSnapshotDigest": snapshot_digest,
+            "restockItems": restock_items,
+            "reason": reason,
+            "cashReturnConfirmed": cash_return_confirmed,
+            "expectedCashShiftId": expected_cash_shift_id,
+            "paymentResolution": payment_resolution,
+        }
+    else:
+        expected_keys = {
+            "operationId",
+            "reversalId",
+            "originalPaymentMethod",
+            "originalTotalMmk",
+            "outcome",
+            "evidenceReference",
+        }
+        if set(parsed) != expected_keys:
+            raise TrialValidationError(
+                "Wallet reconciliation request_fingerprint fields are invalid."
+            )
+        reversal_id = _bounded_shop_correction_text(
+            parsed.get("reversalId"),
+            field="Shop correction reversalId",
+            maximum=120,
+        )
+        original_payment_method = parsed.get("originalPaymentMethod")
+        if not isinstance(original_payment_method, str) or original_payment_method not in {
+            "kbzpay",
+            "wavepay",
+        }:
+            raise TrialValidationError(
+                "Wallet reconciliation originalPaymentMethod is invalid."
+            )
+        original_total_mmk = parsed.get("originalTotalMmk")
+        if (
+            type(original_total_mmk) is not int
+            or original_total_mmk < 0
+            or original_total_mmk > 200_000_000_000_000
+        ):
+            raise TrialValidationError(
+                "Wallet reconciliation originalTotalMmk is invalid."
+            )
+        outcome = parsed.get("outcome")
+        if not isinstance(outcome, str) or outcome not in {
+            "money_returned",
+            "payment_not_received",
+        }:
+            raise TrialValidationError("Wallet reconciliation outcome is invalid.")
+        evidence_reference = _bounded_shop_correction_text(
+            parsed.get("evidenceReference"),
+            field="Wallet evidenceReference",
+            maximum=160,
+        )
+        facts = {
+            "operationId": operation_id,
+            "reversalId": reversal_id,
+            "originalPaymentMethod": original_payment_method,
+            "originalTotalMmk": original_total_mmk,
+            "outcome": outcome,
+            "evidenceReference": evidence_reference,
+        }
+    return capability, command_digest, request_fingerprint, facts
+
+
+def _shop_correction_authorization_request(
+    *,
+    authorization_request_id: str | UUID,
+    capability: object,
+    command_digest: object,
+    request_fingerprint: object,
+    confirmation: object,
+) -> tuple[str, str, str, str, JsonObject]:
+    request_id = _normalize_uuid(
+        authorization_request_id,
+        field_name="authorization_request_id",
+    )
+    capability_value, digest_value, fingerprint_value, facts = (
+        _shop_correction_command_facts(
+            capability=capability,
+            command_digest=command_digest,
+            request_fingerprint=request_fingerprint,
+        )
+    )
+    expected_confirmation = SHOP_CORRECTION_AUTHORIZATION_CONFIRMATIONS[capability_value]
+    if not isinstance(confirmation, str) or confirmation != expected_confirmation:
+        raise TrialValidationError("Shop correction confirmation is invalid.")
+    return (
+        request_id,
+        capability_value,
+        digest_value,
+        confirmation,
+        facts,
+    )
+
+
+def _shop_correction_finalization_identity(
+    *, workspace_id: str, capability: str, semantic_target_id: str
+) -> tuple[str, str]:
+    """Return the global semantic-correction key and fingerprint.
+
+    The caller's request id is deliberately absent. It identifies an ambiguous
+    retry claimant, not a new authorization for the same sale or reversal.
+    The exact command digest remains bound in the signed receipt and stored
+    payload, while this key prevents a clone from changing its operation id to
+    obtain another authorization for the same business target.
+    """
+
+    binding = {
+        "contract": SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
+        "workspace_id": workspace_id,
+        "capability": capability,
+        "semantic_target_id": semantic_target_id,
+    }
+    command_id = str(
+        uuid5(
+            NAMESPACE_URL,
+            SHOP_CORRECTION_AUTHORIZATION_COMMAND_NAMESPACE
+            + "\n"
+            + json.dumps(binding, sort_keys=True, separators=(",", ":")),
+        )
+    )
+    return command_id, _canonical_fingerprint(
+        "shop_correction_authorization_finalization", binding
+    )
+
+
+def _shop_correction_uuid(value: object, *, field: str) -> str:
+    try:
+        return str(UUID(str(value)))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise TrialValidationError(f"{field} must be a UUID.") from exc
+
+
+def _shop_correction_digest(value: object, *, field: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise TrialValidationError(f"{field} must be a lowercase SHA-256 digest.")
+    return value
+
+
+def _shop_correction_lineage_input(
+    *,
+    lineage_id: object,
+    lineage_epoch: object,
+    consumption_ordinal: object,
+    consumption_digest: object,
+) -> tuple[str, int, int, str | None]:
+    lineage = _shop_correction_uuid(lineage_id, field="lineage_id")
+    if type(lineage_epoch) is not int or lineage_epoch < 1:
+        raise TrialValidationError("lineage_epoch must be a positive integer.")
+    if type(consumption_ordinal) is not int or consumption_ordinal < 0:
+        raise TrialValidationError("consumption_ordinal must be a non-negative integer.")
+    if consumption_digest is None:
+        if consumption_ordinal != 0:
+            raise TrialValidationError(
+                "A non-empty correction watermark requires a consumption digest."
+            )
+        digest = None
+    else:
+        digest = _shop_correction_digest(
+            consumption_digest, field="consumption_digest"
+        )
+        if consumption_ordinal == 0:
+            raise TrialValidationError(
+                "An empty correction watermark cannot carry a consumption digest."
+            )
+    return lineage, lineage_epoch, consumption_ordinal, digest
+
+
+def _shop_correction_consumption_identity(
+    *, workspace_id: str, capability: str, semantic_target_id: str
+) -> tuple[str, str]:
+    target = _bounded_shop_correction_text(
+        semantic_target_id,
+        field="Shop correction semantic_target_id",
+        maximum=120,
+    )
+    if capability not in SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES:
+        raise TrialValidationError("Shop correction capability is invalid.")
+    binding = {
+        "contract": SHOP_CORRECTION_CONSUMPTION_CONTRACT,
+        "workspace_id": workspace_id,
+        "capability": capability,
+        "semantic_target_id": target,
+    }
+    command_id = str(
+        uuid5(
+            NAMESPACE_URL,
+            SHOP_CORRECTION_CONSUMPTION_COMMAND_NAMESPACE
+            + "\n"
+            + json.dumps(binding, sort_keys=True, separators=(",", ":")),
+        )
+    )
+    return command_id, _canonical_fingerprint(
+        "shop_correction_consumption", binding
+    )
+
+
+def _shop_correction_consumption_digest(
+    *,
+    consumption_id: str,
+    consumption_request_id: str,
+    authorization_receipt_id: str,
+    authorization_receipt_digest: str,
+    workspace_id: str,
+    actor_id: str,
+    capability: str,
+    semantic_target_id: str,
+    command_digest: str,
+    lineage_id: str,
+    lineage_epoch: int,
+    consumption_ordinal: int,
+    previous_consumption_digest: str | None,
+    consumed_at_millis: int,
+) -> str:
+    projection = {
+        "consumptionId": consumption_id,
+        "consumptionRequestId": consumption_request_id,
+        "authorizationReceiptId": authorization_receipt_id,
+        "authorizationReceiptDigest": authorization_receipt_digest,
+        "workspaceId": workspace_id,
+        "actorId": actor_id,
+        "capability": capability,
+        "semanticTargetId": semantic_target_id,
+        "commandDigest": command_digest,
+        "lineageId": lineage_id,
+        "lineageEpoch": lineage_epoch,
+        "consumptionOrdinal": consumption_ordinal,
+        "previousConsumptionDigest": previous_consumption_digest,
+        "consumedAtMillis": consumed_at_millis,
+        "moneyMovementPerformed": False,
+        "localMutationPerformed": False,
+    }
+    return sha256(
+        (
+            SHOP_CORRECTION_CONSUMPTION_CONTRACT
+            + "\n"
+            + json.dumps(
+                projection,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _shop_correction_lineage_from_mapping(
+    value: object,
+    *,
+    workspace_id: str | None = None,
+    idempotent_replay: bool = False,
+) -> ShopCorrectionLineageRecord:
+    if not isinstance(value, Mapping):
+        raise TrialStoreError("Shop correction lineage evidence is invalid.")
+    try:
+        record = ShopCorrectionLineageRecord(
+            activation_request_id=str(UUID(str(value.get("activation_request_id")))),
+            workspace_id=str(value.get("workspace_id") or ""),
+            actor_id=str(value.get("actor_id") or ""),
+            lineage_id=str(UUID(str(value.get("lineage_id")))),
+            lineage_epoch=int(value.get("lineage_epoch")),
+            previous_lineage_id=(
+                None
+                if value.get("previous_lineage_id") is None
+                else str(UUID(str(value.get("previous_lineage_id"))))
+            ),
+            previous_lineage_epoch=(
+                None
+                if value.get("previous_lineage_epoch") is None
+                else int(value.get("previous_lineage_epoch"))
+            ),
+            consumption_ordinal=int(value.get("current_consumption_ordinal")),
+            consumption_digest=(
+                None
+                if value.get("current_consumption_digest") is None
+                else str(value.get("current_consumption_digest"))
+            ),
+            activated_at_millis=int(value.get("activated_at_millis")),
+            idempotent_replay=idempotent_replay,
+        )
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise TrialStoreError("Shop correction lineage evidence is invalid.") from exc
+    try:
+        _shop_correction_lineage_input(
+            lineage_id=record.lineage_id,
+            lineage_epoch=record.lineage_epoch,
+            consumption_ordinal=record.consumption_ordinal,
+            consumption_digest=record.consumption_digest,
+        )
+    except TrialValidationError as exc:
+        raise TrialStoreError("Shop correction lineage evidence is invalid.") from exc
+    if (
+        not record.workspace_id
+        or (workspace_id is not None and record.workspace_id != workspace_id)
+        or not record.actor_id
+        or record.activated_at_millis <= 0
+        or ((record.previous_lineage_id is None) != (record.previous_lineage_epoch is None))
+        or (
+            record.lineage_epoch == 1
+            and (record.previous_lineage_id is not None or record.previous_lineage_epoch is not None)
+        )
+        or (
+            record.lineage_epoch > 1
+            and record.previous_lineage_epoch != record.lineage_epoch - 1
+        )
+    ):
+        raise TrialStoreError("Shop correction lineage evidence is invalid.")
+    return record
+
+
+def _shop_correction_consumption_from_mapping(
+    value: object,
+    *,
+    signer: ShopCorrectionReceiptSigner,
+    workspace_id: str,
+    response_mode: str,
+) -> ShopCorrectionConsumptionProof:
+    if not isinstance(value, Mapping):
+        raise TrialStoreError("Shop correction consumption evidence is invalid.")
+    try:
+        proof = ShopCorrectionConsumptionProof(
+            consumption_id=str(UUID(str(value.get("consumption_id")))),
+            consumption_request_id=str(UUID(str(value.get("consumption_request_id")))),
+            authorization_receipt_id=str(UUID(str(value.get("authorization_receipt_id")))),
+            authorization_receipt_digest=str(value.get("authorization_receipt_digest") or ""),
+            workspace_id=str(value.get("workspace_id") or ""),
+            actor_id=str(value.get("actor_id") or ""),
+            capability=str(value.get("capability") or ""),
+            semantic_target_id=str(value.get("semantic_target_id") or ""),
+            command_digest=str(value.get("command_digest") or ""),
+            lineage_id=str(UUID(str(value.get("lineage_id")))),
+            lineage_epoch=int(value.get("lineage_epoch")),
+            consumption_ordinal=int(value.get("consumption_ordinal")),
+            previous_consumption_digest=(
+                None
+                if value.get("previous_consumption_digest") is None
+                else str(value.get("previous_consumption_digest"))
+            ),
+            history_digest=str(value.get("history_digest") or ""),
+            consumed_at_millis=int(value.get("consumed_at_millis")),
+            key_id=str(value.get("key_id") or ""),
+            signature=str(value.get("signature") or ""),
+            response_mode=response_mode,
+        )
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise TrialStoreError("Shop correction consumption evidence is invalid.") from exc
+    expected = _shop_correction_consumption_digest(
+        consumption_id=proof.consumption_id,
+        consumption_request_id=proof.consumption_request_id,
+        authorization_receipt_id=proof.authorization_receipt_id,
+        authorization_receipt_digest=proof.authorization_receipt_digest,
+        workspace_id=proof.workspace_id,
+        actor_id=proof.actor_id,
+        capability=proof.capability,
+        semantic_target_id=proof.semantic_target_id,
+        command_digest=proof.command_digest,
+        lineage_id=proof.lineage_id,
+        lineage_epoch=proof.lineage_epoch,
+        consumption_ordinal=proof.consumption_ordinal,
+        previous_consumption_digest=proof.previous_consumption_digest,
+        consumed_at_millis=proof.consumed_at_millis,
+    )
+    try:
+        verification_keys = _shop_correction_verification_keys(signer)
+    except ShopCorrectionSigningError as exc:
+        raise TrialStoreError(
+            "Shop correction signing key conflicts with its source pin."
+        ) from exc
+    if (
+        proof.workspace_id != workspace_id
+        or proof.capability not in SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES
+        or proof.history_digest != expected
+        or not verify_shop_correction_signature(
+            key_id=proof.key_id,
+            receipt_digest=proof.history_digest,
+            signature=proof.signature,
+            public_keys=verification_keys,
+        )
+    ):
+        raise TrialStoreError("Shop correction consumption evidence is invalid.")
+    return proof
+
+
+def _shop_correction_receipt_from_mapping(
+    value: object,
+    *,
+    signer: ShopCorrectionReceiptSigner,
+    workspace_id: str,
+    actor_id: str,
+    finalization_request_id: str,
+    capability: str,
+    command_digest: str,
+    idempotent_replay: bool,
+) -> ShopCorrectionAuthorizationReceipt:
+    if not isinstance(value, Mapping):
+        raise TrialStoreError("Shop correction authorization evidence is invalid.")
+    expected_keys = {
+        "contract",
+        "receiptId",
+        "receiptDigest",
+        "finalizationRequestId",
+        "workspaceId",
+        "actorId",
+        "actorLabel",
+        "actorRole",
+        "capability",
+        "source",
+        "commandDigest",
+        "finalizedAtMillis",
+        "issuedAtMillis",
+        "expiresAtMillis",
+        "keyId",
+        "signature",
+    }
+    if set(value) != expected_keys:
+        raise TrialStoreError("Shop correction authorization evidence is invalid.")
+    try:
+        receipt_id = str(UUID(str(value.get("receiptId"))))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise TrialStoreError("Shop correction authorization evidence is invalid.") from exc
+    issued_at_millis = value.get("issuedAtMillis")
+    finalized_at_millis = value.get("finalizedAtMillis")
+    expires_at_millis = value.get("expiresAtMillis")
+    if (
+        type(finalized_at_millis) is not int
+        or type(issued_at_millis) is not int
+        or type(expires_at_millis) is not int
+    ):
+        raise TrialStoreError("Shop correction authorization evidence is invalid.")
+    receipt = ShopCorrectionAuthorizationReceipt(
+        receipt_id=receipt_id,
+        receipt_digest=str(value.get("receiptDigest") or ""),
+        finalization_request_id=str(value.get("finalizationRequestId") or ""),
+        workspace_id=str(value.get("workspaceId") or ""),
+        actor_id=str(value.get("actorId") or ""),
+        actor_label=str(value.get("actorLabel") or ""),
+        actor_role=str(value.get("actorRole") or ""),
+        capability=str(value.get("capability") or ""),
+        source=str(value.get("source") or ""),
+        command_digest=str(value.get("commandDigest") or ""),
+        finalized_at_millis=finalized_at_millis,
+        issued_at_millis=issued_at_millis,
+        expires_at_millis=expires_at_millis,
+        key_id=str(value.get("keyId") or ""),
+        signature=str(value.get("signature") or ""),
+        idempotent_replay=idempotent_replay,
+    )
+    expected_digest = shop_correction_authorization_receipt_v3_digest(
+        source=receipt.source,
+        receipt_id=receipt.receipt_id,
+        finalization_request_id=receipt.finalization_request_id,
+        workspace_id=receipt.workspace_id,
+        actor_id=receipt.actor_id,
+        actor_label=receipt.actor_label,
+        actor_role=receipt.actor_role,
+        capability=receipt.capability,
+        command_digest=receipt.command_digest,
+        finalized_at_millis=receipt.finalized_at_millis,
+        issued_at_millis=receipt.issued_at_millis,
+        expires_at_millis=receipt.expires_at_millis,
+    )
+    if (
+        value.get("contract") != SHOP_CORRECTION_AUTHORIZATION_CONTRACT
+        or receipt.finalization_request_id != finalization_request_id
+        or receipt.workspace_id != workspace_id
+        or receipt.actor_id != actor_id
+        or receipt.actor_label != "Workspace owner"
+        or receipt.actor_role != "owner"
+        or receipt.capability != capability
+        or receipt.source != SHOP_CORRECTION_AUTHORIZATION_SOURCE
+        or receipt.command_digest != command_digest
+        or not re.fullmatch(r"[0-9a-f]{64}", receipt.receipt_digest)
+        or receipt.receipt_digest != expected_digest
+        or receipt.finalized_at_millis <= 0
+        or receipt.issued_at_millis <= 0
+        or not (
+            receipt.issued_at_millis
+            <= receipt.finalized_at_millis
+            <= receipt.expires_at_millis
+        )
+        or receipt.expires_at_millis - receipt.issued_at_millis
+        != SHOP_CORRECTION_AUTHORIZATION_TTL_MILLIS
+        or receipt.key_id != signer.key_id
+        or not signer.verify(
+            receipt_digest=receipt.receipt_digest,
+            signature=receipt.signature,
+        )
+    ):
+        raise TrialStoreError("Shop correction authorization evidence is invalid.")
+    return receipt
+
+
+def _new_shop_correction_authorization_receipt(
+    *,
+    signer: ShopCorrectionReceiptSigner,
+    workspace_id: str,
+    actor_id: str,
+    finalization_request_id: str,
+    capability: str,
+    command_digest: str,
+    finalized_at_millis: int,
+) -> ShopCorrectionAuthorizationReceipt:
+    issued_at_millis = finalized_at_millis
+    expires_at_millis = issued_at_millis + SHOP_CORRECTION_AUTHORIZATION_TTL_MILLIS
+    receipt_id = str(uuid4())
+    receipt_digest = shop_correction_authorization_receipt_v3_digest(
+        source=SHOP_CORRECTION_AUTHORIZATION_SOURCE,
+        receipt_id=receipt_id,
+        finalization_request_id=finalization_request_id,
+        workspace_id=workspace_id,
+        actor_id=actor_id,
+        actor_label="Workspace owner",
+        actor_role="owner",
+        capability=capability,
+        command_digest=command_digest,
+        finalized_at_millis=finalized_at_millis,
+        issued_at_millis=issued_at_millis,
+        expires_at_millis=expires_at_millis,
+    )
+    return ShopCorrectionAuthorizationReceipt(
+        receipt_id=receipt_id,
+        receipt_digest=receipt_digest,
+        finalization_request_id=finalization_request_id,
+        workspace_id=workspace_id,
+        actor_id=actor_id,
+        actor_label="Workspace owner",
+        actor_role="owner",
+        capability=capability,
+        source=SHOP_CORRECTION_AUTHORIZATION_SOURCE,
+        command_digest=command_digest,
+        finalized_at_millis=finalized_at_millis,
+        issued_at_millis=issued_at_millis,
+        expires_at_millis=expires_at_millis,
+        key_id=signer.key_id,
+        signature=signer.sign(receipt_digest=receipt_digest),
+    )
+
+
 def _normalize_acceptance_product(product: object) -> tuple[str, str]:
     normalized = str(product or "").strip().lower()
     surface = PRODUCT_ACCEPTANCE_SURFACES.get(normalized)
@@ -3394,6 +4425,17 @@ def _principal_auth_ready(principal: TrialPrincipal | None) -> bool:
         return False
 
 
+def _require_shop_correction_principal(principal: TrialPrincipal) -> TrialPrincipal:
+    normalized = principal.normalized()
+    if normalized.actor_kind != HUMAN_ACTOR_KIND:
+        raise TrialHumanApprovalRequired()
+    if normalized.identity_provider != "supabase":
+        raise TrialPermissionDenied("shop.correction.supabase_identity")
+    if not _principal_auth_ready(normalized):
+        raise TrialNotReadyError(("auth_ready",))
+    return normalized
+
+
 def _iso_timestamp(value: Any) -> str:
     if value is None:
         return ""
@@ -3497,10 +4539,23 @@ class PostgresTrialStore:
     probe succeeds with a dedicated non-BYPASSRLS login role.
     """
 
-    def __init__(self, database_url: str, *, reducer: StateReducer, write_enabled: bool = False):
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        reducer: StateReducer,
+        write_enabled: bool = False,
+        shop_correction_signer: ShopCorrectionReceiptSigner | None = None,
+    ):
         self.database_url = str(database_url or "").strip()
         self.reducer = reducer
         self.write_enabled = bool(write_enabled)
+        self._shop_correction_signer = _configured_shop_correction_signer(
+            shop_correction_signer
+        )
+
+    def shop_correction_authorization_signing_ready(self) -> bool:
+        return self._shop_correction_signer is not None
 
     def _connect(self):
         if not self.database_url:
@@ -4726,6 +5781,780 @@ class PostgresTrialStore:
         result = row.get("result_json") or {}
         return json.loads(result) if isinstance(result, str) else result
 
+    @staticmethod
+    def _require_active_workspace_owner(cursor: Any, principal: TrialPrincipal) -> None:
+        cursor.execute(
+            """
+            select owner_actor_id
+            from app_private.workspace_access_controls
+            where workspace_id = %s and status = 'active'
+            for share
+            """,
+            (principal.workspace_id,),
+        )
+        row = cursor.fetchone()
+        if not isinstance(row, Mapping) or str(row.get("owner_actor_id") or "") != principal.actor_id:
+            raise TrialPermissionDenied("shop.owner")
+
+    def _load_shop_correction_authorization_replay(
+        self,
+        cursor: Any,
+        *,
+        principal: TrialPrincipal,
+        command_id: str,
+        authorization_request_id: str,
+        fingerprint: str,
+        capability: str,
+        command_digest: str,
+    ) -> ShopCorrectionAuthorizationReceipt | None:
+        cursor.execute(
+            """
+            select event_type, actor_id, actor_kind, command_fingerprint,
+                   payload_json, result_json
+            from app_private.workspace_events
+            where workspace_id = %s and command_id = %s
+            """,
+            (principal.workspace_id, command_id),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        if (
+            str(row.get("event_type") or "")
+            != SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE
+            or str(row.get("actor_id") or "") != principal.actor_id
+            or str(row.get("actor_kind") or "") != principal.actor_kind
+            or str(row.get("command_fingerprint") or "") != fingerprint
+        ):
+            raise TrialIdempotencyConflict(command_id)
+        payload = row.get("payload_json") or {}
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError as exc:
+                raise TrialStoreError(
+                    "Shop correction authorization evidence is invalid."
+                ) from exc
+        if (
+            not isinstance(payload, Mapping)
+            or payload.get("authorizationRequestId") != authorization_request_id
+            or payload.get("capability") != capability
+            or payload.get("commandDigest") != command_digest
+        ):
+            raise TrialIdempotencyConflict(command_id)
+        result = row.get("result_json") or {}
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError as exc:
+                raise TrialStoreError(
+                    "Shop correction authorization evidence is invalid."
+                ) from exc
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
+        return _shop_correction_receipt_from_mapping(
+            result,
+            signer=signer,
+            workspace_id=principal.workspace_id,
+            actor_id=principal.actor_id,
+            finalization_request_id=authorization_request_id,
+            capability=capability,
+            command_digest=command_digest,
+            idempotent_replay=True,
+        )
+
+    def issue_shop_correction_authorization(
+        self,
+        principal: TrialPrincipal,
+        *,
+        authorization_request_id: str | UUID,
+        capability: str,
+        command_digest: str,
+        request_fingerprint: str,
+        confirmation: str,
+    ) -> ShopCorrectionAuthorizationReceipt:
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
+        (
+            request_id,
+            capability_value,
+            command_digest_value,
+            confirmation_value,
+            command_facts,
+        ) = _shop_correction_authorization_request(
+            authorization_request_id=authorization_request_id,
+            capability=capability,
+            command_digest=command_digest,
+            request_fingerprint=request_fingerprint,
+            confirmation=confirmation,
+        )
+        normalized = _require_shop_correction_principal(principal)
+        command_id, fingerprint = _shop_correction_finalization_identity(
+            workspace_id=normalized.workspace_id,
+            capability=capability_value,
+            semantic_target_id=str(
+                command_facts[
+                    "saleId"
+                    if capability_value == "shop.sale.reverse"
+                    else "reversalId"
+                ]
+            ),
+        )
+        with self._guarded_cursor(
+            normalized,
+            write=True,
+            capability="commerce.write",
+        ) as (cursor, _capabilities):
+            if "commerce" not in self._product_entitlements(
+                cursor,
+                normalized.workspace_id,
+            ):
+                raise TrialPermissionDenied("product.commerce")
+            self._require_active_workspace_owner(cursor, normalized)
+            self._lock(
+                cursor,
+                f"{normalized.workspace_id}:shop-correction-finalization:{command_id}",
+            )
+            self._lock(
+                cursor,
+                f"{normalized.workspace_id}:shop-correction-request:{request_id}",
+            )
+            cursor.execute(
+                """
+                select command_id
+                from app_private.workspace_events
+                where workspace_id = %s
+                  and event_type = %s
+                  and payload_json ->> 'authorizationRequestId' = %s
+                """,
+                (
+                    normalized.workspace_id,
+                    SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE,
+                    request_id,
+                ),
+            )
+            request_claim = cursor.fetchone()
+            if request_claim and str(request_claim.get("command_id") or "") != command_id:
+                raise TrialIdempotencyConflict(request_id)
+            cursor.execute(
+                """
+                select floor(extract(epoch from clock_timestamp()) * 1000)::bigint
+                       as issued_at_millis
+                """
+            )
+            clock_row = cursor.fetchone() or {}
+            try:
+                issued_at_millis = int(clock_row.get("issued_at_millis"))
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise TrialNotReadyError(("database_or_schema_ready",)) from exc
+            if issued_at_millis <= 0:
+                raise TrialNotReadyError(("database_or_schema_ready",))
+            replay = self._load_shop_correction_authorization_replay(
+                cursor,
+                principal=normalized,
+                command_id=command_id,
+                authorization_request_id=request_id,
+                fingerprint=fingerprint,
+                capability=capability_value,
+                command_digest=command_digest_value,
+            )
+            if replay is not None:
+                if issued_at_millis > replay.expires_at_millis:
+                    raise TrialAuthorizationExpired(request_id)
+                return replay
+            receipt = _new_shop_correction_authorization_receipt(
+                signer=signer,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                finalization_request_id=request_id,
+                capability=capability_value,
+                command_digest=command_digest_value,
+                finalized_at_millis=issued_at_millis,
+            )
+            payload: JsonObject = {
+                "contract": SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
+                "authorizationRequestId": request_id,
+                "capability": capability_value,
+                "commandDigest": command_digest_value,
+                "confirmation": confirmation_value,
+                "command": command_facts,
+            }
+            cursor.execute(
+                """
+                insert into app_private.workspace_events
+                  (event_id, workspace_id, command_id, command_fingerprint, surface,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
+                   payload_json, result_json)
+                values (%s, %s, %s, %s, 'commerce', %s, %s, %s, null, null,
+                        %s::jsonb, %s::jsonb)
+                """,
+                (
+                    receipt.receipt_id,
+                    normalized.workspace_id,
+                    command_id,
+                    fingerprint,
+                    SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE,
+                    normalized.actor_id,
+                    normalized.actor_kind,
+                    json.dumps(payload, ensure_ascii=False),
+                    json.dumps(receipt.to_dict(), ensure_ascii=False),
+                ),
+            )
+            readback = self._load_shop_correction_authorization_replay(
+                cursor,
+                principal=normalized,
+                command_id=command_id,
+                authorization_request_id=request_id,
+                fingerprint=fingerprint,
+                capability=capability_value,
+                command_digest=command_digest_value,
+            )
+            if readback is None or readback.to_dict() != receipt.to_dict():
+                raise TrialStoreError(
+                    "Shop correction authorization evidence could not be read back."
+                )
+            return receipt
+
+    def activate_shop_correction_lineage(
+        self,
+        principal: TrialPrincipal,
+        *,
+        activation_request_id: str | UUID,
+        lineage_id: str | UUID,
+        expected_previous_lineage_id: str | UUID | None,
+        expected_previous_lineage_epoch: int | None,
+        local_consumption_ordinal: int,
+        local_consumption_digest: str | None,
+    ) -> ShopCorrectionLineageRecord:
+        normalized = _require_shop_correction_principal(principal)
+        request_id = _shop_correction_uuid(
+            activation_request_id, field="activation_request_id"
+        )
+        lineage = _shop_correction_uuid(lineage_id, field="lineage_id")
+        previous_lineage = (
+            None
+            if expected_previous_lineage_id is None
+            else _shop_correction_uuid(
+                expected_previous_lineage_id,
+                field="expected_previous_lineage_id",
+            )
+        )
+        if expected_previous_lineage_epoch is not None and (
+            type(expected_previous_lineage_epoch) is not int
+            or expected_previous_lineage_epoch < 1
+        ):
+            raise TrialValidationError(
+                "expected_previous_lineage_epoch must be a positive integer."
+            )
+        _, _, ordinal, digest = _shop_correction_lineage_input(
+            lineage_id=lineage,
+            lineage_epoch=1,
+            consumption_ordinal=local_consumption_ordinal,
+            consumption_digest=local_consumption_digest,
+        )
+        activation_fingerprint = _canonical_fingerprint(
+            "shop_correction_lineage_activation",
+            {
+                "activation_request_id": request_id,
+                "lineage_id": lineage,
+                "expected_previous_lineage_id": previous_lineage,
+                "expected_previous_lineage_epoch": expected_previous_lineage_epoch,
+                "local_consumption_ordinal": ordinal,
+                "local_consumption_digest": digest,
+            },
+        )
+        command_id = str(uuid5(NAMESPACE_URL, f"{SHOP_CORRECTION_LINEAGE_CONTRACT}\n{normalized.workspace_id}\n{request_id}"))
+        select_fields = """
+            workspace_id, activation_request_id, lineage_id, lineage_epoch,
+            previous_lineage_id, previous_lineage_epoch, actor_id,
+            current_consumption_ordinal, current_consumption_digest,
+            floor(extract(epoch from activated_at) * 1000)::bigint as activated_at_millis
+        """
+        with self._guarded_cursor(
+            normalized, write=True, capability="commerce.write"
+        ) as (cursor, _capabilities):
+            if "commerce" not in self._product_entitlements(cursor, normalized.workspace_id):
+                raise TrialPermissionDenied("product.commerce")
+            self._require_active_workspace_owner(cursor, normalized)
+            self._lock(cursor, f"{normalized.workspace_id}:shop-correction-lineage")
+            self._lock(
+                cursor,
+                f"{normalized.workspace_id}:shop-correction-lineage-request:{request_id}",
+            )
+            cursor.execute(
+                f"""select {select_fields}, activation_fingerprint
+                    from app_private.shop_correction_lineages
+                    where workspace_id = %s and activation_request_id = %s""",
+                (normalized.workspace_id, request_id),
+            )
+            replay_row = cursor.fetchone()
+            cursor.execute(
+                f"""select {select_fields}
+                    from app_private.shop_correction_lineages
+                    where workspace_id = %s and superseded_at is null
+                    for update""",
+                (normalized.workspace_id,),
+            )
+            active_row = cursor.fetchone()
+            if replay_row is not None:
+                if str(replay_row.get("activation_fingerprint") or "") != activation_fingerprint:
+                    raise TrialIdempotencyConflict(request_id)
+                replay = _shop_correction_lineage_from_mapping(
+                    replay_row,
+                    workspace_id=normalized.workspace_id,
+                    idempotent_replay=True,
+                )
+                if active_row is not None and str(active_row.get("lineage_id")) == replay.lineage_id:
+                    return _shop_correction_lineage_from_mapping(
+                        active_row,
+                        workspace_id=normalized.workspace_id,
+                        idempotent_replay=True,
+                    )
+                return replay
+            if active_row is None:
+                if (
+                    previous_lineage is not None
+                    or expected_previous_lineage_epoch is not None
+                    or ordinal != 0
+                    or digest is not None
+                ):
+                    raise TrialReconciliationRequired(state="initial_watermark_not_empty")
+                epoch = 1
+            else:
+                active = _shop_correction_lineage_from_mapping(
+                    active_row, workspace_id=normalized.workspace_id
+                )
+                if (
+                    previous_lineage != active.lineage_id
+                    or expected_previous_lineage_epoch != active.lineage_epoch
+                ):
+                    raise TrialReconciliationRequired(state="stale_lineage")
+                if ordinal != active.consumption_ordinal or digest != active.consumption_digest:
+                    raise TrialReconciliationRequired(state="watermark_mismatch")
+                if lineage == active.lineage_id:
+                    raise TrialValidationError("A restored lineage must use a fresh lineage_id.")
+                epoch = active.lineage_epoch + 1
+                cursor.execute(
+                    """update app_private.shop_correction_lineages
+                       set superseded_at = transaction_timestamp()
+                       where workspace_id = %s and lineage_id = %s
+                         and superseded_at is null
+                       returning lineage_id""",
+                    (normalized.workspace_id, active.lineage_id),
+                )
+                if str((cursor.fetchone() or {}).get("lineage_id") or "") != active.lineage_id:
+                    raise TrialReconciliationRequired(state="stale_lineage")
+            cursor.execute(
+                """insert into app_private.shop_correction_lineages
+                  (workspace_id, lineage_id, lineage_epoch, activation_request_id,
+                   activation_fingerprint, actor_id, actor_kind,
+                   previous_lineage_id, previous_lineage_epoch,
+                   initial_consumption_ordinal, initial_consumption_digest,
+                   current_consumption_ordinal, current_consumption_digest)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    normalized.workspace_id, lineage, epoch, request_id,
+                    activation_fingerprint, normalized.actor_id, normalized.actor_kind,
+                    previous_lineage, expected_previous_lineage_epoch,
+                    ordinal, digest, ordinal, digest,
+                ),
+            )
+            cursor.execute(
+                f"""select {select_fields}
+                    from app_private.shop_correction_lineages
+                    where workspace_id = %s and activation_request_id = %s""",
+                (normalized.workspace_id, request_id),
+            )
+            record = _shop_correction_lineage_from_mapping(
+                cursor.fetchone(), workspace_id=normalized.workspace_id
+            )
+            payload = {
+                "contract": SHOP_CORRECTION_LINEAGE_CONTRACT,
+                "activationRequestId": request_id,
+                "lineageId": lineage,
+                "expectedPreviousLineageId": previous_lineage,
+                "expectedPreviousLineageEpoch": expected_previous_lineage_epoch,
+                "localConsumptionOrdinal": ordinal,
+                "localConsumptionDigest": digest,
+            }
+            cursor.execute(
+                """insert into app_private.workspace_events
+                  (event_id, workspace_id, command_id, command_fingerprint, surface,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
+                   payload_json, result_json)
+                values (%s, %s, %s, %s, 'commerce', %s, %s, %s, null, null,
+                        %s::jsonb, %s::jsonb)""",
+                (
+                    str(uuid4()), normalized.workspace_id, command_id,
+                    activation_fingerprint, SHOP_CORRECTION_LINEAGE_EVENT_TYPE,
+                    normalized.actor_id, normalized.actor_kind,
+                    json.dumps(payload, ensure_ascii=False),
+                    json.dumps(record.to_dict(), ensure_ascii=False),
+                ),
+            )
+            return record
+
+    def consume_shop_correction_authorization(
+        self,
+        principal: TrialPrincipal,
+        *,
+        consumption_request_id: str | UUID,
+        authorization_receipt_id: str | UUID,
+        authorization_receipt_digest: str,
+        lineage_id: str | UUID,
+        lineage_epoch: int,
+        capability: str,
+        semantic_target_id: str,
+        command_digest: str,
+        allow_new_decision: bool,
+    ) -> ShopCorrectionConsumptionProof:
+        normalized = _require_shop_correction_principal(principal)
+        if type(allow_new_decision) is not bool:
+            raise TrialValidationError("allow_new_decision must be a boolean.")
+        request_id = _shop_correction_uuid(
+            consumption_request_id, field="consumption_request_id"
+        )
+        receipt_id = _shop_correction_uuid(
+            authorization_receipt_id, field="authorization_receipt_id"
+        )
+        receipt_digest = _shop_correction_digest(
+            authorization_receipt_digest, field="authorization_receipt_digest"
+        )
+        lineage, epoch, _, _ = _shop_correction_lineage_input(
+            lineage_id=lineage_id,
+            lineage_epoch=lineage_epoch,
+            consumption_ordinal=0,
+            consumption_digest=None,
+        )
+        digest = _shop_correction_digest(command_digest, field="command_digest")
+        target = _bounded_shop_correction_text(
+            semantic_target_id, field="Shop correction semantic_target_id", maximum=120
+        )
+        if capability not in SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES:
+            raise TrialValidationError("Shop correction capability is invalid.")
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
+        command_id, fingerprint = _shop_correction_consumption_identity(
+            workspace_id=normalized.workspace_id,
+            capability=capability,
+            semantic_target_id=target,
+        )
+        consumption_fields = """
+            workspace_id, consumption_id, consumption_request_id,
+            authorization_receipt_id, authorization_receipt_digest, actor_id,
+            capability, semantic_target_id, command_digest, lineage_id,
+            lineage_epoch, consumption_ordinal, previous_consumption_digest,
+            history_digest, consumed_at_millis, key_id, signature
+        """
+        with self._guarded_cursor(
+            normalized, write=True, capability="commerce.write"
+        ) as (cursor, _capabilities):
+            if "commerce" not in self._product_entitlements(cursor, normalized.workspace_id):
+                raise TrialPermissionDenied("product.commerce")
+            self._require_active_workspace_owner(cursor, normalized)
+            self._lock(cursor, f"{normalized.workspace_id}:shop-correction-lineage")
+            self._lock(cursor, f"{normalized.workspace_id}:shop-correction-target:{command_id}")
+            self._lock(cursor, f"{normalized.workspace_id}:shop-correction-request:{request_id}")
+            cursor.execute(
+                """select workspace_id, activation_request_id, lineage_id, lineage_epoch,
+                          previous_lineage_id, previous_lineage_epoch, actor_id,
+                          current_consumption_ordinal, current_consumption_digest,
+                          floor(extract(epoch from activated_at) * 1000)::bigint as activated_at_millis
+                   from app_private.shop_correction_lineages
+                   where workspace_id = %s and superseded_at is null
+                   for update""",
+                (normalized.workspace_id,),
+            )
+            active_row = cursor.fetchone()
+            if active_row is None:
+                raise TrialNotReadyError(("shop_correction_lineage_ready",))
+            active = _shop_correction_lineage_from_mapping(
+                active_row, workspace_id=normalized.workspace_id
+            )
+            if active.lineage_id != lineage or active.lineage_epoch != epoch:
+                raise TrialReconciliationRequired(state="stale_lineage")
+            cursor.execute(
+                f"""select {consumption_fields}
+                    from app_private.shop_correction_consumptions
+                    where workspace_id = %s and consumption_request_id = %s""",
+                (normalized.workspace_id, request_id),
+            )
+            request_row = cursor.fetchone()
+            cursor.execute(
+                f"""select {consumption_fields}
+                    from app_private.shop_correction_consumptions
+                    where workspace_id = %s and command_id = %s""",
+                (normalized.workspace_id, command_id),
+            )
+            existing_row = cursor.fetchone()
+            if request_row is not None and (
+                existing_row is None
+                or str(request_row.get("consumption_id")) != str(existing_row.get("consumption_id"))
+            ):
+                raise TrialIdempotencyConflict(request_id)
+            if existing_row is not None:
+                existing = _shop_correction_consumption_from_mapping(
+                    existing_row,
+                    signer=signer,
+                    workspace_id=normalized.workspace_id,
+                    response_mode="reconstruct_existing",
+                )
+                existing = replace(
+                    existing,
+                    response_mode=(
+                        "recover_same_request"
+                        if existing.consumption_request_id == request_id
+                        and existing.lineage_id == lineage
+                        and existing.lineage_epoch == epoch
+                        else "reconstruct_existing"
+                    ),
+                )
+                if (
+                    existing.authorization_receipt_id != receipt_id
+                    or existing.authorization_receipt_digest != receipt_digest
+                    or existing.actor_id != normalized.actor_id
+                    or existing.capability != capability
+                    or existing.semantic_target_id != target
+                    or existing.command_digest != digest
+                    or active.consumption_ordinal < existing.consumption_ordinal
+                ):
+                    raise TrialReconciliationRequired(state="committed_other_lineage")
+                return existing
+            cursor.execute(
+                """select payload_json, result_json
+                   from app_private.workspace_events
+                   where workspace_id = %s
+                     and event_type = %s
+                     and result_json ->> 'receiptId' = %s
+                   limit 1""",
+                (normalized.workspace_id, SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE, receipt_id),
+            )
+            authorization_row = cursor.fetchone()
+            if not isinstance(authorization_row, Mapping):
+                raise TrialNotFound("Shop correction authorization was not found.")
+            payload = authorization_row.get("payload_json") or {}
+            result = authorization_row.get("result_json") or {}
+            try:
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                if isinstance(result, str):
+                    result = json.loads(result)
+            except json.JSONDecodeError as exc:
+                raise TrialStoreError(
+                    "Shop correction authorization evidence is invalid."
+                ) from exc
+            if not isinstance(payload, Mapping) or not isinstance(result, Mapping):
+                raise TrialStoreError("Shop correction authorization evidence is invalid.")
+            payload_request_id = str(payload.get("authorizationRequestId") or "")
+            if (
+                payload.get("contract") != SHOP_CORRECTION_AUTHORIZATION_CONTRACT
+                or payload.get("capability") != capability
+                or payload.get("commandDigest") != digest
+            ):
+                raise TrialPermissionDenied("shop.correction.consume")
+            receipt = _shop_correction_receipt_from_mapping(
+                result,
+                signer=signer,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                finalization_request_id=payload_request_id,
+                capability=capability,
+                command_digest=digest,
+                idempotent_replay=True,
+            )
+            command = payload.get("command")
+            expected_target = (
+                command.get("saleId" if capability == "shop.sale.reverse" else "reversalId")
+                if isinstance(command, Mapping)
+                else None
+            )
+            if receipt.receipt_digest != receipt_digest or expected_target != target:
+                raise TrialPermissionDenied("shop.correction.consume")
+            if not allow_new_decision:
+                raise TrialNotReadyError(("shop_correction_authorization_window_open",))
+            cursor.execute(
+                "select floor(extract(epoch from transaction_timestamp()) * 1000)::bigint as consumed_at_millis"
+            )
+            now_row = cursor.fetchone() or {}
+            now_millis = int(now_row.get("consumed_at_millis") or 0)
+            if now_millis <= 0:
+                raise TrialStoreError("Shop correction server time is invalid.")
+            if now_millis > receipt.expires_at_millis:
+                raise TrialAuthorizationExpired(receipt.finalization_request_id)
+            ordinal = active.consumption_ordinal + 1
+            consumption_id = str(uuid5(UUID(receipt_id), request_id))
+            history_digest = _shop_correction_consumption_digest(
+                consumption_id=consumption_id,
+                consumption_request_id=request_id,
+                authorization_receipt_id=receipt_id,
+                authorization_receipt_digest=receipt_digest,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                capability=capability,
+                semantic_target_id=target,
+                command_digest=digest,
+                lineage_id=lineage,
+                lineage_epoch=epoch,
+                consumption_ordinal=ordinal,
+                previous_consumption_digest=active.consumption_digest,
+                consumed_at_millis=now_millis,
+            )
+            signature = signer.sign(receipt_digest=history_digest)
+            expected_proof = ShopCorrectionConsumptionProof(
+                consumption_id=consumption_id,
+                consumption_request_id=request_id,
+                authorization_receipt_id=receipt_id,
+                authorization_receipt_digest=receipt_digest,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                capability=capability,
+                semantic_target_id=target,
+                command_digest=digest,
+                lineage_id=lineage,
+                lineage_epoch=epoch,
+                consumption_ordinal=ordinal,
+                previous_consumption_digest=active.consumption_digest,
+                history_digest=history_digest,
+                consumed_at_millis=now_millis,
+                key_id=signer.key_id,
+                signature=signature,
+            )
+            cursor.execute(
+                """insert into app_private.shop_correction_consumptions
+                  (workspace_id, consumption_id, consumption_request_id,
+                   authorization_receipt_id, authorization_receipt_digest,
+                   actor_id, actor_kind, capability, semantic_target_id,
+                   command_id, command_digest, lineage_id, lineage_epoch,
+                   consumption_ordinal, previous_consumption_digest, history_digest,
+                   consumed_at_millis, key_id, signature)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    normalized.workspace_id, consumption_id, request_id,
+                    receipt_id, receipt_digest, normalized.actor_id,
+                    normalized.actor_kind, capability, target, command_id, digest,
+                    lineage, epoch, ordinal, active.consumption_digest,
+                    history_digest, now_millis, signer.key_id, signature,
+                ),
+            )
+            cursor.execute(
+                """update app_private.shop_correction_lineages
+                   set current_consumption_ordinal = %s,
+                       current_consumption_digest = %s
+                   where workspace_id = %s and lineage_id = %s
+                     and lineage_epoch = %s and superseded_at is null
+                     and current_consumption_ordinal = %s
+                     and current_consumption_digest is not distinct from %s
+                   returning current_consumption_ordinal, current_consumption_digest""",
+                (
+                    ordinal, history_digest, normalized.workspace_id, lineage,
+                    epoch, active.consumption_ordinal, active.consumption_digest,
+                ),
+            )
+            advanced = cursor.fetchone() or {}
+            if (
+                int(advanced.get("current_consumption_ordinal") or -1) != ordinal
+                or str(advanced.get("current_consumption_digest") or "") != history_digest
+            ):
+                raise TrialReconciliationRequired(state="watermark_mismatch")
+            cursor.execute(
+                f"""select {consumption_fields}
+                    from app_private.shop_correction_consumptions
+                    where workspace_id = %s and consumption_id = %s""",
+                (normalized.workspace_id, consumption_id),
+            )
+            proof = _shop_correction_consumption_from_mapping(
+                cursor.fetchone(),
+                signer=signer,
+                workspace_id=normalized.workspace_id,
+                response_mode="commit_new",
+            )
+            if proof.signed_dict() != expected_proof.signed_dict():
+                raise TrialStoreError("Shop correction consumption evidence could not be read back.")
+            audit_payload = {
+                "contract": SHOP_CORRECTION_CONSUMPTION_CONTRACT,
+                "consumptionRequestId": request_id,
+                "authorizationReceiptId": receipt_id,
+                "capability": capability,
+                "semanticTargetId": target,
+                "commandDigest": digest,
+                "lineageId": lineage,
+                "lineageEpoch": epoch,
+            }
+            cursor.execute(
+                """insert into app_private.workspace_events
+                  (event_id, workspace_id, command_id, command_fingerprint, surface,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
+                   payload_json, result_json)
+                values (%s, %s, %s, %s, 'commerce', %s, %s, %s, null, null,
+                        %s::jsonb, %s::jsonb)""",
+                (
+                    consumption_id, normalized.workspace_id, command_id, fingerprint,
+                    SHOP_CORRECTION_CONSUMPTION_EVENT_TYPE, normalized.actor_id,
+                    normalized.actor_kind, json.dumps(audit_payload, ensure_ascii=False),
+                    json.dumps(proof.to_dict(), ensure_ascii=False),
+                ),
+            )
+            return proof
+
+    def get_shop_correction_reconciliation_status(
+        self,
+        principal: TrialPrincipal,
+        *,
+        lineage_id: str | UUID,
+        lineage_epoch: int,
+        local_consumption_ordinal: int,
+        local_consumption_digest: str | None,
+    ) -> ShopCorrectionReconciliationStatus:
+        normalized = _require_shop_correction_principal(principal)
+        lineage, epoch, ordinal, digest = _shop_correction_lineage_input(
+            lineage_id=lineage_id,
+            lineage_epoch=lineage_epoch,
+            consumption_ordinal=local_consumption_ordinal,
+            consumption_digest=local_consumption_digest,
+        )
+        with self._guarded_cursor(
+            normalized, write=False, capability="commerce.write"
+        ) as (cursor, _capabilities):
+            if "commerce" not in self._product_entitlements(cursor, normalized.workspace_id):
+                raise TrialPermissionDenied("product.commerce")
+            self._require_active_workspace_owner(cursor, normalized)
+            cursor.execute(
+                """select lineage_id, lineage_epoch,
+                          current_consumption_ordinal, current_consumption_digest
+                   from app_private.shop_correction_lineages
+                   where workspace_id = %s and superseded_at is null""",
+                (normalized.workspace_id,),
+            )
+            row = cursor.fetchone()
+            if not isinstance(row, Mapping):
+                raise TrialNotReadyError(("shop_correction_lineage_ready",))
+            active_lineage = str(row.get("lineage_id") or "")
+            active_epoch = int(row.get("lineage_epoch") or 0)
+            server_ordinal = int(row.get("current_consumption_ordinal") or 0)
+            server_digest = row.get("current_consumption_digest")
+            if active_lineage != lineage or active_epoch != epoch:
+                state = "stale_lineage"
+            elif server_ordinal == ordinal and server_digest == digest:
+                state = "current"
+            else:
+                state = "reconciliation_required"
+            return ShopCorrectionReconciliationStatus(
+                workspace_id=normalized.workspace_id,
+                requested_lineage_id=lineage,
+                requested_lineage_epoch=epoch,
+                active_lineage_id=active_lineage,
+                active_lineage_epoch=active_epoch,
+                server_consumption_ordinal=server_ordinal,
+                server_consumption_digest=(None if server_digest is None else str(server_digest)),
+                local_consumption_ordinal=ordinal,
+                local_consumption_digest=digest,
+                state=state,
+            )
+
     def apply_command(
         self,
         principal: TrialPrincipal,
@@ -5337,6 +7166,7 @@ class InMemoryTrialStore:
         schema_ready: bool = True,
         audit_ready: bool = True,
         write_enabled: bool = True,
+        shop_correction_signer: ShopCorrectionReceiptSigner | None = None,
     ):
         self.reducer = reducer
         self.database_ready = bool(database_ready)
@@ -5344,9 +7174,24 @@ class InMemoryTrialStore:
         self.schema_ready = bool(schema_ready)
         self.audit_ready = bool(audit_ready)
         self.write_enabled = bool(write_enabled)
+        self._shop_correction_signer = _configured_shop_correction_signer(
+            shop_correction_signer
+        )
         self._memberships: dict[tuple[str, str], tuple[str, str, frozenset[str]]] = {}
         self._states: dict[tuple[str, str], TrialState] = {}
         self._events: dict[tuple[str, str], tuple[str, str, str, JsonObject]] = {}
+        self._event_types: dict[tuple[str, str], str] = {}
+        self._shop_correction_payloads: dict[tuple[str, str], JsonObject] = {}
+        self._shop_correction_lineages: dict[str, ShopCorrectionLineageRecord] = {}
+        self._shop_correction_lineage_requests: dict[
+            tuple[str, str], ShopCorrectionLineageRecord
+        ] = {}
+        self._shop_correction_consumptions: dict[
+            tuple[str, str], ShopCorrectionConsumptionProof
+        ] = {}
+        self._shop_correction_consumption_requests: dict[
+            tuple[str, str], ShopCorrectionConsumptionProof
+        ] = {}
         self._commerce_action_ids: dict[tuple[str, str], str] = {}
         self._approvals: dict[tuple[str, str], ApprovalRecord] = {}
         self._approval_commands: dict[tuple[str, str], str] = {}
@@ -5354,7 +7199,11 @@ class InMemoryTrialStore:
         self._self_serve_attempts: dict[str, int] = {}
         self._workspace_labels: dict[str, str] = {}
         self._workspace_product_entitlements: dict[str, tuple[str, ...]] = {}
+        self._workspace_owner_actor_ids: dict[str, str] = {}
         self._lock = RLock()
+
+    def shop_correction_authorization_signing_ready(self) -> bool:
+        return self._shop_correction_signer is not None
 
     def provision_membership(
         self,
@@ -5397,6 +7246,13 @@ class InMemoryTrialStore:
         if not workspace:
             raise TrialValidationError("Workspace ID is required.")
         self._workspace_product_entitlements[workspace] = normalized
+
+    def provision_workspace_owner(self, *, workspace_id: str, actor_id: str) -> None:
+        workspace = str(workspace_id or "").strip()
+        actor = str(actor_id or "").strip()
+        if not workspace or not actor:
+            raise TrialValidationError("Workspace owner identity is required.")
+        self._workspace_owner_actor_ids[workspace] = actor
 
     def create_self_serve_workspace(
         self,
@@ -5489,6 +7345,7 @@ class InMemoryTrialStore:
             self._self_serve_links[claim] = deepcopy(link_record)
             self._workspace_labels[workspace_id] = label
             self._workspace_product_entitlements[workspace_id] = (normalized_product,)
+            self._workspace_owner_actor_ids[workspace_id] = actor
             result = SelfServeWorkspaceResult(
                 workspace_id=workspace_id,
                 label=label,
@@ -5628,6 +7485,524 @@ class InMemoryTrialStore:
         ):
             raise TrialIdempotencyConflict(command_id)
         return deepcopy(result)
+
+    def issue_shop_correction_authorization(
+        self,
+        principal: TrialPrincipal,
+        *,
+        authorization_request_id: str | UUID,
+        capability: str,
+        command_digest: str,
+        request_fingerprint: str,
+        confirmation: str,
+    ) -> ShopCorrectionAuthorizationReceipt:
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
+        (
+            request_id,
+            capability_value,
+            command_digest_value,
+            confirmation_value,
+            command_facts,
+        ) = _shop_correction_authorization_request(
+            authorization_request_id=authorization_request_id,
+            capability=capability,
+            command_digest=command_digest,
+            request_fingerprint=request_fingerprint,
+            confirmation=confirmation,
+        )
+        normalized = _require_shop_correction_principal(principal)
+        command_id, fingerprint = _shop_correction_finalization_identity(
+            workspace_id=normalized.workspace_id,
+            capability=capability_value,
+            semantic_target_id=str(
+                command_facts[
+                    "saleId"
+                    if capability_value == "shop.sale.reverse"
+                    else "reversalId"
+                ]
+            ),
+        )
+        with self._lock:
+            normalized, readiness = self._guard(
+                normalized,
+                write=True,
+                capability="commerce.write",
+            )
+            if (
+                readiness.product_entitlements is None
+                or "commerce" not in readiness.product_entitlements
+            ):
+                raise TrialPermissionDenied("product.commerce")
+            if (
+                self._workspace_owner_actor_ids.get(normalized.workspace_id)
+                != normalized.actor_id
+            ):
+                raise TrialPermissionDenied("shop.owner")
+            event_key = (normalized.workspace_id, command_id)
+            claimed_command = next(
+                (
+                    existing_command
+                    for (workspace_id, existing_command), payload
+                    in self._shop_correction_payloads.items()
+                    if workspace_id == normalized.workspace_id
+                    and payload.get("authorizationRequestId") == request_id
+                ),
+                None,
+            )
+            if claimed_command is not None and claimed_command != command_id:
+                raise TrialIdempotencyConflict(request_id)
+            if (
+                event_key in self._events
+                and self._event_types.get(event_key)
+                != SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE
+            ):
+                raise TrialIdempotencyConflict(command_id)
+            issued_at_millis = int(datetime.now(timezone.utc).timestamp() * 1000)
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                command_id,
+                fingerprint,
+            )
+            if replay is not None:
+                payload = self._shop_correction_payloads.get(event_key)
+                if (
+                    not isinstance(payload, Mapping)
+                    or payload.get("authorizationRequestId") != request_id
+                    or payload.get("capability") != capability_value
+                    or payload.get("commandDigest") != command_digest_value
+                ):
+                    raise TrialIdempotencyConflict(command_id)
+                receipt = _shop_correction_receipt_from_mapping(
+                    replay,
+                    signer=signer,
+                    workspace_id=normalized.workspace_id,
+                    actor_id=normalized.actor_id,
+                    finalization_request_id=request_id,
+                    capability=capability_value,
+                    command_digest=command_digest_value,
+                    idempotent_replay=True,
+                )
+                if issued_at_millis > receipt.expires_at_millis:
+                    raise TrialAuthorizationExpired(request_id)
+                return receipt
+            receipt = _new_shop_correction_authorization_receipt(
+                signer=signer,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                finalization_request_id=request_id,
+                capability=capability_value,
+                command_digest=command_digest_value,
+                finalized_at_millis=issued_at_millis,
+            )
+            self._events[event_key] = (
+                fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
+                receipt.to_dict(),
+            )
+            self._event_types[event_key] = SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE
+            self._shop_correction_payloads[event_key] = {
+                "contract": SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
+                "authorizationRequestId": request_id,
+                "capability": capability_value,
+                "commandDigest": command_digest_value,
+                "confirmation": confirmation_value,
+                "command": deepcopy(command_facts),
+            }
+            readback = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                command_id,
+                fingerprint,
+            )
+            record = _shop_correction_receipt_from_mapping(
+                readback,
+                signer=signer,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                finalization_request_id=request_id,
+                capability=capability_value,
+                command_digest=command_digest_value,
+                idempotent_replay=False,
+            )
+            if record.to_dict() != receipt.to_dict():
+                raise TrialStoreError(
+                    "Shop correction authorization evidence could not be read back."
+                )
+            return record
+
+    def _guard_shop_correction_owner(
+        self, principal: TrialPrincipal, *, write: bool
+    ) -> tuple[TrialPrincipal, TrialReadiness]:
+        normalized, readiness = self._guard(
+            principal,
+            write=write,
+            capability="commerce.write",
+        )
+        if (
+            readiness.product_entitlements is None
+            or "commerce" not in readiness.product_entitlements
+        ):
+            raise TrialPermissionDenied("product.commerce")
+        if self._workspace_owner_actor_ids.get(normalized.workspace_id) != normalized.actor_id:
+            raise TrialPermissionDenied("shop.owner")
+        return normalized, readiness
+
+    def activate_shop_correction_lineage(
+        self,
+        principal: TrialPrincipal,
+        *,
+        activation_request_id: str | UUID,
+        lineage_id: str | UUID,
+        expected_previous_lineage_id: str | UUID | None,
+        expected_previous_lineage_epoch: int | None,
+        local_consumption_ordinal: int,
+        local_consumption_digest: str | None,
+    ) -> ShopCorrectionLineageRecord:
+        request_id = _shop_correction_uuid(
+            activation_request_id, field="activation_request_id"
+        )
+        lineage = _shop_correction_uuid(lineage_id, field="lineage_id")
+        if expected_previous_lineage_id is None:
+            previous_lineage = None
+        else:
+            previous_lineage = _shop_correction_uuid(
+                expected_previous_lineage_id,
+                field="expected_previous_lineage_id",
+            )
+        if expected_previous_lineage_epoch is not None and (
+            type(expected_previous_lineage_epoch) is not int
+            or expected_previous_lineage_epoch < 1
+        ):
+            raise TrialValidationError(
+                "expected_previous_lineage_epoch must be a positive integer."
+            )
+        _, _, ordinal, digest = _shop_correction_lineage_input(
+            lineage_id=lineage,
+            lineage_epoch=1,
+            consumption_ordinal=local_consumption_ordinal,
+            consumption_digest=local_consumption_digest,
+        )
+        with self._lock:
+            normalized, _ = self._guard_shop_correction_owner(principal, write=True)
+            replay = self._shop_correction_lineage_requests.get(
+                (normalized.workspace_id, request_id)
+            )
+            if replay is not None:
+                if (
+                    replay.lineage_id != lineage
+                    or replay.previous_lineage_id != previous_lineage
+                    or replay.previous_lineage_epoch != expected_previous_lineage_epoch
+                    or replay.consumption_ordinal != ordinal
+                    or replay.consumption_digest != digest
+                ):
+                    raise TrialIdempotencyConflict(request_id)
+                current = self._shop_correction_lineages.get(normalized.workspace_id)
+                if (
+                    current is not None
+                    and current.lineage_id == replay.lineage_id
+                    and current.lineage_epoch == replay.lineage_epoch
+                ):
+                    return replace(
+                        replay,
+                        consumption_ordinal=current.consumption_ordinal,
+                        consumption_digest=current.consumption_digest,
+                        idempotent_replay=True,
+                    )
+                return replace(replay, idempotent_replay=True)
+            active = self._shop_correction_lineages.get(normalized.workspace_id)
+            if active is None:
+                if (
+                    previous_lineage is not None
+                    or expected_previous_lineage_epoch is not None
+                    or ordinal != 0
+                    or digest is not None
+                ):
+                    raise TrialReconciliationRequired(state="initial_watermark_not_empty")
+                epoch = 1
+            else:
+                if (
+                    previous_lineage != active.lineage_id
+                    or expected_previous_lineage_epoch != active.lineage_epoch
+                ):
+                    raise TrialReconciliationRequired(state="stale_lineage")
+                if (
+                    ordinal != active.consumption_ordinal
+                    or digest != active.consumption_digest
+                ):
+                    raise TrialReconciliationRequired(state="watermark_mismatch")
+                if lineage == active.lineage_id:
+                    raise TrialValidationError(
+                        "A restored lineage must use a fresh lineage_id."
+                    )
+                epoch = active.lineage_epoch + 1
+            record = ShopCorrectionLineageRecord(
+                activation_request_id=request_id,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                lineage_id=lineage,
+                lineage_epoch=epoch,
+                previous_lineage_id=previous_lineage,
+                previous_lineage_epoch=expected_previous_lineage_epoch,
+                consumption_ordinal=ordinal,
+                consumption_digest=digest,
+                activated_at_millis=int(datetime.now(timezone.utc).timestamp() * 1000),
+            )
+            self._shop_correction_lineages[normalized.workspace_id] = record
+            self._shop_correction_lineage_requests[
+                (normalized.workspace_id, request_id)
+            ] = record
+            return record
+
+    def _find_shop_correction_authorization(
+        self,
+        *,
+        workspace_id: str,
+        receipt_id: str,
+    ) -> tuple[ShopCorrectionAuthorizationReceipt, Mapping[str, Any]]:
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
+        for event_key, event_type in self._event_types.items():
+            if event_key[0] != workspace_id or event_type != SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE:
+                continue
+            stored = self._events.get(event_key)
+            if stored is None:
+                continue
+            result = stored[3]
+            if str(result.get("receiptId") or "") != receipt_id:
+                continue
+            payload = self._shop_correction_payloads.get(event_key)
+            if not isinstance(payload, Mapping):
+                raise TrialStoreError("Shop correction authorization evidence is invalid.")
+            receipt = _shop_correction_receipt_from_mapping(
+                result,
+                signer=signer,
+                workspace_id=workspace_id,
+                actor_id=str(result.get("actorId") or ""),
+                finalization_request_id=str(result.get("finalizationRequestId") or ""),
+                capability=str(result.get("capability") or ""),
+                command_digest=str(result.get("commandDigest") or ""),
+                idempotent_replay=True,
+            )
+            return receipt, payload
+        raise TrialNotFound("Shop correction authorization was not found.")
+
+    def consume_shop_correction_authorization(
+        self,
+        principal: TrialPrincipal,
+        *,
+        consumption_request_id: str | UUID,
+        authorization_receipt_id: str | UUID,
+        authorization_receipt_digest: str,
+        lineage_id: str | UUID,
+        lineage_epoch: int,
+        capability: str,
+        semantic_target_id: str,
+        command_digest: str,
+        allow_new_decision: bool,
+    ) -> ShopCorrectionConsumptionProof:
+        if type(allow_new_decision) is not bool:
+            raise TrialValidationError("allow_new_decision must be a boolean.")
+        request_id = _shop_correction_uuid(
+            consumption_request_id, field="consumption_request_id"
+        )
+        receipt_id = _shop_correction_uuid(
+            authorization_receipt_id, field="authorization_receipt_id"
+        )
+        receipt_digest = _shop_correction_digest(
+            authorization_receipt_digest,
+            field="authorization_receipt_digest",
+        )
+        lineage, epoch, _, _ = _shop_correction_lineage_input(
+            lineage_id=lineage_id,
+            lineage_epoch=lineage_epoch,
+            consumption_ordinal=0,
+            consumption_digest=None,
+        )
+        digest = _shop_correction_digest(command_digest, field="command_digest")
+        target = _bounded_shop_correction_text(
+            semantic_target_id,
+            field="Shop correction semantic_target_id",
+            maximum=120,
+        )
+        if capability not in SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES:
+            raise TrialValidationError("Shop correction capability is invalid.")
+        with self._lock:
+            normalized, _ = self._guard_shop_correction_owner(principal, write=True)
+            active = self._shop_correction_lineages.get(normalized.workspace_id)
+            if (
+                active is None
+                or active.lineage_id != lineage
+                or active.lineage_epoch != epoch
+            ):
+                raise TrialReconciliationRequired(state="stale_lineage")
+            receipt, payload = self._find_shop_correction_authorization(
+                workspace_id=normalized.workspace_id,
+                receipt_id=receipt_id,
+            )
+            command = payload.get("command")
+            if not isinstance(command, Mapping):
+                raise TrialStoreError("Shop correction authorization evidence is invalid.")
+            expected_target = command.get(
+                "saleId" if capability == "shop.sale.reverse" else "reversalId"
+            )
+            if (
+                receipt.actor_id != normalized.actor_id
+                or receipt.receipt_digest != receipt_digest
+                or receipt.capability != capability
+                or receipt.command_digest != digest
+                or expected_target != target
+            ):
+                raise TrialPermissionDenied("shop.correction.consume")
+            command_id, _ = _shop_correction_consumption_identity(
+                workspace_id=normalized.workspace_id,
+                capability=capability,
+                semantic_target_id=target,
+            )
+            key = (normalized.workspace_id, command_id)
+            existing = self._shop_correction_consumptions.get(key)
+            if existing is not None:
+                exact_request = existing.consumption_request_id == request_id
+                same_committed_lineage = (
+                    existing.lineage_id == lineage
+                    and existing.lineage_epoch == epoch
+                )
+                accepted_successor = (
+                    active.lineage_id == lineage
+                    and active.lineage_epoch == epoch
+                    and active.consumption_ordinal >= existing.consumption_ordinal
+                )
+                if (
+                    existing.authorization_receipt_id != receipt_id
+                    or existing.authorization_receipt_digest != receipt_digest
+                    or existing.command_digest != digest
+                    or existing.capability != capability
+                    or existing.semantic_target_id != target
+                    or not (same_committed_lineage or accepted_successor)
+                ):
+                    raise TrialReconciliationRequired(state="committed_other_lineage")
+                return replace(
+                    existing,
+                    response_mode=(
+                        "recover_same_request"
+                        if same_committed_lineage and exact_request
+                        else "reconstruct_existing"
+                    ),
+                )
+            claimed = self._shop_correction_consumption_requests.get(
+                (normalized.workspace_id, request_id)
+            )
+            if claimed is not None:
+                raise TrialIdempotencyConflict(request_id)
+            if not allow_new_decision:
+                raise TrialNotReadyError(("shop_correction_authorization_window_open",))
+            now_millis = int(datetime.now(timezone.utc).timestamp() * 1000)
+            if now_millis > receipt.expires_at_millis:
+                raise TrialAuthorizationExpired(receipt.finalization_request_id)
+            ordinal = active.consumption_ordinal + 1
+            consumption_id = str(uuid5(UUID(receipt_id), request_id))
+            history_digest = _shop_correction_consumption_digest(
+                consumption_id=consumption_id,
+                consumption_request_id=request_id,
+                authorization_receipt_id=receipt_id,
+                authorization_receipt_digest=receipt_digest,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                capability=capability,
+                semantic_target_id=target,
+                command_digest=digest,
+                lineage_id=lineage,
+                lineage_epoch=epoch,
+                consumption_ordinal=ordinal,
+                previous_consumption_digest=active.consumption_digest,
+                consumed_at_millis=now_millis,
+            )
+            signer = self._shop_correction_signer
+            if signer is None:
+                raise TrialNotReadyError(("shop_correction_signing_ready",))
+            proof = ShopCorrectionConsumptionProof(
+                consumption_id=consumption_id,
+                consumption_request_id=request_id,
+                authorization_receipt_id=receipt_id,
+                authorization_receipt_digest=receipt_digest,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                capability=capability,
+                semantic_target_id=target,
+                command_digest=digest,
+                lineage_id=lineage,
+                lineage_epoch=epoch,
+                consumption_ordinal=ordinal,
+                previous_consumption_digest=active.consumption_digest,
+                history_digest=history_digest,
+                consumed_at_millis=now_millis,
+                key_id=signer.key_id,
+                signature=signer.sign(receipt_digest=history_digest),
+            )
+            self._shop_correction_consumptions[key] = proof
+            self._shop_correction_consumption_requests[
+                (normalized.workspace_id, request_id)
+            ] = proof
+            self._shop_correction_lineages[normalized.workspace_id] = (
+                ShopCorrectionLineageRecord(
+                    activation_request_id=active.activation_request_id,
+                    workspace_id=active.workspace_id,
+                    actor_id=active.actor_id,
+                    lineage_id=active.lineage_id,
+                    lineage_epoch=active.lineage_epoch,
+                    previous_lineage_id=active.previous_lineage_id,
+                    previous_lineage_epoch=active.previous_lineage_epoch,
+                    consumption_ordinal=ordinal,
+                    consumption_digest=history_digest,
+                    activated_at_millis=active.activated_at_millis,
+                )
+            )
+            return proof
+
+    def get_shop_correction_reconciliation_status(
+        self,
+        principal: TrialPrincipal,
+        *,
+        lineage_id: str | UUID,
+        lineage_epoch: int,
+        local_consumption_ordinal: int,
+        local_consumption_digest: str | None,
+    ) -> ShopCorrectionReconciliationStatus:
+        lineage, epoch, ordinal, digest = _shop_correction_lineage_input(
+            lineage_id=lineage_id,
+            lineage_epoch=lineage_epoch,
+            consumption_ordinal=local_consumption_ordinal,
+            consumption_digest=local_consumption_digest,
+        )
+        with self._lock:
+            normalized, _ = self._guard_shop_correction_owner(principal, write=False)
+            active = self._shop_correction_lineages.get(normalized.workspace_id)
+            if active is None:
+                raise TrialNotReadyError(("shop_correction_lineage_ready",))
+            if lineage != active.lineage_id or epoch != active.lineage_epoch:
+                state = "stale_lineage"
+            elif ordinal == active.consumption_ordinal and digest == active.consumption_digest:
+                state = "current"
+            else:
+                state = "reconciliation_required"
+            return ShopCorrectionReconciliationStatus(
+                workspace_id=normalized.workspace_id,
+                requested_lineage_id=lineage,
+                requested_lineage_epoch=epoch,
+                active_lineage_id=active.lineage_id,
+                active_lineage_epoch=active.lineage_epoch,
+                server_consumption_ordinal=active.consumption_ordinal,
+                server_consumption_digest=active.consumption_digest,
+                local_consumption_ordinal=ordinal,
+                local_consumption_digest=digest,
+                state=state,
+            )
 
     def apply_command(
         self,

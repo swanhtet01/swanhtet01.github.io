@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 
 import { buildAllyCeoCompanyPlan } from './ally-ceo-company-plan.mjs'
 import { buildManagedPilotReadiness, readinessDigest } from './managed-pilot-readiness.mjs'
+import { unitV14DatabaseFixture } from './managed-pilot-v14-fixture.mjs'
 
 const now = `# Now
 
@@ -64,7 +65,8 @@ function portfolio(overrides = {}, automationOverrides = {}) {
 }
 
 function managedReadiness() {
-  const database = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
+  const historicalDatabase = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
+  const database = unitV14DatabaseFixture(historicalDatabase)
   const sourceReceipts = ['portfolio', 'database', 'storage', 'security', 'storageproof', 'persistenceproof', 'selfserveproof', 'now', 'package', 'kernel']
     .map((path) => ({ path, digest: readinessDigest(path) }))
   return JSON.stringify(buildManagedPilotReadiness({

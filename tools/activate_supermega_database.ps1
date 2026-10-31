@@ -109,12 +109,12 @@ if ([string]$activationPlan.target.projectRef -ne $ExpectedProjectRef) {
 }
 $activationSchemaVersion = [string]$activationPlan.target.schemaVersion
 $activationReleaseCommit = ([string]$activationPlan.target.releaseCommit).Trim().ToLowerInvariant()
-if ($activationSchemaVersion -ne '13') {
-  throw 'Activation plan must target the reviewed managed schema version 13.'
+if ($activationSchemaVersion -ne '14') {
+  throw 'Activation plan must target the reviewed managed schema version 14.'
 }
-if ([string]$activationPlan.target.schemaProfile -cne 'v13-self-serve' -or
-    [string]$activationPlan.target.databaseContract -cne 'supermega_private_trial_database_v13_self_serve_v1') {
-  throw 'Activation plan must bind the reviewed v13 self-serve database profile; rebuild and reapprove older plans.'
+if ([string]$activationPlan.target.schemaProfile -cne 'v14-shop-correction' -or
+    [string]$activationPlan.target.databaseContract -cne 'supermega_private_trial_database_v14_shop_correction_v1') {
+  throw 'Activation plan must bind the reviewed v14 Shop correction database profile; rebuild and reapprove older plans.'
 }
 if ($activationReleaseCommit -notmatch '^[0-9a-f]{40}$') {
   throw 'Activation plan must bind the exact reviewed 40-character release commit.'
@@ -198,7 +198,7 @@ try {
     '--env-key', 'SUPERMEGA_DATABASE_URL',
     '--storage-audit-env-key', 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL',
     '--activation-target',
-    '--schema-profile', 'v13-self-serve',
+    '--schema-profile', 'v14-shop-correction',
     '--expected-project-ref-env-key', 'SUPERMEGA_ACTIVATION_PROJECT_REF',
     '--ensure-schema',
     '--require-ready'

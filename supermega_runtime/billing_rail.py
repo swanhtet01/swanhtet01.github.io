@@ -33,6 +33,7 @@ import re
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from supermega_runtime.billing_contracts import MERCHANT_BILLING_SUMMARY_CONTRACT, PREMIUM_TIER
 from supermega_runtime.trial_store import TrialIdempotencyConflict
 
 
@@ -108,7 +109,6 @@ BILLING_STATE_CONTRACT = "supermega.managed_billing_state.v1"
 INVOICE_PACKET_CONTRACT = "supermega.managed-billing.invoice-packet.v1"
 MANAGED_BILLING_CONTRACT = "supermega.managed-billing.v1"
 MAX_INPUT_BYTES = 1024 * 1024
-PREMIUM_TIER = "premium"
 
 BILLING_EVENT_TYPES = (
     "billing.invoice.issued",
@@ -844,6 +844,40 @@ class BillingLedger:
         return total
 
     @staticmethod
+    def _workspace_refund_totals(cursor: Any, workspace_id: str) -> tuple[dict[str, int], bool]:
+        """Load a workspace's refund projection once for read-only reports.
+
+        Any malformed record makes the projection untrustworthy. Read models
+        then exclude affected monetary claims instead of skipping or repairing
+        append-only evidence.
+        """
+
+        cursor.execute(
+            """
+            select payload_json
+            from app_private.billing_events
+            where workspace_id = %s
+              and event_type = 'billing.refund.recorded'
+            """,
+            (workspace_id,),
+        )
+        totals: dict[str, int] = {}
+        for row in cursor.fetchall():
+            packet = _row_json(row, "payload_json", 0)
+            if not isinstance(packet, Mapping):
+                return {}, False
+            try:
+                digest = _invoice_digest(packet.get("invoiceDigest"), "Refund invoice digest")
+                amount = _minor_amount(packet.get("amountMinor"), "Refund amount", minimum=1)
+            except BillingRailError:
+                return {}, False
+            total = totals.get(digest, 0) + amount
+            if not isinstance(total, int) or isinstance(total, bool) or total > 9_000_000_000_000_000:
+                return {}, False
+            totals[digest] = total
+        return totals, True
+
+    @staticmethod
     def _entitlement_row(cursor: Any, workspace_id: str) -> Any:
         cursor.execute(
             """
@@ -1519,8 +1553,31 @@ class BillingLedger:
         invoice = packet.get("invoice") if isinstance(packet, Mapping) else None
         return invoice if isinstance(invoice, Mapping) else None
 
+    @staticmethod
+    def _validated_stored_invoice_core(row: Any, workspace: str) -> Mapping[str, Any] | None:
+        packet = _row_json(row, "payload_json", 4)
+        try:
+            validated = validate_invoice_packet(packet, workspace_id=workspace)
+        except BillingRailError:
+            return None
+        row_invoice_id = str(_row_value(row, "invoice_id", 0))
+        row_digest = f"sha256:{_row_value(row, 'invoice_digest', 2)}"
+        if (
+            validated["invoiceId"] != row_invoice_id
+            or validated["workspaceId"] != workspace
+            or validated["invoiceDigest"] != row_digest
+        ):
+            return None
+        invoice = validated["packet"].get("invoice")
+        return invoice if isinstance(invoice, Mapping) else None
+
     def _overdue_report(
-        self, cursor: Any, workspace: str, invoice_rows: Sequence[Any], as_of: datetime
+        self,
+        workspace: str,
+        invoice_rows: Sequence[Any],
+        as_of: datetime,
+        refund_totals: Mapping[str, int],
+        refund_history_trusted: bool,
     ) -> dict[str, Any]:
         """READ-ONLY overdue projection over the invoices and billing_events
         already recorded by founder actions (first-month lifecycle: the rail
@@ -1545,7 +1602,13 @@ class BillingLedger:
                 # void: the receivable was cancelled. Neither is outstanding.
                 continue
             invoice_id = str(_row_value(row, "invoice_id", 0))
-            invoice = self._stored_invoice_core(row)
+            invoice = self._validated_stored_invoice_core(row, workspace)
+            if invoice is None:
+                excluded.append({
+                    "invoiceId": invoice_id,
+                    "note": "Stored invoice seal or workspace binding is invalid; overdue status is not guessed.",
+                })
+                continue
             schedule = invoice.get("issuedToPayBy") if invoice is not None else None
             due_raw = schedule.get("dueDate") if isinstance(schedule, Mapping) else None
             due_date = None
@@ -1579,7 +1642,19 @@ class BillingLedger:
                 # day after dueDate.
                 continue
             digest = f"sha256:{_row_value(row, 'invoice_digest', 2)}"
-            refunded = self._prior_refund_total(cursor, workspace, digest)
+            if not refund_history_trusted:
+                excluded.append({
+                    "invoiceId": invoice_id,
+                    "note": "Stored refund history is malformed; outstanding status is not guessed.",
+                })
+                continue
+            refunded = refund_totals.get(digest, 0)
+            if refunded < 0 or refunded > total:
+                excluded.append({
+                    "invoiceId": invoice_id,
+                    "note": "Stored refund total is outside the sealed invoice amount; outstanding status is not guessed.",
+                })
+                continue
             entries.append(
                 {
                     "invoiceId": invoice_id,
@@ -1602,6 +1677,118 @@ class BillingLedger:
             "overdueInvoices": entries,
             "excluded": excluded,
             "totalOutstandingMinorByCurrency": totals,
+        }
+
+    def _merchant_billing_summary(
+        self,
+        cursor: Any,
+        workspace: str,
+        invoice_rows: Sequence[Any],
+        entitlement: Any,
+        as_of: datetime,
+        refund_totals: Mapping[str, int],
+        refund_history_trusted: bool,
+    ) -> dict[str, Any]:
+        """Privacy-bounded account-hub projection of the founder ledger.
+
+        It intentionally omits customer contacts, delivery channels, payment
+        references, founder evidence, command IDs and administrative actions.
+        ``paid`` means a founder recorded an out-of-band verification; it never
+        claims provider settlement or recurring billing.
+        """
+
+        invoices: list[dict[str, Any]] = []
+        excluded: list[dict[str, str]] = []
+        totals: dict[str, int] = {}
+        for row in invoice_rows:
+            invoice_id = str(_row_value(row, "invoice_id", 0))
+            status = str(_row_value(row, "status", 1))
+            invoice = self._validated_stored_invoice_core(row, workspace)
+            amount = invoice.get("amount") if invoice is not None else None
+            schedule = invoice.get("issuedToPayBy") if invoice is not None else None
+            currency = amount.get("currency") if isinstance(amount, Mapping) else None
+            exponent = amount.get("exponent") if isinstance(amount, Mapping) else None
+            total = amount.get("totalMinor") if isinstance(amount, Mapping) else None
+            due_date = schedule.get("dueDate") if isinstance(schedule, Mapping) else None
+            issued_at = schedule.get("issuedAt") if isinstance(schedule, Mapping) else None
+            try:
+                if not isinstance(currency, str) or not currency:
+                    raise ValueError("currency")
+                if not isinstance(exponent, int) or isinstance(exponent, bool) or exponent < 0:
+                    raise ValueError("exponent")
+                if not isinstance(total, int) or isinstance(total, bool) or total < 0:
+                    raise ValueError("total")
+                if not isinstance(due_date, str):
+                    raise ValueError("due")
+                date.fromisoformat(due_date)
+                if not isinstance(issued_at, str):
+                    raise ValueError("issued")
+                _timestamp(issued_at, "Invoice issued time")
+            except (BillingRailError, ValueError):
+                excluded.append({
+                    "invoiceId": invoice_id,
+                    "reason": "stored_invoice_summary_unavailable",
+                })
+                continue
+            digest = f"sha256:{_row_value(row, 'invoice_digest', 2)}"
+            if not refund_history_trusted:
+                excluded.append({
+                    "invoiceId": invoice_id,
+                    "reason": "stored_refund_history_invalid",
+                })
+                continue
+            refunded = refund_totals.get(digest, 0)
+            if refunded < 0 or refunded > total:
+                excluded.append({
+                    "invoiceId": invoice_id,
+                    "reason": "stored_refund_total_invalid",
+                })
+                continue
+            outstanding = max(total - refunded, 0) if status == "issued" else 0
+            if outstanding:
+                totals[currency] = totals.get(currency, 0) + outstanding
+            payment_state = {
+                "issued": "pending_manual_verification",
+                "paid": "confirmed_out_of_band",
+                "void": "void",
+            }.get(status, "unknown")
+            invoices.append({
+                "invoiceId": invoice_id,
+                "status": status,
+                "issuedAt": issued_at,
+                "dueDate": due_date,
+                "currency": currency,
+                "exponent": exponent,
+                "totalMinor": total,
+                "refundedMinor": refunded,
+                "outstandingMinor": outstanding,
+                "paymentState": payment_state,
+                "providerSettlementVerified": False,
+                "receiptAvailable": False,
+            })
+        entitlement_status = (
+            str(_row_value(entitlement, "status", 2)) if entitlement is not None else "none"
+        )
+        return {
+            "contract": MERCHANT_BILLING_SUMMARY_CONTRACT,
+            "workspaceId": workspace,
+            "asOf": _timestamp_text(as_of),
+            "package": {
+                "bindingStatus": "legacy_entitlement_only",
+                "packageCode": None,
+                "term": None,
+                "renewalAt": None,
+                "entitlementKey": PREMIUM_TIER,
+                "entitlementStatus": entitlement_status,
+            },
+            "invoices": invoices,
+            "excluded": excluded,
+            "totalOutstandingMinorByCurrency": totals,
+            "recurringBillingConfigured": False,
+            "providerSettlementVerified": False,
+            "administrativeActionsExposed": False,
+            "externalWritesPerformed": False,
+            "secretValuesExposed": False,
         }
 
     def get_billing_state(
@@ -1633,8 +1820,26 @@ class BillingLedger:
                         (workspace,),
                     )
                     invoice_rows = list(cursor.fetchall() or [])
-                    overdue_report = self._overdue_report(cursor, workspace, invoice_rows, as_of)
+                    refund_totals, refund_history_trusted = self._workspace_refund_totals(
+                        cursor, workspace
+                    )
+                    overdue_report = self._overdue_report(
+                        workspace,
+                        invoice_rows,
+                        as_of,
+                        refund_totals,
+                        refund_history_trusted,
+                    )
                     entitlement = self._entitlement_row(cursor, workspace)
+                    merchant_summary = self._merchant_billing_summary(
+                        cursor,
+                        workspace,
+                        invoice_rows,
+                        entitlement,
+                        as_of,
+                        refund_totals,
+                        refund_history_trusted,
+                    )
                     cursor.execute(
                         """
                         select count(*) as event_count
@@ -1676,6 +1881,7 @@ class BillingLedger:
                 },
                 "premiumUnlocked": entitlement_status == "granted",
                 "overdueReport": overdue_report,
+                "merchantSummary": merchant_summary,
                 "eventCount": event_count,
                 "localProjectionTrusted": False,
                 "externalWritesPerformed": False,

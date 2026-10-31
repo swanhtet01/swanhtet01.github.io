@@ -8,8 +8,8 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-os.environ['SUPERMEGA_TRIAL_SCHEMA_VERSION'] = '13'
-os.environ['SUPERMEGA_BILLING_SCHEMA_VERSION'] = '13'
+os.environ['SUPERMEGA_TRIAL_SCHEMA_VERSION'] = '14'
+os.environ['SUPERMEGA_BILLING_SCHEMA_VERSION'] = '14'
 os.environ['SUPERMEGA_OTEL_DISABLED'] = '1'
 
 import psycopg
@@ -32,7 +32,7 @@ def run():
     def connect():
         return psycopg.connect(admin_url, autocommit=True, connect_timeout=15)
     with connect() as connection:
-        if connection.execute("select schema_version from app_private.trial_schema_meta where component='private_trial_backend'").fetchone() != (13,):
+        if connection.execute("select schema_version from app_private.trial_schema_meta where component='private_trial_backend'").fetchone() != (14,):
             raise RuntimeError('acceptance_schema_invalid')
         # The approved branch was empty. Refuse to touch a subsequently-used branch.
         for table in (*('app_private.' + name for name in TABLES), 'auth.users', 'auth.sessions', 'app_private.self_serve_attempt_budgets'):

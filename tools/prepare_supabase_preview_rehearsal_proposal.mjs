@@ -10,10 +10,12 @@ export const SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT = 'supermega.supabase-
 const root = resolve(import.meta.dirname, '..')
 const output = resolve(root, 'hq', 'readiness', 'supabase-preview-rehearsal-proposal.json')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
-const EXPECTED_MIGRATION_COUNT = 24
-const EXPECTED_PRIVATE_MIGRATION_COUNT = 23
+const EXPECTED_MIGRATION_COUNT = 25
+const EXPECTED_PRIVATE_MIGRATION_COUNT = 24
 const EXPECTED_PUBLIC_BASELINE = '20260711081300_public_legacy_baseline.sql'
-const EXPECTED_FINAL_MIGRATION = '20260930010000_app_rls_initplan_optimization.sql'
+const EXPECTED_FINAL_MIGRATION = '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql'
+const EXPECTED_SCHEMA_PROFILE = 'v14-shop-correction'
+const EXPECTED_DATABASE_CONTRACT = 'supermega_private_trial_database_v14_shop_correction_v1'
 const EXPECTED_MIGRATIONS = Object.freeze([
   EXPECTED_PUBLIC_BASELINE,
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -38,9 +40,10 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   '20260924194557_ecommerce_customer_review_storage.sql',
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
+  '20260930010000_app_rls_initplan_optimization.sql',
   EXPECTED_FINAL_MIGRATION,
 ])
-const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 13
+const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 14
 const MAX_PREVIEW_LIFETIME_HOURS = 24
 const SOURCES = [
   'package.json',
@@ -108,6 +111,8 @@ async function migrationChain() {
   if (privateCount !== EXPECTED_PRIVATE_MIGRATION_COUNT) fail('supabase_preview_rehearsal_private_migration_count_invalid')
   return {
     schemaVersion: EXPECTED_SOURCE_TARGET_SCHEMA_VERSION,
+    schemaProfile: EXPECTED_SCHEMA_PROFILE,
+    databaseContract: EXPECTED_DATABASE_CONTRACT,
     migrationCount: migrations.length,
     privateMigrationCount: privateCount,
     publicBaseline: EXPECTED_PUBLIC_BASELINE,
@@ -178,6 +183,8 @@ function validateProposalShape(packet) {
   if (packet.previewBranch.startsWithProductionData !== false || packet.previewBranch.deleteAfterEvidence !== true) fail('supabase_preview_rehearsal_proposal_data_boundary_invalid')
   if (packet.previewBranch.productionRefsAllowed !== false || packet.previewBranch.privilegedRuntimeCredentialsAllowed !== false) fail('supabase_preview_rehearsal_proposal_secret_boundary_invalid')
   if (packet.migrationPlan?.schemaVersion !== EXPECTED_SOURCE_TARGET_SCHEMA_VERSION
+    || packet.migrationPlan?.schemaProfile !== EXPECTED_SCHEMA_PROFILE
+    || packet.migrationPlan?.databaseContract !== EXPECTED_DATABASE_CONTRACT
     || packet.migrationPlan?.migrationCount !== EXPECTED_MIGRATION_COUNT
     || packet.migrationPlan?.privateMigrationCount !== EXPECTED_PRIVATE_MIGRATION_COUNT
     || packet.migrationPlan?.publicBaseline !== EXPECTED_PUBLIC_BASELINE
@@ -211,7 +218,7 @@ function validateProposalShape(packet) {
   if (!Array.isArray(packet.requiredEvidence) || packet.requiredEvidence.length < 10) fail('supabase_preview_rehearsal_proposal_evidence_invalid')
   for (const evidence of [
     'preview-branch-status-and-migration-list',
-    'source-controlled-migration-chain-applied-through-v13',
+    'source-controlled-migration-chain-applied-through-v14',
     'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
     'website-review-recipient-isolation-entitlement-and-session-revocation',
     'website-review-and-feedback-nonempty-backup-restore',
@@ -315,7 +322,7 @@ export async function buildSupabasePreviewRehearsalProposal({
     requiredEvidence: [
       'preview-branch-status-and-migration-list',
       'clean-empty-data-less-branch-confirmed',
-      'source-controlled-migration-chain-applied-through-v13',
+      'source-controlled-migration-chain-applied-through-v14',
       'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
       'website-review-recipient-isolation-entitlement-and-session-revocation',
       'website-review-and-feedback-nonempty-backup-restore',

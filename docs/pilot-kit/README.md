@@ -1,5 +1,13 @@
 # SuperMega Shop pilot kit
 
+## Current native Shop launch
+
+For the active Android tablet, iPad, and Windows candidate, Vivian uses the
+[native Shop acceptance card](../NATIVE-SHOP-VIVIAN-ACCEPTANCE.md). It is the
+current merchant/commercial execution card for Gates 3–6 of the Shop release
+runbook. The older Spa material below is preserved browser/managed-pilot
+evidence and must not be used to approve the native Shop release.
+
 **This kit is preparation for the managed pilot, not the pilot's acceptance evidence itself.** The Shop work order `shop-spa-owner-pilot`'s actual gate (`hq/portfolio.json`) requires one named Spa owner to complete reviewed client import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant, with setup time, correction effort, and five-day evidence recorded. This kit prepares the operator, baseline, agreement, and rehearsal without pretending sample data is client proof. The authenticated run on an isolated hosted tenant remains a separate, founder-only step.
 
 ## Strategy bridge: Profit Control acquisition, Spa proof

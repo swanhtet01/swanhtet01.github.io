@@ -21,6 +21,7 @@ from supermega_runtime.client_import_runtime import (
     ClientImportValidationError,
     validate_client_import_staging_package,
 )
+from supermega_runtime.billing_contracts import MERCHANT_BILLING_SUMMARY_CONTRACT, PREMIUM_TIER
 from supermega_runtime.company_brief import (
     assert_brief_sources_unchanged,
     build_managed_company_brief,
@@ -59,6 +60,7 @@ from supermega_runtime.plant_equipment_import import (
     validate_plant_equipment_import,
 )
 from supermega_runtime.telemetry import schema as telemetry_schema
+from supermega_runtime.billing_contracts import BILLING_READ_CAPABILITY
 from supermega_runtime.telemetry.tracing import domain_span
 from supermega_runtime.production_material_handoff import (
     production_material_requests,
@@ -71,8 +73,13 @@ from supermega_runtime.trial_store import (
     PRODUCT_ACCEPTANCE_SURFACES,
     SURFACE_WRITE_CAPABILITIES,
     ApprovalRecord,
-    PostgresTrialStore,
     CommandResult,
+    PostgresTrialStore,
+    ShopCorrectionAuthorizationReceipt,
+    ShopCorrectionConsumptionProof,
+    ShopCorrectionLineageRecord,
+    ShopCorrectionReconciliationStatus,
+    TrialAuthorizationExpired,
     TrialClaimConflict,
     TrialIdempotencyConflict,
     TrialHumanApprovalRequired,
@@ -82,6 +89,7 @@ from supermega_runtime.trial_store import (
     TrialPermissionDenied,
     TrialPrincipal,
     TrialRateLimited,
+    TrialReconciliationRequired,
     TrialReadiness,
     TrialState,
     TrialStore,
@@ -104,6 +112,9 @@ TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "website", "setup")
 
 SELF_SERVE_ACTIVATION_WINDOW_ENV = "SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW"
 SELF_SERVE_ACTIVATION_CONTRACT = "supermega.self_serve_workspace_activation.v1"
+SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV = (
+    "SUPERMEGA_SHOP_CORRECTION_AUTHORIZATION_WINDOW"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +153,17 @@ class WelcomeEmailSender(Protocol):
     ) -> bool: ...
 
 
+class MerchantBillingSummaryReader(Protocol):
+    """Read one already privacy-bounded billing projection for one principal.
+
+    The runtime store deliberately cannot read the founder billing ledger. The
+    deployed adapter must therefore remain a separate read-only boundary and
+    return only ``merchantSummary`` from ``BillingLedger.get_billing_state``.
+    """
+
+    def __call__(self, principal: TrialPrincipal) -> Mapping[str, Any]: ...
+
+
 def self_serve_activation_window_open() -> bool:
     """The fail-closed service gate for self-serve tenant creation.
 
@@ -151,6 +173,27 @@ def self_serve_activation_window_open() -> bool:
     """
 
     return os.environ.get(SELF_SERVE_ACTIVATION_WINDOW_ENV) == "open"
+
+
+def shop_correction_authorization_window_open() -> bool:
+    """Keep connected Shop correction authorization dark until explicitly opened."""
+
+    return os.environ.get(SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV) == "open"
+
+
+def shop_correction_global_consumption_ready() -> bool:
+    """Keep correction receipts dark until server-side consumption exists.
+
+    A signed receipt that is consumed only by local SQLite can be replayed
+    against another copy of the same pre-correction database.  Device time is
+    also not an authoritative expiry clock.  This source gate deliberately has
+    no environment override: a reviewed implementation must replace it only
+    after atomic, server-time receipt consumption and its cross-database tests
+    exist.
+    """
+
+    return False
+
 
 _YANGON_TIME_ZONE = timezone(timedelta(hours=6, minutes=30))
 
@@ -208,6 +251,45 @@ class TrialProductAcceptanceRequest(_StrictRequest):
     product: Literal["commerce", "production", "website", "ecommerce"]
     release_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
     confirmation: Literal["RECORD HOSTED PRODUCT ACCEPTANCE"]
+
+
+class TrialShopCorrectionAuthorizationRequest(_StrictRequest):
+    authorization_request_id: UUID
+    capability: Literal["shop.sale.reverse", "shop.sale.reconcile_wallet"]
+    command_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    request_fingerprint: str = Field(min_length=2, max_length=4096)
+    confirmation: str = Field(min_length=1, max_length=40)
+
+
+class TrialShopCorrectionLineageRequest(_StrictRequest):
+    activation_request_id: UUID
+    lineage_id: UUID
+    expected_previous_lineage_id: UUID | None = None
+    expected_previous_lineage_epoch: int | None = Field(default=None, ge=1)
+    local_consumption_ordinal: int = Field(ge=0)
+    local_consumption_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+
+
+class TrialShopCorrectionConsumptionRequest(_StrictRequest):
+    consumption_request_id: UUID
+    authorization_receipt_id: UUID
+    authorization_receipt_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    lineage_id: UUID
+    lineage_epoch: int = Field(ge=1)
+    capability: Literal["shop.sale.reverse", "shop.sale.reconcile_wallet"]
+    semantic_target_id: str = Field(min_length=1, max_length=120)
+    command_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class TrialShopCorrectionStatusRequest(_StrictRequest):
+    lineage_id: UUID
+    lineage_epoch: int = Field(ge=1)
+    local_consumption_ordinal: int = Field(ge=0)
+    local_consumption_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
 
 
 class TrialSelfServeWorkspaceRequest(_StrictRequest):
@@ -444,6 +526,225 @@ def _require_read_ready(readiness: TrialReadiness) -> None:
         raise _error(403, "trial_membership_required")
 
 
+_MERCHANT_BILLING_SUMMARY_KEYS = frozenset(
+    {
+        "contract",
+        "workspaceId",
+        "asOf",
+        "package",
+        "invoices",
+        "excluded",
+        "totalOutstandingMinorByCurrency",
+        "recurringBillingConfigured",
+        "providerSettlementVerified",
+        "administrativeActionsExposed",
+        "externalWritesPerformed",
+        "secretValuesExposed",
+    }
+)
+_MERCHANT_BILLING_PACKAGE_KEYS = frozenset(
+    {
+        "bindingStatus",
+        "packageCode",
+        "term",
+        "renewalAt",
+        "entitlementKey",
+        "entitlementStatus",
+    }
+)
+_MERCHANT_BILLING_INVOICE_KEYS = frozenset(
+    {
+        "invoiceId",
+        "status",
+        "issuedAt",
+        "dueDate",
+        "currency",
+        "exponent",
+        "totalMinor",
+        "refundedMinor",
+        "outstandingMinor",
+        "paymentState",
+        "providerSettlementVerified",
+        "receiptAvailable",
+    }
+)
+_MERCHANT_BILLING_EXCLUDED_REASONS = frozenset(
+    {
+        "stored_invoice_summary_unavailable",
+        "stored_refund_history_invalid",
+        "stored_refund_total_invalid",
+    }
+)
+_MERCHANT_BILLING_MAX_MINOR = 2**53 - 1
+
+
+def _billing_safe_text(value: object, *, maximum: int) -> str:
+    if not isinstance(value, str) or value != value.strip() or not value or len(value) > maximum:
+        raise ValueError("unsafe billing text")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("unsafe billing text")
+    return value
+
+
+def _billing_timestamp(value: object) -> datetime:
+    text = _billing_safe_text(value, maximum=40)
+    parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("billing timestamp must include a timezone")
+    return parsed
+
+
+def _validated_merchant_billing_summary(
+    value: object,
+    *,
+    workspace_id: str,
+) -> dict[str, Any]:
+    """Revalidate the admin-ledger projection before it crosses to a member.
+
+    The adapter is deployment wiring, not an authorization boundary. Exact
+    shapes keep founder evidence, payment references, commands, or future
+    administrative fields from becoming browser-visible by accident.
+    """
+
+    if not isinstance(value, Mapping) or frozenset(value) != _MERCHANT_BILLING_SUMMARY_KEYS:
+        raise ValueError("merchant billing summary shape")
+    if value.get("contract") != MERCHANT_BILLING_SUMMARY_CONTRACT:
+        raise ValueError("merchant billing summary contract")
+    if value.get("workspaceId") != workspace_id:
+        raise ValueError("merchant billing workspace")
+    as_of = _billing_timestamp(value.get("asOf"))
+    if as_of > datetime.now(timezone.utc) + timedelta(minutes=5):
+        raise ValueError("merchant billing future projection")
+    for false_key in (
+        "recurringBillingConfigured",
+        "providerSettlementVerified",
+        "administrativeActionsExposed",
+        "externalWritesPerformed",
+        "secretValuesExposed",
+    ):
+        if value.get(false_key) is not False:
+            raise ValueError("merchant billing boundary")
+
+    package = value.get("package")
+    if not isinstance(package, Mapping) or frozenset(package) != _MERCHANT_BILLING_PACKAGE_KEYS:
+        raise ValueError("merchant billing package shape")
+    if package != {
+        "bindingStatus": "legacy_entitlement_only",
+        "packageCode": None,
+        "term": None,
+        "renewalAt": None,
+        "entitlementKey": PREMIUM_TIER,
+        "entitlementStatus": package.get("entitlementStatus"),
+    }:
+        raise ValueError("merchant billing package boundary")
+    if package.get("entitlementStatus") not in {"none", "granted", "revoked"}:
+        raise ValueError("merchant billing entitlement status")
+
+    invoices = value.get("invoices")
+    if not isinstance(invoices, list) or len(invoices) > 500:
+        raise ValueError("merchant billing invoice count")
+    invoice_ids: set[str] = set()
+    invoice_id_order: list[str] = []
+    calculated_totals: dict[str, int] = {}
+    for invoice in invoices:
+        if not isinstance(invoice, Mapping) or frozenset(invoice) != _MERCHANT_BILLING_INVOICE_KEYS:
+            raise ValueError("merchant billing invoice shape")
+        invoice_id = _billing_safe_text(invoice.get("invoiceId"), maximum=120)
+        if invoice_id in invoice_ids:
+            raise ValueError("duplicate merchant billing invoice")
+        invoice_ids.add(invoice_id)
+        invoice_id_order.append(invoice_id)
+        status = invoice.get("status")
+        expected_payment_state = {
+            "issued": "pending_manual_verification",
+            "paid": "confirmed_out_of_band",
+            "void": "void",
+        }.get(status)
+        if expected_payment_state is None or invoice.get("paymentState") != expected_payment_state:
+            raise ValueError("merchant billing payment state")
+        if _billing_timestamp(invoice.get("issuedAt")) > as_of:
+            raise ValueError("merchant billing invoice after projection")
+        due_date = _billing_safe_text(invoice.get("dueDate"), maximum=10)
+        if date.fromisoformat(due_date).isoformat() != due_date:
+            raise ValueError("merchant billing due date")
+        currency = _billing_safe_text(invoice.get("currency"), maximum=3)
+        if len(currency) != 3 or not currency.isalpha() or currency.upper() != currency:
+            raise ValueError("merchant billing currency")
+        exponent = invoice.get("exponent")
+        amounts = [invoice.get(key) for key in ("totalMinor", "refundedMinor", "outstandingMinor")]
+        if (
+            not isinstance(exponent, int)
+            or isinstance(exponent, bool)
+            or exponent < 0
+            or exponent > 6
+            or any(
+                not isinstance(amount, int)
+                or isinstance(amount, bool)
+                or amount < 0
+                or amount > _MERCHANT_BILLING_MAX_MINOR
+                for amount in amounts
+            )
+        ):
+            raise ValueError("merchant billing amount")
+        total, refunded, outstanding = amounts
+        if refunded > total:
+            raise ValueError("merchant billing refund")
+        expected_outstanding = total - refunded if status == "issued" else 0
+        if outstanding != expected_outstanding:
+            raise ValueError("merchant billing outstanding")
+        if invoice.get("providerSettlementVerified") is not False or invoice.get("receiptAvailable") is not False:
+            raise ValueError("merchant billing claim")
+        if outstanding:
+            calculated_total = calculated_totals.get(currency, 0) + outstanding
+            if calculated_total > _MERCHANT_BILLING_MAX_MINOR:
+                raise ValueError("merchant billing total overflow")
+            calculated_totals[currency] = calculated_total
+    if invoice_id_order != sorted(invoice_id_order):
+        raise ValueError("merchant billing invoice order")
+
+    excluded = value.get("excluded")
+    if not isinstance(excluded, list) or len(excluded) > 500:
+        raise ValueError("merchant billing excluded count")
+    excluded_ids: set[str] = set()
+    excluded_id_order: list[str] = []
+    for item in excluded:
+        if not isinstance(item, Mapping) or frozenset(item) != {"invoiceId", "reason"}:
+            raise ValueError("merchant billing excluded shape")
+        excluded_id = _billing_safe_text(item.get("invoiceId"), maximum=120)
+        if excluded_id in excluded_ids or excluded_id in invoice_ids:
+            raise ValueError("merchant billing excluded identity")
+        excluded_ids.add(excluded_id)
+        excluded_id_order.append(excluded_id)
+        if item.get("reason") not in _MERCHANT_BILLING_EXCLUDED_REASONS:
+            raise ValueError("merchant billing excluded reason")
+    if excluded_id_order != sorted(excluded_id_order):
+        raise ValueError("merchant billing excluded order")
+
+    totals = value.get("totalOutstandingMinorByCurrency")
+    if not isinstance(totals, Mapping) or len(totals) > 20:
+        raise ValueError("merchant billing totals")
+    normalized_totals: dict[str, int] = {}
+    for currency, amount in totals.items():
+        normalized_currency = _billing_safe_text(currency, maximum=3)
+        if (
+            len(normalized_currency) != 3
+            or normalized_currency.upper() != normalized_currency
+            or not normalized_currency.isalpha()
+            or not isinstance(amount, int)
+            or isinstance(amount, bool)
+            or amount < 0
+            or amount > _MERCHANT_BILLING_MAX_MINOR
+        ):
+            raise ValueError("merchant billing total")
+        normalized_totals[normalized_currency] = amount
+    if normalized_totals != calculated_totals:
+        raise ValueError("merchant billing totals mismatch")
+    result = deepcopy(dict(value))
+    if len(json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > 256 * 1024:
+        raise ValueError("merchant billing summary too large")
+    return result
+
+
 def _require_write_ready(readiness: TrialReadiness, capability: str) -> None:
     infrastructure_blockers = [
         name
@@ -512,25 +813,26 @@ async def _bounded_json_body(
     request: Request,
     *,
     maximum_bytes: int = CLIENT_IMPORT_MAX_PACKAGE_BYTES,
+    error_prefix: str = "client_import",
 ) -> object:
     """Read one JSON package without trusting Content-Length or buffering unbounded input."""
 
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if content_type != "application/json":
-        raise _error(415, "client_import_json_required")
+        raise _error(415, f"{error_prefix}_json_required")
 
     content_length = request.headers.get("content-length")
     if content_length:
         try:
             declared_size = int(content_length)
         except ValueError as exc:
-            raise _error(400, "client_import_invalid_content_length") from exc
+            raise _error(400, f"{error_prefix}_invalid_content_length") from exc
         if declared_size < 0:
-            raise _error(400, "client_import_invalid_content_length")
+            raise _error(400, f"{error_prefix}_invalid_content_length")
         if declared_size > maximum_bytes:
             raise _error(
                 413,
-                "client_import_too_large",
+                f"{error_prefix}_too_large",
                 maximum_bytes=maximum_bytes,
             )
 
@@ -542,7 +844,7 @@ async def _bounded_json_body(
             if total > maximum_bytes:
                 raise _error(
                     413,
-                    "client_import_too_large",
+                    f"{error_prefix}_too_large",
                     maximum_bytes=maximum_bytes,
                 )
             chunks.append(chunk)
@@ -554,7 +856,7 @@ async def _bounded_json_body(
     except HTTPException:
         raise
     except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-        raise _error(422, "client_import_invalid_json") from exc
+        raise _error(422, f"{error_prefix}_invalid_json") from exc
 
 
 def _invoke(operation: Callable[[], ResultT]) -> ResultT:
@@ -584,6 +886,18 @@ def _invoke(operation: Callable[[], ResultT]) -> ResultT:
         ) from exc
     except TrialIdempotencyConflict as exc:
         raise _error(409, "trial_idempotency_conflict", command_id=exc.command_id) from exc
+    except TrialAuthorizationExpired as exc:
+        raise _error(
+            409,
+            "shop_correction_authorization_expired",
+            authorization_request_id=exc.authorization_request_id,
+        ) from exc
+    except TrialReconciliationRequired as exc:
+        raise _error(
+            409,
+            "shop_correction_reconciliation_required",
+            state=exc.state,
+        ) from exc
     except TrialInvalidTransition as exc:
         raise _error(409, "trial_invalid_transition") from exc
     except TrialClaimConflict as exc:
@@ -1068,6 +1382,7 @@ def create_trial_router(
     resolve_signup_session: SignupSessionResolver | None = None,
     order_intake_provider: OrderIntakeDraftProvider | None = None,
     send_welcome_email: WelcomeEmailSender | None = None,
+    merchant_billing_summary_reader: MerchantBillingSummaryReader | None = None,
     current_date: DateResolver = _current_yangon_date,
 ) -> APIRouter:
     """Create an unwired private-trial router with injected storage and auth.
@@ -1402,6 +1717,58 @@ def create_trial_router(
     def trial_readiness(request: Request) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
         return _readiness(store, principal).to_dict()
+
+    @router.get("/account/billing")
+    def account_billing(request: Request) -> JSONResponse:
+        headers = {
+            "Cache-Control": "private, no-store, max-age=0",
+            "Pragma": "no-cache",
+            "Vary": "Authorization, X-SuperMega-Workspace-Id",
+            "X-Content-Type-Options": "nosniff",
+        }
+        try:
+            if (
+                request.query_params
+                or request.headers.get("content-length") not in {None, "0"}
+                or request.headers.get("transfer-encoding") is not None
+            ):
+                raise _error(422, "account_billing_request_invalid")
+            principal = _resolve_principal(request, resolve_principal)
+            readiness = _readiness(store, principal)
+            _require_read_ready(readiness)
+            if principal.actor_kind != "human":
+                raise _error(403, "account_billing_human_required")
+            if BILLING_READ_CAPABILITY not in readiness.capabilities:
+                raise _error(
+                    403,
+                    "trial_capability_required",
+                    required_capability=BILLING_READ_CAPABILITY,
+                )
+            if merchant_billing_summary_reader is None:
+                raise _error(503, "account_billing_unavailable")
+            try:
+                raw_summary = merchant_billing_summary_reader(principal)
+                billing = _validated_merchant_billing_summary(
+                    raw_summary,
+                    workspace_id=principal.workspace_id,
+                )
+            except Exception as exc:
+                raise _error(503, "account_billing_unavailable") from exc
+            return JSONResponse(
+                {
+                    "contract": "supermega.managed_account_billing.v1",
+                    "identity": {
+                        "workspace_id": principal.workspace_id,
+                        "actor_id": principal.actor_id,
+                        "actor_kind": principal.actor_kind,
+                    },
+                    "billing": billing,
+                },
+                headers=headers,
+            )
+        except HTTPException as exc:
+            exc.headers = {**(exc.headers or {}), **headers}
+            raise
 
     @router.get("/bootstrap")
     def trial_bootstrap(request: Request) -> dict[str, Any]:
@@ -1860,6 +2227,8 @@ def create_trial_router(
             )
         if principal.actor_kind != "human":
             raise _error(403, "trial_human_approval_required")
+        if not readiness.premium_unlocked:
+            raise _error(403, "trial_premium_entitlement_required")
         if order_intake_provider is None:
             raise _error(503, "order_intake_provider_not_configured")
         raw_body = await _bounded_json_body(
@@ -2417,6 +2786,169 @@ def create_trial_router(
             **_command_response(result),
         }
 
+    @router.post("/shop/correction-authorizations")
+    async def issue_shop_correction_authorization(request: Request) -> JSONResponse:
+        # Keep the source shippable while the hosted authorization/deployment
+        # gate remains closed. Check this before auth, parsing, or storage.
+        if not shop_correction_global_consumption_ready():
+            raise _error(503, "shop_correction_global_consumption_unavailable")
+        if not shop_correction_authorization_window_open():
+            raise _error(503, "shop_correction_authorization_window_closed")
+        if not store.shop_correction_authorization_signing_ready():
+            raise _error(503, "shop_correction_authorization_signing_unavailable")
+        principal = _resolve_principal(request, resolve_principal)
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=8192,
+            error_prefix="shop_correction_authorization",
+        )
+        try:
+            body = TrialShopCorrectionAuthorizationRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "shop_correction_authorization_request_invalid") from exc
+        receipt: ShopCorrectionAuthorizationReceipt = _invoke(
+            lambda: store.issue_shop_correction_authorization(
+                principal,
+                authorization_request_id=body.authorization_request_id,
+                capability=body.capability,
+                command_digest=body.command_digest,
+                request_fingerprint=body.request_fingerprint,
+                confirmation=body.confirmation,
+            )
+        )
+        return JSONResponse(
+            {
+                "authorization": receipt.to_dict(),
+                "idempotent_replay": receipt.idempotent_replay,
+                "local_mutation_performed": False,
+                "money_returned": False,
+                "external_writes_performed": not receipt.idempotent_replay,
+                "secret_values_exposed": False,
+            },
+            headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+        )
+
+    @router.post("/shop/correction-lineages")
+    async def activate_shop_correction_lineage(request: Request) -> JSONResponse:
+        if not shop_correction_global_consumption_ready():
+            raise _error(503, "shop_correction_global_consumption_unavailable")
+        principal = _resolve_principal(request, resolve_principal)
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=4096,
+            error_prefix="shop_correction_lineage",
+        )
+        try:
+            body = TrialShopCorrectionLineageRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "shop_correction_lineage_request_invalid") from exc
+        record: ShopCorrectionLineageRecord = _invoke(
+            lambda: store.activate_shop_correction_lineage(
+                principal,
+                activation_request_id=body.activation_request_id,
+                lineage_id=body.lineage_id,
+                expected_previous_lineage_id=body.expected_previous_lineage_id,
+                expected_previous_lineage_epoch=body.expected_previous_lineage_epoch,
+                local_consumption_ordinal=body.local_consumption_ordinal,
+                local_consumption_digest=body.local_consumption_digest,
+            )
+        )
+        return JSONResponse(
+            {
+                "lineage": record.to_dict(),
+                "idempotent_replay": record.idempotent_replay,
+                "local_mutation_performed": False,
+                "money_movement_performed": False,
+                "external_writes_performed": not record.idempotent_replay,
+                "secret_values_exposed": False,
+            },
+            headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+        )
+
+    @router.post("/shop/correction-consumptions")
+    async def consume_shop_correction_authorization(request: Request) -> JSONResponse:
+        if not shop_correction_global_consumption_ready():
+            raise _error(503, "shop_correction_global_consumption_unavailable")
+        if not store.shop_correction_authorization_signing_ready():
+            raise _error(503, "shop_correction_authorization_signing_unavailable")
+        principal = _resolve_principal(request, resolve_principal)
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=4096,
+            error_prefix="shop_correction_consumption",
+        )
+        try:
+            body = TrialShopCorrectionConsumptionRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "shop_correction_consumption_request_invalid") from exc
+        proof: ShopCorrectionConsumptionProof = _invoke(
+            lambda: store.consume_shop_correction_authorization(
+                principal,
+                consumption_request_id=body.consumption_request_id,
+                authorization_receipt_id=body.authorization_receipt_id,
+                authorization_receipt_digest=body.authorization_receipt_digest,
+                lineage_id=body.lineage_id,
+                lineage_epoch=body.lineage_epoch,
+                capability=body.capability,
+                semantic_target_id=body.semantic_target_id,
+                command_digest=body.command_digest,
+                allow_new_decision=shop_correction_authorization_window_open(),
+            )
+        )
+        reconstruction_required = (
+            proof.consumption_request_id != str(body.consumption_request_id)
+            or proof.lineage_id != str(body.lineage_id)
+            or proof.lineage_epoch != body.lineage_epoch
+        )
+        return JSONResponse(
+            {
+                "consumption": proof.to_dict(),
+                "idempotent_replay": proof.response_mode != "commit_new",
+                # This is derivable from the signed original request ID and the
+                # caller's request; clients must not treat this envelope flag as authority.
+                "reconstruction_required": reconstruction_required,
+                "local_mutation_performed": False,
+                "money_movement_performed": False,
+                "external_writes_performed": proof.response_mode == "commit_new",
+                "secret_values_exposed": False,
+            },
+            headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+        )
+
+    @router.post("/shop/correction-consumptions/status")
+    async def shop_correction_reconciliation_status(request: Request) -> JSONResponse:
+        if not shop_correction_global_consumption_ready():
+            raise _error(503, "shop_correction_global_consumption_unavailable")
+        principal = _resolve_principal(request, resolve_principal)
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=2048,
+            error_prefix="shop_correction_status",
+        )
+        try:
+            body = TrialShopCorrectionStatusRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "shop_correction_status_request_invalid") from exc
+        status: ShopCorrectionReconciliationStatus = _invoke(
+            lambda: store.get_shop_correction_reconciliation_status(
+                principal,
+                lineage_id=body.lineage_id,
+                lineage_epoch=body.lineage_epoch,
+                local_consumption_ordinal=body.local_consumption_ordinal,
+                local_consumption_digest=body.local_consumption_digest,
+            )
+        )
+        return JSONResponse(
+            {
+                "status": status.to_dict(),
+                "local_mutation_performed": False,
+                "money_movement_performed": False,
+                "external_writes_performed": False,
+                "secret_values_exposed": False,
+            },
+            headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+        )
+
     @router.post("/product-acceptance")
     def record_product_acceptance(
         request: Request,
@@ -2736,6 +3268,7 @@ __all__ = [
     "PrincipalResolver",
     "SELF_SERVE_ACTIVATION_CONTRACT",
     "SELF_SERVE_ACTIVATION_WINDOW_ENV",
+    "SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV",
     "SignupSessionResolver",
     "TRIAL_API_PREFIX",
     "TrialApprovalDecisionRequest",
@@ -2743,7 +3276,13 @@ __all__ = [
     "TrialCommandRequest",
     "TrialProductAcceptanceRequest",
     "TrialSelfServeWorkspaceRequest",
+    "TrialShopCorrectionAuthorizationRequest",
+    "TrialShopCorrectionConsumptionRequest",
+    "TrialShopCorrectionLineageRequest",
+    "TrialShopCorrectionStatusRequest",
     "TrialSignupSession",
     "create_trial_router",
     "self_serve_activation_window_open",
+    "shop_correction_authorization_window_open",
+    "shop_correction_global_consumption_ready",
 ]

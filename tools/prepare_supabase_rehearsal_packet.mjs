@@ -12,11 +12,15 @@ const projectRefPattern = /^[a-z0-9]{20}$/
 const commitPattern = /^[0-9a-f]{40}$/
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const branchPattern = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
+const expectedSchemaProfile = 'v14-shop-correction'
+const expectedDatabaseContract = 'supermega_private_trial_database_v14_shop_correction_v1'
+const expectedPrivateMigrationCount = 24
 // v11 (self-serve grants) joined the reviewed chain 2026-08-16: hosted-proven on
 // an isolated branch (hq/readiness/self-serve-pilot-proof.json), fingerprint-
-// pinned in verify_private_trial_migrations.mjs. The packet describes the full
-// reviewed chain; applying it to production remains a separate founder decision.
-const expectedSchemaVersion = 13
+// pinned in verify_private_trial_migrations.mjs. That proof remains historical
+// v11 evidence. This packet targets the full current v14 source chain; applying
+// it to any managed target remains a separate founder decision and rehearsal.
+const expectedSchemaVersion = 14
 const expectedMigrationNames = [
   '20260711081300_public_legacy_baseline.sql',
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -42,6 +46,7 @@ const expectedMigrationNames = [
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
+  '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql',
 ]
 
 export function validateRehearsalMigrationNames(names) {
@@ -71,6 +76,9 @@ async function migrationInventory(repositoryRoot) {
   if (sqlEntries.some((entry) => !entry.isFile())) fail('supabase_rehearsal_migration_not_regular_file')
   const names = sqlEntries.map((entry) => entry.name).sort()
   validateRehearsalMigrationNames(names)
+  if (names.filter((name) => name !== expectedMigrationNames[0]).length !== expectedPrivateMigrationCount) {
+    fail('supabase_rehearsal_private_migration_inventory_mismatch')
+  }
   return Promise.all(names.map(async (name) => ({
     name,
     sha256: sha256(await readFile(resolve(directory, name))),
@@ -84,7 +92,7 @@ async function browserQuarantineInventory(repositoryRoot) {
   ])
   const audit = JSON.parse(auditRaw)
   // The source audit may trail the full isolated rehearsal chain, but it must
-  // describe a reviewed managed schema no newer than this packet's v13 target.
+  // describe a reviewed managed schema no newer than this packet's v14 target.
   // The rehearsal remains responsible for applying and validating later
   // migrations; the audit remains the exact current public-object inventory.
   if (audit?.contract !== 'supermega.supabase-security-advisor-audit.v2'
@@ -284,8 +292,11 @@ export async function buildSupabaseRehearsalPacket({
       commit: releaseCommit,
       review: reviewedRelease,
       schemaVersion: expectedSchemaVersion,
-      schemaVersionScope: 'private-core-v13-plus-explicit-post-v13-extensions',
+      schemaProfile: expectedSchemaProfile,
+      databaseContract: expectedDatabaseContract,
+      schemaVersionScope: 'private-core-v14-plus-explicit-source-migrations',
       migrationCount: migrations.length,
+      privateMigrationCount: expectedPrivateMigrationCount,
       migrations,
       browserQuarantine,
     },
@@ -327,7 +338,7 @@ export async function buildSupabaseRehearsalPacket({
         'separately-approved-baseline-only-if-proven-empty-and-applicable',
         'verify-exact-public-inventory-then-reviewed-browser-quarantine',
         'apply-remaining-ordered-migrations-stop-on-first-error',
-        'validate-core-v13-and-every-post-v13-extension',
+        'validate-core-v14-and-every-source-migration',
         'prove-hosted-product-journeys-isolation-and-recovery-separately',
       ],
       blindRetryAllowed: false,
@@ -337,7 +348,7 @@ export async function buildSupabaseRehearsalPacket({
       'independent-restore-to-isolated-target',
       'hostname-verified-postgresql-17-preflight',
       'ordered-migration-application-through-website-customer-acceptance',
-      'read-only-v13-runtime-validator',
+      'read-only-v14-runtime-validator',
       'durable-self-serve-attempt-budget-validation',
       'website-review-storage-and-entitlement-validation',
       'immutable-website-customer-acceptance-validation',

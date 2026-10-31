@@ -1,0 +1,604 @@
+name: Shop native POS checks
+
+on:
+  pull_request:
+    paths:
+      - "mobile/shop_pos/**"
+      - ".github/workflows/shop-native-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shop-native-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Analyze, test, and build Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "300"
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Verify pinned native toolchain contract
+        working-directory: ${{ github.workspace }}
+        run: npm run shop:native:ci-contract:verify
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Check changed Dart formatting
+        run: |
+          dart format lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cafe_kitchen_entitlement.dart lib/shop_cafe_order_contract.dart lib/shop_cafe_order_screen.dart lib/shop_cafe_order_store.dart lib/shop_cash_shift_screen.dart lib/shop_catalog_search.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_consumption.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_qa_evidence_store.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_staff_authorization.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_add_product_test.dart test/shop_backup_test.dart test/shop_cafe_kitchen_entitlement_test.dart test/shop_cafe_order_contract_test.dart test/shop_cafe_order_screen_test.dart test/shop_cafe_order_store_test.dart test/shop_cafe_table_kitchen_test.dart test/shop_cash_movement_test.dart test/shop_catalog_search_test.dart test/shop_core_internal_acceptance_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_mmk_input_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_pending_cash_checkout_test.dart test/shop_process_interrupt_worker_test.dart test/shop_qa_evidence_store_test.dart test/shop_responsiveness_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/shop_sqlite_full_recovery_test.dart test/shop_staff_authorization_test.dart test/shop_stock_activity_test.dart test/visual_capture_test.dart test/widget_checkout_test.dart test/widget_shell_test.dart test/widget_test_support.dart lib/shop_cash_movement_dialog.dart test/shop_cash_movement_authorized_flow_test.dart
+          git diff --exit-code -- lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cafe_kitchen_entitlement.dart lib/shop_cafe_order_contract.dart lib/shop_cafe_order_screen.dart lib/shop_cafe_order_store.dart lib/shop_cash_shift_screen.dart lib/shop_catalog_search.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_consumption.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_qa_evidence_store.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_staff_authorization.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_add_product_test.dart test/shop_backup_test.dart test/shop_cafe_kitchen_entitlement_test.dart test/shop_cafe_order_contract_test.dart test/shop_cafe_order_screen_test.dart test/shop_cafe_order_store_test.dart test/shop_cafe_table_kitchen_test.dart test/shop_cash_movement_test.dart test/shop_catalog_search_test.dart test/shop_core_internal_acceptance_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_mmk_input_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_pending_cash_checkout_test.dart test/shop_process_interrupt_worker_test.dart test/shop_qa_evidence_store_test.dart test/shop_responsiveness_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/shop_sqlite_full_recovery_test.dart test/shop_staff_authorization_test.dart test/shop_stock_activity_test.dart test/visual_capture_test.dart test/widget_checkout_test.dart test/widget_shell_test.dart test/widget_test_support.dart lib/shop_cash_movement_dialog.dart test/shop_cash_movement_authorized_flow_test.dart
+
+      - name: Check first-sale widget in isolation
+        run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_checkout_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
+
+      - name: Check first-run restore in isolation
+        run: timeout --signal=TERM --kill-after=10s 60s flutter test test/shop_backup_test.dart --plain-name 'fresh install restores before Shop opens' --reporter expanded --timeout 45s
+
+      - name: Verify Flutter test shard inventory
+        run: |
+          find test -maxdepth 1 -type f -name '*_test.dart' -printf '%p\n' | sort > /tmp/shop-test-files.actual
+          cat > /tmp/shop-test-files.expected <<'EOF'
+          test/connected_orders_test.dart
+          test/shop_add_product_test.dart
+          test/shop_backup_test.dart
+          test/shop_cafe_kitchen_entitlement_test.dart
+          test/shop_cafe_order_contract_test.dart
+          test/shop_cafe_order_screen_test.dart
+          test/shop_cafe_order_store_test.dart
+          test/shop_cafe_table_kitchen_test.dart
+          test/shop_cash_movement_authorized_flow_test.dart
+          test/shop_cash_movement_test.dart
+          test/shop_catalog_search_test.dart
+          test/shop_core_internal_acceptance_test.dart
+          test/shop_correction_authorization_service_test.dart
+          test/shop_correction_consumption_test.dart
+          test/shop_foundation_test.dart
+          test/shop_member_identity_test.dart
+          test/shop_mmk_input_test.dart
+          test/shop_operational_export_database_test.dart
+          test/shop_operational_export_saver_test.dart
+          test/shop_operational_export_test.dart
+          test/shop_operational_export_widget_test.dart
+          test/shop_pending_cash_checkout_test.dart
+          test/shop_process_interrupt_worker_test.dart
+          test/shop_qa_evidence_store_test.dart
+          test/shop_responsiveness_test.dart
+          test/shop_runtime_profile_test.dart
+          test/shop_runtime_scope_test.dart
+          test/shop_sqlite_full_recovery_test.dart
+          test/shop_staff_authorization_test.dart
+          test/shop_stock_activity_test.dart
+          test/visual_capture_test.dart
+          test/widget_checkout_test.dart
+          test/widget_shell_test.dart
+          EOF
+          diff -u /tmp/shop-test-files.expected /tmp/shop-test-files.actual
+
+      - name: Run isolated Flutter test shards
+        run: |
+          started_at="$(date +%s)"
+          behavior_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior.XXXXXX")"
+          persistence_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence.XXXXXX")"
+          cleanup() {
+            rm -rf -- "$behavior_tmp" "$persistence_tmp"
+          }
+          trap cleanup EXIT
+          (
+            TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
+              test/connected_orders_test.dart \
+              test/shop_add_product_test.dart \
+              test/shop_cafe_order_screen_test.dart \
+              test/shop_catalog_search_test.dart \
+              test/shop_correction_authorization_service_test.dart \
+              test/shop_foundation_test.dart \
+              test/shop_operational_export_saver_test.dart \
+              test/shop_operational_export_test.dart \
+              test/shop_operational_export_widget_test.dart \
+              test/shop_responsiveness_test.dart \
+              test/shop_runtime_profile_test.dart \
+              test/shop_runtime_scope_test.dart \
+              test/shop_stock_activity_test.dart \
+              test/widget_shell_test.dart \
+              test/widget_checkout_test.dart
+          ) &
+          behavior_pid="$!"
+          (
+            TMPDIR="$persistence_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_backup_test.dart \
+              test/shop_cafe_kitchen_entitlement_test.dart \
+              test/shop_cafe_order_contract_test.dart \
+              test/shop_cafe_order_store_test.dart \
+              test/shop_cafe_table_kitchen_test.dart \
+              test/shop_cash_movement_authorized_flow_test.dart \
+              test/shop_cash_movement_test.dart \
+              test/shop_core_internal_acceptance_test.dart \
+              test/shop_correction_consumption_test.dart \
+              test/shop_member_identity_test.dart \
+              test/shop_mmk_input_test.dart \
+              test/shop_operational_export_database_test.dart \
+              test/shop_pending_cash_checkout_test.dart \
+              test/shop_qa_evidence_store_test.dart \
+              test/shop_sqlite_full_recovery_test.dart \
+              test/shop_staff_authorization_test.dart \
+              test/visual_capture_test.dart
+          ) &
+          persistence_pid="$!"
+          set +e
+          wait "$behavior_pid"
+          behavior_status="$?"
+          wait "$persistence_pid"
+          persistence_status="$?"
+          set -e
+          elapsed="$(( $(date +%s) - started_at ))"
+          if [ "$elapsed" -gt "$SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS" ]; then
+            echo "shop_flutter_test_aggregate_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$behavior_status" -eq 0
+          test "$persistence_status" -eq 0
+
+      - name: Run real Flutter process-interruption scenarios
+        run: |
+          flutter_bin="$(readlink -f "$(command -v flutter)")"
+          test -x "$flutter_bin"
+          FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 180s python3 scripts/test_shop_process_interruption.py
+
+      - name: Generate Android production identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform android --profile production
+
+      - name: Analyze Flutter source
+        run: flutter analyze
+
+      - name: Capture synthetic Flutter screens with bundled fonts
+        env:
+          SHOP_VISUAL_CAPTURE: "1"
+        run: |
+          flutter_bin="$(readlink -f "$(command -v flutter)")"
+          export SHOP_MATERIAL_ICONS_FONT="$(dirname "$flutter_bin")/cache/artifacts/material_fonts/MaterialIcons-Regular.otf"
+          test -f "$SHOP_MATERIAL_ICONS_FONT"
+          timeout --signal=TERM --kill-after=10s 180s flutter test test/visual_capture_test.dart --update-goldens --reporter expanded --timeout 60s
+
+      - name: Retain Flutter-rendered screens for design review
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-flutter-renders-${{ github.sha }}
+          path: |
+            mobile/shop_pos/test/goldens/shop_checkout_1200_en.png
+            mobile/shop_pos/test/goldens/shop_checkout_1200_my.png
+            mobile/shop_pos/test/goldens/shop_checkout_390_en.png
+            mobile/shop_pos/test/goldens/shop_checkout_390_my.png
+            mobile/shop_pos/test/goldens/shop_checkout_820_en.png
+            mobile/shop_pos/test/goldens/shop_checkout_820_my.png
+            mobile/shop_pos/test/goldens/shop_sell_390_en.png
+            mobile/shop_pos/test/goldens/shop_sell_390_my.png
+            mobile/shop_pos/test/goldens/shop_stock_1200_en.png
+            mobile/shop_pos/test/goldens/shop_stock_390_en.png
+            mobile/shop_pos/test/goldens/shop_stock_390_my.png
+            mobile/shop_pos/test/goldens/shop_stock_820_en.png
+            mobile/shop_pos/test/goldens/shop_stock_820_my.png
+            mobile/shop_pos/test/goldens/shop_today_1200_en.png
+            mobile/shop_pos/test/goldens/shop_today_390_en.png
+            mobile/shop_pos/test/goldens/shop_today_390_my.png
+            mobile/shop_pos/test/goldens/shop_today_820_en.png
+            mobile/shop_pos/test/goldens/shop_today_820_my.png
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Reject unsigned Android release packaging
+        run: |
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEYSTORE_PATH
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_ALIAS
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_STORE_PASSWORD
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_PASSWORD
+          cleanup_release_outputs() {
+            release_files="$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print 2>/dev/null)"
+            if [ -n "$release_files" ]; then
+              rm -f build/app/outputs/flutter-apk/app-production-release*.apk
+              return 1
+            fi
+          }
+          trap 'result=$?; cleanup_release_outputs || result=1; trap - EXIT; exit "$result"' EXIT
+          rm -f build/app/outputs/flutter-apk/app-production-release*.apk
+          set +e
+          release_output="$(flutter build apk --release --no-pub --flavor production 2>&1)"
+          release_status=$?
+          set -e
+          test "$release_status" -ne 0
+          printf '%s\n' "$release_output" | grep -F 'shop_android_release_signing_unavailable'
+          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print -quit 2>/dev/null)"
+          set +e
+          aggregate_output="$(cd android && ./gradlew assembleProductionRelease --console=plain 2>&1)"
+          aggregate_status=$?
+          set -e
+          test "$aggregate_status" -ne 0
+          printf '%s\n' "$aggregate_output" | grep -F 'shop_android_release_signing_unavailable'
+          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print -quit 2>/dev/null)"
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug --no-pub --flavor production
+
+      - name: Record Android debug APK checksum
+        run: |
+          cd build/app/outputs/flutter-apk
+          sha256sum app-production-debug.apk > app-production-debug.apk.sha256
+          sha256sum --check app-production-debug.apk.sha256
+
+      - name: Retain Android debug APK for device QA
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-android-production-debug-${{ github.sha }}
+          path: |
+            mobile/shop_pos/build/app/outputs/flutter-apk/app-production-debug.apk
+            mobile/shop_pos/build/app/outputs/flutter-apk/app-production-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    name: Build iPad/iOS app
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate iOS production identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform ios --profile production
+
+      - name: Build iOS app without signing
+        run: flutter build ios --debug --no-codesign --no-pub
+
+  windows:
+    name: Build Windows PC app
+    runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Generate Windows runner without touching the app lockfile
+        shell: pwsh
+        run: |
+          $lockBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath 'pubspec.lock').Hash
+          $runnerSource = Join-Path $env:RUNNER_TEMP 'supermega_shop_windows_runner'
+          flutter create --platforms=windows --no-pub --project-name supermega_shop $runnerSource
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath (Join-Path $runnerSource 'windows') -Destination 'windows' -Recurse
+          & .\scripts\build_windows_icon.ps1
+          $lockAfter = (Get-FileHash -Algorithm SHA256 -LiteralPath 'pubspec.lock').Hash
+          if ($lockBefore -ne $lockAfter) { throw 'Windows runner generation changed the committed pubspec.lock.' }
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate Windows production identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform windows --profile production
+
+      - name: Prove backup restore and no-replace behavior on Windows
+        run: flutter test test/shop_backup_test.dart --reporter expanded --timeout 2m
+
+      - name: Build unsigned Windows app
+        run: flutter build windows --release --no-pub
+
+      - name: Package complete Windows app for device QA
+        shell: pwsh
+        run: |
+          $releaseDir = 'build/windows/x64/runner/Release'
+          if (-not (Test-Path -LiteralPath $releaseDir)) { throw 'Windows release directory is missing.' }
+          $packagePath = 'build/supermega-shop-windows-unsigned.zip'
+          $checksumPath = "$packagePath.sha256"
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $packagePath
+          $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $packagePath).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath $checksumPath -Value "$checksum  supermega-shop-windows-unsigned.zip" -Encoding ascii
+          if (-not (Test-Path -LiteralPath $checksumPath)) { throw 'Windows package checksum is missing.' }
+          $recordedChecksum = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
+          $expectedChecksum = "$checksum  supermega-shop-windows-unsigned.zip"
+          if ($recordedChecksum -cne $expectedChecksum) { throw 'Windows package checksum verification failed.' }
+
+      - name: Retain Windows QA package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-windows-unsigned-${{ github.sha }}
+          path: |
+            mobile/shop_pos/build/supermega-shop-windows-unsigned.zip
+            mobile/shop_pos/build/supermega-shop-windows-unsigned.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  android-qa:
+    name: Build isolated Android synthetic QA app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate Android QA identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1
+
+      - name: Build Android QA
+        run: flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1
+
+      - name: Stage Android QA artifact
+        run: cp build/app/outputs/flutter-apk/app-qa-debug.apk "${{ github.workspace }}/app-qa-debug.apk"
+
+      - name: Inspect Android QA identity
+        working-directory: ${{ github.workspace }}
+        run: |
+          android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$android_sdk_root"
+          if [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
+            test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"
+          fi
+          android_sdk_root="$(readlink -f "$android_sdk_root")"
+          analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"
+          test -x "$analyzer"
+          test "$("$analyzer" manifest application-id app-qa-debug.apk)" = 'dev.supermega.supermega_shop.qa'
+          manifest_xml="$(mktemp)"
+          trap 'rm -f "$manifest_xml"' EXIT
+          "$analyzer" manifest print app-qa-debug.apk > "$manifest_xml"
+          python3 -c 'import sys, xml.etree.ElementTree as ET; android = "{http://schemas.android.com/apk/res/android}"; apps = ET.parse(sys.argv[1]).getroot().findall("application"); items = apps[0].findall("meta-data") if len(apps) == 1 else []; metadata = {item.get(android + "name"): item.get(android + "value") for item in items}; expected = {"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1", "dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1", "dev.supermega.shop.qa.scopedEncryptedRestore": "true", "dev.supermega.shop.qa.scopedSyntheticExport": "true", "dev.supermega.shop.qa.generalExternalFileAccess": "false"}; valid = len(apps) == 1 and len(metadata) == len(items) and apps[0].get(android + "label") == "Shop QA" and all(metadata.get(key) == value for key, value in expected.items()); sys.exit(None if valid else "shop_android_qa_identity_or_capability_mismatch")' "$manifest_xml"
+          rm -f "$manifest_xml"
+          trap - EXIT
+
+      - name: Hash Android QA artifact
+        working-directory: ${{ github.workspace }}
+        run: sha256sum app-qa-debug.apk > app-qa-debug.apk.sha256
+
+      - name: Bind Android QA artifact to source
+        working-directory: ${{ github.workspace }}
+        run: echo "source-sha=${{ github.sha }} sha-256=$(cat app-qa-debug.apk.sha256) promotion-ineligible qa-capability-contract=supermega.shop.android-qa-capabilities.v1 qa-evidence-contract=supermega.shop.synthetic-qa-evidence.v1 qa-scoped-encrypted-restore=true qa-scoped-synthetic-export=true qa-general-external-file-access=false" > app-qa-debug.apk.manifest
+
+      - name: Upload promotion-ineligible Android QA artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-android
+          path: |
+            app-qa-debug.apk
+            app-qa-debug.apk.sha256
+            app-qa-debug.apk.manifest
+          if-no-files-found: error
+          retention-days: 7
+
+  ios-qa:
+    name: Build isolated iOS synthetic QA app
+    runs-on: macos-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate iOS QA identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform ios --profile synthetic_qa_v1
+
+      - name: Build iOS QA
+        run: flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1
+
+      - name: Inspect iOS QA identity
+        run: |
+          info='build/ios/iphoneos/Runner.app/Info.plist'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")" = 'dev.supermega.supermegaShop.qa'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$info")" = 'Shop QA'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$info")" = 'Shop QA'
+
+      - name: Prove iOS QA app is not code signed
+        working-directory: ${{ github.workspace }}
+        run: |
+          signature_log="$(mktemp)"
+          trap 'rm -f "$signature_log"' EXIT
+          if codesign -dv --verbose=4 mobile/shop_pos/build/ios/iphoneos/Runner.app 2>"$signature_log"; then
+            echo 'shop_ios_qa_unexpected_signature' >&2
+            exit 1
+          fi
+          grep -Fq 'code object is not signed at all' "$signature_log"
+          printf '%s\n' '{"classification":"ios_no_codesign","productionSigned":false,"stableUpdateIdentityProven":false}' > Runner.app.zip.signing.json
+
+      - name: Stage iOS QA artifact
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "${{ github.workspace }}/Runner.app.zip"
+
+      - name: Hash iOS QA artifact
+        working-directory: ${{ github.workspace }}
+        run: shasum -a 256 Runner.app.zip > Runner.app.zip.sha256
+
+      - name: Record observed iOS QA toolchain
+        working-directory: ${{ github.workspace }}
+        run: flutter --version --machine > Runner.app.zip.toolchain.json
+
+      - name: Bind iOS QA artifact to source
+        working-directory: ${{ github.workspace }}
+        run: node tools/write_shop_qa_artifact_manifest.mjs --platform ios --artifact Runner.app.zip --checksum Runner.app.zip.sha256 --toolchain Runner.app.zip.toolchain.json --signing Runner.app.zip.signing.json --output Runner.app.zip.manifest
+
+      - name: Upload promotion-ineligible iOS QA artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-ios
+          path: |
+            Runner.app.zip
+            Runner.app.zip.sha256
+            Runner.app.zip.toolchain.json
+            Runner.app.zip.signing.json
+            Runner.app.zip.manifest
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-qa:
+    name: Build isolated Windows synthetic QA app
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Generate Windows runner
+        run: |
+          $runnerSource = Join-Path $env:RUNNER_TEMP 'supermega_shop_windows_qa_runner'
+          flutter create --platforms=windows --no-pub --project-name supermega_shop $runnerSource
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath (Join-Path $runnerSource 'windows') -Destination 'windows' -Recurse
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate Windows QA identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform windows --profile synthetic_qa_v1
+
+      - name: Configure Windows QA runner
+        run: .\scripts\configure_windows_qa_runner.ps1
+
+      - name: Build Windows QA
+        run: flutter build windows --release --no-pub --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1
+
+      - name: Inspect Windows QA identity
+        run: |
+          $executable = 'build\windows\x64\runner\Release\supermega_shop_qa.exe'
+          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'shop_windows_qa_executable_missing' }
+          $identity = (Get-Item -LiteralPath $executable).VersionInfo
+          if ($identity.ProductName -cne 'Shop QA' -or
+              $identity.FileDescription -cne 'Shop QA' -or
+              $identity.InternalName -cne 'supermega_shop_qa' -or
+              $identity.OriginalFilename -cne 'supermega_shop_qa.exe') {
+            throw 'shop_windows_qa_built_identity_mismatch'
+          }
+
+      - name: Prove Windows QA executable is unsigned
+        working-directory: ${{ github.workspace }}
+        run: |
+          $executable = 'mobile\shop_pos\build\windows\x64\runner\Release\supermega_shop_qa.exe'
+          $signature = Get-AuthenticodeSignature -LiteralPath $executable
+          if ($signature.Status -cne 'NotSigned' -or $null -ne $signature.SignerCertificate) {
+            throw 'shop_windows_qa_unexpected_signature'
+          }
+          [ordered]@{
+            classification = 'windows_unsigned'
+            productionSigned = $false
+            stableUpdateIdentityProven = $false
+          } | ConvertTo-Json -Compress | Set-Content -LiteralPath 'supermega-shop-windows-qa.zip.signing.json' -Encoding utf8NoBOM
+
+      - name: Package full Windows QA runtime
+        run: |
+          $releaseDirectory = (Resolve-Path 'build\windows\x64\runner\Release').Path
+          $packagePath = Join-Path $env:GITHUB_WORKSPACE 'supermega-shop-windows-qa.zip'
+          Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath -CompressionLevel Optimal
+
+      - name: Hash and verify Windows QA package
+        working-directory: ${{ github.workspace }}
+        run: |
+          $artifact = 'supermega-shop-windows-qa.zip'
+          $checksumPath = "$artifact.sha256"
+          $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant()
+          "$digest  $artifact" | Set-Content -LiteralPath $checksumPath -Encoding ascii -NoNewline
+          $expected = "$((Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant())  $artifact"
+          $recorded = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
+          if ($recorded -cne $expected) { throw 'shop_windows_qa_checksum_mismatch' }
+
+      - name: Record observed Windows QA toolchain
+        working-directory: ${{ github.workspace }}
+        run: flutter --version --machine | Set-Content -LiteralPath 'supermega-shop-windows-qa.zip.toolchain.json' -Encoding utf8NoBOM
+
+      - name: Bind Windows QA artifact to source
+        working-directory: ${{ github.workspace }}
+        run: node tools/write_shop_qa_artifact_manifest.mjs --platform windows --artifact supermega-shop-windows-qa.zip --checksum supermega-shop-windows-qa.zip.sha256 --toolchain supermega-shop-windows-qa.zip.toolchain.json --signing supermega-shop-windows-qa.zip.signing.json --output supermega-shop-windows-qa.zip.manifest
+
+      - name: Upload promotion-ineligible Windows QA artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-windows
+          path: |
+            supermega-shop-windows-qa.zip
+            supermega-shop-windows-qa.zip.sha256
+            supermega-shop-windows-qa.zip.toolchain.json
+            supermega-shop-windows-qa.zip.signing.json
+            supermega-shop-windows-qa.zip.manifest
+          if-no-files-found: error
+          retention-days: 7

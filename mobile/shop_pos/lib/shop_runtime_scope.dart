@@ -1,0 +1,299 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'shop_runtime_profile.dart';
+
+typedef ShopDirectoryProvider = Future<Directory> Function();
+typedef ShopRuntimeConfigurationProvider = ShopRuntimeConfiguration Function();
+
+const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
+const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
+
+ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(
+  ShopRuntimeScope? runtimeScope, {
+  required bool testOnlyAllowMissingRuntimeScope,
+}) {
+  if (runtimeScope == null && !testOnlyAllowMissingRuntimeScope) {
+    throw StateError('shop_runtime_scope_required');
+  }
+  return runtimeScope;
+}
+
+Future<SharedPreferences> _openShopPreferences() =>
+    SharedPreferences.getInstance();
+
+Future<Directory> openProductionShopDocumentsDirectory() =>
+    getApplicationDocumentsDirectory();
+
+Future<Directory> openProductionShopTemporaryDirectory() =>
+    getTemporaryDirectory();
+
+/// Resolves the signed/generated runtime tuple before any preference, path,
+/// database, provider, or device boundary is opened by application startup.
+Future<ShopRuntimeScope> resolveShopRuntimeScopeForStartup({
+  ShopRuntimeConfigurationProvider? configurationProvider,
+  ShopDirectoryProvider? documentsProvider,
+  ShopDirectoryProvider? supportProvider,
+  ShopDirectoryProvider? temporaryProvider,
+  Future<SharedPreferences> Function()? preferencesProvider,
+}) async {
+  final configuration =
+      (configurationProvider ?? ShopRuntimeConfiguration.fromEnvironment)();
+  return ShopRuntimeScope.resolve(
+    configuration.profile,
+    configuration: configuration,
+    documentsProvider: documentsProvider,
+    supportProvider: supportProvider,
+    temporaryProvider: temporaryProvider,
+    preferencesProvider: preferencesProvider,
+  );
+}
+
+class ShopPreferenceKeys {
+  const ShopPreferenceKeys._(this._prefix);
+
+  final String _prefix;
+
+  String _key(String productionKey) => '$_prefix$productionKey';
+
+  String get localeMyanmar => _key('shop_locale_myanmar');
+  String get pendingPickerIntent => _key('shop_pending_picker_intent');
+  String get favoriteProductIds => _key('shop_favorite_product_ids');
+  String get receiptPrinterHost => _key(shopReceiptPrinterHostKey);
+  String get receiptPaperWidth => _key(shopReceiptPaperWidthKey);
+
+  static const production = ShopPreferenceKeys._('');
+  static const syntheticQa = ShopPreferenceKeys._('qa.synthetic-qa-v1.');
+}
+
+class ShopScopedPreferences {
+  const ShopScopedPreferences(
+    this.instance,
+    this.keys, {
+    this.stringListWriter,
+  });
+
+  final SharedPreferences instance;
+  final ShopPreferenceKeys keys;
+  final Future<bool> Function(String key, List<String> value)? stringListWriter;
+
+  Future<bool> setStringList(String key, List<String> value) =>
+      stringListWriter?.call(key, value) ?? instance.setStringList(key, value);
+}
+
+Future<ShopScopedPreferences> openProductionShopPreferences() async =>
+    ShopScopedPreferences(
+      await _openShopPreferences(),
+      ShopPreferenceKeys.production,
+    );
+
+class ShopRuntimeScope {
+  const ShopRuntimeScope._({
+    required this.configuration,
+    required this.documentsRoot,
+    required this.temporaryRoot,
+    required this.syntheticEvidenceRoot,
+    required this.preferences,
+  });
+
+  static const isolationContractVersion = 1;
+  static const _sentinelName = '.supermega-shop-runtime-scope.json';
+
+  final ShopRuntimeConfiguration configuration;
+  final Directory documentsRoot;
+  final Directory temporaryRoot;
+  final Directory? syntheticEvidenceRoot;
+  final ShopScopedPreferences preferences;
+  ShopRuntimeCapabilities get capabilities => configuration.capabilities;
+
+  static Future<ShopRuntimeScope> resolve(
+    ShopRuntimeProfile runtimeProfile, {
+    ShopRuntimeConfiguration? configuration,
+    ShopDirectoryProvider? documentsProvider,
+    ShopDirectoryProvider? supportProvider,
+    ShopDirectoryProvider? temporaryProvider,
+    Future<SharedPreferences> Function()? preferencesProvider,
+  }) async {
+    final resolvedConfiguration =
+        configuration ?? ShopRuntimeConfiguration.fromEnvironment();
+    if (resolvedConfiguration.profile != runtimeProfile) {
+      throw StateError('shop_runtime_profile_changed');
+    }
+    if (!resolvedConfiguration.isSyntheticQa) {
+      final documents =
+          await (documentsProvider ?? openProductionShopDocumentsDirectory)();
+      final temporary =
+          await (temporaryProvider ?? openProductionShopTemporaryDirectory)();
+      final preferences = await (preferencesProvider ?? _openShopPreferences)();
+      return ShopRuntimeScope._(
+        configuration: resolvedConfiguration,
+        documentsRoot: documents,
+        temporaryRoot: temporary,
+        syntheticEvidenceRoot: null,
+        preferences: ShopScopedPreferences(
+          preferences,
+          ShopPreferenceKeys.production,
+        ),
+      );
+    }
+
+    final support = await (supportProvider ?? getApplicationSupportDirectory)();
+    final temporaryParent =
+        await (temporaryProvider ?? openProductionShopTemporaryDirectory)();
+    await _requireRealDirectory(support, 'shop_qa_support_root_invalid');
+    await _requireRealDirectory(
+      temporaryParent,
+      'shop_qa_temporary_root_invalid',
+    );
+    final documents = Directory(
+      '${support.path}${Platform.pathSeparator}'
+      '${ShopRuntimeConfiguration.qaProfileId}',
+    );
+    final temporary = Directory(
+      '${temporaryParent.path}${Platform.pathSeparator}'
+      '${ShopRuntimeConfiguration.qaProfileId}',
+    );
+    await _bootstrapQaRoot(documents, resolvedConfiguration);
+    await _bootstrapQaRoot(temporary, resolvedConfiguration);
+    final evidence = Directory(
+      '${documents.path}${Platform.pathSeparator}synthetic-evidence',
+    );
+    await _ensureConfinedChild(documents, evidence);
+    final evidenceType = await FileSystemEntity.type(
+      evidence.path,
+      followLinks: false,
+    );
+    if (evidenceType == FileSystemEntityType.notFound) {
+      await evidence.create();
+    }
+    await _validateQaPersistentEntries(documents, evidence);
+    final preferences = await (preferencesProvider ?? _openShopPreferences)();
+    return ShopRuntimeScope._(
+      configuration: resolvedConfiguration,
+      documentsRoot: documents,
+      temporaryRoot: temporary,
+      syntheticEvidenceRoot: evidence,
+      preferences: ShopScopedPreferences(
+        preferences,
+        ShopPreferenceKeys.syntheticQa,
+      ),
+    );
+  }
+
+  static Future<void> _requireRealDirectory(
+    Directory directory,
+    String error,
+  ) async {
+    final type = await FileSystemEntity.type(
+      directory.path,
+      followLinks: false,
+    );
+    if (type != FileSystemEntityType.directory) throw StateError(error);
+  }
+
+  static Future<void> _bootstrapQaRoot(
+    Directory root,
+    ShopRuntimeConfiguration configuration,
+  ) async {
+    final originalType = await FileSystemEntity.type(
+      root.path,
+      followLinks: false,
+    );
+    final createdHere = originalType == FileSystemEntityType.notFound;
+    if (!createdHere && originalType != FileSystemEntityType.directory) {
+      throw StateError('shop_qa_scope_root_invalid');
+    }
+    if (createdHere) await root.create();
+    final sentinel = File(
+      '${root.path}${Platform.pathSeparator}$_sentinelName',
+    );
+    final expected = jsonEncode({
+      'contract': 'supermega.shop.qa-isolation.v1',
+      'formatVersion': isolationContractVersion,
+      'profileId': configuration.profileId,
+      'platformIdentity': configuration.platformIdentity,
+    });
+    if (createdHere) {
+      final entries = await root.list(followLinks: false).toList();
+      if (entries.isNotEmpty) {
+        throw StateError('shop_qa_scope_root_not_empty');
+      }
+      await sentinel.create(exclusive: true);
+      await sentinel.writeAsString(expected, flush: true);
+      return;
+    }
+    if (await FileSystemEntity.type(sentinel.path, followLinks: false) !=
+        FileSystemEntityType.file) {
+      throw StateError('shop_qa_scope_sentinel_missing');
+    }
+    if (await sentinel.readAsString() != expected) {
+      throw StateError('shop_qa_scope_sentinel_mismatch');
+    }
+  }
+
+  static Future<void> _ensureConfinedChild(
+    Directory root,
+    Directory child,
+  ) async {
+    final rootPath = root.absolute.path;
+    final childPath = child.absolute.path;
+    if (!childPath.startsWith('$rootPath${Platform.pathSeparator}')) {
+      throw StateError('shop_qa_scope_path_escape');
+    }
+    final type = await FileSystemEntity.type(child.path, followLinks: false);
+    if (type != FileSystemEntityType.notFound &&
+        type != FileSystemEntityType.directory) {
+      throw StateError('shop_qa_scope_child_invalid');
+    }
+  }
+
+  static Future<void> _validateQaPersistentEntries(
+    Directory root,
+    Directory evidence,
+  ) async {
+    await _requireConfinedEntry(root, evidence, FileSystemEntityType.directory);
+    final databaseName = const ['supermega', 'shop.sqlite'].join('_');
+    for (final name in [
+      databaseName,
+      '$databaseName-journal',
+      '$databaseName-wal',
+      '$databaseName-shm',
+      '$databaseName.restore-in-progress',
+      '.supermega-shop-backup.lock',
+    ]) {
+      await _requireConfinedEntry(
+        root,
+        File('${root.path}${Platform.pathSeparator}$name'),
+        FileSystemEntityType.file,
+        allowMissing: true,
+      );
+    }
+  }
+
+  static Future<void> _requireConfinedEntry(
+    Directory root,
+    FileSystemEntity entry,
+    FileSystemEntityType expectedType, {
+    bool allowMissing = false,
+  }) async {
+    final type = await FileSystemEntity.type(entry.path, followLinks: false);
+    if (allowMissing && type == FileSystemEntityType.notFound) return;
+    if (type != expectedType) {
+      throw StateError('shop_qa_scope_persistent_entry_invalid');
+    }
+    final resolvedRoot = await root.resolveSymbolicLinks();
+    final resolvedEntry = await entry.resolveSymbolicLinks();
+    final prefix = '$resolvedRoot${Platform.pathSeparator}';
+    final caseSensitive = !Platform.isWindows;
+    final normalizedRoot = caseSensitive ? prefix : prefix.toLowerCase();
+    final normalizedEntry = caseSensitive
+        ? resolvedEntry
+        : resolvedEntry.toLowerCase();
+    if (!normalizedEntry.startsWith(normalizedRoot)) {
+      throw StateError('shop_qa_scope_persistent_entry_escape');
+    }
+  }
+}

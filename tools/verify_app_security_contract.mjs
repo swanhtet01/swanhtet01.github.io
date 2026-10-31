@@ -54,7 +54,9 @@ const selfServeGrantsMigration = await read('supabase/migrations/20260816120000_
 const publicBrowserQuarantine = await read('supabase/rehearsal/20260804_public_browser_quarantine.sql')
 const publicBrowserQuarantineVerifier = await read('tools/verify_public_browser_quarantine.mjs')
 const managedActivation = await read('supermega_runtime/managed_activation.py')
-const currentDatabaseProfile = await read('tools/private_trial_v13_contract.py')
+const historicalV13DatabaseProfile = await read('tools/private_trial_v13_contract.py')
+const currentDatabaseProfile = await read('tools/private_trial_v14_contract.py')
+const shopCorrectionReceipts = await read('supermega_runtime/shop_correction_receipts.py')
 const managedEnvironmentValueVerifier = await read('tools/verify_managed_runtime_environment_values.mjs')
 const runtimeRoleProvisioner = await read('tools/provision_supermega_runtime_role.py')
 const managedAccountPage = await read('showroom/src/core/ManagedAccountPage.tsx')
@@ -306,53 +308,62 @@ const requireContract = (name, condition) => {
   if (!condition) failures.push(name)
 }
 // Drift guards for the independently tested implementation, not database or
-// provider evidence. Keep the legacy profile pins below for historical audits.
+// provider evidence. Keep the historical v13 profile independently pinned so
+// advancing the activation target cannot rewrite prior evidence.
 const currentDatabasePins = [
   [databaseValidator, [
     'def schema_contract(profile: str)',
-    'choices=("legacy-v11", "v13-self-serve")',
+    'choices=("legacy-v11", "v13-self-serve", "v14-shop-correction")',
     'schema_profile=args.schema_profile',
     'schema_profile=schema_profile',
     'schema_profile_mode_conflict',
   ]],
   [currentDatabaseProfile, [
-    'PROFILE = "v13-self-serve"',
-    'CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"',
-    'SCHEMA_VERSION=13',
+    'PROFILE = "v14-shop-correction"',
+    'CONTRACT = "supermega_private_trial_database_v14_shop_correction_v1"',
+    'SCHEMA_VERSION = 14',
+    'from tools import private_trial_v13_contract as v13',
     '"extension_columns_exact"',
     '"extension_constraints_exact"',
     '"extension_functions_exact"',
     '"extension_policies_exact"',
-    '"private_column_acl_exact"',
+    'v13.extension_checks(v13_snapshot)',
   ]],
   [managedActivation, [
-    'TRIAL_SCHEMA_VERSION = 13',
-    'TRIAL_SCHEMA_PROFILE = "v13-self-serve"',
-    'TRIAL_DATABASE_CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"',
+    'TRIAL_SCHEMA_VERSION = 14',
+    'TRIAL_SCHEMA_PROFILE = "v14-shop-correction"',
+    'TRIAL_DATABASE_CONTRACT = "supermega_private_trial_database_v14_shop_correction_v1"',
     'type(target["schemaVersion"]) is not int',
     'target["schemaProfile"] != TRIAL_SCHEMA_PROFILE',
     'target["databaseContract"] != TRIAL_DATABASE_CONTRACT',
-    'verify_postgres17_schema_v13_self_serve',
+    'verify_postgres17_schema_v14_shop_correction',
   ]],
   [databaseActivator, [
-    "'--schema-profile', 'v13-self-serve'",
-    "target.schemaProfile -cne 'v13-self-serve'",
-    "target.databaseContract -cne 'supermega_private_trial_database_v13_self_serve_v1'",
+    "'--schema-profile', 'v14-shop-correction'",
+    "target.schemaProfile -cne 'v14-shop-correction'",
+    "target.databaseContract -cne 'supermega_private_trial_database_v14_shop_correction_v1'",
     "-Key 'SUPERMEGA_BILLING_SCHEMA_VERSION' -Value $activationSchemaVersion",
   ]],
   [managedRuntimeEnvironmentVerifier, [
-    "managedSchemaVersion = '13'",
+    "managedSchemaVersion = '14'",
     'environment.SUPERMEGA_BILLING_SCHEMA_VERSION',
     "if (billingSchemaVersion !== managedSchemaVersion) addFailure('managed_billing_schema_version_invalid')",
     'schemaVersion, billingSchemaVersion, boundProjectRef',
   ]],
 ]
 const currentDatabasePinsMatch = (groups) => groups.every(([source, pins]) => pins.every((pin) => source.includes(pin)))
-requireContract('managed v13 activation selects and binds the reviewed profile and billing configuration', currentDatabasePinsMatch(currentDatabasePins))
-requireContract('managed v13 source guard rejects each missing contract pin', currentDatabasePins.every(([source, pins], groupIndex) => pins.every((pin) => {
+requireContract('managed v14 activation selects and binds the reviewed profile and billing configuration', currentDatabasePinsMatch(currentDatabasePins))
+requireContract('managed v14 source guard rejects each missing contract pin', currentDatabasePins.every(([source, pins], groupIndex) => pins.every((pin) => {
   const altered = currentDatabasePins.map((group, index) => index === groupIndex ? [source.split(pin).join('removed-contract-pin'), pins] : group)
   return !currentDatabasePinsMatch(altered)
 })))
+requireContract('historical v13 database evidence remains independently identified',
+  historicalV13DatabaseProfile.includes('PROFILE = "v13-self-serve"')
+  && historicalV13DatabaseProfile.includes('CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"')
+  && historicalV13DatabaseProfile.includes('20260818090000_private_trial_backend_v13_billing_entitlement_read.sql'))
+requireContract('Shop correction stays globally closed with no production verification pins',
+  /def shop_correction_global_consumption_ready\(\) -> bool:[\s\S]{0,900}return False/.test(trialRuntime)
+  && /SHOP_CORRECTION_RECEIPT_PUBLIC_KEYS:\s*Mapping\[str, str\]\s*=\s*\{\}/.test(shopCorrectionReceipts))
 requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
 const expectedHumanCommerceEvents = [
@@ -707,7 +718,7 @@ requireContract('public browser quarantine is compatibility, idempotence, drift,
   && rootPackage.scripts?.['database:public-browser-quarantine:verify'] === 'node tools/verify_public_browser_quarantine.mjs'
   && rootPackage.scripts?.['app:verify'] === 'node tools/run_app_verify.mjs --serial'
   && rootPackage.scripts?.['app:verify:steps']?.includes('database:public-browser-quarantine:verify'))
-requireContract('managed account links are explicitly bounded, single-flight, scrubbed, and excluded from behavior memory', /detectSessionInUrl: false/.test(managedTrialClient) && /AUTH_CODE = \/\^\[A-Za-z0-9\._~\-\]\{16,2048\}\$\//.test(managedTrialClient) && /AUTH_TOKEN = \/\^\[A-Za-z0-9\._~\-\]\{16,16384\}\$\//.test(managedTrialClient) && /exactAuthParameters/.test(managedTrialClient) && /rawQuery\.length > 4096/.test(managedTrialClient) && /rawFragment\.length > 40000/.test(managedTrialClient) && /new Set\(purposes\)\.size > 1/.test(managedTrialClient) && /pendingManagedAccountSetup/.test(managedTrialClient) && /window\.history\.replaceState\(window\.history\.state, '', '\/account\/setup'\)/.test(managedTrialClient) && /exchangeCodeForSession\(code\)/.test(managedTrialClient) && /setSession\(\{/.test(managedTrialClient) && /const sensitiveAccountRoute = location\.pathname\.startsWith\('\/account\/'\)/.test(coreShell) && /const route = sensitiveAccountRoute \? location\.pathname/.test(coreShell))
+requireContract('managed account links are explicitly bounded, single-flight, scrubbed, and excluded from behavior memory', /detectSessionInUrl: false/.test(managedTrialClient) && /AUTH_CODE = \/\^\[A-Za-z0-9\._~\-\]\{16,2048\}\$\//.test(managedTrialClient) && /AUTH_TOKEN = \/\^\[A-Za-z0-9\._~\-\]\{16,16384\}\$\//.test(managedTrialClient) && /exactAuthParameters/.test(managedTrialClient) && /rawQuery\.length > 4096/.test(managedTrialClient) && /rawFragment\.length > 40000/.test(managedTrialClient) && /new Set\(purposes\)\.size > 1/.test(managedTrialClient) && /pendingManagedAccountSetup/.test(managedTrialClient) && /window\.history\.replaceState\(window\.history\.state, '', '\/account\/setup'\)/.test(managedTrialClient) && /exchangeCodeForSession\(code\)/.test(managedTrialClient) && /setSession\(\{/.test(managedTrialClient) && /const accountRecoveryRoute = location\.pathname\.startsWith\('\/account\/recovery'\) \|\| location\.pathname\.startsWith\('\/account\/setup'\)/.test(coreShell) && /const accountHubRoute = location\.pathname === '\/account' \|\| location\.pathname === '\/account\/'/.test(coreShell) && /const sensitiveAccountRoute = accountRecoveryRoute \|\| accountHubRoute/.test(coreShell) && /managedAccountRouteLoginPath\(location\.pathname, location\.search\)/.test(coreShell) && /Navigate replace to=\{protectedLoginPath\}/.test(coreShell) && /to=\{protectedLoginPath\}>Sign in again/.test(coreShell) && /const route = sensitiveAccountRoute \? location\.pathname/.test(coreShell))
 requireContract('managed recovery is non-enumerating and password setup remains named-user only', /resetPasswordForEmail/.test(managedTrialClient) && /redirectTo: managedAccountRedirectUrl\(\)/.test(managedTrialClient) && /origin\.protocol !== 'https:'/.test(managedTrialClient) && /password\.length < 12/.test(managedTrialClient) && /updateUser\(\{ password \}\)/.test(managedTrialClient) && /data\.user\.is_anonymous !== false/.test(managedTrialClient) && /For privacy, the result is the same whether or not the address has an account\./.test(managedAccountPage) && /If this address is eligible/.test(managedAccountPage) && /This screen cannot confirm email delivery\./.test(managedAccountPage))
 requireContract('managed password setup requires current callback evidence even when a named session exists', /\} else \{\n    throw accountLinkError\(\)\n  \}\n\n  forgetWorkspace/.test(managedTrialClient) && !/initializeManagedAccountSetup[\s\S]*?supabase\.auth\.getSession\(\)[\s\S]*?export function beginManagedAccountSetup/.test(managedTrialClient))
 requireContract('managed activation requires durable named-owner authorization and encrypted admin transport', /ACTIVATION_AUTHORIZATION_CONTRACT/.test(managedActivation) && /"contract": "decision_packet\.v1"/.test(managedActivation) && /from app_private\.approval_requests/.test(managedActivation) && /verify_supabase_user_identity/.test(managedActivation) && /Durable owner authorization is missing/.test(managedActivation) && /explicit encrypted sslmode/.test(managedActivation) && /--untracked-files=all/.test(managedActivation))
@@ -863,7 +874,7 @@ requireContract('console errors and partial lead conversions are recorded with s
   && !/console\.api_unhandled_error[\s\S]{0,160}body/.test(consoleApi)
   && /lead conversion records the won stage before it logs a clean win/.test(consoleErrorRecordingTest)
   && /console error handling contract records safe metadata and never request bodies/.test(consoleErrorRecordingTest))
-requireContract('managed database secret handoff is staged, release-bound, value-verified, and compensated', /vercel@56\.1\.0/.test(databaseActivator) && /--sensitive/.test(databaseActivator) && /AppVercelProjectId = 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'/.test(databaseActivator) && /VercelOrgId = 'team_wI4l7ZgSxcEztQPSlCCYVeJ5'/.test(databaseActivator) && /--cwd/.test(databaseActivator) && !/--project/.test(databaseActivator) && /\$addedEnvironmentKeys\.Add\(\$Key\)/.test(databaseActivator) && /Remove-StagedEnvironmentValues/.test(databaseActivator) && /\$VercelCli env rm/.test(databaseActivator) && /verify_managed_runtime_environment_values\.mjs/.test(databaseActivator) && /Activation plan must target the reviewed managed schema version 13/.test(databaseActivator) && /Activation plan must bind the exact reviewed 40-character release commit/.test(databaseActivator) && databaseActivator.includes("-Key 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL' -Value $resolvedStorageAudit -Sensitive") && databaseActivator.includes("-Key 'SUPERMEGA_TRIAL_SCHEMA_VERSION'") && databaseActivator.includes("-Key 'SUPERMEGA_SUPABASE_PROJECT_REF'") && !databaseActivator.includes("-Key 'SUPERMEGA_RELEASE_COMMIT'") && /VERCEL_GIT_COMMIT_SHA remains authoritative after deployment/.test(databaseActivator) && databaseActivator.indexOf("-Key 'SUPERMEGA_DATABASE_URL'") < databaseActivator.indexOf("-Key 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL'") && databaseActivator.indexOf("-Key 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL'") < databaseActivator.indexOf("-Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'") && databaseActivator.indexOf("Write-Output '==> activate the workspace gate") < databaseActivator.indexOf("-Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'") && /managedSchemaVersion = '13'/.test(managedRuntimeEnvironmentVerifier) && /SUPERMEGA_SUPABASE_PROJECT_REF/.test(managedRuntimeEnvironmentVerifier) && /SUPERMEGA_RELEASE_COMMIT[\s\S]+VERCEL_GIT_COMMIT_SHA[\s\S]+GITHUB_SHA/.test(managedRuntimeEnvironmentVerifier) && /managed_self_serve_window_not_open/.test(managedRuntimeEnvironmentVerifier))
+requireContract('managed database secret handoff is staged, release-bound, value-verified, and compensated', /vercel@56\.1\.0/.test(databaseActivator) && /--sensitive/.test(databaseActivator) && /AppVercelProjectId = 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'/.test(databaseActivator) && /VercelOrgId = 'team_wI4l7ZgSxcEztQPSlCCYVeJ5'/.test(databaseActivator) && /--cwd/.test(databaseActivator) && !/--project/.test(databaseActivator) && /\$addedEnvironmentKeys\.Add\(\$Key\)/.test(databaseActivator) && /Remove-StagedEnvironmentValues/.test(databaseActivator) && /\$VercelCli env rm/.test(databaseActivator) && /verify_managed_runtime_environment_values\.mjs/.test(databaseActivator) && /Activation plan must target the reviewed managed schema version 14/.test(databaseActivator) && /Activation plan must bind the exact reviewed 40-character release commit/.test(databaseActivator) && databaseActivator.includes("-Key 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL' -Value $resolvedStorageAudit -Sensitive") && databaseActivator.includes("-Key 'SUPERMEGA_TRIAL_SCHEMA_VERSION'") && databaseActivator.includes("-Key 'SUPERMEGA_SUPABASE_PROJECT_REF'") && !databaseActivator.includes("-Key 'SUPERMEGA_RELEASE_COMMIT'") && /VERCEL_GIT_COMMIT_SHA remains authoritative after deployment/.test(databaseActivator) && databaseActivator.indexOf("-Key 'SUPERMEGA_DATABASE_URL'") < databaseActivator.indexOf("-Key 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL'") && databaseActivator.indexOf("-Key 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL'") < databaseActivator.indexOf("-Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'") && databaseActivator.indexOf("Write-Output '==> activate the workspace gate") < databaseActivator.indexOf("-Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'") && /managedSchemaVersion = '14'/.test(managedRuntimeEnvironmentVerifier) && /SUPERMEGA_SUPABASE_PROJECT_REF/.test(managedRuntimeEnvironmentVerifier) && /SUPERMEGA_RELEASE_COMMIT[\s\S]+VERCEL_GIT_COMMIT_SHA[\s\S]+GITHUB_SHA/.test(managedRuntimeEnvironmentVerifier) && /managed_self_serve_window_not_open/.test(managedRuntimeEnvironmentVerifier))
 requireContract('managed storage privacy proof is bounded, read-only, owner-confirmed, and redacted',
   /supermega\.private-storage-privacy\.v1/.test(storagePrivacyVerifier)
   && /supabase_storage_rest_v2/.test(storagePrivacyVerifier)

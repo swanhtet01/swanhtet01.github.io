@@ -10,6 +10,7 @@ import re
 import unicodedata
 from typing import Any
 
+from supermega_runtime.billing_contracts import BILLING_READ_CAPABILITY
 from supermega_runtime.client_import_runtime import (
     CLIENT_IMPORT_OBJECTS,
     CLIENT_IMPORT_PROFILE_IDS,
@@ -39,6 +40,7 @@ _KNOWN_CAPABILITIES = frozenset(
         "approvals.read",
         "approvals.request",
         "approvals.decide",
+        BILLING_READ_CAPABILITY,
     }
 )
 _KNOWN_EVENTS = frozenset(

@@ -5,6 +5,7 @@ import test from 'node:test'
 import {
   ManagedTrialError,
   createSelfServeWorkspace,
+  managedCapabilitiesFromBootstrap,
   managedBootstrapHasCapability,
   managedProductsFromBootstrap,
   normalizeSelfServeClaimCode,
@@ -283,13 +284,29 @@ test('managed staff writes require an explicit valid surface capability', () => 
     readiness: { capabilities: ['commerce.read', 'commerce.write', 'company.read'] },
   }, identity, 'commerce.write'), true)
   assert.equal(managedBootstrapHasCapability({ ...bootstrap, readiness: {} }, identity, 'commerce.write'), false)
+  assert.deepEqual(managedCapabilitiesFromBootstrap({
+    ...bootstrap,
+    readiness: { capabilities: ['billing.read', 'commerce.read', 'company.read'] },
+  }, identity), ['billing.read', 'commerce.read', 'company.read'])
+  assert.equal(managedBootstrapHasCapability({
+    ...bootstrap,
+    readiness: { capabilities: ['billing.read', 'commerce.read', 'company.read'] },
+  }, identity, 'billing.read'), true)
+  assert.deepEqual(managedCapabilitiesFromBootstrap({
+    ...bootstrap,
+    readiness: { capabilities: ['ecommerce.review', 'website.review'] },
+  }, identity), ['ecommerce.review', 'website.review'])
   for (const capabilities of [
     ['commerce.write', 'commerce.read'],
     ['commerce.read', 'commerce.read'],
     ['commerce.read', 'Admin.All'],
+    ['commerce.read', 'unknown.read'],
+    ['commerce.read', ' company.read'],
+    ['commerce.read', 'company.read\n'],
+    ['commerce.read', 1],
   ]) {
     assert.throws(
-      () => managedBootstrapHasCapability({ ...bootstrap, readiness: { capabilities } }, identity, 'commerce.write'),
+      () => managedCapabilitiesFromBootstrap({ ...bootstrap, readiness: { capabilities } }, identity),
       (error) => error instanceof ManagedTrialError && error.code === 'managed_bootstrap_invalid',
     )
   }

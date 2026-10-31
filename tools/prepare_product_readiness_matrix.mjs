@@ -135,8 +135,8 @@ function releaseGateFrom(handoff) {
   return handoff.remote?.candidateBranchState === 'exact' ? 'pull_request_creation' : 'review_branch_push'
 }
 
-function productEvidenceLevel({ releaseVerified, readinessItem }) {
-  if (releaseVerified && readinessItem?.localStatus === 'release-candidate-local') return 'local_verified_release_candidate'
+function productEvidenceLevel({ productId, releaseVerified, readinessItem }) {
+  if (productId === 'shop' && releaseVerified && readinessItem?.localStatus === 'release-candidate-local') return 'local_verified_release_candidate'
   return 'source_mapped_unverified'
 }
 
@@ -148,13 +148,8 @@ function productNextAction(productId, shopPilotDay0Readiness = null) {
     }
     return 'After GitHub main protection and review PR gates, capture owner-private baseline and intake, rehearse preview, then collect 20 consecutive accepted observed runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates before activation review.'
   }
-  if (productId === 'plant') {
-    return 'Keep security and regression maintenance only until Shop pilot decision; then run one order-bound OEE review with operator, supervisor, source mapping, and measured correction effort.'
-  }
-  if (productId === 'website') {
-    return 'Keep brief/export/regression maintenance only until Shop pilot decision; then run one named-business brief through accepted responsive preview before any domain or publish action.'
-  }
-  return 'Keep storefront exception and handoff maintenance only until Shop pilot decision; then prove cart-to-Shop exception handling before payment, delivery, refund, or stock automation.'
+  if (productId === 'plant') return 'Preserve existing Plant source and evidence outside SuperMega.dev. No readiness or release work is eligible without a separate owner scope decision.'
+  return `Preserve ${productId} as an optional custom or enterprise package. Require an owner-approved package, server-enforced tenant entitlement, support boundary, and acceptance contract before implementation or activation.`
 }
 
 function productBlockers(productId, releaseGate, readinessItem, readiness, shopPilotDay0Readiness = null) {
@@ -164,8 +159,12 @@ function productBlockers(productId, releaseGate, readinessItem, readiness, shopP
     if (shopPilotDay0Readiness?.day0Readiness?.baselinePacketAccepted !== true) blockers.push('owner_private_baseline')
     if (shopPilotDay0Readiness?.day0Readiness?.intakePacketAccepted !== true) blockers.push('owner_private_intake')
     blockers.push('real_shop_pilot_evidence')
+  } else if (productId === 'plant') {
+    blockers.push('outside_supermega_dev_scope')
+    blockers.push(`${productId}_managed_proof_missing`)
   } else {
-    blockers.push('shop_pilot_decision_not_complete')
+    blockers.push('custom_package_scope_required')
+    blockers.push('server_enforced_entitlement_missing')
     blockers.push(`${productId}_managed_proof_missing`)
   }
   for (const gate of readiness?.overall?.blockingGateIds || []) {
@@ -189,12 +188,16 @@ function matrixProduct({ product, readinessItem, releaseGate, releaseVerified, r
     appRoute: text(product.appRoute || '/', 'product_readiness_matrix_app_route', 80),
     sourcePathCount: Array.isArray(product.sourcePaths) ? product.sourcePaths.length : 0,
     workOrderId: text(readinessItem?.workOrderId || product.workOrderId || `${product.productId}-work-order`, 'product_readiness_matrix_work_order', 120),
-    evidenceLevel: productEvidenceLevel({ releaseVerified, readinessItem }),
+    evidenceLevel: productEvidenceLevel({ productId: product.productId, releaseVerified, readinessItem }),
     currentBlockers: productBlockers(product.productId, releaseGate, readinessItem, readiness, shopPilotDay0Readiness),
     requiredProof: text(readinessItem?.requiredProof || product.requiredProof, 'product_readiness_matrix_required_proof', 520),
     nextAction: productNextAction(product.productId, shopPilotDay0Readiness),
     claims: {
-      localCandidateVerified: releaseVerified && readinessItem?.localStatus === 'release-candidate-local',
+      localCandidateVerified: product.productId === 'shop' && releaseVerified && readinessItem?.localStatus === 'release-candidate-local',
+      technicalWorkEligible: product.productId === 'shop',
+      defaultLaunchProduct: product.productId === 'shop',
+      customPackageOnly: ['website', 'ecommerce'].includes(product.productId),
+      outsideSuperMegaDev: product.productId === 'plant',
       productionLive: false,
       commercialProofReady: false,
       managedActivationReady: false,
@@ -312,7 +315,11 @@ function validateProductEntry(product) {
     || product.claims.productionLive !== false
     || product.claims.commercialProofReady !== false
     || product.claims.managedActivationReady !== false
-    || product.claims.erpReplacementClaimAllowed !== false) fail('product_readiness_matrix_product_claims_invalid')
+    || product.claims.erpReplacementClaimAllowed !== false
+    || product.claims.technicalWorkEligible !== (productId === 'shop')
+    || product.claims.defaultLaunchProduct !== (productId === 'shop')
+    || product.claims.customPackageOnly !== ['website', 'ecommerce'].includes(productId)
+    || product.claims.outsideSuperMegaDev !== (productId === 'plant')) fail('product_readiness_matrix_product_claims_invalid')
   return product
 }
 
@@ -473,7 +480,8 @@ function runSelfTest() {
   const checks = {
     product_order_preserved: sameArray(ready.productOrder, PRODUCT_ORDER),
     shop_first_money_path_visible: ready.products[0].productId === 'shop' && ready.products[0].currentBlockers.includes('owner_private_baseline'),
-    plant_waits_for_shop_decision: ready.products.find((product) => product.productId === 'plant').currentBlockers.includes('shop_pilot_decision_not_complete'),
+    plant_outside_supermega_dev: ready.products.find((product) => product.productId === 'plant').claims.outsideSuperMegaDev === true,
+    optional_packages_are_gated: ready.products.filter((product) => ['website', 'ecommerce'].includes(product.productId)).every((product) => product.claims.customPackageOnly === true && product.currentBlockers.includes('server_enforced_entitlement_missing')),
     github_gate_first: ready.release.currentGateId === 'github_main_protection',
     forbidden_claims_preserved: ready.forbiddenClaims.includes('managed_activation_ready') && ready.forbiddenClaims.includes('erp_replacement_claim'),
     no_external_effects: Object.values(ready.controls).every((value) => value === false),

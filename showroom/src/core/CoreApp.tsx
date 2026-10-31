@@ -1,7 +1,9 @@
 import { spaCounterFields } from './shop-spa-counter-fields'
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
+import { initialShopCashTenderGateState, reduceShopCashTenderGate, reviewShopCashTenderGate, shopCashTenderGateCanSubmit, shopCashTenderGateValue } from './shop-cash-tender'
+import { ShopCashTenderFields } from './ShopCashTenderFields'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
@@ -999,6 +1001,12 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [cashTenderState, dispatchCashTender] = useReducer(
+    reduceShopCashTenderGate,
+    undefined,
+    initialShopCashTenderGateState,
+  )
+  const cashTenderInputRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -1023,6 +1031,14 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   if (!action) return null
   const isCounterConfirmation = action.presentation === 'counter'
   const isCounterSettlement = isCounterConfirmation && action.kind === 'order_settle'
+  const cashTender = isCounterSettlement ? action.cashTender : undefined
+  const effectiveCashGiven = shopCashTenderGateValue(cashTenderState)
+  const cashTenderReview = cashTender
+    ? reviewShopCashTenderGate(cashTender.amountDueMmk, cashTenderState)
+    : null
+  const cashTenderBlocked = cashTender
+    ? !shopCashTenderGateCanSubmit(cashTender.amountDueMmk, cashTenderState)
+    : false
   const isPaymentReconciliation = action.kind === 'payment_reconcile'
   // Keep the dialog locked during an unresolved submission. After an error, allow
   // recovery without trapping the operator. An error alone does not prove that a
@@ -1036,7 +1052,14 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     const confirmedReason = action.confirmation?.reason ?? reason.trim()
     const confirmedEvidence = action.confirmation?.evidenceReference
       ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion?.trim() ?? '' : evidenceReference.trim())
-    if (!responsibleActor || !confirmedReason || !confirmedEvidence) return
+    if (!responsibleActor || !confirmedReason || !confirmedEvidence || cashTenderBlocked) {
+      if (cashTender && cashTenderBlocked) {
+        dispatchCashTender({ type: 'submit', amountDueMmk: cashTender.amountDueMmk })
+        requestAnimationFrame(() => cashTenderInputRef.current?.focus())
+      }
+      return
+    }
+    if (cashTender) dispatchCashTender({ type: 'submit', amountDueMmk: cashTender.amountDueMmk })
     setBusy(true)
     setError('')
     try {
@@ -1063,10 +1086,20 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
       {isCounterConfirmation
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>{isPaymentReconciliation ? 'Payment evidence reference' : 'Reference'}<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder={isPaymentReconciliation ? 'Internal slip file ID or counter reference' : 'Message ID, receipt, count sheet, or observation'} /></label>{isPaymentReconciliation ? <p className="form-notice">For QR payments, record an internal slip file ID or counter reference only. Do not enter a customer phone number, wallet ID, account number, or payment credentials. This records your review; it does not verify or charge a payment.</p> : null}</>}
+      {cashTender && cashTenderReview ? <ShopCashTenderFields
+        amountDueMmk={cashTender.amountDueMmk}
+        assertive={cashTenderState.validationAssertive}
+        inputRef={cashTenderInputRef}
+        onBlur={() => dispatchCashTender({ type: 'blur' })}
+        onChange={(event) => dispatchCashTender({ type: 'input', value: event.target.value })}
+        readOnly={cashTenderState.frozenValue !== null || Boolean(action.confirmation)}
+        review={cashTenderReview}
+        value={effectiveCashGiven}
+      /> : null}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">{isCounterSettlement
         ? 'Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.'
         : 'Browser-local sample only. Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.'}</p> : null}
-      <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? bi('Retry same confirmation') : isCounterSettlement ? 'Complete sale' : bi(isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
+      <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy || cashTenderBlocked} type="submit">{busy ? 'Applying…' : action.confirmation ? bi('Retry same confirmation') : isCounterSettlement ? 'Complete sale' : bi(isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
       {error
         ? <div className="form-notice" data-action-gate="error" data-tone="error" role="alert">
           <p>{ownerFacingActionError(error)}</p>
@@ -1196,6 +1229,15 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   if (kind === 3) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="9" width="28" x="22" y="35" /><rect className="art-main" height="55" rx="9" width="26" x="55" y="28" /><path className="art-highlight" d="M29 28h15v8M62 20h13v9M30 54h12M62 49h12" /></svg>
   if (kind === 4) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="58" rx="10" width="62" x="19" y="23" /><path className="art-detail" d="M50 67 34 53c-9-9 4-21 16-8 12-13 25-1 16 8z" /><path className="art-highlight" d="M27 32h46" /></svg>
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
+}
+
+function shopProductArtworkKind(item: Pick<CommerceItem, 'sku' | 'name'>) {
+  const identity = `${item.sku} ${item.name}`.toLocaleLowerCase()
+  if (/\b(rice|sugar|salt|detergent|coffee)\b/.test(identity)) return 2
+  if (/\b(water|oil|milk|shampoo)\b/.test(identity)) return 1
+  if (/\b(toothpaste|soap)\b/.test(identity)) return 3
+  if (/\b(beauty|cosmetic|medicine)\b/.test(identity)) return 4
+  return 0
 }
 
 function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, recordedOrderIds, sampleCatalogActive }: {
@@ -1363,7 +1405,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
               {localDemoStatus === 'records-at-risk' ? <Link className="shop-counter-local-link" data-risk="true" to="/settings/#workspace-recovery">Back up records</Link> : null}
             </nav> : null}
-            {persistLocalDraft ? <span className="shop-counter-device-boundary">This device only</span> : null}
+            {persistLocalDraft ? <span className="shop-counter-device-boundary">{sampleCatalogActive ? 'Browser demo · fictional records stay on this device' : 'Local records · this device only'}</span> : null}
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
@@ -1398,7 +1440,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
-            const artKind = items.indexOf(item) % 5
+            const artKind = shopProductArtworkKind(item)
             // Ids are keyed by render position, not by SKU: aria-labelledby takes a
             // SPACE-separated id list and a SKU is operator-typed, so a SKU with a
             // space in it would silently split into two broken references.
@@ -3988,6 +4030,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? `Order ${displayReference} completed · ${review.payment} reconciled · Stock ${stockReview}`
         : `Order ${displayReference} confirmed · Reserved stock ${stockReview}`,
       presentation: 'counter',
+      ...(completesSale && review.payment === 'Cash' ? { cashTender: { amountDueMmk: order.total } } : {}),
       actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
       evidenceReferenceSuggestion: `Counter order ${displayReference}`,
       evidenceReferenceLocked: true,

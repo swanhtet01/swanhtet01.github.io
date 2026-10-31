@@ -126,6 +126,7 @@ export default defineConfig(({ command }) => ({
             || id.includes('/src/core/channel-order-intake.ts')
             || id.includes('/src/core/managed-trial.ts')
             || id.includes('/src/core/managed-portal-client.ts')
+            || id.includes('/src/core/managed-portal-capabilities-client.ts')
             || id.includes('/src/core/team-work.ts')) {
             return 'operating-models'
           }

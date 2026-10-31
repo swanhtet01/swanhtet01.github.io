@@ -1,12 +1,14 @@
-import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router'
 import { productionEntryDecision } from './production-entry'
+import { superMegaBrandIdentity, superMegaBrandMark } from './brand-mark'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { bi } from './i18n-actions'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
+import { managedAccountRouteLoginPath } from './account-login-route'
 import type { ClientSolutionId } from './client-onboarding'
 import {
   managedProductIsVisible,
@@ -15,6 +17,11 @@ import {
   resolveManagedProductRoute,
 } from './managed-product-access'
 import { currentManagedWorkspace } from './managed-workspace-selection'
+import {
+  localPortalAccess,
+  ManagedPortalAccessContext,
+  type ManagedPortalAccess,
+} from './managed-portal-access-context'
 import { watchManagedSessionStorage } from './managed-session-invalidation'
 import { readManagedSignupPolicy, type ManagedSignupPolicy } from './managed-signup-policy'
 import type { SetupProductId } from './product-setup'
@@ -199,23 +206,6 @@ function managedLoginPath(product: string | null) {
   return slug ? `/login?product=${slug}` : '/login'
 }
 
-type ManagedPortalAccess =
-  | { status: 'local'; products: readonly ClientSolutionId[]; workspaceId: '' }
-  | { status: 'checking'; products: readonly ClientSolutionId[]; workspaceId: string }
-  | { status: 'reauthenticate'; products: readonly ClientSolutionId[]; workspaceId: string }
-  | {
-      status: 'ready'
-      products: readonly ClientSolutionId[]
-      workspaceId: string
-      companyName: string
-      companyRole: 'owner' | 'operator' | 'viewer'
-      accountEmail: string
-    }
-  | { status: 'error'; products: readonly ClientSolutionId[]; workspaceId: string; message: string }
-
-const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
-const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
-
 function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
   const accessKey = enabled && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
   const [resolved, setResolved] = useState<{ key: string; access: ManagedPortalAccess }>({ key: 'local', access: localPortalAccess })
@@ -225,10 +215,11 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
     let active = true
     void import('./managed-portal-client')
       .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedProductsFromBootstrap }) => {
+        const { managedCapabilitiesFromBootstrap } = await import('./managed-portal-capabilities-client')
         const identity = await currentManagedIdentity()
         if (!active) return
         if (!identity || identity.workspaceId !== selectedWorkspace) {
-          setResolved({ key: accessKey, access: { status: 'reauthenticate', products: [], workspaceId: selectedWorkspace } })
+          setResolved({ key: accessKey, access: { status: 'reauthenticate', products: [], capabilities: [], workspaceId: selectedWorkspace } })
           return
         }
         const [bootstrap, directory] = await Promise.all([
@@ -245,6 +236,7 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
           access: {
             status: 'ready',
             products: managedProductsFromBootstrap(bootstrap, identity),
+            capabilities: managedCapabilitiesFromBootstrap(bootstrap, identity),
             workspaceId: selectedWorkspace,
             companyName: company.label,
             companyRole: company.access,
@@ -259,6 +251,7 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
           access: {
             status: 'error',
             products: [],
+            capabilities: [],
             workspaceId: '',
             message: error instanceof Error ? error.message : 'Company product access could not be verified.',
           },
@@ -268,8 +261,8 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
   }, [accessKey, enabled, selectedWorkspace])
 
   if (!selectedWorkspace) return localPortalAccess
-  if (!enabled) return { status: 'checking', products: [], workspaceId: '' }
-  if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }
+  if (!enabled) return { status: 'checking', products: [], capabilities: [], workspaceId: '' }
+  if (resolved.key !== accessKey) return { status: 'checking', products: [], capabilities: [], workspaceId: '' }
   return resolved.access
 }
 
@@ -379,7 +372,11 @@ function useRuntimeHealth() {
 function Brand() {
   return (
     <Link className="core-brand" to="/" aria-label="SuperMega app home">
-      <span className="core-brand-mark" aria-hidden="true">&gt;_</span>
+      <span className="core-brand-mark" aria-hidden="true">
+        <svg viewBox={superMegaBrandMark.viewBox} width={superMegaBrandMark.width} height={superMegaBrandMark.height} focusable="false">
+          <path d={superMegaBrandMark.path} fill="none" stroke={superMegaBrandIdentity.accent} strokeWidth={superMegaBrandMark.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
       <span className="core-brand-name">SUPERMEGA</span>
     </Link>
   )
@@ -415,10 +412,16 @@ export function CoreLayout() {
   const selectedManagedWorkspace = typeof window !== 'undefined' ? currentManagedWorkspace() : ''
   const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)
   const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
-  const sensitiveAccountRoute = location.pathname.startsWith('/account/')
+  const accountRecoveryRoute = location.pathname.startsWith('/account/recovery') || location.pathname.startsWith('/account/setup')
+  const accountHubRoute = location.pathname === '/account' || location.pathname === '/account/'
+  const sensitiveAccountRoute = accountRecoveryRoute || accountHubRoute
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
   const accountEntryRoute = loginRoute || sensitiveAccountRoute
+  const protectedPortalRoute = Boolean(requestedProduct) || accountHubRoute
   const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
+  const protectedLoginPath = sensitiveAccountRoute
+    ? managedAccountRouteLoginPath(location.pathname, location.search)
+    : companyLoginPath
   const setupRoute = customerSettingsRoute || internalBuilderRoute
   const setupNavigation: NavigationItem = internalBuilderRoute
     ? { to: '/internal/client-builder/', label: 'Client builder' }
@@ -441,8 +444,10 @@ export function CoreLayout() {
   const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(new URLSearchParams(location.search).get('tab')) : null
   const routeName = loginRoute
     ? 'Sign in'
-    : sensitiveAccountRoute
-      ? (location.pathname.startsWith('/account/recovery') ? 'Account recovery' : 'Account setup')
+    : accountHubRoute
+      ? 'Account'
+      : accountRecoveryRoute
+        ? (location.pathname.startsWith('/account/recovery') ? 'Account recovery' : 'Account setup')
       : location.pathname.startsWith('/website/')
       ? 'Website'
       : location.pathname.startsWith('/ecommerce/')
@@ -513,7 +518,7 @@ export function CoreLayout() {
 
   const productionEntry = productionEntryDecision(window.location.hostname, accountEntryRoute, portalAccess.status)
   if (productionEntry === 'checking') return <PortalAccessPanel title="Opening…" copy="Checking your account." />
-  if (productionEntry === 'login') return <Navigate replace to={companyLoginPath} />
+  if (productionEntry === 'login') return <Navigate replace to={protectedLoginPath} />
 
   return (
     <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
@@ -523,10 +528,10 @@ export function CoreLayout() {
         {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? portalAccess.status === 'ready' ? <Link className="account-shell-link" to="/account">Account</Link> : <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? portalAccess.status === 'ready' ? <Link aria-label="Account" className="account-shell-link mobile-account-link" to="/account">Account</Link> : <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
@@ -543,12 +548,12 @@ export function CoreLayout() {
           <div className="core-route-content">
             <ManagedPortalAccessContext.Provider value={portalAccess}>
               <RouteErrorBoundary resetKey={location.pathname}>
-                {requestedProduct && portalAccess.status === 'checking'
+                {protectedPortalRoute && portalAccess.status === 'checking'
                   ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
-                  : requestedProduct && portalAccess.status === 'reauthenticate'
-                    ? <Navigate replace to={companyLoginPath} />
-                    : requestedProduct && portalAccess.status === 'error'
-                      ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
+                  : protectedPortalRoute && portalAccess.status === 'reauthenticate'
+                    ? <Navigate replace to={protectedLoginPath} />
+                    : protectedPortalRoute && portalAccess.status === 'error'
+                      ? <PortalAccessPanel action={<Link className="button" to={protectedLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
                       : requestedProduct && !managedProductAllowed
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />
