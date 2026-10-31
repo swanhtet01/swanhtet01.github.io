@@ -147,7 +147,7 @@ void main() {
       final memberToken = _memberToken(17);
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 26);
+        expect(database.schemaVersion, 27);
         final storeRef = await database.readStoreRef();
         await _seedPseudonymousMember(
           database,
@@ -493,7 +493,7 @@ Future<ShopCorrectionAuthorization> _authorization({
 
 void _removePostV15SchemaObjects(Database connection) {
   for (final definition
-      in shopConnectedSiteSchemaDefinitionsV26().entries.toList().reversed) {
+      in shopConnectedSiteSchemaDefinitionsV27().entries.toList().reversed) {
     final type = shopSchemaObjectTypeForDefinition(definition.value);
     connection.execute(
       'DROP ${type == 'table'

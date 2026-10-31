@@ -92,12 +92,21 @@ void main() {
     },
   );
 
-  test('v24 migrates through v25 authority into fail-closed v26', () async {
+  test('v24 migrates through v25 authority into fail-closed v27', () async {
     final root = await Directory.systemTemp.createTemp('shop-enrollment-v24-');
     final file = File('${root.path}/shop.sqlite');
     var database = ShopDatabase(NativeDatabase(file));
     try {
       await database.verifyReadyForUse();
+      for (final entry
+          in shopConnectedAuthoritySchemaDefinitionsV27().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(entry.value);
+        await database.customStatement(
+          'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
+        );
+      }
       for (final entry
           in shopConnectedCloudDispositionSchemaDefinitionsV26().entries
               .toList()
@@ -121,7 +130,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 26);
+      expect(database.schemaVersion, 27);
       for (final table in const [
         'shop_site_pairing_nonces',
         'shop_site_pending_enrollments',
@@ -139,7 +148,7 @@ void main() {
     }
   });
 
-  test('materialized v25 authority survives direct v26 migration', () async {
+  test('materialized v25 authority survives direct v27 migration', () async {
     final root = await Directory.systemTemp.createTemp('shop-enrollment-v25-');
     final file = File('${root.path}/shop.sqlite');
     final keyPair = await Ed25519().newKeyPairFromSeed(
@@ -188,6 +197,15 @@ void main() {
         ),
         verifier: const _EvidenceVerifier(true),
       );
+      for (final entry
+          in shopConnectedAuthoritySchemaDefinitionsV27().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(entry.value);
+        await database.customStatement(
+          'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
+        );
+      }
       for (final entry
           in shopConnectedCloudDispositionSchemaDefinitionsV26().entries
               .toList()

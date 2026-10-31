@@ -326,7 +326,7 @@ void main() {
       await expectLater(database.verifyReadyForUse(), throwsStateError);
       await database.close();
       expect(
-        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 26),
+        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 27),
         throwsA(anything),
       );
     } finally {
