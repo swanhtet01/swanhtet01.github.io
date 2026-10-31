@@ -21,7 +21,136 @@ import {
   withRecorderLease,
   recordCompletionSummary,
   writeRecorderFailureDiagnostic,
+  toolchainChildEnvironment,
+  requireVerifiedRecorderRuntime,
 } from './record_postgres17_rehearsal.mjs'
+
+const verifiedToolchainFixture = () => ({
+  profileId: 'synthetic-profile',
+  archiveFileName: 'synthetic-installer.exe',
+  archiveBytes: 1234,
+  archiveSha256: '5'.repeat(64),
+  manifestSha256: '1'.repeat(64),
+  policySha256: '4'.repeat(64),
+  sourceDigest: '2'.repeat(64),
+  bindingDigest: '3'.repeat(64),
+  loadClosureEvidenceSha256: '8'.repeat(64),
+  executionBundleSha256: '3'.repeat(64),
+  receiptEvidence: {
+    contract: 'supermega.postgres17-toolchain-receipt-evidence.v1',
+    profileId: 'synthetic-profile',
+    manifestSha256: '1'.repeat(64),
+    policySha256: '4'.repeat(64),
+    sourceDigest: '2'.repeat(64),
+    bindingDigest: '3'.repeat(64),
+    executionBundleSha256: '3'.repeat(64),
+    loadClosureEvidenceSha256: '8'.repeat(64),
+    sourceAuthentication: [{
+      sourceId: 'synthetic-postgresql',
+      sourceArtifactSha256: '5'.repeat(64),
+      evidenceSha256: '9'.repeat(64),
+    }],
+  },
+  archivePath: '/synthetic/archive.exe',
+  execution: {
+    root: '/synthetic/pgsql',
+    postgresBin: '/synthetic/pgsql/bin',
+    openssl: '/synthetic/pgsql/bin/openssl.exe',
+    python: '/synthetic/pgsql/python/python.exe',
+    psycopg: '/synthetic/pgsql/python/psycopg/__init__.py',
+    node: process.execPath,
+    git: '/synthetic/pgsql/git/bin/git.exe',
+  },
+})
+
+test('child environment omits every caller and verified tool selector', () => {
+  const environment = toolchainChildEnvironment({ execution: {
+    postgresBin: 'C:\\verified\\pgsql\\bin',
+    openssl: 'C:\\verified\\openssl.exe',
+    python: 'C:\\verified\\python.exe',
+    psycopg: 'C:\\verified\\psycopg\\__init__.py',
+    node: process.execPath,
+    git: 'C:\\verified\\git.exe',
+  } }, {
+    SUPERMEGA_POSTGRES17_BIN: 'C:\\untrusted',
+    SUPERMEGA_OPENSSL: 'C:\\untrusted.exe',
+    SUPERMEGA_PYTHON: 'C:\\untrusted-python.exe',
+    SUPERMEGA_PSYCOPG_FILE: 'C:\\untrusted-psycopg.py',
+    SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST: 'C:\\forged\\request.json',
+    SUPERMEGA_POSTGRES17_AUTHORITY_SESSION: 'forged-session',
+  })
+  assert.equal('SUPERMEGA_POSTGRES17_BIN' in environment, false)
+  assert.equal('SUPERMEGA_OPENSSL' in environment, false)
+  assert.equal('SUPERMEGA_PYTHON' in environment, false)
+  assert.equal('SUPERMEGA_PSYCOPG_FILE' in environment, false)
+  assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST' in environment, false)
+  assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_SESSION' in environment, false)
+  assert.throws(() => toolchainChildEnvironment({ execution: {} }), /execution_binding_missing/)
+})
+
+test('recorder authority requires the current exact verified Node executable', async () => {
+  const verified = verifiedToolchainFixture()
+  assert.equal(
+    await requireVerifiedRecorderRuntime(verified, process.execPath, async value => value),
+    process.execPath,
+  )
+  await assert.rejects(
+    requireVerifiedRecorderRuntime(verified, '/substituted/node', async value => value),
+    /recorder_node_mismatch/,
+  )
+  await assert.rejects(
+    requireVerifiedRecorderRuntime({ execution: {} }, process.execPath, async value => value),
+    /recorder_node_unverified/,
+  )
+})
+
+test('record rejects a substituted Node before inspecting source or invoking Git', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-node-'))
+  let sourceInspections = 0
+  try {
+    const substituted = verifiedToolchainFixture()
+    substituted.execution.node = join(folder, 'substituted-node.exe')
+    await assert.rejects(record(join(folder, 'receipt.json'), {
+      revalidateToolchain: async () => substituted,
+      cleanSource: () => { sourceInspections += 1; throw new Error('must_not_run') },
+      gitOutput: () => { throw new Error('must_not_run') },
+    }), /recorder_node_unverified/)
+    assert.equal(sourceInspections, 0)
+  } finally { await rm(folder, { recursive: true, force: true }) }
+})
+
+test('recorder launches only the verified Python and explicit verified tool paths', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-launch-'))
+  const destination = join(folder, 'receipt.json')
+  let observed
+  const events = []
+  try {
+    await assert.rejects(record(destination, {
+      cleanSource: git => { events.push(`source:${git}`); return { implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) } },
+      gitOutput: git => { events.push(`git:${git}`); return join(folder, 'common-git-directory') },
+      implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+      revalidateToolchain: async () => { events.push('profile'); return verifiedToolchainFixture() },
+      spawnSync: (...args) => { observed = args; return { status: 1, stdout: '', stderr: '' } },
+      tmpdir: () => folder,
+    }), /database_rehearsal_termination_unreconciled/)
+    assert.equal(observed[0], '/synthetic/pgsql/python/python.exe')
+    assert.equal(events[0], 'profile')
+    assert.equal(events[1], 'source:/synthetic/pgsql/git/bin/git.exe')
+    assert.equal(events[2], 'git:/synthetic/pgsql/git/bin/git.exe')
+    assert.deepEqual(observed[1].slice(0, 3), ['-I', '-B', observed[1][2]])
+    assert.equal(observed[1][2].endsWith('tools/rehearse_supermega_postgres17.py'), true)
+    assert.deepEqual(observed[1].slice(3), [
+      '--expected-head', 'a'.repeat(40),
+      '--postgres-bin', '/synthetic/pgsql/bin',
+      '--openssl', '/synthetic/pgsql/bin/openssl.exe',
+      '--git', '/synthetic/pgsql/git/bin/git.exe',
+    ])
+    assert.equal(observed[2].input, '')
+    assert.equal(observed[2].env.PYTHONNOUSERSITE, '1')
+    assert.equal('PATH' in observed[2].env, false)
+    assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST' in observed[2].env, false)
+  } finally { await rm(folder, { recursive: true, force: true }) }
+})
 
 test('record refuses a stale diagnostic before launching a child', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-collision-'))
@@ -52,6 +181,7 @@ test('record keeps both leases and surfaces only allowlisted diagnostic persiste
         cleanSource: () => ({ implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) }),
         gitOutput: () => commonDirectory,
         implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+        revalidateToolchain: async () => verifiedToolchainFixture(),
         readFile: async () => { const error = new Error('private path and credential'); error.code = 'ENOENT'; throw error },
         spawnSync: () => { launches += 1; return { status: null, signal: 'SIGTERM', stdout: 'password=private', stderr: 'C:\\private' } },
         tmpdir: () => folder,
@@ -80,6 +210,7 @@ test('record writes sanitized missing-raw diagnostics and a retained repository 
     cleanSource: () => ({ implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) }),
     gitOutput: () => commonDirectory,
     implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+    revalidateToolchain: async () => verifiedToolchainFixture(),
     readFile: async () => { const error = new Error('private path'); error.code = 'ENOENT'; throw error },
     spawnSync: () => { launches += 1; return { status: null, signal: 'SIGTERM', stdout: 'password=private', stderr: 'C:\\private' } },
     tmpdir: () => folder,
@@ -88,7 +219,7 @@ test('record writes sanitized missing-raw diagnostics and a retained repository 
     await assert.rejects(record(destination, runtime), /database_rehearsal_termination_unreconciled/)
     assert.equal(launches, 1)
     const diagnostic = JSON.parse(await readFile(`${destination}.diagnostic.json`, 'utf8'))
-    assert.equal(diagnostic.rawStatus, 'missing')
+    assert.equal(diagnostic.rawStatus, 'malformed')
     assert.equal(diagnostic.streams.contentsRetained, false)
     assert.equal(JSON.stringify(diagnostic).includes('private'), false)
     assert.equal(JSON.stringify(diagnostic).includes('password'), false)
@@ -117,8 +248,8 @@ test('record classifies malformed and parsed-unreconciled raw evidence without r
         cleanSource: () => ({ implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) }),
         gitOutput: () => join(folder, 'common-git-directory'),
         implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
-        readFile: async () => rawText,
-        spawnSync: () => ({ status: 1, stdout: '', stderr: '' }),
+        revalidateToolchain: async () => verifiedToolchainFixture(),
+        spawnSync: () => ({ status: 1, stdout: rawText, stderr: '' }),
         tmpdir: () => folder,
       }), /database_rehearsal_termination_unreconciled/)
       assert.equal(JSON.parse(await readFile(`${destination}.diagnostic.json`, 'utf8')).rawStatus, expectedStatus)
@@ -147,6 +278,7 @@ test('record retains only a fixed code when the child cannot persist sanitized e
       cleanSource: () => ({ implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) }),
       gitOutput: () => join(folder, 'common-git-directory'),
       implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+      revalidateToolchain: async () => verifiedToolchainFixture(),
       readFile: async () => { const error = new Error('private raw path'); error.code = 'ENOENT'; throw error },
       spawnSync: () => ({ status: 1, stdout: safeChildReport, stderr: 'password=private C:\\secret' }),
       tmpdir: () => folder,
@@ -344,15 +476,37 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.ok(runner.paths.includes('tools/private_trial_v14_contract.py'))
   assert.ok(runner.paths.includes('tests/test_shop_correction_postgres_v14_contract.py'))
 })
+const expectedToolchain = {
+  contract: 'supermega.postgres17-toolchain-receipt-evidence.v1',
+  profileId: 'synthetic-profile',
+  archiveFileName: 'synthetic-installer.exe',
+  archiveBytes: 333_927_270,
+  sourceArtifactSha256: 'c'.repeat(64),
+  manifestSha256: '1'.repeat(64),
+  policySha256: '2'.repeat(64),
+  sourceDigest: '3'.repeat(64),
+  bindingDigest: '4'.repeat(64),
+  loadClosureEvidenceSha256: '7'.repeat(64),
+  executionBundleSha256: '4'.repeat(64),
+  sourceAuthentication: [{
+    sourceId: 'synthetic-postgresql',
+    sourceArtifactSha256: 'c'.repeat(64),
+    evidenceSha256: '5'.repeat(64),
+  }],
+  trustedBoundary: 'isolated-single-purpose-windows-x64-v1',
+}
+implementation.expectedToolchain = expectedToolchain
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',
   implementationCommit: 'b'.repeat(40),
   implementationTree: 'e'.repeat(40),
   implementation,
   archive: { bytes: 333_927_270, sha256: 'c'.repeat(64) },
+  toolchain: expectedToolchain,
 }
 const raw = {
-  contract: 'supermega_postgres17_rehearsal_v2', ok: true, ready: true, status: 'rehearsed',
+  contract: 'supermega_postgres17_rehearsal_v2', ok: true, authoritative: false,
+  ready: true, status: 'rehearsed',
   engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true, start_mode: 'pg_ctl_restricted_token' },
   migrations: { count: migrationNames.length, schema_version: 14, names: migrationNames, schema_profile: 'v14-shop-correction',
     catalog_contract: 'supermega_private_trial_database_v14_shop_correction_v1', production_validator_ready: true },
@@ -367,7 +521,6 @@ const raw = {
   storage: { catalog_mode: 'local_private_fixture', hosted_storage_privacy_proof_required: true, policy_count: 0, public_bucket_count: 0 },
   cleanup_complete: true, secret_values_exposed: false, production_mutated: false, supabase_mutated: false, vercel_mutated: false,
 }
-
 test('builds a sanitized digest-bound local PostgreSQL 17 proof without hosted claims', () => {
   const proof = buildSanitizedProof(raw, context)
   assert.equal(proof.schemaVersion, DATABASE_REHEARSAL_EVIDENCE_SCHEMA)
@@ -419,6 +572,7 @@ test('record completion is derived from validated shared proof before publishing
 test('requires exact current migration identity, source commit/tree and implementation paths', () => {
   const vectors = [
     [r => { r.contract = 'supermega_postgres17_rehearsal_v1' }, /not_ready/],
+    [r => { r.authoritative = true }, /not_ready/],
     [r => { r.migrations.schema_version = 11 }, /migrations_invalid/],
     [r => { r.migrations.names[14] = 'missing.sql' }, /migrations_invalid/],
     [r => { r.migrations.schema_profile = 'legacy-v11' }, /migrations_invalid/],
@@ -474,12 +628,32 @@ test('consumer rejects tampering and rehashed semantic overclaims', () => {
     [p => { p.migration.names.reverse() }, /migrations_invalid/],
     [p => { delete p.catalog.after.private_column_acl_exact }, /catalog_invalid/],
     [p => { p.safety.productionMutated = true }, /safety_invalid/],
+    [p => { p.engine.toolchain.sourceDigest = 'a'.repeat(64) }, /toolchain_stale/],
+    [p => { p.engine.toolchain.loadClosureEvidenceSha256 = 'b'.repeat(64) }, /toolchain_stale/],
   ]
   for (const [mutate, error] of mutations) {
     const invalid = buildSanitizedProof(raw, context)
     mutate(invalid)
     invalid.receiptDigest = proofDigest(invalid)
     assert.throws(() => validateSanitizedProof(invalid, implementation), error)
+  }
+})
+
+test('receipt verifier rejects non-canonical or incomplete toolchain evidence', () => {
+  const vectors = [
+    p => { p.engine.toolchain.executionBundleSha256 = 'f'.repeat(64) },
+    p => { p.engine.toolchain.archiveBytes += 1 },
+    p => { p.engine.toolchain.sourceAuthentication = [] },
+    p => { p.engine.toolchain.sourceAuthentication[0].unreviewed = true },
+    p => { p.engine.toolchain.sourceAuthentication.push({
+      sourceId: 'synthetic-a', sourceArtifactSha256: 'a'.repeat(64), evidenceSha256: 'b'.repeat(64),
+    }) },
+  ]
+  for (const mutate of vectors) {
+    const invalid = buildSanitizedProof(raw, context)
+    mutate(invalid)
+    invalid.receiptDigest = proofDigest(invalid)
+    assert.throws(() => validateSanitizedProof(invalid, implementation), /toolchain_invalid/)
   }
 })
 
@@ -494,7 +668,7 @@ test('Python and recorder bind the same exact ordered source inventory and diges
   assert.deepEqual(observed.migrations, migrationNames)
 })
 
-test('read-only CLI consumer recomputes exact raw receipt pair and rejects changed raw evidence', async () => {
+test('read-only CLI consumer rejects a receipt whose authority is not current source-controlled evidence', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-test-'))
   const input = join(folder, 'receipt.json')
   const invoke = () => spawnSync(process.execPath, ['tools/record_postgres17_rehearsal.mjs', '--verify', '--input', input],
@@ -507,15 +681,9 @@ test('read-only CLI consumer recomputes exact raw receipt pair and rejects chang
       { cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 30_000, windowsHide: true })
     assert.equal(duplicate.status, 1)
     assert.match(duplicate.stderr, /database_rehearsal_toolchain_provenance_unapproved/)
-    const pass = invoke()
-    assert.equal(pass.status, 0, pass.stderr)
-    assert.equal(JSON.parse(pass.stdout).checks, 79)
-    const changed = structuredClone(raw)
-    changed.checks.billing_runtime_write_denied = false
-    await writeFile(`${input}.raw.json`, JSON.stringify(changed))
     const fail = invoke()
     assert.equal(fail.status, 1)
-    assert.match(fail.stderr, /database_rehearsal_check_failed/)
+    assert.match(fail.stderr, /database_rehearsal_evidence_toolchain_invalid/)
     assert.equal(await readFile(input, 'utf8'), JSON.stringify(proof))
     assert.equal(fail.stderr.includes(folder), false)
   } finally {
@@ -555,7 +723,7 @@ test('timeout, signal, absent report or unknown cleanup cannot release a rehears
   }
 })
 
-test('only terminal confirmed cleanup, or prelaunch failure, releases owned leases', async () => {
+test('only successful reconciled completion or prelaunch failure releases owned leases', async () => {
   for (const mode of ['success', 'failed-cleaned', 'before-launch']) {
     const folder = await mkdtemp(join(tmpdir(), 'supermega-lease-test-'))
     const locks = [join(folder, 'repository.lock'), join(folder, 'output.lock')]
@@ -563,11 +731,17 @@ test('only terminal confirmed cleanup, or prelaunch failure, releases owned leas
       await assert.rejects(withRecorderLease(locks, async lease => {
         if (mode !== 'before-launch') {
           lease.markLaunched()
-          assert.equal(lease.reconcile({ status: mode === 'success' ? 0 : 1 }, raw), true)
+          assert.equal(
+            lease.reconcile({ status: mode === 'success' ? 0 : 1 }, raw),
+            mode === 'success',
+          )
         }
         throw new Error('simulated_end')
       }), /simulated_end/)
-      for (const path of locks) await assert.rejects(access(path), { code: 'ENOENT' })
+      for (const path of locks) {
+        if (mode === 'failed-cleaned') await access(path)
+        else await assert.rejects(access(path), { code: 'ENOENT' })
+      }
     } finally { await rm(folder, { recursive: true, force: true }) }
   }
 })

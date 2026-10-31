@@ -72,8 +72,8 @@ function managedReadiness() {
   return JSON.stringify(buildManagedPilotReadiness({
     portfolio: JSON.parse(portfolio({}, { ecommerce: { status: 'owner-gated' } })),
     databaseEvidence: database,
-    databaseImplementation: { digest: database.implementationDigest,
-      fileCount: database.implementationFileCount, paths: database.implementation.paths },
+    databaseImplementation: { ...database.implementation,
+      fileCount: database.implementationFileCount },
     storageAudit: 'Status: local verifier ready; hosted proof blocked',
     securityAudit: {
       contract: 'supermega.supabase-security-advisor-audit.v2',

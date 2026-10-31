@@ -1,4 +1,13 @@
 import { createHash } from 'node:crypto'
+import { lstatSync, readFileSync } from 'node:fs'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
+import {
+  inspectPostgres17PublisherPolicy,
+  inspectPostgres17ToolchainProfile,
+  toolchainReceiptEvidence,
+  verifyWindowsAuthenticodePublisherEvidence,
+  verifyWindowsLoadClosureEvidence,
+} from '../tools/postgres17_toolchain_profile.mjs'
 
 export const DATABASE_REHEARSAL_EVIDENCE_SCHEMA = 'supermega.hq.database-rehearsal.v3'
 const schemaProfile = 'v14-shop-correction'
@@ -77,6 +86,11 @@ const implementationPaths = [...new Set([
   'tools/run_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.test.mjs',
+  'tools/postgres17_toolchain_profile.mjs',
+  'tools/postgres17_toolchain_profile.test.mjs',
+  'tools/inspect_windows_authenticode.ps1',
+  'hq/research/postgres17-toolchain-profile.json',
+  'hq/research/postgres17-publisher-policy.json',
   'tests/test_postgres17_rehearsal_contract.py',
 ])].sort()
 
@@ -182,6 +196,117 @@ function fail(code) {
 const sha256 = (value) => `sha256:${createHash('sha256').update(value).digest('hex')}`
 const validDigest = (value) => /^sha256:[0-9a-f]{64}$/.test(value || '')
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right)
+const compareUtf8 = (left, right) => Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
+
+function sourceControlledToolchainAuthority() {
+  const repositoryRoot = resolve(import.meta.dirname, '..')
+  const researchRoot = resolve(repositoryRoot, 'hq', 'research')
+  const readBound = (path) => {
+    if (typeof path !== 'string' || path.length === 0) {
+      fail('database_rehearsal_evidence_toolchain_invalid')
+    }
+    const absolute = resolve(researchRoot, path)
+    const child = relative(researchRoot, absolute)
+    if (!child || child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child)) {
+      fail('database_rehearsal_evidence_toolchain_invalid')
+    }
+    const metadata = lstatSync(absolute)
+    if (!metadata.isFile() || metadata.isSymbolicLink()) {
+      fail('database_rehearsal_evidence_toolchain_invalid')
+    }
+    return readFileSync(absolute)
+  }
+  let profile, policy, closureBytes, closure
+  const profileBytes = readFileSync(resolve(researchRoot, 'postgres17-toolchain-profile.json'))
+  const policyBytes = readFileSync(resolve(researchRoot, 'postgres17-publisher-policy.json'))
+  try {
+    profile = JSON.parse(profileBytes.toString('utf8'))
+    policy = JSON.parse(policyBytes.toString('utf8'))
+    closureBytes = readBound(profile.loadClosure.evidencePath)
+    closure = JSON.parse(closureBytes.toString('utf8'))
+  } catch {
+    fail('database_rehearsal_evidence_toolchain_invalid')
+  }
+  let profileInspection, policyInspection
+  try {
+    profileInspection = inspectPostgres17ToolchainProfile(profile)
+    policyInspection = inspectPostgres17PublisherPolicy(policy)
+    verifyWindowsLoadClosureEvidence(profile, closure)
+  } catch {
+    fail('database_rehearsal_evidence_toolchain_invalid')
+  }
+  const structuralBlockers = profileInspection.blockers.filter((blocker) =>
+    !blocker.startsWith('source_authentication_runtime_verification_required:'))
+  if (structuralBlockers.length > 0 || !policyInspection.ready
+    || closureBytes.length !== profile.loadClosure.evidenceBytes
+    || createHash('sha256').update(closureBytes).digest('hex')
+      !== profile.loadClosure.evidenceSha256) {
+    fail('database_rehearsal_evidence_toolchain_invalid')
+  }
+  const primary = profile.sources.find(({ component }) => component === 'postgresql')
+  if (!primary) fail('database_rehearsal_evidence_toolchain_invalid')
+  const sourceAuthentication = profile.sources.map((source) => {
+    const authentication = source.authentication
+    let evidenceBytes, evidence
+    try {
+      evidenceBytes = readBound(authentication?.evidencePath)
+      evidence = JSON.parse(evidenceBytes.toString('utf8'))
+    } catch {
+      fail('database_rehearsal_evidence_toolchain_invalid')
+    }
+    if (createHash('sha256').update(evidenceBytes).digest('hex')
+      !== authentication.evidenceSha256
+      || evidenceBytes.length !== authentication.evidenceBytes
+      || authentication.status !== 'reviewed') {
+      fail('database_rehearsal_evidence_toolchain_invalid')
+    }
+    const common = {
+      sourceId: source.sourceId,
+      sourceArtifactSha256: source.sha256,
+      evidenceSha256: authentication.evidenceSha256,
+    }
+    if (authentication.method === 'windows-authenticode-v1') {
+      try {
+        return {
+          ...verifyWindowsAuthenticodePublisherEvidence({
+            source, policy, evidence, observed: evidence,
+          }),
+          evidenceSha256: authentication.evidenceSha256,
+        }
+      } catch { fail('database_rehearsal_evidence_toolchain_invalid') }
+    }
+    if (authentication.method !== 'reviewed-source-digest-v1'
+      || evidence.contract !== 'supermega.reviewed-source-digest.v1'
+      || evidence.status !== 'reviewed'
+      || evidence.sourceId !== source.sourceId
+      || evidence.artifactSha256 !== source.sha256
+      || evidence.artifactBytes !== source.bytes) {
+      fail('database_rehearsal_evidence_toolchain_invalid')
+    }
+    return common
+  }).sort((left, right) => compareUtf8(left.sourceId, right.sourceId))
+  const bindingDigest = createHash('sha256').update(JSON.stringify(profile.bindings)).digest('hex')
+  let canonical
+  try {
+    canonical = toolchainReceiptEvidence({
+      profileId: profile.profileId,
+      manifestSha256: createHash('sha256').update(profileBytes).digest('hex'),
+      policySha256: createHash('sha256').update(policyBytes).digest('hex'),
+      sourceDigest: createHash('sha256').update(JSON.stringify(profile.sources)).digest('hex'),
+      bindingDigest,
+      executionBundleSha256: bindingDigest,
+      loadClosureEvidenceSha256: profile.loadClosure.evidenceSha256,
+      sourceAuthentication,
+    })
+  } catch { fail('database_rehearsal_evidence_toolchain_invalid') }
+  return {
+    ...canonical,
+    archiveFileName: primary.fileName,
+    archiveBytes: primary.bytes,
+    sourceArtifactSha256: primary.sha256,
+    trustedBoundary: 'isolated-single-purpose-windows-x64-v1',
+  }
+}
 
 function requireExactChecks(checks, names, code) {
   if (!same(Object.keys(checks || {}).sort(), [...names].sort())
@@ -211,8 +336,54 @@ function mappedChecks(rawChecks) {
   return Object.fromEntries(rawCheckNames.map((name) => [camelCheckName(name), true]))
 }
 
+function requireToolchainEvidence(toolchain, archive, code) {
+  const keys = [
+    'archiveBytes', 'archiveFileName', 'bindingDigest', 'contract',
+    'executionBundleSha256', 'loadClosureEvidenceSha256', 'manifestSha256',
+    'policySha256', 'profileId', 'sourceArtifactSha256', 'sourceAuthentication',
+    'sourceDigest', 'trustedBoundary',
+  ]
+  const allowedAuthenticationKeys = new Set([
+    'evidenceSha256', 'policyId', 'signerCertificateSha256', 'sourceArtifactSha256',
+    'sourceId', 'timestampCertificateSha256',
+  ])
+  if (!toolchain || !same(Object.keys(toolchain).sort(), keys.sort())
+    || toolchain.contract !== 'supermega.postgres17-toolchain-receipt-evidence.v1'
+    || typeof toolchain.profileId !== 'string' || toolchain.profileId.length === 0
+    || typeof toolchain.archiveFileName !== 'string'
+    || !toolchain.archiveFileName.toLowerCase().endsWith('.exe')
+    || !Number.isSafeInteger(toolchain.archiveBytes) || toolchain.archiveBytes < 1
+    || toolchain.trustedBoundary !== 'isolated-single-purpose-windows-x64-v1'
+    || ![toolchain.manifestSha256, toolchain.policySha256, toolchain.sourceDigest,
+      toolchain.bindingDigest, toolchain.executionBundleSha256,
+      toolchain.loadClosureEvidenceSha256, toolchain.sourceArtifactSha256]
+      .every((digest) => /^[0-9a-f]{64}$/.test(digest || ''))
+    || toolchain.executionBundleSha256 !== toolchain.bindingDigest
+    || toolchain.sourceArtifactSha256 !== archive.sha256
+    || toolchain.archiveBytes !== archive.bytes
+    || !Array.isArray(toolchain.sourceAuthentication)
+    || toolchain.sourceAuthentication.length === 0
+    || toolchain.sourceAuthentication.some((source, index, sources) =>
+      !source || Object.keys(source).some((key) => !allowedAuthenticationKeys.has(key))
+      || typeof source.sourceId !== 'string' || source.sourceId.length === 0
+      || !/^[0-9a-f]{64}$/.test(source.sourceArtifactSha256 || '')
+      || !/^[0-9a-f]{64}$/.test(source.evidenceSha256 || '')
+      || (source.policyId !== undefined
+        && (typeof source.policyId !== 'string' || source.policyId.length === 0))
+      || ['signerCertificateSha256', 'timestampCertificateSha256'].some((key) =>
+        source[key] !== undefined && !/^[0-9a-f]{64}$/.test(source[key] || ''))
+      || (index > 0 && compareUtf8(sources[index - 1].sourceId, source.sourceId) >= 0))) {
+    fail(code)
+  }
+  if (!toolchain.sourceAuthentication.some((source) =>
+    source.sourceArtifactSha256 === toolchain.sourceArtifactSha256)) fail(code)
+  return structuredClone(toolchain)
+}
+
 export function buildSanitizedProof(raw, context) {
-  if (raw?.contract !== 'supermega_postgres17_rehearsal_v2' || raw.ok !== true || raw.ready !== true || raw.status !== 'rehearsed') fail('database_rehearsal_not_ready')
+  if (raw?.contract !== 'supermega_postgres17_rehearsal_v2' || raw.ok !== true
+    || raw.authoritative !== false || raw.ready !== true
+    || raw.status !== 'rehearsed') fail('database_rehearsal_not_ready')
   if (raw.engine?.major !== 17
     || raw.engine?.tls_active !== true
     || raw.engine?.loopback_only !== true
@@ -239,6 +410,11 @@ export function buildSanitizedProof(raw, context) {
     || raw.source?.head !== context.implementationCommit || raw.source?.tree !== context.implementationTree
     || raw.source?.implementation_digest !== context.implementation.digest) fail('database_rehearsal_source_mismatch')
   if (!/^[0-9a-f]{64}$/.test(context.archive.sha256 || '') || !Number.isSafeInteger(context.archive.bytes) || context.archive.bytes < 1) fail('database_rehearsal_archive_invalid')
+  const toolchain = requireToolchainEvidence(
+    context.toolchain,
+    context.archive,
+    'database_rehearsal_toolchain_authority_invalid',
+  )
 
   const proof = {
     schemaVersion: DATABASE_REHEARSAL_EVIDENCE_SCHEMA,
@@ -267,16 +443,17 @@ export function buildSanitizedProof(raw, context) {
       coversImplementationCommit: false,
     },
     engine: {
-      distribution: 'EDB PostgreSQL Windows x86-64 binaries',
+      distribution: 'publisher-authenticated multi-source PostgreSQL Windows x86-64 toolchain',
       version: raw.engine.version,
       major: raw.engine.major,
       sourcePage: 'https://www.postgresql.org/download/windows/',
-      archive: 'https://get.enterprisedb.com/postgresql/postgresql-17.10-2-windows-x64-binaries.zip',
+      archive: toolchain.archiveFileName,
       archiveBytes: context.archive.bytes,
       observedArchiveSha256: context.archive.sha256,
       tlsActive: raw.engine.tls_active,
       loopbackOnly: raw.engine.loopback_only,
       startMode: raw.engine.start_mode,
+      toolchain,
     },
     migration: {
       count: raw.migrations.count,
@@ -344,6 +521,14 @@ export function validateSanitizedProof(proof, currentImplementation) {
     || proof.engine?.loopbackOnly !== true
     || !['pg_ctl_restricted_token', 'windows_direct_sandbox'].includes(proof.engine?.startMode)
     || !/^[0-9a-f]{64}$/.test(proof.engine?.observedArchiveSha256 || '')) fail('database_rehearsal_evidence_engine_invalid')
+  const toolchain = requireToolchainEvidence(
+    proof.engine?.toolchain,
+    { sha256: proof.engine.observedArchiveSha256, bytes: proof.engine.archiveBytes },
+    'database_rehearsal_evidence_toolchain_invalid',
+  )
+  const expectedToolchain = currentImplementation.expectedToolchain
+    ?? sourceControlledToolchainAuthority()
+  if (!same(toolchain, expectedToolchain)) fail('database_rehearsal_evidence_toolchain_stale')
   if (proof.migration?.count !== migrations.length || proof.migration?.schemaVersion !== 14
     || !same(proof.migration?.names, migrations) || proof.migration?.schemaProfile !== schemaProfile
     || proof.migration?.catalogContract !== catalogContract

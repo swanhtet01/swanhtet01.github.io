@@ -1,9 +1,9 @@
 # Current private-chain rehearsal
 
-This document's v13 is the hosted PostgreSQL/Supabase `v13-self-serve`
-profile. It is independent of native Shop's committed green-anchor SQLite
-`user_version = 13` and the current uncommitted native schema-v14 security
-increment.
+The first section preserves the historical hosted PostgreSQL/Supabase
+`v13-self-serve` helper for baseline and adversarial checks. The authoritative
+full release rehearsal described below is the current PostgreSQL schema-v14
+contract. Both are independent of native Shop's SQLite `user_version`.
 
 Local execution only:
 
@@ -72,20 +72,60 @@ and [column privileges](https://supabase.com/docs/guides/database/postgres/colum
 
 ## Full release database rehearsal
 
-The source-owned release runner now applies the exact 23 private migrations
-through schema 13 plus durable attempt budgets. It retains all 56 prior product,
-approval, identity and recovery checks, then runs the same actual account/billing
-exercise above and the current recovery checks (74 behavior checks total). Both
-catalogs must pass the exact 33-name current validator matrix. Legacy helper
-defaults remain v11 solely for baseline/adversarial tests; the release entry
-explicitly selects `CURRENT_MIGRATIONS` and `v13-self-serve` for both fresh and
-restored databases.
+The source-owned release runner applies the exact 24 private migrations through
+schema 14 and the `v14-shop-correction` profile. It runs all 79 exact behavior
+and recovery checks. Both fresh and restored catalogs must pass the exact
+33-name current validator matrix. Legacy helper defaults remain solely for
+baseline and adversarial tests; the release entry explicitly selects
+`CURRENT_MIGRATIONS` and the current v14 profile for both databases.
 
 New receipt production is currently blocked before PostgreSQL starts because no
-reviewed provenance profile yet binds the historical archive to every loaded
-PostgreSQL/OpenSSL/Python dependency. The commands below are the intended flow
+reviewed provenance profile yet binds the verified installer and every separate
+PostgreSQL/OpenSSL/Python/Psycopg source to the complete runtime closure. The commands below are the intended flow
 only after that source-controlled profile is complete and independently reviewed;
 Linux and caller-supplied tool paths are not approved substitutes.
+
+The pending profile is recorded at
+`hq/research/postgres17-toolchain-profile.json`. Its `sources[]` and `bindings[]`
+model must authenticate each actual source independently and bind every executed,
+imported or non-system loaded file to that source. PostgreSQL, Python,
+Psycopg/native extensions and OpenSSL may not inherit one another's provenance.
+Synthetic fixtures prove tamper rejection but can never authorize a real
+recording. Until complete Windows source identities, file hashes, runtime-load
+closure, retained evidence digests and independent approval are present, the
+recorder fails before starting PostgreSQL.
+
+The verified PostgreSQL source candidate is EDB's official Windows x64
+`postgresql-17.11-5-windows-x64.exe`: 413,001,200 bytes, SHA-256
+`612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072`.
+Two read-only downloads matched those bytes and Microsoft Winget's independent
+manifest. Windows reported a valid embedded `Authenticode` signature, required
+code-signing EKU `1.3.6.1.5.5.7.3.3`, signer raw-DER SHA-256
+`558b34d97944a53cefc13c031ea46845be00f0b9bb87f47dc3110eaee07f82d3`
+and timestamp-certificate raw-DER SHA-256
+`2da09da7f4131f9fe72db6c5e6e9c9656755af043f1ea742cc0d2120e141ebfc`.
+The installer was not executed. The canonical observer still must emit and
+retain a digest-bound evidence file before the policy can be independently
+approved. A URL, filename, subject string or secondary checksum alone is never
+authority.
+
+The Node recorder is the sole receipt authority. It revalidates the canonical
+profile immediately before launch and after confirmed cleanup, launches the
+exact verified Python executable with verified PostgreSQL and OpenSSL paths,
+and reconstructs the sanitized receipt from the raw non-authoritative Python
+report plus current source/toolchain evidence. Direct Python output cannot mint
+an accepted receipt.
+
+The reviewed trust boundary is a fresh, single-purpose isolated Windows x64
+runner with no concurrent or interactive same-user workload and no
+attacker-writable source/runtime directories. Hostile same-host mutation is out
+of scope for this minimal path; if it becomes a requirement, a separately
+approved immutable staging/execution-lock design must be restored. Pre/post
+hashing is not represented as protection against swap-execute-restore by a
+hostile same-user process. The remaining required evidence is the retained
+canonical Authenticode observation, complete authenticated multi-source
+bindings/load closure, materialized runtime inventory, Windows execution and
+independent profile approval.
 
 Then run once from an exact clean committed checkout, using the approved tools:
 
