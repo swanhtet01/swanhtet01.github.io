@@ -1,0 +1,52 @@
+{
+  "contract": "supermega.postgres17-windows-bootstrap-policy.v1",
+  "policyId": "github-windows-2025-postgres17-bootstrap-v1",
+  "status": "pending-closure-observer",
+  "platform": { "os": "windows", "arch": "x64", "runner": "windows-2025" },
+  "installer": {
+    "sourceId": "edb-postgresql-17.11-5-windows-x64",
+    "url": "https://get.enterprisedb.com/postgresql/postgresql-17.11-5-windows-x64.exe",
+    "fileName": "postgresql-17.11-5-windows-x64.exe",
+    "bytes": 413001200,
+    "sha256": "612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072",
+    "publisherPolicyPath": "hq/research/postgres17-publisher-policy.json"
+  },
+  "execution": {
+    "authoritativeDocumentationUrl": "https://www.enterprisedb.com/docs/supported-open-source/postgresql/installing/command_line_parameters/",
+    "authoritativeDocumentationSha256": "6b60234851ac72ff5d2447058d4d2826d0aef8652b9ba31da6c05e02c12133e0",
+    "mode": "extract-only",
+    "arguments": [
+      "--extract-only", "1",
+      "--mode", "unattended",
+      "--unattendedmodeui", "none",
+      "--prefix", "{runtimeRoot}",
+      "--install_runtimes", "0",
+      "--create_shortcuts", "0"
+    ],
+    "serviceInstallationAllowed": false,
+    "systemPathMutationAllowed": false,
+    "interactiveUiAllowed": false
+  },
+  "closureObserver": {
+    "status": "pending",
+    "contract": "supermega.windows-process-image-observer.v1",
+    "captureMethod": "windows-kernel-process-image-events-v1",
+    "requiresCaptureBeforeSpawn": true,
+    "requiresDroppedEvents": 0,
+    "requiresCompleteDescendantCorrelation": true,
+    "command": null,
+    "sha256": null
+  },
+  "trustedBoundary": {
+    "singlePurposeEphemeralRunner": true,
+    "concurrentSameUserWorkloadsAllowed": false,
+    "interactiveUsersAllowed": false,
+    "hostileSameUserMutationInScope": false
+  },
+  "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
+  "blockers": [
+    "The service-free extract-only flags are bound to the retained authoritative EDB documentation digest, but the policy is not independently approved.",
+    "No dependency-free loss-aware Windows kernel process/image observer is committed and independently reviewed; installer execution therefore remains disabled.",
+    "Stage 2 remains disabled until a complete reviewed profile, source policies and retained evidence are committed at the exact rehearsal SHA."
+  ]
+}

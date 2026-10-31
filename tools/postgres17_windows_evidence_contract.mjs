@@ -1,0 +1,174 @@
+import { createHash } from 'node:crypto'
+import { readFile, readdir } from 'node:fs/promises'
+import { basename, isAbsolute, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+
+const SHA256 = /^[0-9a-f]{64}$/
+const ID = /^[a-z0-9][a-z0-9._-]{0,127}$/
+const EXACT_SHA = /^[0-9a-f]{40}$/
+const USES = new Set(['executed', 'imported', 'loaded'])
+function fail(code) { throw new Error(code) }
+function object(value) { return Boolean(value) && typeof value === 'object' && !Array.isArray(value) }
+function exact(value, keys) {
+  return object(value) && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0')
+}
+function integer(value, min, max) { return Number.isSafeInteger(value) && value >= min && value <= max }
+function safeRelative(value) {
+  return typeof value === 'string' && value.length > 0 && !isAbsolute(value)
+    && !value.startsWith('/') && !value.startsWith('\\') && !value.includes(':')
+    && !value.split(/[\\/]/).some((part) => ['', '.', '..'].includes(part))
+}
+function safeJson(bytes) {
+  if (bytes.length < 2 || bytes.length > 1024 * 1024) fail('bootstrap_evidence_size_invalid')
+  const text = bytes.toString('utf8')
+  if (/postgres(?:ql)?:\/\//i.test(text) || /C:\\Users\\/i.test(text)
+    || /runneradmin/i.test(text) || /"(?:password|connectionString|rowContents)"\s*:/i.test(text)) {
+    fail('bootstrap_evidence_not_sanitized')
+  }
+  try { return JSON.parse(text) } catch { fail('bootstrap_evidence_json_invalid') }
+}
+const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')
+
+export function validateSanitizedClosure(closure, expectedSha) {
+  const keys = ['contract', 'exactSha', 'captureStartedBeforeSpawn', 'rehearsalObserved',
+    'droppedEvents', 'descendantCorrelationComplete', 'runtimeModulesComplete',
+    'processTreeComplete', 'allProcessesExited', 'serviceInventoryUnchanged',
+    'allSelectedPortsClosed', 'selectedPorts', 'temporaryDataRemoved', 'profileId',
+    'runtimeClosureEvidenceSha256', 'sourceDigest', 'bindingDigest', 'receiptSha256',
+    'rawReceiptSha256', 'processCount', 'runtimeFileCount', 'systemModuleCount',
+    'processes', 'runtimeFiles', 'systemModules']
+  if (!exact(closure, keys) || closure.contract !== 'supermega.windows-process-image-observer.v1'
+    || closure.exactSha !== expectedSha || !EXACT_SHA.test(expectedSha)
+    || closure.captureStartedBeforeSpawn !== true || closure.rehearsalObserved !== true
+    || closure.droppedEvents !== 0 || closure.descendantCorrelationComplete !== true
+    || closure.runtimeModulesComplete !== true || closure.processTreeComplete !== true
+    || closure.allProcessesExited !== true || closure.serviceInventoryUnchanged !== true
+    || closure.allSelectedPortsClosed !== true || closure.temporaryDataRemoved !== true
+    || typeof closure.profileId !== 'string' || !ID.test(closure.profileId)
+    || ![closure.runtimeClosureEvidenceSha256, closure.sourceDigest, closure.bindingDigest,
+      closure.receiptSha256, closure.rawReceiptSha256].every((value) => SHA256.test(value || ''))
+    || !integer(closure.processCount, 1, 10000)
+    || !integer(closure.runtimeFileCount, 1, 10000)
+    || !integer(closure.systemModuleCount, 1, 10000)
+    || !Array.isArray(closure.selectedPorts) || closure.selectedPorts.length < 1
+    || closure.selectedPorts.some((value) => !integer(value, 1, 65535))
+    || new Set(closure.selectedPorts).size !== closure.selectedPorts.length
+    || !Array.isArray(closure.processes) || closure.processes.length !== closure.processCount
+    || !Array.isArray(closure.runtimeFiles) || closure.runtimeFiles.length !== closure.runtimeFileCount
+    || !Array.isArray(closure.systemModules) || closure.systemModules.length !== closure.systemModuleCount) {
+    fail('bootstrap_closure_inventory_invalid')
+  }
+  for (const process of closure.processes) {
+    if (!exact(process, ['sequence', 'parentSequence', 'imageBindingId', 'sourceId', 'exitCode'])
+      || !integer(process.sequence, 0, 1000000)
+      || !(process.parentSequence === null || integer(process.parentSequence, 0, 1000000))
+      || !ID.test(process.imageBindingId || '') || !ID.test(process.sourceId || '')
+      || process.exitCode !== 0) fail('bootstrap_closure_inventory_invalid')
+  }
+  for (const file of closure.runtimeFiles) {
+    if (!exact(file, ['bindingId', 'sourceId', 'relativePath', 'bytes', 'sha256', 'uses'])
+      || !ID.test(file.bindingId || '') || !ID.test(file.sourceId || '')
+      || !safeRelative(file.relativePath) || !integer(file.bytes, 1, Number.MAX_SAFE_INTEGER)
+      || !SHA256.test(file.sha256 || '') || !Array.isArray(file.uses) || file.uses.length < 1
+      || new Set(file.uses).size !== file.uses.length || file.uses.some((use) => !USES.has(use))) {
+      fail('bootstrap_closure_inventory_invalid')
+    }
+  }
+  for (const module of closure.systemModules) {
+    if (!exact(module, ['fileName', 'bytes', 'sha256'])
+      || module.fileName !== basename(module.fileName || '')
+      || !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,255}$/.test(module.fileName || '')
+      || !integer(module.bytes, 1, Number.MAX_SAFE_INTEGER) || !SHA256.test(module.sha256 || '')) {
+      fail('bootstrap_closure_inventory_invalid')
+    }
+  }
+  return { processCount: closure.processCount, runtimeFileCount: closure.runtimeFileCount,
+    systemModuleCount: closure.systemModuleCount }
+}
+
+export async function verifyEvidenceDirectory(directory, stage, expectedSha) {
+  if (!EXACT_SHA.test(expectedSha || '') || !['capture', 'rehearsal'].includes(stage)) {
+    fail('bootstrap_evidence_arguments_invalid')
+  }
+  const expected = stage === 'capture'
+    ? ['postgres17-stage1-candidate.json']
+    : ['postgres17-rehearsal.json', 'postgres17-rehearsal.json.raw.json',
+      'postgres17-stage2-cleanup.json', 'postgres17-stage2-closure.json']
+  const actual = (await readdir(directory)).sort()
+  if (actual.join('\0') !== expected.sort().join('\0')) fail('bootstrap_evidence_file_set_invalid')
+  const values = {}
+  const bytes = {}
+  for (const name of expected) {
+    bytes[name] = await readFile(join(directory, name))
+    values[name] = safeJson(bytes[name])
+  }
+  if (stage === 'capture') {
+    const candidate = values[expected[0]]
+    const observationKeys = ['contract', 'artifactFileName', 'artifactBytes', 'artifactSha256',
+      'signatureStatus', 'signatureType', 'signerCertificateSha256', 'signerSubject',
+      'signerIssuer', 'timestampCertificateSha256', 'timestampSubject', 'ekuOids']
+    if (!exact(candidate, ['contract', 'authoritative', 'exactSha', 'installer', 'documentation',
+      'executionPerformed', 'databaseRehearsalReceiptCreated', 'cleanup', 'secretValuesExposed'])
+      || !exact(candidate.installer, observationKeys)
+      || !exact(candidate.documentation, ['url', 'sha256'])
+      || !exact(candidate.cleanup,
+        ['serviceInventoryUnchanged', 'temporaryDataRemoved', 'processOrPortCheckApplicable'])
+      || candidate.contract !== 'supermega.postgres17-stage1-candidate.v1'
+      || candidate.authoritative !== false || candidate.exactSha !== expectedSha
+      || candidate.executionPerformed !== false
+      || candidate.databaseRehearsalReceiptCreated !== false
+      || candidate.secretValuesExposed !== false
+      || candidate.installer.contract !== 'supermega.windows-authenticode-observation.v1'
+      || typeof candidate.installer.artifactFileName !== 'string'
+      || !integer(candidate.installer.artifactBytes, 1, Number.MAX_SAFE_INTEGER)
+      || !SHA256.test(candidate.installer.artifactSha256 || '')
+      || candidate.installer.signatureStatus !== 'Valid'
+      || candidate.installer.signatureType !== 'Authenticode'
+      || !SHA256.test(candidate.installer.signerCertificateSha256 || '')
+      || typeof candidate.installer.signerSubject !== 'string'
+      || typeof candidate.installer.signerIssuer !== 'string'
+      || !SHA256.test(candidate.installer.timestampCertificateSha256 || '')
+      || typeof candidate.installer.timestampSubject !== 'string'
+      || !Array.isArray(candidate.installer.ekuOids)
+      || candidate.installer.ekuOids.length < 1
+      || candidate.installer.ekuOids.some((value) =>
+        typeof value !== 'string' || !/^\d+(?:\.\d+)+$/.test(value))
+      || typeof candidate.documentation.url !== 'string'
+      || !candidate.documentation.url.startsWith('https://')
+      || !SHA256.test(candidate.documentation.sha256 || '')
+      || candidate.cleanup.serviceInventoryUnchanged !== true
+      || candidate.cleanup.temporaryDataRemoved !== true
+      || candidate.cleanup.processOrPortCheckApplicable !== false) {
+      fail('bootstrap_stage1_candidate_invalid')
+    }
+    return { stage, exactSha: expectedSha }
+  }
+  const closure = values['postgres17-stage2-closure.json']
+  validateSanitizedClosure(closure, expectedSha)
+  const cleanup = values['postgres17-stage2-cleanup.json']
+  if (!exact(cleanup, ['contract', 'authoritative', 'exactSha', 'serviceInventoryUnchanged',
+    'allSelectedPortsClosed', 'selectedPortCount', 'temporaryDataRemoved', 'allProcessesExited',
+    'closureEvidenceSha256', 'receiptSha256', 'rawReceiptSha256',
+    'receiptReconstructionRawRetained', 'secretValuesExposed'])
+    || cleanup.contract !== 'supermega.postgres17-stage2-cleanup.v1'
+    || cleanup.authoritative !== false || cleanup.exactSha !== expectedSha
+    || cleanup.secretValuesExposed !== false || cleanup.serviceInventoryUnchanged !== true
+    || cleanup.allSelectedPortsClosed !== true || cleanup.temporaryDataRemoved !== true
+    || cleanup.allProcessesExited !== true || cleanup.receiptReconstructionRawRetained !== true
+    || !integer(cleanup.selectedPortCount, 1, 65535)
+    || cleanup.selectedPortCount !== closure.selectedPorts.length
+    || cleanup.closureEvidenceSha256 !== digest(bytes['postgres17-stage2-closure.json'])
+    || cleanup.receiptSha256 !== digest(bytes['postgres17-rehearsal.json'])
+    || cleanup.rawReceiptSha256 !== digest(bytes['postgres17-rehearsal.json.raw.json'])
+    || closure.receiptSha256 !== cleanup.receiptSha256
+    || closure.rawReceiptSha256 !== cleanup.rawReceiptSha256) fail('bootstrap_stage2_evidence_invalid')
+  return { stage, exactSha: expectedSha, receiptSha256: cleanup.receiptSha256 }
+}
+
+async function main() {
+  const [directory, stage, expectedSha] = process.argv.slice(2)
+  console.log(JSON.stringify(await verifyEvidenceDirectory(directory, stage, expectedSha)))
+}
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  main().catch((error) => { console.error(error.message); process.exitCode = 1 })
+}

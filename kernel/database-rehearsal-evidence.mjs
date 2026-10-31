@@ -8,6 +8,12 @@ import {
   verifyWindowsAuthenticodePublisherEvidence,
   verifyWindowsLoadClosureEvidence,
 } from '../tools/postgres17_toolchain_profile.mjs'
+import {
+  combinedPolicySha256,
+  inspectOfficialRegistryPolicy,
+  OFFICIAL_REGISTRY_SOURCE_METHOD,
+  verifyOfficialRegistryEvidence,
+} from '../tools/postgres17_source_registry.mjs'
 
 export const DATABASE_REHEARSAL_EVIDENCE_SCHEMA = 'supermega.hq.database-rehearsal.v3'
 const schemaProfile = 'v14-shop-correction'
@@ -88,9 +94,16 @@ const implementationPaths = [...new Set([
   'tools/record_postgres17_rehearsal.test.mjs',
   'tools/postgres17_toolchain_profile.mjs',
   'tools/postgres17_toolchain_profile.test.mjs',
+  'tools/postgres17_source_registry.mjs',
+  'tools/postgres17_windows_evidence_bootstrap.ps1',
+  'tools/postgres17_windows_evidence_bootstrap.test.mjs',
+  'tools/postgres17_windows_evidence_contract.mjs',
   'tools/inspect_windows_authenticode.ps1',
   'hq/research/postgres17-toolchain-profile.json',
   'hq/research/postgres17-publisher-policy.json',
+  'hq/research/postgres17-official-source-policy.json',
+  'hq/research/postgres17-windows-bootstrap-policy.json',
+  '.github/workflows/postgres17-windows-evidence.yml',
   'tests/test_postgres17_rehearsal_contract.py',
 ])].sort()
 
@@ -216,28 +229,34 @@ function sourceControlledToolchainAuthority() {
     }
     return readFileSync(absolute)
   }
-  let profile, policy, closureBytes, closure
+  let profile, policy, registryPolicy, closureBytes, closure
   const profileBytes = readFileSync(resolve(researchRoot, 'postgres17-toolchain-profile.json'))
   const policyBytes = readFileSync(resolve(researchRoot, 'postgres17-publisher-policy.json'))
+  const registryPolicyBytes = readFileSync(resolve(researchRoot, 'postgres17-official-source-policy.json'))
   try {
     profile = JSON.parse(profileBytes.toString('utf8'))
     policy = JSON.parse(policyBytes.toString('utf8'))
+    registryPolicy = JSON.parse(registryPolicyBytes.toString('utf8'))
     closureBytes = readBound(profile.loadClosure.evidencePath)
     closure = JSON.parse(closureBytes.toString('utf8'))
   } catch {
     fail('database_rehearsal_evidence_toolchain_invalid')
   }
-  let profileInspection, policyInspection
+  let profileInspection, policyInspection, registryPolicyInspection
   try {
     profileInspection = inspectPostgres17ToolchainProfile(profile)
     policyInspection = inspectPostgres17PublisherPolicy(policy)
+    registryPolicyInspection = inspectOfficialRegistryPolicy(registryPolicy)
     verifyWindowsLoadClosureEvidence(profile, closure)
   } catch {
     fail('database_rehearsal_evidence_toolchain_invalid')
   }
   const structuralBlockers = profileInspection.blockers.filter((blocker) =>
     !blocker.startsWith('source_authentication_runtime_verification_required:'))
+  const hasRegistrySources = profile.sources.some(({ authentication }) =>
+    authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD)
   if (structuralBlockers.length > 0 || !policyInspection.ready
+    || (hasRegistrySources && !registryPolicyInspection.ready)
     || closureBytes.length !== profile.loadClosure.evidenceBytes
     || createHash('sha256').update(closureBytes).digest('hex')
       !== profile.loadClosure.evidenceSha256) {
@@ -275,6 +294,16 @@ function sourceControlledToolchainAuthority() {
         }
       } catch { fail('database_rehearsal_evidence_toolchain_invalid') }
     }
+    if (authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD) {
+      try {
+        return {
+          ...verifyOfficialRegistryEvidence({
+            source, authentication, policy: registryPolicy, evidence,
+          }),
+          evidenceSha256: authentication.evidenceSha256,
+        }
+      } catch { fail('database_rehearsal_evidence_toolchain_invalid') }
+    }
     if (authentication.method !== 'reviewed-source-digest-v1'
       || evidence.contract !== 'supermega.reviewed-source-digest.v1'
       || evidence.status !== 'reviewed'
@@ -291,7 +320,7 @@ function sourceControlledToolchainAuthority() {
     canonical = toolchainReceiptEvidence({
       profileId: profile.profileId,
       manifestSha256: createHash('sha256').update(profileBytes).digest('hex'),
-      policySha256: createHash('sha256').update(policyBytes).digest('hex'),
+      policySha256: combinedPolicySha256(policyBytes, registryPolicyBytes),
       sourceDigest: createHash('sha256').update(JSON.stringify(profile.sources)).digest('hex'),
       bindingDigest,
       executionBundleSha256: bindingDigest,
@@ -345,7 +374,7 @@ function requireToolchainEvidence(toolchain, archive, code) {
   ]
   const allowedAuthenticationKeys = new Set([
     'evidenceSha256', 'policyId', 'signerCertificateSha256', 'sourceArtifactSha256',
-    'sourceId', 'timestampCertificateSha256',
+    'sourceId', 'timestampCertificateSha256', 'registryPolicyId', 'metadataSha256',
   ])
   if (!toolchain || !same(Object.keys(toolchain).sort(), keys.sort())
     || toolchain.contract !== 'supermega.postgres17-toolchain-receipt-evidence.v1'
@@ -372,6 +401,9 @@ function requireToolchainEvidence(toolchain, archive, code) {
         && (typeof source.policyId !== 'string' || source.policyId.length === 0))
       || ['signerCertificateSha256', 'timestampCertificateSha256'].some((key) =>
         source[key] !== undefined && !/^[0-9a-f]{64}$/.test(source[key] || ''))
+      || (source.registryPolicyId !== undefined
+        && (typeof source.registryPolicyId !== 'string' || source.registryPolicyId.length === 0
+          || !/^[0-9a-f]{64}$/.test(source.metadataSha256 || '')))
       || (index > 0 && compareUtf8(sources[index - 1].sourceId, source.sourceId) >= 0))) {
     fail(code)
   }

@@ -1,0 +1,14 @@
+{
+  "contract": "supermega.postgres17-official-registry-policy.v1",
+  "policyId": "postgres17-official-runtime-sources-v1-pending-review",
+  "status": "pending",
+  "testOnly": false,
+  "artifacts": [],
+  "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
+  "blockers": [
+    "Official Python, Psycopg/native-extension, OpenSSL, Node and Git artifact locations, package versions, platform tags, byte sizes and digests are not yet retained.",
+    "Official registry metadata bytes and independent approvals are not yet retained and hashed.",
+    "Python, OpenSSL and Git source-authentication schemes are deliberately unsupported until component-specific official metadata or signature verification is implemented and reviewed.",
+    "A URL or digest by itself is intentionally insufficient for production source authentication."
+  ]
+}

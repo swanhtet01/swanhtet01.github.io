@@ -3,6 +3,12 @@ import { spawnSync } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 import { lstat, readFile, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import {
+  combinedPolicySha256,
+  OFFICIAL_REGISTRY_SOURCE_METHOD,
+  readOfficialRegistryPolicy,
+  verifyOfficialRegistryEvidence,
+} from './postgres17_source_registry.mjs'
 
 export const POSTGRES17_TOOLCHAIN_PROFILE_CONTRACT =
   'supermega.postgres17-toolchain-provenance.v2'
@@ -25,6 +31,13 @@ const defaultPublisherPolicyPath = resolve(
   'hq',
   'research',
   'postgres17-publisher-policy.json',
+)
+const defaultRegistryPolicyPath = resolve(
+  import.meta.dirname,
+  '..',
+  'hq',
+  'research',
+  'postgres17-official-source-policy.json',
 )
 const authenticodeInspectorPath = resolve(import.meta.dirname, 'inspect_windows_authenticode.ps1')
 const REQUIRED_ROLES = new Set([
@@ -152,13 +165,21 @@ function exactAuthenticationShape(authentication) {
   const required = [
     'status', 'method', 'reference', 'evidencePath', 'evidenceBytes', 'evidenceSha256',
   ]
-  const optional = authentication?.method === WINDOWS_AUTHENTICODE_METHOD ? ['policyId'] : []
+  const optional = [WINDOWS_AUTHENTICODE_METHOD, OFFICIAL_REGISTRY_SOURCE_METHOD]
+    .includes(authentication?.method) ? ['policyId'] : []
   return hasExactKeys(authentication, required, optional)
 }
 
 function exactAuthenticodeAuthentication(authentication) {
   return exactAuthenticationShape(authentication)
     && authentication.method === WINDOWS_AUTHENTICODE_METHOD
+    && typeof authentication.policyId === 'string'
+    && authentication.policyId.length > 0
+}
+
+function exactRegistryAuthentication(authentication) {
+  return exactAuthenticationShape(authentication)
+    && authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD
     && typeof authentication.policyId === 'string'
     && authentication.policyId.length > 0
 }
@@ -340,6 +361,12 @@ export function inspectPostgres17ToolchainProfile(profile) {
     }
     if (authentication.method === WINDOWS_AUTHENTICODE_METHOD) {
       if (!exactAuthenticodeAuthentication(authentication) || !source.fileName.toLowerCase().endsWith('.exe')) {
+        blockers.push(`source_authentication_invalid:${source.sourceId}`)
+      } else if (profile.testOnly !== true) {
+        blockers.push(`source_authentication_runtime_verification_required:${source.sourceId}`)
+      }
+    } else if (authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD) {
+      if (source.component === 'postgresql' || !exactRegistryAuthentication(authentication)) {
         blockers.push(`source_authentication_invalid:${source.sourceId}`)
       } else if (profile.testOnly !== true) {
         blockers.push(`source_authentication_runtime_verification_required:${source.sourceId}`)
@@ -572,7 +599,13 @@ export function verifyWindowsAuthenticodePublisherEvidence({
   }
 }
 
-async function verifySourceAuthentication({ source, manifestPath, sourcePath, publisherPolicyPath }) {
+async function verifySourceAuthentication({
+  source,
+  manifestPath,
+  sourcePath,
+  publisherPolicyPath,
+  registryPolicy,
+}) {
   const policyBytes = await readFile(publisherPolicyPath)
   const policy = parseJsonEvidence(policyBytes, 'database_rehearsal_publisher_policy_invalid')
   const authentication = source.authentication
@@ -585,6 +618,12 @@ async function verifySourceAuthentication({ source, manifestPath, sourcePath, pu
       ...verifyWindowsAuthenticodePublisherEvidence({
         source, policy, evidence, observed: await inspectWindowsAuthenticode(sourcePath),
       }),
+      evidenceSha256: authentication.evidenceSha256,
+    }
+  }
+  if (authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD) {
+    return {
+      ...verifyOfficialRegistryEvidence({ source, authentication, policy: registryPolicy, evidence }),
       evidenceSha256: authentication.evidenceSha256,
     }
   }
@@ -611,6 +650,7 @@ export async function verifyPostgres17ToolchainProfile({
   allowSynthetic = false,
   requireHostPlatform = false,
   publisherPolicyPath = defaultPublisherPolicyPath,
+  registryPolicyPath = defaultRegistryPolicyPath,
 }) {
   const manifestMetadata = await lstat(manifestPath)
   if (!manifestMetadata.isFile() || manifestMetadata.isSymbolicLink()) {
@@ -622,7 +662,9 @@ export async function verifyPostgres17ToolchainProfile({
   const ignoredBlockers = new Set()
   if (allowSynthetic && profile.testOnly === true) ignoredBlockers.add('synthetic_profile')
   for (const source of profile.sources) {
-    if (profile.testOnly === false && source.authentication.method === WINDOWS_AUTHENTICODE_METHOD) {
+    if (profile.testOnly === false
+      && [WINDOWS_AUTHENTICODE_METHOD, OFFICIAL_REGISTRY_SOURCE_METHOD]
+        .includes(source.authentication.method)) {
       ignoredBlockers.add(`source_authentication_runtime_verification_required:${source.sourceId}`)
     }
   }
@@ -636,6 +678,7 @@ export async function verifyPostgres17ToolchainProfile({
   if (!primary) fail('database_rehearsal_toolchain_source_missing')
   if (archivePath !== null) sourcePaths = { ...sourcePaths, [primary.sourceId]: archivePath }
   const sourceAuthentication = []
+  const registryPolicy = await readOfficialRegistryPolicy(registryPolicyPath)
   for (const source of profile.sources) {
     const sourcePath = sourcePaths[source.sourceId]
     if (typeof sourcePath !== 'string' || basename(sourcePath) !== source.fileName) {
@@ -648,7 +691,7 @@ export async function verifyPostgres17ToolchainProfile({
       dirname(manifestPath),
     )
     sourceAuthentication.push(await verifySourceAuthentication({
-      source, manifestPath, sourcePath, publisherPolicyPath,
+      source, manifestPath, sourcePath, publisherPolicyPath, registryPolicy,
     }))
   }
   extractedRoot ??= resolve(dirname(sourcePaths[primary.sourceId]), profile.runtimeRootName)
@@ -688,6 +731,7 @@ export async function verifyPostgres17ToolchainProfile({
     }
   }
   const policyBytes = await readFile(publisherPolicyPath)
+  const registryPolicyBytes = await readFile(registryPolicyPath)
   const sourceDigest = createHash('sha256').update(JSON.stringify(profile.sources)).digest('hex')
   const bindingDigest = createHash('sha256').update(JSON.stringify(profile.bindings)).digest('hex')
   const verified = {
@@ -695,7 +739,7 @@ export async function verifyPostgres17ToolchainProfile({
     ready: true,
     profileId: profile.profileId,
     manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
-    policySha256: createHash('sha256').update(policyBytes).digest('hex'),
+    policySha256: combinedPolicySha256(policyBytes, registryPolicyBytes),
     sourceDigest,
     bindingDigest,
     executionBundleSha256: bindingDigest,
@@ -733,13 +777,26 @@ export function toolchainReceiptEvidence(verified) {
         ...digestShape, 'policyId', 'signerCertificateSha256',
         'timestampCertificateSha256',
       ]
-      if (!hasExactKeys(value, value.policyId === undefined ? digestShape : authenticodeShape)) {
+      const registryShape = [
+        ...digestShape, 'registryPolicyId', 'metadataSha256',
+      ]
+      const shape = value.registryPolicyId === undefined
+        ? (value.policyId === undefined ? digestShape : authenticodeShape)
+        : registryShape
+      if (!hasExactKeys(value, shape)) {
         fail('database_rehearsal_toolchain_receipt_evidence_invalid')
       }
       const base = {
         sourceId: value.sourceId,
         sourceArtifactSha256: value.sourceArtifactSha256,
         evidenceSha256: value.evidenceSha256,
+      }
+      if (value.registryPolicyId !== undefined) {
+        return {
+          ...base,
+          registryPolicyId: value.registryPolicyId,
+          metadataSha256: value.metadataSha256,
+        }
       }
       if (value.policyId === undefined) return base
       return {
@@ -776,6 +833,7 @@ export function toolchainReceiptEvidence(verified) {
 export async function sourceControlledToolchainReceiptEvidence({
   manifestPath,
   publisherPolicyPath = defaultPublisherPolicyPath,
+  registryPolicyPath = defaultRegistryPolicyPath,
   allowSynthetic = false,
 }) {
   const manifestBytes = await readFile(manifestPath)
@@ -790,6 +848,8 @@ export async function sourceControlledToolchainReceiptEvidence({
   if (!inspectPostgres17PublisherPolicy(policy).ready) {
     fail('database_rehearsal_publisher_policy_unapproved')
   }
+  const registryPolicyBytes = await readFile(registryPolicyPath)
+  const registryPolicy = await readOfficialRegistryPolicy(registryPolicyPath)
   const sourceAuthentication = []
   for (const source of profile.sources) {
     const authentication = source.authentication
@@ -807,6 +867,11 @@ export async function sourceControlledToolchainReceiptEvidence({
         ...verifyWindowsAuthenticodePublisherEvidence({
           source, policy, evidence, observed: evidence,
         }),
+        evidenceSha256: authentication.evidenceSha256,
+      })
+    } else if (authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD) {
+      sourceAuthentication.push({
+        ...verifyOfficialRegistryEvidence({ source, authentication, policy: registryPolicy, evidence }),
         evidenceSha256: authentication.evidenceSha256,
       })
     } else {
@@ -836,7 +901,7 @@ export async function sourceControlledToolchainReceiptEvidence({
   return toolchainReceiptEvidence({
     profileId: profile.profileId,
     manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
-    policySha256: createHash('sha256').update(policyBytes).digest('hex'),
+    policySha256: combinedPolicySha256(policyBytes, registryPolicyBytes),
     sourceDigest: createHash('sha256').update(JSON.stringify(profile.sources)).digest('hex'),
     bindingDigest: createHash('sha256').update(JSON.stringify(profile.bindings)).digest('hex'),
     executionBundleSha256: createHash('sha256').update(JSON.stringify(profile.bindings)).digest('hex'),

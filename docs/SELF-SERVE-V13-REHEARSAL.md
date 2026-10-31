@@ -116,6 +116,59 @@ and reconstructs the sanitized receipt from the raw non-authoritative Python
 report plus current source/toolchain evidence. Direct Python output cannot mint
 an accepted receipt.
 
+The repository now contains a dedicated, manual-only Windows evidence bootstrap
+at `.github/workflows/postgres17-windows-evidence.yml`. It accepts an exact
+40-hex commit and refuses to run unless that commit is also the selected dispatch
+ref. Checkout uses read-only contents permission and does not persist GitHub
+credentials. There are no push, pull-request, schedule or automatic triggers.
+No workflow has been dispatched, so this is source-level capability only.
+
+The bootstrap has two deliberately separate stages:
+
+1. `capture` can produce only `supermega.postgres17-stage1-candidate.v1` with
+   `authoritative:false`. It cannot call the receipt recorder or create a
+   `supermega.hq.database-rehearsal.v3` receipt. It verifies the exact EDB
+   installer size, digest, Authenticode status/type, raw-DER signer, code-signing
+   EKU and timestamp, then deletes the downloaded bytes without executing them.
+   The service-free
+   `--extract-only 1 --mode unattended --unattendedmodeui none --prefix ...
+   --install_runtimes 0 --create_shortcuts 0` invocation is pinned to EDB's
+   authoritative command-line documentation digest. Execution still fails closed
+   because a dependency-free loss-aware Windows kernel process/image observer is
+   not yet committed and independently approved. Process-module polling is not a
+   substitute, so the committed workflow cannot yet enter stage 2.
+2. `rehearsal` never promotes a stage-1 artifact. It may run only after the exact
+   source commit separately contains a reviewed PostgreSQL publisher policy,
+   reviewed official-source registry policy, complete multi-source profile,
+   retained source-authentication evidence and complete no-drop load closure.
+   One reviewed loss-aware observer must start before extraction and remain active
+   over the actual profile-bound Node recorder, Python runner and both PostgreSQL
+   clusters, with no dropped events and complete descendant/module correlation.
+   The existing Node recorder remains the sole receipt authority and continues to
+   enforce the 24 migrations, both 33-check catalogs, all 79 behavior/recovery
+   checks, loopback TLS, reconstruction and cleanup.
+
+Official archives and wheels other than PostgreSQL use the
+`official-registry-artifact-v1` contract. It binds the official HTTPS host and
+exact artifact/metadata URLs, package, version, platform, filename, size, artifact
+digest, retained official metadata digest, source-controlled allowlist and two
+distinct policy/evidence reviewers. PyPI wheel evidence must parse the official
+JSON release record and match the exact wheel filename, size and digest; Node.js
+archives must parse the exact version's official `SHASUMS256.txt` line. Other
+component schemes remain unsupported rather than falling back to opaque metadata
+or a generic digest. A URL, caller assertion or artifact digest alone cannot
+authenticate production input. The currently committed registry policy is pending
+and empty, so it authorizes nothing.
+
+The workflow uploads only explicitly named sanitized JSON outputs, including the
+raw receipt required for reconstruction only after it passes the same size and
+secret-shape checks and a sanitized complete process/runtime/system-module
+closure projection bound to the receipt, raw report and cleanup summary, with
+seven-day retention. It never uploads installers,
+extracted binaries, credentials, passwords or row contents. Successful cleanup must show
+the service inventory unchanged, the selected port closed and the temporary
+runtime/data root removed; runner destruction is not cleanup evidence.
+
 The reviewed trust boundary is a fresh, single-purpose isolated Windows x64
 runner with no concurrent or interactive same-user workload and no
 attacker-writable source/runtime directories. Hostile same-host mutation is out
