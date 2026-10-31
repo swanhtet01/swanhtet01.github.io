@@ -95,6 +95,22 @@ Source-bound verification:
   v1-v4 retry compatibility checks **PASS**; client suite **25/25 PASS** and
   independent review **PASS**. Workflow remains `guide`, template remains
   blank, and no hosted delivery or owned tenant support case was exercised;
+- contact-generator reconciliation at local-only checkpoint
+  `6ed563cc32423dc67389179b4ef2a6c3dc6e6a09`, tree
+  `982fd4d463451ed16b4f2c2d6dc7fb2a0bb5e0d1`, restores that account-help
+  behavior where the current generator blob had lost it. Exact singleton
+  `product` + `template=managed-account` + `utm_source=app` +
+  `utm_medium=business_setup` handoffs show support-only EN/MY copy while the
+  submitted workflow stays `guide` with blank plan/template/service. Duplicate
+  or near-miss authority fields remain ordinary contact intent across language
+  switching. Focused intent **4/4 PASS**, public deploy guard **37/37 PASS**,
+  syntax **990 scripts PASS**, demo-playbook **531 checks PASS**, claims guard
+  **179/179 PASS**, and independent final review **PASS**. The full public build
+  and generated EN/MY receipt suite remain **BLOCKED/NOT RUN** at the preserved
+  `native_shop_gallery_source_tree_drift` provenance gate; the broader account
+  route suite is also **NOT RUN** because the existing local `typescript`
+  dependency is absent. No package install, push, CI, publication or deployment
+  was performed;
 - managed access-entry clarity at `9fa44b4a`: rendered account-route suite
   **88/88 PASS**, product visibility **11/11 PASS**, EN/MY contact receipt
   generator **25/25 PASS**, and independent review **PASS**. Public Shop,
