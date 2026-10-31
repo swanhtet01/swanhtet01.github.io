@@ -87,6 +87,11 @@ const implementationPaths = [...new Set([
   'tools/postgres17_authority_session.test.mjs',
   'tools/postgres17_python_authority.py',
   'tools/postgres17_windows_execution_lock.py',
+  'tools/windows/postgres17_execution_broker.cpp',
+  'tools/windows/postgres17_execution_broker_build.json',
+  'tools/windows/postgres17_execution_broker_protocol.cpp',
+  'tools/windows/postgres17_execution_broker_protocol.hpp',
+  'tools/windows/postgres17_execution_broker_protocol_test.cpp',
   'tools/inspect_windows_authenticode.ps1',
   'hq/research/postgres17-toolchain-profile.json',
   'hq/research/postgres17-publisher-policy.json',
@@ -94,6 +99,7 @@ const implementationPaths = [...new Set([
   'tests/test_postgres17_rehearsal_contract.py',
   'tests/test_postgres17_python_authority.py',
   'tests/test_postgres17_windows_execution_lock.py',
+  'tests/test_postgres17_windows_execution_broker.py',
 ])].sort()
 
 export const catalogCheckNames = [

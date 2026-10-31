@@ -1,0 +1,72 @@
+{
+  "contract": "supermega.postgres17-windows-broker-build.v1",
+  "target": "windows-x64",
+  "language": "c++17",
+  "output": "supermega-postgres17-execution-broker.exe",
+  "sources": [
+    "tools/windows/postgres17_execution_broker.cpp",
+    "tools/windows/postgres17_execution_broker_protocol.cpp",
+    "tools/windows/postgres17_execution_broker_protocol.hpp"
+  ],
+  "translationUnits": [
+    "tools/windows/postgres17_execution_broker.cpp",
+    "tools/windows/postgres17_execution_broker_protocol.cpp"
+  ],
+  "headers": [
+    "tools/windows/postgres17_execution_broker_protocol.hpp"
+  ],
+  "compiler": {
+    "family": "msvc",
+    "path": null,
+    "version": null
+  },
+  "windowsSdkVersion": null,
+  "compileFlags": [
+    "/nologo",
+    "/std:c++17",
+    "/permissive-",
+    "/W4",
+    "/WX",
+    "/sdl",
+    "/guard:cf",
+    "/Qspectre",
+    "/DUNICODE",
+    "/D_UNICODE",
+    "/DWIN32_LEAN_AND_MEAN",
+    "/D_WIN32_WINNT=0x0A00",
+    "/EHsc",
+    "/MT"
+  ],
+  "linkFlags": [
+    "/DYNAMICBASE",
+    "/NXCOMPAT",
+    "/HIGHENTROPYVA",
+    "/CETCOMPAT"
+  ],
+  "systemLibraries": [
+    "advapi32.lib",
+    "bcrypt.lib",
+    "kernel32.lib"
+  ],
+  "invocationOrder": [
+    "compiler.path",
+    "compileFlags",
+    "translationUnits",
+    "/Fe:output",
+    "/link",
+    "linkFlags",
+    "systemLibraries"
+  ],
+  "productionAdapterEnabled": false,
+  "signed": false,
+  "windowsCompiled": false,
+  "windowsValidated": false,
+  "blockers": [
+    "exact-msvc-version-not-pinned",
+    "exact-windows-sdk-version-not-pinned",
+    "windows-build-not-run",
+    "windows-hostile-runtime-tests-not-run",
+    "broker-binary-unsigned",
+    "production-adapter-disabled"
+  ]
+}

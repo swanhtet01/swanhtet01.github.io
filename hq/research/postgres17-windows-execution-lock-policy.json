@@ -47,7 +47,7 @@
     "reviewedAt": null
   },
   "blockers": [
-    "No signed native broker binary, digest, signer certificate, or independently reviewed protocol implementation is retained.",
+    "A source-only native broker and protocol implementation is retained, but no exact MSVC/Windows SDK build, signed broker binary, digest, signer certificate, or real Windows validation is retained.",
     "No independently authenticated launcher supplies the expected requestor SID and running broker image path, volume, file ID, digest, and signer identity.",
     "No protected staging-owner SID or exact DACL has been selected and independently reviewed on Windows.",
     "No authorized Windows-x64 run proves retained reparse-safe handles, file IDs, volume identity, explicit handle inheritance, non-breakaway job containment, post-run reconciliation, cleanup, or crash recovery.",
