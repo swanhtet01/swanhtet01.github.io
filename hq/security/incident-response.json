@@ -1,0 +1,79 @@
+{
+  "contract": "supermega.security-incident-response.v1",
+  "status": "prepared_not_rehearsed",
+  "lastReviewedDate": "2026-10-24",
+  "claims": { "isoCertified": false, "isoCompliant": false, "controlEffectivenessVerified": false, "tabletopCompleted": false, "rtoRpoApproved": false, "staffRolloutAuthorized": false, "productionChangesAuthorized": false, "liveActionsAuthorized": false, "externalMessagesAuthorized": false },
+  "roles": [
+    { "id": "incident_commander", "assignment": "required_at_declaration", "authority": "coordinates response only", "inheritedProductionAuthority": false, "communicationsAuthorized": false },
+    { "id": "technical_lead", "assignment": "Swan", "authority": "technical containment and recovery owner within existing access", "inheritedProductionAuthority": false, "communicationsAuthorized": false },
+    { "id": "operations_lead", "assignment": "Vivian", "authority": "merchant operations owner; communications require separate approval; not engineering QA", "inheritedProductionAuthority": false, "communicationsAuthorized": false },
+    { "id": "evidence_custodian", "assignment": "required_at_declaration", "authority": "preserves immutable timeline and evidence references", "inheritedProductionAuthority": false, "communicationsAuthorized": false }
+  ],
+  "severity": [
+    { "id": "SEV0", "definition": "confirmed cross-tenant exposure, signing-key compromise, or uncontrolled production money/stock mutation", "ownerNotificationMinutes": null, "notificationTargetStatus": "owner_decision_required" },
+    { "id": "SEV1", "definition": "credible credential compromise, fraudulent correction authority, or unavailable recovery for an active merchant", "ownerNotificationMinutes": null, "notificationTargetStatus": "owner_decision_required" },
+    { "id": "SEV2", "definition": "contained security defect or service degradation with a safe workaround and no confirmed cross-tenant effect", "ownerNotificationMinutes": null, "notificationTargetStatus": "owner_decision_required" }
+  ],
+  "systems": [
+    { "id": "shop_native", "rtoMinutes": null, "rpoMinutes": null, "targetStatus": "owner_decision_required", "recoveryEvidence": "signed installed restart/update/restore NOT RUN" },
+    { "id": "merchant_portal", "rtoMinutes": null, "rpoMinutes": null, "targetStatus": "owner_decision_required", "recoveryEvidence": "exact-current hosted recovery NOT RUN" },
+    { "id": "internal_console", "rtoMinutes": null, "rpoMinutes": null, "targetStatus": "staff_rollout_blocked", "recoveryEvidence": "named staff identity and MFA missing" },
+    { "id": "billing_evidence", "rtoMinutes": null, "rpoMinutes": null, "targetStatus": "owner_decision_required", "recoveryEvidence": "append-only source tests PASS; hosted restore NOT RUN" }
+  ],
+  "scenarios": [
+    {
+      "id": "credential_compromise", "severity": "SEV1", "detect": "unexpected authenticated session, secret alert, or provider access event",
+      "controlIds": ["revoke_exact_identity", "preserve_unaffected_state", "block_privileged_actions", "review_exposure_window", "no_chat_credentials", "no_unscoped_rotation"],
+      "contain": ["revoke the exact affected session or credential", "preserve other identities and customer data", "block new privileged actions until scope is known"],
+      "evidence": ["actor and tenant", "first and last observed time", "provider audit reference", "affected capability"],
+      "recover": ["rotate only the affected credential through its owner procedure", "reverify least privilege", "review actions during the exposure window"],
+      "forbidden": ["share replacement credentials in chat", "delete audit history", "rotate unrelated credentials without scope"]
+    },
+    {
+      "id": "tenant_leakage", "severity": "SEV0", "detect": "one actor can observe another workspace or cross-tenant identifier",
+      "controlIds": ["disable_affected_route_or_membership", "preserve_access_evidence", "two_tenant_denial", "revocation_proof", "independent_reopen_review", "no_exposed_data_copy"],
+      "contain": ["disable the affected hosted route or membership", "preserve database and access evidence", "keep unaffected local selling available where safe"],
+      "evidence": ["actor", "source and target workspace", "route and query", "release commit", "RLS and membership snapshot"],
+      "recover": ["repair authorization boundary", "run two-tenant denial and revocation proof", "independent review before reopening"],
+      "forbidden": ["copy exposed data into a bug report", "guess affected merchants", "reopen from source review alone"]
+    },
+    {
+      "id": "fraudulent_correction", "severity": "SEV1", "detect": "invalid, replayed, foreign-workspace, or unexplained correction authorization",
+      "controlIds": ["disable_correction_issuance", "preserve_original_sale", "freeze_authorization_target", "reconcile_stock_shift_wallet", "no_wallet_refund_claim", "no_local_replacement_proof"],
+      "contain": ["disable correction issuance while normal offline selling remains available", "preserve original sale and audit records", "freeze the affected authorization target"],
+      "evidence": ["workspace", "actor", "sale and reversal operation", "receipt identifier", "command digest", "issuer key identifier"],
+      "recover": ["reconcile stock, cash shift and wallet uncertainty", "revoke affected issuer material", "prove forged, replayed and wrong-scope denial"],
+      "forbidden": ["rewrite the original sale", "claim a wallet refund without provider evidence", "issue a local replacement proof"]
+    },
+    {
+      "id": "lost_device", "severity": "SEV1", "detect": "merchant reports a missing or stolen device holding Shop records",
+      "controlIds": ["revoke_hosted_sessions", "record_last_backup", "signed_replacement_only", "verified_restore", "no_remote_wipe_claim", "no_passphrase_collection"],
+      "contain": ["revoke hosted sessions and memberships associated with the device", "do not remotely claim local data deletion", "record last known backup and close state"],
+      "evidence": ["workspace", "device label without hardware secret", "last signed build", "last backup digest and date", "pending wallet or print uncertainty"],
+      "recover": ["install only an approved signed build", "restore a verified encrypted backup", "reconcile post-backup records with the merchant"],
+      "forbidden": ["request the backup passphrase in chat", "restore into production without review", "claim remote wipe"]
+    },
+    {
+      "id": "failed_restore", "severity": "SEV1", "detect": "encrypted backup fails integrity, migration, workspace binding, or reopen verification",
+      "controlIds": ["preserve_archive", "preserve_source_database", "no_replace_current_database", "record_verifier_code", "synthetic_reproduction", "no_integrity_weakening"],
+      "contain": ["preserve the original archive and source database", "stop replacement of the current database", "record the exact verifier code"],
+      "evidence": ["source and target build", "archive digest", "schema versions", "sanitized verifier result", "no-replace result"],
+      "recover": ["use an independently verified prior backup", "repair migration only with synthetic reproduction", "repeat restore in an isolated target before merchant use"],
+      "forbidden": ["edit the archive", "weaken integrity checks", "delete the current database"]
+    },
+    {
+      "id": "signing_key_compromise", "severity": "SEV0", "detect": "unexpected signature, custody breach, or unauthorized signed artifact",
+      "controlIds": ["stop_distribution", "preserve_signature_evidence", "platform_owner_notification", "reviewed_key_rotation", "no_unsigned_emergency_build", "no_key_reuse"],
+      "contain": ["stop distribution and promotion", "preserve artifact, signature and release metadata", "notify platform owners through approved channels"],
+      "evidence": ["artifact digest", "signing identity", "release commit", "distribution channel", "first observed time"],
+      "recover": ["revoke or rotate through the platform owner procedure", "publish a reviewed replacement only after independent verification", "document affected versions"],
+      "forbidden": ["publish an unsigned emergency build", "reuse suspected key material", "delete the compromised artifact evidence"]
+    }
+  ],
+  "tabletop": {
+    "requiredScenarioIds": ["credential_compromise", "tenant_leakage", "fraudulent_correction", "lost_device", "failed_restore", "signing_key_compromise"],
+    "status": "not_run",
+    "evidenceRequired": ["named_participants", "start_and_end_time", "decisions", "observed_gaps", "corrective_actions_with_owner_and_due_date"],
+    "externalEffectsAllowed": []
+  }
+}

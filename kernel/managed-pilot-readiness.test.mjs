@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { proofDigest } from './database-rehearsal-evidence.mjs'
+import { unitV14DatabaseFixture } from './managed-pilot-v14-fixture.mjs'
 
 import { buildManagedPilotReadiness, readinessDigest, validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
 
@@ -19,10 +20,8 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
   },
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
-const databaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
-// Unit-only time fixture; never written as operational evidence.
-databaseFixture.recordedAt = '2026-07-31T10:00:00.000Z'
-databaseFixture.receiptDigest = proofDigest(databaseFixture)
+const historicalV13DatabaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
+const databaseFixture = unitV14DatabaseFixture(historicalV13DatabaseFixture)
 const selfServePilotProof = {
   contract: 'supermega.self-serve-pilot-proof.v1',
   approvalId: 'self-serve-proof-v11c-20260816',
@@ -71,6 +70,20 @@ const input = {
   sourceReceipts,
 }
 
+test('historical v13 rehearsal receipt cannot satisfy the current v14 readiness gate', () => {
+  const historical = structuredClone(input)
+  historical.databaseEvidence = historicalV13DatabaseFixture
+  historical.databaseImplementation = {
+    digest: historicalV13DatabaseFixture.implementationDigest,
+    fileCount: historicalV13DatabaseFixture.implementationFileCount,
+    paths: historicalV13DatabaseFixture.implementation.paths,
+  }
+  assert.throws(
+    () => buildManagedPilotReadiness(historical),
+    /managed_pilot_readiness_database_evidence_invalid/,
+  )
+})
+
 test('derives one blocked four-product ledger from current bounded evidence', () => {
   const ledger = buildManagedPilotReadiness(input)
   assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v5')
@@ -86,15 +99,15 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   )
   assert.equal(
     ledger.gates.find((gate) => gate.id === 'security')?.evidence,
-    'Historical blocked audit (27 findings) observed managed schema v7 against its then-target v11. Current schema v13 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.',
+    'Historical blocked audit (27 findings) observed managed schema v7 against its then-target v11. Current schema v14 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.',
   )
   assert.equal(ledger.liveProduction.schemaVersion, 7)
   assert.equal(ledger.liveProduction.publicBrowserQuarantine, false)
   assert.equal(ledger.liveProduction.currentStateRevalidated, false)
-  assert.equal(ledger.liveProduction.localTargetVersion, 13)
-  assert.equal(ledger.liveProduction.versionDrift, 6)
-  assert.equal(ledger.localDatabase.schemaVersion, 13)
-  assert.equal(ledger.localDatabase.migrationCount, 23)
+  assert.equal(ledger.liveProduction.localTargetVersion, 14)
+  assert.equal(ledger.liveProduction.versionDrift, 7)
+  assert.equal(ledger.localDatabase.schemaVersion, 14)
+  assert.equal(ledger.localDatabase.migrationCount, 24)
   assert.equal(ledger.localDatabase.hostedEvidenceCurrent, false)
   assert.equal(ledger.liveProduction.managedWritesEnabled, false)
   assert.equal(ledger.pilotEvidence.pilotMode, 'owner_named')
@@ -211,8 +224,8 @@ test('historical clean hosted audit cannot satisfy current schema or self-serve 
   assert.equal(ledger.securityAudit.localTargetVersion, 11)
   assert.equal(ledger.selfServePilot.schemaVersionProven, 11)
   assert.equal(ledger.selfServePilot.currentTargetProven, false)
-  assert.equal(ledger.liveProduction.localTargetVersion, 13)
-  assert.equal(ledger.liveProduction.versionDrift, 2)
+  assert.equal(ledger.liveProduction.localTargetVersion, 14)
+  assert.equal(ledger.liveProduction.versionDrift, 3)
   assert.equal(ledger.gates.find(g => g.id === 'security').status, 'blocked')
   assert.equal(ledger.overall.blockingGateCount, 6)
   for (const key of ['storagePrivacy', 'managedPersistence', 'selfServePilot']) {
@@ -220,7 +233,7 @@ test('historical clean hosted audit cannot satisfy current schema or self-serve 
     changed[key].currentTargetProven = true
     assert.throws(() => validateManagedPilotReadiness(changed), /managed_pilot_readiness_.*invalid/)
   }
-  assert.match(ledger.gates.find(g => g.id === 'security').nextAction, /fresh schema v13/)
+  assert.match(ledger.gates.find(g => g.id === 'security').nextAction, /fresh schema v14/)
   const staleInstruction = structuredClone(ledger)
   staleInstruction.gates.find(g => g.id === 'security').nextAction = historical.securityAudit.conclusion.nextAction
   assert.throws(() => validateManagedPilotReadiness(staleInstruction), /managed_pilot_readiness_gate_evidence_invalid/)

@@ -113,7 +113,7 @@ function input(overrides = {}) {
       blockingGateCount: 6,
       blockingGateIds: ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'],
     },
-    liveProduction: { operatingMode: 'isolated_demo', localTargetVersion: 13, currentStateRevalidated: false, managedWritesEnabled: false, productionMutationAuthorized: false },
+    liveProduction: { operatingMode: 'isolated_demo', localTargetVersion: 14, currentStateRevalidated: false, managedWritesEnabled: false, productionMutationAuthorized: false },
     previewRehearsal: {
       proofComplete: false,
       productionRefsRejected: true,
@@ -177,7 +177,7 @@ function input(overrides = {}) {
       failedBranchReuseAllowed: false,
     },
     migrationPlan: {
-      schemaVersion: 13,
+      schemaVersion: 14,
       chainDigest: `sha256:${'c'.repeat(64)}`,
       productionApplyAllowed: false,
     },
@@ -267,7 +267,8 @@ test('fails closed for dirty worktree and external-effect authority', () => {
 
 test('historical three-gate and schema snapshots cannot satisfy current release assessment', () => {
   for (const mutate of [r => { r.overall.blockingGateCount = 3; r.overall.blockingGateIds = ['preview_rehearsal', 'pilot_evidence', 'production_activation'] },
-    r => { r.liveProduction.localTargetVersion = 11 }, r => { r.liveProduction.currentStateRevalidated = true }]) {
+    r => { r.liveProduction.localTargetVersion = 13 }, r => { r.liveProduction.localTargetVersion = 11 },
+    r => { r.liveProduction.currentStateRevalidated = true }]) {
     const readiness = structuredClone(input().readiness)
     mutate(readiness)
     const report = assessReleaseStackOwnerGates(input({ readiness }))
@@ -311,6 +312,15 @@ test('rejects fifth-product AI, weak GitHub checks, and unsafe Supabase preview 
   }))
   assert.equal(unsafeSupabase.ok, false)
   assert.ok(unsafeSupabase.failures.includes('release_stack_owner_gate_supabase_proposal_invalid'))
+
+  const historicalV13Supabase = assessReleaseStackOwnerGates(input({
+    supabaseProposal: {
+      ...input().supabaseProposal,
+      migrationPlan: { ...input().supabaseProposal.migrationPlan, schemaVersion: 13 },
+    },
+  }))
+  assert.equal(historicalV13Supabase.ok, false)
+  assert.ok(historicalV13Supabase.failures.includes('release_stack_owner_gate_supabase_proposal_invalid'))
 })
 
 test('rejects tampered reports', () => {

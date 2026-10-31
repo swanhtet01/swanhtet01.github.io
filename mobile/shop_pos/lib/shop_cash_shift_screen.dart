@@ -1,20 +1,48 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 import 'shop_copy.dart';
+import 'shop_cash_movement_dialog.dart';
+import 'shop_correction_authorization_service.dart';
 import 'shop_database.dart';
-import 'stock_screen.dart' show parseStockQuantity;
+import 'shop_operational_export.dart';
+import 'shop_operational_export_saver.dart';
+import 'shop_runtime_scope.dart';
+import 'shop_staff_authorization.dart';
+
+@visibleForTesting
+bool shopOperationalExportActionAvailable({
+  required bool hasRuntimeScope,
+  required bool hasTestAction,
+  required bool allowTestSeam,
+}) => hasRuntimeScope ? !hasTestAction : allowTestSeam && hasTestAction;
+
+@visibleForTesting
+bool shopOperationalExportSaveAvailable({
+  required bool isSyntheticQa,
+  required bool hasTestAction,
+}) => hasTestAction || !isSyntheticQa;
 
 class ShopCashShiftScreen extends StatefulWidget {
   const ShopCashShiftScreen({
     required this.database,
     required this.myanmar,
+    this.runtimeScope,
+    this.cashMovementAuthorizer,
+    this.staffContext = const ShopStaffCommandContext.unavailable(),
+    this.exportAction,
+    this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
   });
 
   final ShopDatabase database;
   final bool myanmar;
+  final ShopRuntimeScope? runtimeScope;
+  final ShopCorrectionAuthorizer? cashMovementAuthorizer;
+  final ShopStaffCommandContext staffContext;
+  final Future<ShopOperationalExportSaveResult> Function(String shiftId)?
+  exportAction;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<ShopCashShiftScreen> createState() => _ShopCashShiftScreenState();
@@ -24,14 +52,24 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
   final _operator = TextEditingController();
   final _openingFloat = TextEditingController(text: '0');
   final _countedCash = TextEditingController();
+  final _statusFocus = FocusNode();
   String _openOperationId = const Uuid().v4();
   String? _closeOperationId;
   ShopCashShiftReview? _review;
   ShopCashShift? _latest;
   String? _error;
+  String? _notice;
   bool _loading = true;
   bool _loadFailed = false;
   bool _busy = false;
+  bool _cashMovementAvailable = false;
+  ShopManagedWorkspaceBinding? _workspaceBinding;
+
+  bool get _exportAvailable => shopOperationalExportActionAvailable(
+    hasRuntimeScope: widget.runtimeScope != null,
+    hasTestAction: widget.exportAction != null,
+    allowTestSeam: widget.testOnlyAllowMissingRuntimeScope,
+  );
 
   @override
   void initState() {
@@ -44,6 +82,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     _operator.dispose();
     _openingFloat.dispose();
     _countedCash.dispose();
+    _statusFocus.dispose();
     super.dispose();
   }
 
@@ -55,10 +94,33 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
           ? null
           : await widget.database.readCashShiftReview(openShift.id);
       final latest = await widget.database.readLatestCashShift();
+      final binding = openShift == null
+          ? null
+          : await widget.database.readManagedWorkspaceBinding();
+      var cashMovementAvailable = false;
+      final authorizer = widget.cashMovementAuthorizer;
+      final cashMovementAuthorizationEnabled =
+          widget.runtimeScope?.capabilities.cashMovementAuthorization ??
+          widget.testOnlyAllowMissingRuntimeScope;
+      if (cashMovementAuthorizationEnabled &&
+          binding != null &&
+          authorizer != null) {
+        try {
+          cashMovementAvailable = await authorizer.canRequestAuthorization(
+            workspaceId: binding.workspaceId,
+            requiredActorId: binding.attachedActorId,
+            capability: shopCashMovementCapability,
+          );
+        } catch (_) {
+          cashMovementAvailable = false;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _review = review;
         _latest = latest;
+        _workspaceBinding = binding;
+        _cashMovementAvailable = cashMovementAvailable;
         _loading = false;
         _loadFailed = false;
         _error = null;
@@ -66,6 +128,10 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
+        _review = null;
+        _latest = null;
+        _workspaceBinding = null;
+        _cashMovementAvailable = false;
         _loading = false;
         _loadFailed = true;
         _error = shopCopy(
@@ -77,30 +143,66 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     }
   }
 
+  Future<void> _recordCashMovement(String kind) async {
+    if (_busy || !_cashMovementAvailable || _review == null) return;
+    final authorizer = widget.cashMovementAuthorizer;
+    final binding = _workspaceBinding;
+    if (authorizer == null || binding == null) return;
+    final movement = await showShopCashMovementDialog(
+      context: context,
+      database: widget.database,
+      shift: _review!.shift,
+      workspaceBinding: binding,
+      authorizer: authorizer,
+      kind: kind,
+      myanmar: widget.myanmar,
+    );
+    if (movement == null || !mounted) return;
+    await _refresh();
+    if (!mounted) return;
+    setState(() {
+      _notice = shopCopy(
+        widget.myanmar,
+        movement.kind == 'cash_in'
+            ? 'Authorized cash in recorded.'
+            : 'Authorized cash out recorded.',
+        movement.kind == 'cash_in'
+            ? 'ခွင့်ပြုထားသော ငွေသားအဝင် မှတ်တမ်းတင်ပြီးပါပြီ။'
+            : 'ခွင့်ပြုထားသော ငွေသားအထွက် မှတ်တမ်းတင်ပြီးပါပြီ။',
+      );
+    });
+  }
+
   void _showError(Object error, String english, String burmese) {
     if (!mounted) return;
     final detail = error.toString();
     setState(() {
+      _notice = null;
       _error = detail.contains('pending wallet')
           ? shopCopy(
               widget.myanmar,
               'Finish or cancel the pending wallet checkout first.',
               'ဆိုင်းငံ့ထားသော ဖုန်းငွေပေးချေမှုအရောင်းကို အရင်ပြီးစီးစေပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
             )
-          : detail.contains('Sales changed')
+          : detail.contains('Shift activity changed')
           ? shopCopy(
               widget.myanmar,
-              'A sale changed the total. Review the shift again.',
-              'အရောင်းပြောင်းလဲသွားပါသည်။ တာဝန်ချိန်စာရင်းကို ပြန်စစ်ပါ။',
+              'Recorded cash activity changed. Review the shift again.',
+              'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက် ပြောင်းလဲသွားသောကြောင့် တာဝန်ချိန်ကို ပြန်စစ်ပါ။',
             )
           : shopCopy(widget.myanmar, english, burmese);
     });
+    _focusStatus();
   }
+
+  void _focusStatus() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) _statusFocus.requestFocus();
+  });
 
   Future<void> _openShift() async {
     if (_busy) return;
     final label = _operator.text.trim();
-    final openingFloat = parseStockQuantity(_openingFloat.text);
+    final openingFloat = parseShopMmkInput(_openingFloat.text);
     if (label.isEmpty ||
         label.length > 80 ||
         openingFloat == null ||
@@ -116,12 +218,15 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _notice = null;
     });
     try {
       await widget.database.openCashShift(
         operationId: _openOperationId,
         operatorLabel: label,
         openingFloatMmk: openingFloat,
+        staffActorId: widget.staffContext.actorId,
+        staffAuthorizer: widget.staffContext.authorizer,
       );
       _openOperationId = const Uuid().v4();
       await _refresh();
@@ -141,7 +246,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
 
   Future<void> _closeShift() async {
     if (_busy || _review == null) return;
-    final counted = parseStockQuantity(_countedCash.text);
+    final counted = parseShopMmkInput(_countedCash.text);
     if (counted == null || counted < 0 || counted > 200000000000000) {
       _showError(
         ArgumentError(),
@@ -160,7 +265,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
             shopCopy(widget.myanmar, 'Cash difference', 'ငွေသားကွာခြားချက်'),
           ),
           content: Text(
-            '${shopCopy(widget.myanmar, 'Expected from recorded sales', 'မှတ်တမ်းရှိ အရောင်းအရ မျှော်မှန်းငွေ')}: '
+            '${shopCopy(widget.myanmar, 'Expected after recorded cash activity', 'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက်ပြီးနောက် မျှော်မှန်းငွေ')}: '
             '${shopMmk(review.expectedCashMmk, myanmar: widget.myanmar)}\n'
             '${shopCopy(widget.myanmar, 'Counted', 'ရေတွက်ငွေ')}: '
             '${shopMmk(counted, myanmar: widget.myanmar)}\n'
@@ -190,6 +295,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _notice = null;
     });
     try {
       await widget.database.closeCashShift(
@@ -197,7 +303,14 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
         operationId: _closeOperationId ??= const Uuid().v4(),
         seenSaleCount: review.saleCount,
         seenCashTotalMmk: review.cashSalesTotalMmk,
+        seenCashReversalCount: review.cashReversalCount,
+        seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
+        seenCashMovementCount: review.cashMovementCount,
+        seenCashInTotalMmk: review.cashInTotalMmk,
+        seenCashOutTotalMmk: review.cashOutTotalMmk,
         countedCashMmk: counted,
+        staffActorId: widget.staffContext.actorId,
+        staffAuthorizer: widget.staffContext.authorizer,
       );
       _closeOperationId = null;
       _countedCash.clear();
@@ -215,6 +328,190 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Future<void> _exportClosedShift(ShopCashShift shift) async {
+    if (_busy) return;
+    final scope = requireShopRuntimeScopeOrTestSeam(
+      widget.runtimeScope,
+      testOnlyAllowMissingRuntimeScope:
+          widget.testOnlyAllowMissingRuntimeScope &&
+          widget.exportAction != null,
+    );
+    if (widget.exportAction != null &&
+        (scope != null || !widget.testOnlyAllowMissingRuntimeScope)) {
+      throw StateError('shop_operational_export_test_seam_invalid');
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    var saveAttempted = false;
+    try {
+      final snapshot = await widget.database
+          .readClosedCashShiftOperationalExport(shift.id);
+      const exporter = ShopOperationalExporter();
+      final preview = exporter.preview(
+        snapshot,
+        widget.myanmar
+            ? ShopOperationalPreviewLocale.my
+            : ShopOperationalPreviewLocale.en,
+      );
+      final saveAvailable = shopOperationalExportSaveAvailable(
+        isSyntheticQa: scope?.configuration.isSyntheticQa ?? false,
+        hasTestAction: widget.exportAction != null,
+      );
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(preview.labels.title),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _exportPreviewRow(
+                  preview.labels.gross,
+                  preview.values.grossMmk,
+                ),
+                _exportPreviewRow(
+                  preview.labels.reversals,
+                  -preview.values.reversalMmk,
+                ),
+                _exportPreviewRow(preview.labels.net, preview.values.netMmk),
+                const Divider(),
+                _exportPreviewRow(
+                  preview.labels.expected,
+                  preview.values.expectedCashMmk,
+                ),
+                _exportPreviewRow(
+                  preview.labels.counted,
+                  preview.values.countedCashMmk,
+                ),
+                _exportPreviewRow(
+                  preview.labels.difference,
+                  preview.values.differenceMmk,
+                ),
+                if (preview.values.pendingWalletCount > 0)
+                  _exportPreviewRow(
+                    '${preview.labels.pendingWallet} '
+                    '(${shopNumber(preview.values.pendingWalletCount, myanmar: widget.myanmar)})',
+                    preview.values.pendingWalletMmk,
+                  ),
+                const SizedBox(height: 12),
+                Text(
+                  preview.labels.warning,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Use encrypted Backup & restore for recovery.',
+                    'ပြန်လည်ရယူရန် စာဝှက်ထားသော အရန်ကူးနှင့် ပြန်လည်ရယူမှုကို သုံးပါ။',
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (!saveAvailable) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Saving is unavailable in the synthetic QA app. Preview only.',
+                      'စမ်းသပ် QA အက်ပ်တွင် ဖိုင်သိမ်း၍ မရပါ။ အစမ်းကြည့်ရန်သာ ဖြစ်သည်။',
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(shopCopy(widget.myanmar, 'Cancel', 'မလုပ်တော့ပါ')),
+            ),
+            FilledButton(
+              onPressed: saveAvailable
+                  ? () => Navigator.of(context).pop(true)
+                  : null,
+              child: Text(
+                shopCopy(widget.myanmar, 'Save CSV', 'CSV ဖိုင် သိမ်းမည်'),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      saveAttempted = true;
+      final result = await (widget.exportAction != null
+          ? widget.exportAction!(shift.id)
+          : ShopOperationalExportSaver.save(
+              runtimeScope: scope!,
+              bytes: exporter.encode(snapshot).bytes,
+              shiftId: shift.id,
+            ));
+      if (!mounted) return;
+      setState(() {
+        _notice = result == ShopOperationalExportSaveResult.saved
+            ? shopCopy(
+                widget.myanmar,
+                'Closed-shift CSV saved. It is readable and not encrypted.',
+                'ပိတ်ပြီးတာဝန်ချိန် CSV ဖိုင် သိမ်းပြီးပါပြီ။ ဖတ်ရှုနိုင်ပြီး စာဝှက်မထားပါ။',
+              )
+            : shopCopy(
+                widget.myanmar,
+                'Save cancelled. Shop records were not changed.',
+                'သိမ်းဆည်းမှု ပယ်ဖျက်လိုက်သည်။ Shop မှတ်တမ်းများ မပြောင်းလဲပါ။',
+              );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _notice = null;
+        _error = saveAttempted
+            ? shopCopy(
+                widget.myanmar,
+                'Could not confirm whether the CSV was saved. Check your files before retrying. Shop records were not changed.',
+                'CSV ဖိုင် သိမ်းပြီးမပြီး အတည်မပြုနိုင်ပါ။ ထပ်မကြိုးစားမီ ဖိုင်များကို စစ်ဆေးပါ။ Shop မှတ်တမ်းများ မပြောင်းလဲပါ။',
+              )
+            : shopCopy(
+                widget.myanmar,
+                'Could not prepare this closed shift. Shop records were not changed.',
+                'ပိတ်ပြီးတာဝန်ချိန် ဖိုင်ကို မပြင်ဆင်နိုင်ပါ။ Shop မှတ်တမ်းများ မပြောင်းလဲပါ။',
+              );
+      });
+      _focusStatus();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _exportPreviewRow(String label, int amount) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Builder(
+      builder: (context) {
+        final value = Text(
+          shopMmk(amount, myanmar: widget.myanmar),
+          textAlign: TextAlign.end,
+        );
+        if (MediaQuery.sizeOf(context).width < 600) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [Text(label), const SizedBox(height: 2), value],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: Text(label)),
+            const SizedBox(width: 12),
+            Flexible(child: value),
+          ],
+        );
+      },
+    ),
+  );
 
   Widget _amountRow(String label, int amount, {bool strong = false}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -240,18 +537,19 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     ),
   );
 
-  Widget _moneyField(TextEditingController controller, String label) =>
-      TextField(
-        controller: controller,
-        keyboardType: TextInputType.number,
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[0-9၀-၉]')),
-        ],
-        decoration: InputDecoration(
-          labelText: label,
-          suffixText: widget.myanmar ? 'ကျပ်' : 'MMK',
-        ),
-      );
+  Widget _moneyField(
+    TextEditingController controller,
+    String label, {
+    required Key fieldKey,
+  }) => TextField(
+    key: fieldKey,
+    controller: controller,
+    keyboardType: TextInputType.number,
+    decoration: InputDecoration(
+      labelText: label,
+      suffixText: widget.myanmar ? 'ကျပ်' : 'MMK',
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -270,16 +568,35 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                     padding: const EdgeInsets.all(20),
                     children: [
                       if (_error != null) ...[
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
+                        Semantics(
+                          container: true,
+                          liveRegion: true,
+                          child: Focus(
+                            focusNode: _statusFocus,
+                            child: Text(
+                              _error!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
                           ),
                         ),
                         TextButton(
                           onPressed: _refresh,
                           child: Text(
                             shopCopy(widget.myanmar, 'Refresh', 'ပြန်ဖွင့်ရန်'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (_notice != null) ...[
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _notice!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -321,6 +638,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                             'Opening cash in drawer',
                             'အံဆွဲရှိ စတင်ငွေသား',
                           ),
+                          fieldKey: const ValueKey('shop-shift-opening-cash'),
                         ),
                         const SizedBox(height: 24),
                         FilledButton(
@@ -354,11 +672,20 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                               '${MaterialLocalizations.of(context).formatShortDate(DateTime.fromMillisecondsSinceEpoch(closedAt))} '
                               '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(closedAt)))}',
                             ),
+                          if ((last.cashReversalCount ?? 0) > 0)
+                            _amountRow(
+                              shopCopy(
+                                widget.myanmar,
+                                'Cash returned (${last.cashReversalCount})',
+                                'ငွေသားပြန်ပေးမှု (${shopNumber(last.cashReversalCount ?? 0, myanmar: true)})',
+                              ),
+                              -(last.cashDrawerOutflowMmk ?? 0),
+                            ),
                           _amountRow(
                             shopCopy(
                               widget.myanmar,
-                              'Expected from recorded sales',
-                              'မှတ်တမ်းရှိ အရောင်းအရ မျှော်မှန်းငွေသား',
+                              'Expected after recorded cash activity',
+                              'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက်ပြီးနောက် မျှော်မှန်းငွေသား',
                             ),
                             last.expectedCashMmk ?? 0,
                           ),
@@ -377,6 +704,29 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                               'ကွာခြားချက်',
                             ),
                             last.differenceMmk ?? 0,
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _busy || !_exportAvailable
+                                ? null
+                                : () => _exportClosedShift(last),
+                            icon: const Icon(Icons.table_view_outlined),
+                            label: Text(
+                              shopCopy(
+                                widget.myanmar,
+                                'Export closed shift (CSV)',
+                                'ပိတ်ပြီးတာဝန်ချိန် CSV ထုတ်မည်',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            shopCopy(
+                              widget.myanmar,
+                              'Readable local record — not an encrypted recovery backup.',
+                              'ဖတ်ရှုနိုင်သော စက်တွင်းမှတ်တမ်း — စာဝှက်ထားသော ပြန်လည်ရယူရေးအရန်ကူး မဟုတ်ပါ။',
+                            ),
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
                       ] else ...[
@@ -409,12 +759,39 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                           ),
                           review.cashSalesTotalMmk,
                         ),
+                        if (review.cashReversalCount > 0)
+                          _amountRow(
+                            shopCopy(
+                              widget.myanmar,
+                              'Cash returned (${review.cashReversalCount})',
+                              'ငွေသားပြန်ပေးမှု (${shopNumber(review.cashReversalCount, myanmar: true)})',
+                            ),
+                            -review.cashDrawerOutflowMmk,
+                          ),
+                        if (review.cashInTotalMmk > 0)
+                          _amountRow(
+                            shopCopy(
+                              widget.myanmar,
+                              'Authorized cash in',
+                              'ခွင့်ပြုထားသော ငွေသားအဝင်',
+                            ),
+                            review.cashInTotalMmk,
+                          ),
+                        if (review.cashOutTotalMmk > 0)
+                          _amountRow(
+                            shopCopy(
+                              widget.myanmar,
+                              'Authorized cash out',
+                              'ခွင့်ပြုထားသော ငွေသားအထွက်',
+                            ),
+                            -review.cashOutTotalMmk,
+                          ),
                         const Divider(),
                         _amountRow(
                           shopCopy(
                             widget.myanmar,
-                            'Expected from recorded sales',
-                            'မှတ်တမ်းရှိ အရောင်းအရ မျှော်မှန်းငွေသား',
+                            'Expected after recorded cash activity',
+                            'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက်ပြီးနောက် မျှော်မှန်းငွေသား',
                           ),
                           review.expectedCashMmk,
                           strong: true,
@@ -422,10 +799,47 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                         Text(
                           shopCopy(
                             widget.myanmar,
-                            'Other drawer cash movements are not included.',
-                            'အံဆွဲငွေသား၏ အခြားအဝင်အထွက်များ မပါဝင်ပါ။',
+                            'Only signed owner-authorized drawer movements are included.',
+                            'ပိုင်ရှင်၏ လက်မှတ်ပါ ခွင့်ပြုချက်ရှိသော အံဆွဲငွေ အဝင်အထွက်များသာ ပါဝင်သည်။',
                           ),
                         ),
+                        if (_cashMovementAvailable) ...[
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              OutlinedButton.icon(
+                                key: const ValueKey('shop-cash-in'),
+                                onPressed: _busy
+                                    ? null
+                                    : () => _recordCashMovement('cash_in'),
+                                icon: const Icon(Icons.add),
+                                label: Text(
+                                  shopCopy(
+                                    widget.myanmar,
+                                    'Record cash in',
+                                    'ငွေသားအဝင် မှတ်တမ်းတင်မည်',
+                                  ),
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                key: const ValueKey('shop-cash-out'),
+                                onPressed: _busy
+                                    ? null
+                                    : () => _recordCashMovement('cash_out'),
+                                icon: const Icon(Icons.remove),
+                                label: Text(
+                                  shopCopy(
+                                    widget.myanmar,
+                                    'Record cash out',
+                                    'ငွေသားအထွက် မှတ်တမ်းတင်မည်',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         _amountRow(
                           shopCopy(
@@ -434,6 +848,22 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                             'မှတ်တမ်းတင်ထားသော ဖုန်းငွေပေးချေမှုအရောင်း',
                           ),
                           review.walletSalesTotalMmk,
+                        ),
+                        _amountRow(
+                          shopCopy(
+                            widget.myanmar,
+                            'KBZPay sales (${review.kbzpaySalesCount})',
+                            'KBZPay အရောင်း (${shopNumber(review.kbzpaySalesCount, myanmar: true)})',
+                          ),
+                          review.kbzpaySalesTotalMmk,
+                        ),
+                        _amountRow(
+                          shopCopy(
+                            widget.myanmar,
+                            'WavePay sales (${review.wavepaySalesCount})',
+                            'WavePay အရောင်း (${shopNumber(review.wavepaySalesCount, myanmar: true)})',
+                          ),
+                          review.wavepaySalesTotalMmk,
                         ),
                         Text(
                           shopCopy(
@@ -450,6 +880,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                             'Cash you counted',
                             'ရေတွက်ထားသော ငွေသား',
                           ),
+                          fieldKey: const ValueKey('shop-shift-counted-cash'),
                         ),
                         const SizedBox(height: 24),
                         FilledButton(

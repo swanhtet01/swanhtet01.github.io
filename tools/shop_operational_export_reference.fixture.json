@@ -1,0 +1,80 @@
+{
+  "contract": "supermega.shop.operational-csv.reference.fixture.v1",
+  "shift": {
+    "id": "000042",
+    "operatorLabel": "  =HYPERLINK(\"https://invalid.example\")",
+    "openingFloatMmk": 10000,
+    "openedAtMillis": 1792864200000,
+    "state": "closed",
+    "closedAtMillis": 1792866000000,
+    "cashSalesCount": 1,
+    "cashSalesTotalMmk": 5000,
+    "walletSalesCount": 1,
+    "walletSalesTotalMmk": 3000,
+    "cashReversalCount": 1,
+    "cashReversalTotalMmk": 5000,
+    "expectedCashMmk": 10000,
+    "countedCashMmk": 10000,
+    "differenceMmk": 0,
+    "cashDrawerOutflowMmk": 5000
+  },
+  "sales": [
+    {
+      "id": "000100",
+      "paymentMethod": "cash",
+      "totalMmk": 5000,
+      "createdAtMillis": 1792864800000,
+      "lines": [{"id":"000100-1","productId":"0099999999999","productName":"လက်ဖက်၊ \"အထူး\"\nထုပ်","quantity":2,"unitPriceMmk":2500,"lineTotalMmk":5000}]
+    },
+    {
+      "id": "000101",
+      "paymentMethod": "kbzpay",
+      "totalMmk": 3000,
+      "createdAtMillis": 1792865100000,
+      "lines": [{"id":"000101-1","productId":"000002","productName":" =SUM(1,2), \"အန္တရာယ်\"\nနောက်တန်း","quantity":1,"unitPriceMmk":3000,"lineTotalMmk":3000}]
+    }
+  ],
+  "reversals": [
+    {
+      "id": "000200",
+      "saleId": "000100",
+      "originalPaymentMethod": "cash",
+      "originalTotalMmk": 5000,
+      "cashDrawerDeltaMmk": -5000,
+      "reason": "+မှားယွင်းသော ရောင်းချမှု",
+      "authorizedActorLabel": "Owner, \"မသီတာ\"",
+      "createdAtMillis": 1792865400000,
+      "lines": [{"id":"000200-1","productId":"0099999999999","productName":"လက်ဖက်၊ \"အထူး\"\nထုပ်","quantity":2,"unitPriceMmk":2500,"lineTotalMmk":5000,"restockQuantity":2}],
+      "authorizationReceiptId": "PRIVATE-RECEIPT-MUST-NOT-EXPORT",
+      "authorizationSignature": "PRIVATE-SIGNATURE-MUST-NOT-EXPORT"
+    },
+    {
+      "id": "000201",
+      "saleId": "000101",
+      "originalPaymentMethod": "kbzpay",
+      "originalTotalMmk": 3000,
+      "cashDrawerDeltaMmk": 0,
+      "reason": "@wallet-review",
+      "authorizedActorLabel": "Owner",
+      "createdAtMillis": 1792865700000,
+      "lines": [{"id":"000201-1","productId":"000002","productName":" =SUM(1,2), \"အန္တရာယ်\"\nနောက်တန်း","quantity":1,"unitPriceMmk":3000,"lineTotalMmk":3000,"restockQuantity":0}]
+    }
+  ],
+  "walletReconciliations": [],
+  "stockMovements": [
+    {"id":"000300","saleId":"000100","productId":"0099999999999","quantityDelta":-2,"reason":"sale","createdAtMillis":1792864800000},
+    {"id":"000301","saleId":"000101","productId":"000002","quantityDelta":-1,"reason":"sale","createdAtMillis":1792865100000},
+    {"id":"000302","saleId":"000100","productId":"0099999999999","quantityDelta":2,"reason":"sale_reversal_restock","createdAtMillis":1792865400000}
+  ],
+  "privateExcluded": {
+    "walletMerchantPhone": "+95-PRIVATE-PHONE",
+    "officialQrPayload": "PRIVATE-QR-PAYLOAD",
+    "requestFingerprint": "PRIVATE-REQUEST-FINGERPRINT",
+    "outboxPayload": "PRIVATE-OUTBOX-PAYLOAD",
+    "workspaceId": "PRIVATE-WORKSPACE-ID",
+    "actorId": "PRIVATE-ACTOR-ID",
+    "privateKey": "PRIVATE-KEY-MATERIAL",
+    "sessionToken": "PRIVATE-SESSION-TOKEN",
+    "contactEmail": "private@example.invalid"
+  }
+}

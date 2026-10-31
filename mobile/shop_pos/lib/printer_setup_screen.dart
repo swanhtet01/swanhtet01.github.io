@@ -2,18 +2,49 @@ import 'package:flutter/material.dart';
 
 import 'printer_services.dart';
 import 'shop_copy.dart';
+import 'shop_runtime_scope.dart';
 
 class PrinterSetupScreen extends StatefulWidget {
-  const PrinterSetupScreen({required this.myanmar, super.key});
+  PrinterSetupScreen({
+    required this.myanmar,
+    ShopRuntimeScope? runtimeScope,
+    PrinterDiscoveryService? testOnlyDiscoveryService,
+    ReceiptPrinterSettings? testOnlyPrinterSettings,
+    this.testOnlyAllowMissingRuntimeScope = false,
+    super.key,
+  }) : testOnlyDiscoveryService = _requirePrinterSetupTestDependency(
+         testOnlyDiscoveryService,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ),
+       testOnlyPrinterSettings = _requirePrinterSetupTestDependency(
+         testOnlyPrinterSettings,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ),
+       runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       );
   final bool myanmar;
+  final ShopRuntimeScope? runtimeScope;
+  final PrinterDiscoveryService? testOnlyDiscoveryService;
+  final ReceiptPrinterSettings? testOnlyPrinterSettings;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<PrinterSetupScreen> createState() => _PrinterSetupScreenState();
 }
 
 class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
-  final _service = PrinterDiscoveryService();
-  final _settings = ReceiptPrinterSettings();
+  late final PrinterDiscoveryService? _service =
+      widget.testOnlyDiscoveryService ??
+      (widget.runtimeScope == null
+          ? null
+          : _openPrinterDiscovery(widget.runtimeScope!));
+  late final ReceiptPrinterSettings? _settings =
+      widget.testOnlyPrinterSettings ??
+      (widget.runtimeScope == null
+          ? null
+          : ReceiptPrinterSettings(runtimeScope: widget.runtimeScope));
   bool _loadingSettings = true;
   bool _busy = false;
   bool _cancelled = false;
@@ -34,10 +65,15 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   }
 
   Future<void> _loadSavedPrinter() async {
+    final settings = _settings;
+    if (settings == null) {
+      if (mounted) setState(() => _loadingSettings = false);
+      return;
+    }
     try {
-      final previous = await _settings.readSavedHost();
-      final active = await _settings.readHost();
-      final paperWidth = await _settings.readPaperWidth();
+      final previous = await settings.readSavedHost();
+      final active = await settings.readHost();
+      final paperWidth = await settings.readPaperWidth();
       if (mounted) {
         setState(() {
           _previousHost = previous;
@@ -54,6 +90,17 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
   Future<void> _findPrinters() async {
     if (_busy || _loadingSettings) return;
+    final service = _service;
+    if (service == null) {
+      setState(
+        () => _message = shopCopy(
+          widget.myanmar,
+          'Printer access is unavailable in this preview.',
+          'ဤစမ်းသပ်မြင်ကွင်းတွင် ပရင်တာ အသုံးပြု၍မရပါ။',
+        ),
+      );
+      return;
+    }
     setState(() {
       _busy = true;
       _cancelled = false;
@@ -63,8 +110,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       _printers = [];
     });
     try {
-      final active = await _settings.readHost();
-      final result = await _service.scan(cancelled: () => _cancelled);
+      final active = await _settings!.readHost();
+      final result = await service.scan(cancelled: () => _cancelled);
       if (!mounted) return;
       setState(() {
         _savedHost = active;
@@ -126,13 +173,15 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
   Future<void> _sendTest(NetworkPrinterCandidate printer) async {
     if (_busy || _loadingSettings) return;
+    final service = _service;
+    if (service == null) return;
     final paperWidth = _paperWidth;
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      await _service.sendTestReceipt(printer, paperWidth: paperWidth);
+      await service.sendTestReceipt(printer, paperWidth: paperWidth);
       if (mounted) {
         setState(() {
           _testedHost = printer.host;
@@ -166,19 +215,22 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         _testedWidth != _paperWidth) {
       return;
     }
+    final service = _service;
+    final settings = _settings;
+    if (service == null || settings == null) return;
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      final range = await _service.currentWifiRange();
+      final range = await service.currentWifiRange();
       if (!Ipv4Subnet.fromAddress(
         range.ip,
         range.mask,
       ).hosts.contains(printer.host)) {
         throw const PrinterNetworkChanged();
       }
-      await _settings.saveAfterTest(printer, paperWidth: _paperWidth);
+      await settings.saveAfterTest(printer, paperWidth: _paperWidth);
       if (mounted) {
         setState(() {
           _savedHost = printer.host;
@@ -191,24 +243,32 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         });
       }
     } on PrinterNetworkChanged {
+      settings.requireRetest();
       if (mounted) {
-        setState(
-          () => _message = shopCopy(
+        setState(() {
+          _testedHost = null;
+          _testedWidth = null;
+          _savedHost = null;
+          _message = shopCopy(
             widget.myanmar,
             'Wi-Fi changed after the test. Find and test the printer again.',
             'စမ်းသပ်ပြီးနောက် Wi-Fi ပြောင်းသွားသည်။ ပရင်တာကို ထပ်ရှာပြီး စမ်းသပ်ပါ။',
-          ),
-        );
+          );
+        });
       }
     } catch (_) {
+      settings.requireRetest();
       if (mounted) {
-        setState(
-          () => _message = shopCopy(
+        setState(() {
+          _testedHost = null;
+          _testedWidth = null;
+          _savedHost = null;
+          _message = shopCopy(
             widget.myanmar,
             'Printer setup could not be saved. Test the printer again.',
             'ပရင်တာဆက်တင်ကို သိမ်းမရပါ။ ပရင်တာကို ထပ်စမ်းပါ။',
-          ),
-        );
+          );
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -261,7 +321,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                       ),
                     ],
                     selected: {_paperWidth},
-                    onSelectionChanged: _busy || _loadingSettings
+                    onSelectionChanged:
+                        _settings == null || _busy || _loadingSettings
                         ? null
                         : (selected) {
                             if (selected.first == _paperWidth) return;
@@ -411,4 +472,21 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       ),
     );
   }
+}
+
+T? _requirePrinterSetupTestDependency<T>(
+  T? dependency, {
+  required bool testOnlyAllowMissingRuntimeScope,
+}) {
+  if (dependency != null && !testOnlyAllowMissingRuntimeScope) {
+    throw StateError('printer_setup_test_dependency_requires_test_seam');
+  }
+  return dependency;
+}
+
+PrinterDiscoveryService _openPrinterDiscovery(ShopRuntimeScope runtimeScope) {
+  if (!runtimeScope.capabilities.networkPrinter) {
+    throw StateError('shop_network_printer_unavailable');
+  }
+  return PrinterDiscoveryService(runtimeScope: runtimeScope);
 }

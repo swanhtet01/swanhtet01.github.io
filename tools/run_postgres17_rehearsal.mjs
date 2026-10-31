@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const runner = resolve(root, 'tools', 'rehearse_supermega_postgres17.py')
 const configured = String(process.env.SUPERMEGA_PYTHON || '').trim()
+const preflightOnly = process.argv.slice(2).includes('--preflight')
 const candidates = configured
   ? [configured]
   : process.platform === 'win32'
@@ -26,7 +27,7 @@ for (const candidate of candidates) {
   if (pathCandidate && !existsSync(candidate)) continue
   const probe = spawnSync(
     candidate,
-    ['-c', 'import psycopg; assert psycopg.__version__'],
+    ['-c', preflightOnly ? 'import sys; assert sys.version_info >= (3, 12)' : 'import psycopg; assert psycopg.__version__'],
     {
       cwd: root,
       encoding: 'utf8',

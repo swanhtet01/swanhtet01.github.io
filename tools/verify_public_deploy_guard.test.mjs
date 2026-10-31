@@ -42,10 +42,12 @@ test('current exact public verification chain passes the actual guard', () => {
 })
 
 for (const command of [
+  'node --test tools/public_native_shop_gallery.test.mjs',
   'node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs',
   'node --test --test-concurrency=1 tools/public_preview_profile.test.mjs',
   'node --test tools/test_public_contact_receipt.mjs',
   'node tools/verify_public_vercel_artifact_budget.mjs',
+  'node tools/verify_public_shop_responsive.mjs',
   'npm run hq:verify',
 ]) {
   test(`removing ${command} remains blocked`, () => {
@@ -58,20 +60,24 @@ for (const command of [
 
 for (const [path, token, failure] of [
   ['tools/verify_public_preview_live.mjs', 'validatePreviewContact(contact, policy)', 'preview_contact_readiness_not_verified'],
+  ['tools/verify_public_preview_live.mjs', 'public_preview_project_link_wrong', 'preview_project_link_guard_missing'],
   ['tools/public_preview_profile.mjs', 'contact.accepting !== accepting', 'preview_contact_policy_missing'],
   ['tools/public_preview_profile.mjs', "contact.status !== (accepting ? 'ready' : 'attention')", 'preview_contact_policy_missing'],
   ['tools/public_preview_profile.mjs', "contact.controls?.idempotency !== 'required'", 'preview_contact_policy_missing'],
   ['tools/public_preview_profile.mjs', "contact.controls?.edge_rate_limit !== 'required'", 'preview_contact_policy_missing'],
-  ['tools/verify_public_preview_live.mjs', 'validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)', 'preview_navigation_consumer_missing'],
+  ['tools/verify_public_preview_live.mjs', "validatePreviewLinks(get('/shop/'), policy, manifest.customerProducts, linkOptions)", 'preview_navigation_consumer_missing'],
   ['tools/verify_public_preview_live.mjs', 'validatePreviewLinks(html, policy, manifest.customerProducts,', 'preview_navigation_consumer_missing'],
   ['tools/public_preview_profile.mjs', 'public_preview_production_escape', 'preview_navigation_policy_missing'],
   ['tools/public_preview_profile.mjs', 'public_preview_retired_entry', 'preview_navigation_policy_missing'],
   ['tools/public_preview_profile.mjs', 'public_preview_app_route_invalid', 'preview_navigation_policy_missing'],
   ['tools/public_preview_profile.mjs', 'public_preview_action_missing', 'preview_navigation_policy_missing'],
-  ['tools/verify_public_release_live.mjs', 'homepage_shop_action_missing', 'live_navigation_contract_missing'],
-  ['tools/verify_public_release_live.mjs', 'guided_product_route_missing', 'live_navigation_contract_missing'],
-  ['tools/verify_public_release_live.mjs', 'retired_product_marketed', 'live_navigation_contract_missing'],
-  ...['retired_shop_action_present', 'interface_image_reference_missing', 'interface_image_http_error', 'interface_image_content_type_wrong', 'interface_image_invalid', 'interface_image_release_mismatch'].map(token => ['tools/verify_public_release_live.mjs', token, 'live_navigation_contract_missing']),
+  ['tools/public_preview_profile.mjs', "const appPaths = new Set([policy.app ? PUBLIC_PREVIEW_LOGIN_PATH : '/login'])", 'preview_navigation_policy_missing'],
+  ...['root_redirect_destination_wrong', 'shop_manifest_action_missing',
+    'shop_contact_action_missing', 'page_shop_sign_in_drift',
+    'retired_product_route_not_found', 'retired_product_content_served',
+    'interface_image_reference_missing', 'interface_image_http_error',
+    'interface_image_content_type_wrong', 'interface_image_invalid',
+    'interface_image_release_mismatch'].map(token => ['tools/verify_public_release_live.mjs', token, 'live_navigation_contract_missing']),
 ]) {
   test(`removing ${token} remains blocked`, () => {
     const result = evaluate(value => value, { [path]: value => {

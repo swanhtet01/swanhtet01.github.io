@@ -10,29 +10,36 @@ import 'menu_import_service.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
+import 'shop_runtime_scope.dart';
 
 class MenuImportScreen extends StatefulWidget {
-  const MenuImportScreen({
+  MenuImportScreen({
     required this.database,
     required this.authClient,
     required this.apiBaseUrl,
     required this.myanmar,
     this.recoveredCameraPhoto,
+    ShopRuntimeScope? runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
-  });
+  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       );
 
   final ShopDatabase database;
   final SupabaseClient? authClient;
   final String apiBaseUrl;
   final bool myanmar;
   final XFile? recoveredCameraPhoto;
+  final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<MenuImportScreen> createState() => _MenuImportScreenState();
 }
 
 class _MenuImportScreenState extends State<MenuImportScreen> {
-  final _picker = ImagePicker();
   XFile? _photo;
   bool _photoWasCamera = false;
   bool _cloudConsent = false;
@@ -40,6 +47,15 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
   String? _message;
   String? _batchId;
   List<_CandidateEditor> _editors = [];
+
+  ImagePicker _imagePicker() {
+    final scope = widget.runtimeScope;
+    if (scope == null) throw StateError('shop_runtime_scope_required');
+    if (!scope.capabilities.gallery) {
+      throw StateError('shop_gallery_unavailable');
+    }
+    return ImagePicker();
+  }
 
   @override
   void initState() {
@@ -64,7 +80,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
         defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
     final source = cameraDevice ? ImageSource.camera : ImageSource.gallery;
-    final photo = await _picker.pickImage(
+    final photo = await _imagePicker().pickImage(
       source: source,
       imageQuality: 80,
       maxWidth: 1800,
@@ -148,6 +164,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
       endpoint: endpoint,
       accessToken: () async =>
           widget.authClient?.auth.currentSession?.accessToken,
+      runtimeScope: widget.runtimeScope,
     );
     try {
       final candidates = await service.parsePhoto(

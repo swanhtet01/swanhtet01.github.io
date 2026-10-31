@@ -51,12 +51,12 @@ MIGRATIONS = (
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v2"
-CURRENT_SCHEMA_VERSION = 13
-CURRENT_PROFILE = "v13-self-serve"
-CURRENT_CATALOG_CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
+CURRENT_SCHEMA_VERSION = 14
+CURRENT_PROFILE = "v14-shop-correction"
+CURRENT_CATALOG_CONTRACT = "supermega_private_trial_database_v14_shop_correction_v1"
 # MIGRATIONS remains an explicit legacy baseline for isolated migration tests.
 # The release entrypoint below always passes this complete current chain.
-CURRENT_MIGRATIONS = (*MIGRATIONS,
+V13_MIGRATIONS = (*MIGRATIONS,
     "20260817090000_private_trial_backend_v12_billing_rail.sql",
     "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
     "20260907024457_self_serve_durable_attempt_budget.sql",
@@ -69,11 +69,21 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20260929171000_ecommerce_decision_review_fk_index.sql",
     "20260930010000_app_rls_initplan_optimization.sql",
 )
+CURRENT_MIGRATIONS = (
+    *V13_MIGRATIONS,
+    "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql",
+)
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
+# No current source-controlled profile binds the reviewed Windows archive to
+# every executable/dependency that the rehearsal would load. Keep collection
+# disabled until that complete profile is reviewed; never infer approval from a
+# version string, a caller-provided path, or the mere presence of the old ZIP.
+TOOLCHAIN_PROVENANCE_APPROVED = False
 WINDOWS_DIRECT_START_MODE = "codex-sandbox-direct"
+REHEARSAL_TEMP_DIRECTORY_ENV = "SUPERMEGA_REHEARSAL_TEMP_DIR"
 PUBLIC_BROWSER_TABLES = (
     "assets",
     "enterprise_agent_runs",
@@ -126,6 +136,7 @@ IMPLEMENTATION_PATHS = (
     "tools/validate_supermega_database_url.py",
     "tools/verify_public_browser_quarantine.mjs",
     "tools/verify_managed_runtime_environment_values.mjs",
+    "tools/verify_private_trial_migrations.mjs",
 )
 IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "kernel/database-rehearsal-evidence.mjs",
@@ -137,6 +148,15 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "supermega_runtime/website_runtime.py", "supermega_runtime/website_release_foundation.py",
     "tests/test_website_runtime.py",
     "tools/rehearse_self_serve_v13.py", "tools/private_trial_v13_contract.py",
+    "tools/private_trial_v14_contract.py", "tests/test_database_v14_contract.py",
+    "tests/test_core_security_catalog_contract.py",
+    "tests/test_database_activation_contract.py",
+    "tests/test_database_profile_routing.py",
+    "tests/test_managed_activation.py",
+    "supermega_runtime/shop_correction_receipts.py",
+    "tests/test_shop_correction_authorization.py",
+    "tests/test_shop_correction_postgres_store_mock.py",
+    "tests/test_shop_correction_postgres_v14_contract.py",
     "tools/run_postgres17_rehearsal.mjs", "tools/record_postgres17_rehearsal.mjs",
     "tools/record_postgres17_rehearsal.test.mjs", "tests/test_postgres17_rehearsal_contract.py",
 ))))
@@ -151,6 +171,15 @@ CURRENT_ACCOUNT_CHECKS = (
 CURRENT_RESTORE_CHECKS = (
     "billing_entitlement_preserved_after_restore", "self_serve_budget_preserved_after_restore",
     "private_rows_exact_after_restore", "current_catalog_checked_before_and_after_restore",
+)
+CURRENT_CORRECTION_CHECKS = (
+    "shop_correction_tables_and_forced_rls_validated",
+    "shop_correction_constraints_and_indexes_validated",
+    "shop_correction_triggers_and_functions_validated",
+    "shop_correction_policies_and_acl_validated",
+)
+CURRENT_CORRECTION_RESTORE_CHECKS = (
+    "shop_correction_catalog_preserved_after_restore",
 )
 JOURNEY_PRODUCT_WORKSPACE = "rehearsal-product"
 JOURNEY_PRODUCT_ACTOR = "owner-product"
@@ -188,8 +217,11 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
     if not isinstance(expected_head, str) or not re.fullmatch(r"[0-9a-f]{40}", expected_head):
         raise RehearsalFailure("expected_head_required")
     def git(*args: str) -> str:
-        result = subprocess.run(["git", "--no-optional-locks", *args], cwd=ROOT,
-            capture_output=True, text=True, timeout=10, check=False)
+        try:
+            result = subprocess.run(["git", "--no-optional-locks", *args], cwd=ROOT,
+                capture_output=True, text=True, timeout=10, check=False)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RehearsalFailure("source_identity_unavailable") from exc
         if result.returncode != 0:
             raise RehearsalFailure("source_identity_unavailable")
         return result.stdout.strip()
@@ -197,12 +229,17 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
         raise RehearsalFailure("source_dirty")
     if git("rev-parse", "HEAD") != expected_head:
         raise RehearsalFailure("source_head_mismatch")
-    observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
-        if path.name != "20260711081300_public_legacy_baseline.sql"))
-    if observed != CURRENT_MIGRATIONS:
-        raise RehearsalFailure("private_migration_inventory_mismatch")
-    return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
-            "implementation_digest": _implementation_digest()}
+    try:
+        observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
+            if path.name != "20260711081300_public_legacy_baseline.sql"))
+        if observed != CURRENT_MIGRATIONS:
+            raise RehearsalFailure("private_migration_inventory_mismatch")
+        return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
+                "implementation_digest": _implementation_digest()}
+    except RehearsalFailure:
+        raise
+    except (OSError, RuntimeError) as exc:
+        raise RehearsalFailure("source_identity_unavailable") from exc
 
 
 def _default_postgres_bin() -> Path:
@@ -258,25 +295,53 @@ def _safe_report(error: str, *, cleanup_complete: bool) -> dict[str, Any]:
     }
 
 
-def _emit(report: dict[str, Any], evidence_file: Path | None) -> None:
+def _emit(report: dict[str, Any], evidence_file: Path | None) -> bool:
     serialized = json.dumps(report, indent=2, sort_keys=True)
+    persisted = True
     if evidence_file is not None:
-        evidence_file.parent.mkdir(parents=True, exist_ok=True)
-        with evidence_file.open("x", encoding="utf-8") as output:
-            output.write(serialized + "\n")
+        try:
+            evidence_file.parent.mkdir(parents=True, exist_ok=True)
+            with evidence_file.open("x", encoding="utf-8") as output:
+                output.write(serialized + "\n")
+        except (OSError, RuntimeError):
+            serialized = json.dumps(
+                _safe_report(
+                    "evidence_write_failed",
+                    cleanup_complete=report.get("cleanup_complete") is True,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            persisted = False
     print(serialized)
+    return persisted
 
 
 @contextmanager
 def _disposable_workspace():
-    workspace = Path(tempfile.mkdtemp(prefix="supermega-pg17-")).resolve()
+    try:
+        configured_parent = str(os.getenv(REHEARSAL_TEMP_DIRECTORY_ENV, "")).strip()
+        parent = (
+            Path(configured_parent).expanduser().resolve()
+            if configured_parent
+            else Path(tempfile.gettempdir()).resolve()
+        )
+        if not parent.is_dir() or parent.is_symlink():
+            raise RehearsalFailure("workspace_initialization_failed")
+        workspace = Path(
+            tempfile.mkdtemp(prefix="supermega-pg17-", dir=parent)
+        ).resolve()
+    except RehearsalFailure:
+        raise
+    except (OSError, RuntimeError) as exc:
+        raise RehearsalFailure("workspace_initialization_failed") from exc
     cleanup = {"stopped": False}
     try:
         yield workspace, cleanup
     finally:
         # A failed/unknown shutdown must not delete a possibly live cluster.
         if cleanup["stopped"]:
-            if (workspace.parent != Path(tempfile.gettempdir()).resolve()
+            if (workspace.parent != parent
                     or not workspace.name.startswith("supermega-pg17-")
                     or workspace.is_symlink()):
                 raise RehearsalFailure("cleanup_path_invalid")
@@ -3505,6 +3570,46 @@ def _run_validator(
     return payload
 
 
+def _named_shop_correction_catalog_checks(
+    validation: dict[str, object],
+) -> dict[str, bool]:
+    """Map exact v14 catalog proof to stable, narrowly named receipt checks."""
+
+    checks = validation.get("checks")
+    if not isinstance(checks, dict):
+        raise RehearsalFailure("shop_correction_catalog_checks_missing")
+    requirements = {
+        "shop_correction_tables_and_forced_rls_validated": (
+            "schema_version_current",
+            "expected_private_tables_only",
+            "tenant_tables_force_rls",
+        ),
+        "shop_correction_constraints_and_indexes_validated": (
+            "extension_constraints_exact",
+            "private_indexes_exact",
+        ),
+        "shop_correction_triggers_and_functions_validated": (
+            "extension_functions_exact",
+            "immutable_and_version_triggers_exact",
+        ),
+        "shop_correction_policies_and_acl_validated": (
+            "extension_policies_exact",
+            "private_acl_exact",
+            "backend_acl_scope_exact",
+            "private_column_acl_exact",
+        ),
+    }
+    if tuple(requirements) != CURRENT_CORRECTION_CHECKS:
+        raise RehearsalFailure("shop_correction_check_inventory_mismatch")
+    if any(
+        checks.get(required) is not True
+        for required_checks in requirements.values()
+        for required in required_checks
+    ):
+        raise RehearsalFailure("shop_correction_catalog_check_failed")
+    return dict.fromkeys(CURRENT_CORRECTION_CHECKS, True)
+
+
 def _backup_database(
     *,
     postgres_bin: Path,
@@ -3654,6 +3759,18 @@ def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
     }
 
 
+def _release_preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
+    """Gate receipt/rehearsal authority without disabling local contract tests."""
+    if os.name != "nt":
+        return _safe_report("postgres17_platform_unapproved", cleanup_complete=True)
+    if not TOOLCHAIN_PROVENANCE_APPROVED:
+        return _safe_report(
+            "postgres17_toolchain_provenance_unapproved",
+            cleanup_complete=True,
+        )
+    return _preflight(postgres_bin, openssl)
+
+
 def _run_rehearsal(
     postgres_bin: Path,
     openssl: Path,
@@ -3662,16 +3779,16 @@ def _run_rehearsal(
     source_identity: dict[str, str],
 ) -> int:
     environment = _clean_environment(postgres_bin)
-    preflight = _preflight(postgres_bin, openssl)
+    preflight = _release_preflight(postgres_bin, openssl)
     if preflight.get("ok") is not True:
         _emit(preflight, evidence_file)
         return 2
 
-    # The runtime schema contract is process-scoped for this disposable v13
+    # The runtime schema contract is process-scoped for this disposable v14
     # rehearsal. The launcher is a short-lived child process, so this cannot
     # alter the caller or any hosted environment.
-    os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "13"
-    os.environ["SUPERMEGA_BILLING_SCHEMA_VERSION"] = "13"
+    os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "14"
+    os.environ["SUPERMEGA_BILLING_SCHEMA_VERSION"] = "14"
     os.environ["SUPERMEGA_OTEL_DISABLED"] = "1"
 
     admin_password = _password()
@@ -3772,6 +3889,9 @@ def _run_rehearsal(
                 environment,
                 schema_profile=CURRENT_PROFILE,
             )
+            correction_catalog = _named_shop_correction_catalog_checks(
+                primary_validation
+            )
             phase = "upgrade_and_role_boundaries"
             boundaries = _verify_upgrade_and_role_boundaries(
                 runtime_database_url,
@@ -3806,7 +3926,7 @@ def _run_rehearsal(
             if str(ROOT) not in sys.path:
                 sys.path.insert(0, str(ROOT))
             from tools import rehearse_self_serve_v13 as account_proof
-            if account_proof.MIGRATIONS != CURRENT_MIGRATIONS:
+            if account_proof.MIGRATIONS != V13_MIGRATIONS:
                 raise RehearsalFailure("account_migration_chain_mismatch")
             retained = account_proof.exercise(admin_database_url, runtime_database_url, source_identity["head"])
             private_snapshot = account_proof.snapshot(admin_database_url)
@@ -3893,6 +4013,11 @@ def _run_rehearsal(
                 environment,
                 schema_profile=CURRENT_PROFILE,
             )
+            restored_correction_catalog = _named_shop_correction_catalog_checks(
+                restored_validation
+            )
+            if restored_correction_catalog != correction_catalog:
+                raise RehearsalFailure("restored_shop_correction_catalog_mismatch")
             _verify_restored_data(
                 restore_admin_database_url,
                 expected_approval_authority_snapshot=approval_authority_snapshot,
@@ -3971,6 +4096,8 @@ def _run_rehearsal(
                     **managed_activation,
                     **dict.fromkeys(CURRENT_ACCOUNT_CHECKS, True),
                     **dict.fromkeys(CURRENT_RESTORE_CHECKS, True),
+                    **correction_catalog,
+                    **dict.fromkeys(CURRENT_CORRECTION_RESTORE_CHECKS, True),
                     "backup_created": True,
                     "restore_completed": True,
                     "restored_database_validated": restored_validation.get("ready") is True,
@@ -4026,8 +4153,8 @@ def _run_rehearsal(
     assert report is not None
     if not cleanup_complete and report.get("ok") is True:
         report = _safe_report("cluster_cleanup_failed", cleanup_complete=False)
-    _emit(report, evidence_file)
-    return 0 if report.get("ok") is True else 1
+    evidence_persisted = _emit(report, evidence_file)
+    return 0 if evidence_persisted and report.get("ok") is True else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -4069,15 +4196,29 @@ def main(argv: list[str] | None = None) -> int:
     postgres_bin = args.postgres_bin.expanduser().resolve()
     openssl = _resolve_executable(args.openssl)
     if args.preflight:
-        report = _preflight(postgres_bin, openssl)
-        _emit(report, args.evidence_file)
-        return 0 if report.get("ok") is True else 1
+        report = _release_preflight(postgres_bin, openssl)
+        evidence_persisted = _emit(report, args.evidence_file)
+        return 0 if evidence_persisted and report.get("ok") is True else 1
     try:
         source = _source_identity(args.expected_head)
     except RehearsalFailure as exc:
         _emit(_safe_report(str(exc), cleanup_complete=True), args.evidence_file)
         return 2
-    return _run_rehearsal(postgres_bin, openssl, args.evidence_file, source_identity=source)
+    try:
+        return _run_rehearsal(
+            postgres_bin,
+            openssl,
+            args.evidence_file,
+            source_identity=source,
+        )
+    except RehearsalFailure as exc:
+        if str(exc) != "workspace_initialization_failed":
+            raise
+        _emit(
+            _safe_report("workspace_initialization_failed", cleanup_complete=True),
+            args.evidence_file,
+        )
+        return 2
 
 
 if __name__ == "__main__":

@@ -1,14 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/painting.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
 import 'shop_database.dart';
+import 'shop_runtime_scope.dart';
 
-const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
-const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
+export 'shop_runtime_scope.dart'
+    show shopReceiptPaperWidthKey, shopReceiptPrinterHostKey;
 
 enum ReceiptPaperWidth {
   mm58(PaperSize.mm58),
@@ -67,23 +69,40 @@ class ReceiptPrinterSettings {
     Future<SharedPreferences> Function()? preferences,
     WifiRangeProvider? rangeProvider,
     VerifiedPrinterSession? session,
-  }) : _preferences = preferences ?? SharedPreferences.getInstance,
-       _rangeProvider = rangeProvider ?? _networkRangeProvider(NetworkInfo()),
+    ShopRuntimeScope? runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
+  }) : _preferences =
+           preferences ??
+           (() async => (await openProductionShopPreferences()).instance),
+       _hostKey =
+           requireShopRuntimeScopeOrTestSeam(
+             runtimeScope,
+             testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+           )?.preferences.keys.receiptPrinterHost ??
+           shopReceiptPrinterHostKey,
+       _paperWidthKey =
+           runtimeScope?.preferences.keys.receiptPaperWidth ??
+           shopReceiptPaperWidthKey,
+       _rangeProvider =
+           rangeProvider ??
+           _networkRangeProvider(_requireNetworkDetails(runtimeScope)),
        _session = session ?? _printerSession;
 
   final Future<SharedPreferences> Function() _preferences;
+  final String _hostKey;
+  final String _paperWidthKey;
   final WifiRangeProvider _rangeProvider;
   final VerifiedPrinterSession _session;
 
   Future<String?> readSavedHost() async {
-    final host = (await _preferences()).getString(shopReceiptPrinterHostKey);
+    final host = (await _preferences()).getString(_hostKey);
     if (host == null || !Ipv4Subnet.isPrivateAddress(host)) return null;
     return host;
   }
 
   Future<ReceiptPaperWidth> readPaperWidth() async =>
       ReceiptPaperWidth.fromSavedValue(
-        (await _preferences()).getString(shopReceiptPaperWidthKey),
+        (await _preferences()).getString(_paperWidthKey),
       );
 
   void requireRetest() => _session.clear();
@@ -129,14 +148,11 @@ class ReceiptPrinterSettings {
     }
     final preferences = await _preferences();
     final savedWidth = await preferences.setString(
-      shopReceiptPaperWidthKey,
+      _paperWidthKey,
       paperWidth.name,
     );
     if (!savedWidth) throw StateError('Printer paper size could not be saved.');
-    final saved = await preferences.setString(
-      shopReceiptPrinterHostKey,
-      candidate.host,
-    );
+    final saved = await preferences.setString(_hostKey, candidate.host);
     if (!saved) throw StateError('Printer setup could not be saved.');
     _session.trust(candidate.host, range, paperWidth);
   }
@@ -146,9 +162,19 @@ class ShopReceiptPrinter {
   ShopReceiptPrinter({
     WifiRangeProvider? rangeProvider,
     ReceiptPrinterSettings? settings,
-  }) : _rangeProvider = rangeProvider ?? _networkRangeProvider(NetworkInfo()),
-       _settings = settings ?? ReceiptPrinterSettings();
+    ShopRuntimeScope? runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
+  }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ),
+       _rangeProvider =
+           rangeProvider ??
+           _networkRangeProvider(_requireNetworkDetails(runtimeScope)),
+       _settings =
+           settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope);
 
+  final ShopRuntimeScope? _runtimeScope;
   final WifiRangeProvider _rangeProvider;
   final ReceiptPrinterSettings _settings;
 
@@ -170,21 +196,21 @@ class ShopReceiptPrinter {
       throw const PrinterNetworkChanged();
     }
 
-    final manager = PrinterManager();
+    final manager = _requirePrinterTransport(_runtimeScope);
     try {
       await manager.connect(
         NetworkPrinterDevice(
-          name: 'SuperMega Shop receipt printer',
+          name: 'Shop receipt printer',
           host: host,
           port: 9100,
         ),
         timeout: const Duration(seconds: 5),
       );
-      final ticket = await Ticket.create(trustedPrinter.paperWidth.paperSize);
-      for (final line in shopReceiptTextLines(receipt, myanmar: myanmar)) {
-        await ticket.textRaster(line);
-      }
-      _finishReceipt(ticket, trustedPrinter.paperWidth);
+      final ticket = await buildShopReceiptTicket(
+        receipt,
+        myanmar: myanmar,
+        paperWidth: trustedPrinter.paperWidth,
+      );
       await manager.printTicket(ticket);
     } finally {
       await manager.dispose();
@@ -204,13 +230,23 @@ class ReceiptReprintService {
   ReceiptReprintService({
     ReceiptPrinterSettings? settings,
     ReceiptPrintSender? send,
-  }) : _settings = settings ?? ReceiptPrinterSettings(),
+    ShopRuntimeScope? runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
+  }) : _settings =
+           settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope),
        _send =
            send ??
            ((host, receipt, myanmar) => ShopReceiptPrinter(
-             settings: settings ?? ReceiptPrinterSettings(),
-           ).printSale(host, receipt, myanmar: myanmar));
+             runtimeScope: runtimeScope,
+             settings:
+                 settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope),
+           ).printSale(host, receipt, myanmar: myanmar)),
+       _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       );
 
+  final ShopRuntimeScope? _runtimeScope;
   final ReceiptPrinterSettings _settings;
   final ReceiptPrintSender _send;
 
@@ -221,6 +257,10 @@ class ReceiptReprintService {
     ShopSaleReceipt receipt, {
     required bool myanmar,
   }) async {
+    final scope = _runtimeScope;
+    if (scope != null && !scope.capabilities.networkPrinter) {
+      throw StateError('shop_network_printer_unavailable');
+    }
     final host = await _settings.readHost();
     if (host == null) return false;
     await _send(host, receipt, myanmar);
@@ -232,12 +272,10 @@ List<String> shopReceiptTextLines(
   ShopSaleReceipt receipt, {
   required bool myanmar,
 }) => [
-  'SUPERMEGA SHOP',
+  'SHOP',
   myanmar ? 'အရောင်းပြေစာ' : 'SALE RECEIPT',
-  'Sale ${receipt.id}',
-  DateTime.fromMillisecondsSinceEpoch(receipt.createdAtMillis)
-      .toLocal()
-      .toString(),
+  '${myanmar ? 'အရောင်းအမှတ်' : 'Sale'} ${receipt.id}',
+  _formatReceiptTimestamp(receipt.createdAtMillis),
   '',
   for (final line in receipt.lines) ...[
     '${line.productName} x${line.quantity}',
@@ -245,7 +283,48 @@ List<String> shopReceiptTextLines(
   ],
   '',
   '${myanmar ? 'စုစုပေါင်း' : 'TOTAL'}: ${_formatMmk(receipt.totalMmk)} MMK',
-  '${myanmar ? 'ငွေပေးချေမှု' : 'Payment'}: ${receipt.paymentMethod.toUpperCase()}',
+  '${myanmar ? 'ငွေပေးချေမှု' : 'Payment'}: ${_receiptPaymentName(receipt.paymentMethod, myanmar: myanmar)}',
+  if (receipt.cashTenderedMmk != null)
+    '${myanmar ? 'ပေးငွေ' : 'Cash received'}: ${_formatMmk(receipt.cashTenderedMmk!)} MMK',
+  if (receipt.cashChangeMmk != null)
+    '${myanmar ? 'ပြန်အမ်းငွေ' : 'Change'}: ${_formatMmk(receipt.cashChangeMmk!)} MMK',
+];
+
+String _receiptPaymentName(String method, {required bool myanmar}) =>
+    switch (method) {
+      'cash' => myanmar ? 'ငွေသား' : 'Cash',
+      'kbzpay' => 'KBZPay',
+      'wavepay' => 'WavePay',
+      _ => method,
+    };
+
+Future<Ticket> buildShopReceiptTicket(
+  ShopSaleReceipt receipt, {
+  required bool myanmar,
+  required ReceiptPaperWidth paperWidth,
+  PaperSize? rasterPaperSize,
+}) async {
+  final ticket = await Ticket.create(rasterPaperSize ?? paperWidth.paperSize);
+  final style = _receiptRasterStyle(myanmar);
+  for (final line in shopReceiptTextLines(receipt, myanmar: myanmar)) {
+    await ticket.textRaster(line, style: style);
+  }
+  _finishReceipt(ticket, paperWidth);
+  return ticket;
+}
+
+TextStyle _receiptRasterStyle(bool myanmar) => TextStyle(
+  fontSize: 24,
+  fontFamily: myanmar ? 'NotoSansMyanmarUI' : 'Inter',
+  fontFamilyFallback: myanmar
+      ? const ['NotoSansMyanmar', 'Inter']
+      : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'],
+);
+
+const shopPrinterTestTextLines = <String>[
+  'Shop',
+  'Printer test',
+  'ပရင်တာ စမ်းသပ်မှု',
 ];
 
 String _formatMmk(int value) {
@@ -256,6 +335,13 @@ String _formatMmk(int value) {
     output.write(digits[index]);
   }
   return output.toString();
+}
+
+String _formatReceiptTimestamp(int millis) {
+  final value = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+  String two(int part) => part.toString().padLeft(2, '0');
+  return '${value.year}-${two(value.month)}-${two(value.day)} '
+      '${two(value.hour)}:${two(value.minute)}';
 }
 
 class Ipv4Subnet {
@@ -351,10 +437,20 @@ class PrinterDiscoveryService {
     NetworkInfo? networkInfo,
     PrinterPortProbe? probe,
     WifiRangeProvider? rangeProvider,
-  }) : _rangeProvider =
-           rangeProvider ?? _networkRangeProvider(networkInfo ?? NetworkInfo()),
-       _probe = probe ?? _tcpProbe;
+    ShopRuntimeScope? runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
+  }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ),
+       _rangeProvider =
+           rangeProvider ??
+           _networkRangeProvider(
+             networkInfo ?? _requireNetworkDetails(runtimeScope),
+           ),
+       _probe = probe ?? ((host, port) => _tcpProbe(runtimeScope, host, port));
 
+  final ShopRuntimeScope? _runtimeScope;
   final WifiRangeProvider _rangeProvider;
   final PrinterPortProbe _probe;
   Object? _activeScanToken;
@@ -452,25 +548,25 @@ class PrinterDiscoveryService {
         'Printer is no longer on the current Wi-Fi network.',
       );
     }
-    final manager = PrinterManager();
+    final manager = _requirePrinterTransport(_runtimeScope);
     try {
       await manager.connect(
         NetworkPrinterDevice(
-          name: 'SuperMega Shop test',
+          name: 'Shop printer test',
           host: printer.host,
           port: printer.port,
         ),
         timeout: const Duration(seconds: 5),
       );
       final ticket = await Ticket.create(paperWidth.paperSize);
-      await ticket.textRaster('SuperMega Shop');
-      await ticket.textRaster('Printer test');
-      await ticket.textRaster('ပရင်တာ စမ်းသပ်မှု');
+      for (final line in shopPrinterTestTextLines) {
+        await ticket.textRaster(line, style: _receiptRasterStyle(true));
+      }
       _finishReceipt(ticket, paperWidth);
       await manager.printTicket(ticket);
       await manager.disconnect();
     } finally {
-      manager.dispose();
+      await manager.dispose();
     }
   }
 
@@ -504,7 +600,34 @@ WifiRangeProvider _networkRangeProvider(NetworkInfo networkInfo) {
   };
 }
 
-Future<bool> _tcpProbe(String host, int port) async {
+NetworkInfo _requireNetworkDetails(ShopRuntimeScope? runtimeScope) {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.networkPrinter) {
+    throw StateError('shop_network_printer_unavailable');
+  }
+  return NetworkInfo();
+}
+
+PrinterManager _requirePrinterTransport(ShopRuntimeScope? runtimeScope) {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.networkPrinter) {
+    throw StateError('shop_network_printer_unavailable');
+  }
+  return PrinterManager();
+}
+
+Future<bool> _tcpProbe(
+  ShopRuntimeScope? runtimeScope,
+  String host,
+  int port,
+) async {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.networkPrinter) {
+    throw StateError('shop_network_printer_unavailable');
+  }
   Socket? socket;
   try {
     socket = await Socket.connect(

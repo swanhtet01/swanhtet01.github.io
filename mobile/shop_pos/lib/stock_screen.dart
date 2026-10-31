@@ -6,7 +6,10 @@ import 'package:uuid/uuid.dart';
 
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_staff_authorization.dart';
 import 'shop_today_screen.dart';
+
+const _stockActivityLimit = 20;
 
 int? parseStockQuantity(String? value) {
   final input = value?.trim() ?? '';
@@ -40,6 +43,7 @@ class StockScreen extends StatefulWidget {
     this.active = true,
     this.embeddedTaskShell = false,
     this.onAddProduct,
+    this.staffContext = const ShopStaffCommandContext.unavailable(),
     super.key,
   });
 
@@ -48,6 +52,7 @@ class StockScreen extends StatefulWidget {
   final bool active;
   final bool embeddedTaskShell;
   final VoidCallback? onAddProduct;
+  final ShopStaffCommandContext staffContext;
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -57,6 +62,7 @@ class _StockScreenState extends State<StockScreen> {
   final _search = TextEditingController();
   final _thumbnailFutures = <String, Future<Uint8List?>>{};
   late Stream<List<ShopProduct>> _products;
+  bool _restockOnly = false;
 
   Future<Uint8List?> _thumbnailFor(String productId) {
     if (_thumbnailFutures.length >= 64 &&
@@ -93,6 +99,13 @@ class _StockScreenState extends State<StockScreen> {
     super.dispose();
   }
 
+  void _retryProducts() {
+    setState(() {
+      _thumbnailFutures.clear();
+      _products = widget.database.watchActiveProducts();
+    });
+  }
+
   Future<void> _changeStock(
     ShopProduct product, {
     required bool showReference,
@@ -104,6 +117,7 @@ class _StockScreenState extends State<StockScreen> {
         product: product,
         myanmar: widget.myanmar,
         showReference: showReference,
+        staffContext: widget.staffContext,
       ),
     );
     if (!mounted || result == null) return;
@@ -129,6 +143,7 @@ class _StockScreenState extends State<StockScreen> {
         database: widget.database,
         product: product,
         myanmar: widget.myanmar,
+        staffContext: widget.staffContext,
       ),
     );
     if (!mounted || saved != true) return;
@@ -146,6 +161,15 @@ class _StockScreenState extends State<StockScreen> {
         ),
       );
   }
+
+  Future<void> _showStockActivity(ShopProduct product) => showDialog<void>(
+    context: context,
+    builder: (_) => _StockActivityDialog(
+      database: widget.database,
+      product: product,
+      myanmar: widget.myanmar,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -173,11 +197,33 @@ class _StockScreenState extends State<StockScreen> {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
-              child: Text(
-                shopCopy(
-                  widget.myanmar,
-                  'Could not load stock. Reopen this screen and try again.',
-                  'လက်ကျန်စာရင်း မဖွင့်နိုင်ပါ။ ဤစာမျက်နှာကို ပြန်ဖွင့်ပါ။',
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'Could not load stock. Try again.',
+                        'လက်ကျန်စာရင်း မဖွင့်နိုင်ပါ။ ထပ်ကြိုးစားပါ။',
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      key: const ValueKey('stock-retry-products'),
+                      onPressed: _retryProducts,
+                      icon: const Icon(Icons.refresh),
+                      label: Text(
+                        shopCopy(
+                          widget.myanmar,
+                          'Retry stock',
+                          'လက်ကျန်ပြန်ဖွင့်ရန်',
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -186,24 +232,27 @@ class _StockScreenState extends State<StockScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           final query = _search.text.trim().toLowerCase();
+          bool needsRestock(ShopProduct item) =>
+              item.onHand == 0 ||
+              (item.reorderLevel != null && item.onHand <= item.reorderLevel!);
+          final restockCount = snapshot.data!.where(needsRestock).length;
           final products =
               snapshot.data!
                   .where(
                     (item) =>
-                        query.isEmpty ||
-                        item.name.toLowerCase().contains(query) ||
-                        (item.barcode?.toLowerCase().contains(query) ?? false),
+                        (!_restockOnly || needsRestock(item)) &&
+                        (query.isEmpty ||
+                            item.name.toLowerCase().contains(query) ||
+                            item.category.toLowerCase().contains(query) ||
+                            (item.sku?.toLowerCase().contains(query) ??
+                                false) ||
+                            (item.barcode?.toLowerCase().contains(query) ??
+                                false)),
                   )
                   .toList()
                 ..sort((left, right) {
-                  final leftNeedsAttention =
-                      left.onHand == 0 ||
-                      (left.reorderLevel != null &&
-                          left.onHand <= left.reorderLevel!);
-                  final rightNeedsAttention =
-                      right.onHand == 0 ||
-                      (right.reorderLevel != null &&
-                          right.onHand <= right.reorderLevel!);
+                  final leftNeedsAttention = needsRestock(left);
+                  final rightNeedsAttention = needsRestock(right);
                   if (leftNeedsAttention != rightNeedsAttention) {
                     return leftNeedsAttention ? -1 : 1;
                   }
@@ -294,8 +343,27 @@ class _StockScreenState extends State<StockScreen> {
                         prefixIcon: const Icon(Icons.search),
                         hintText: shopCopy(
                           widget.myanmar,
-                          'Name or barcode',
-                          'အမည် / ဘားကုဒ်',
+                          'Name, barcode, SKU or category',
+                          'အမည်၊ ဘားကုဒ်၊ SKU သို့ အမျိုးအစား',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: FilterChip(
+                        key: const ValueKey('stock-restock-filter'),
+                        selected: _restockOnly,
+                        onSelected: (selected) => setState(() {
+                          _restockOnly = selected;
+                        }),
+                        avatar: const Icon(Icons.inventory_2_outlined),
+                        label: Text(
+                          shopCopy(
+                            widget.myanmar,
+                            'Needs restock · $restockCount',
+                            'ပြန်မှာရန် · ${shopNumber(restockCount, myanmar: true)}',
+                          ),
                         ),
                       ),
                     ),
@@ -337,10 +405,18 @@ class _StockScreenState extends State<StockScreen> {
                                   Text(
                                     shopCopy(
                                       widget.myanmar,
-                                      query.isEmpty
+                                      _restockOnly && query.isEmpty
+                                          ? 'No items need restocking'
+                                          : _restockOnly
+                                          ? 'No matching restock items'
+                                          : query.isEmpty
                                           ? 'No products yet'
                                           : 'No matching products',
-                                      query.isEmpty
+                                      _restockOnly && query.isEmpty
+                                          ? 'ပြန်မှာရန်လိုသော ပစ္စည်း မရှိပါ'
+                                          : _restockOnly
+                                          ? 'ပြန်မှာရန်စာရင်းတွင် ကိုက်ညီသောပစ္စည်း မတွေ့ပါ'
+                                          : query.isEmpty
                                           ? 'ကုန်ပစ္စည်း မရှိသေးပါ'
                                           : 'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ',
                                     ),
@@ -367,9 +443,8 @@ class _StockScreenState extends State<StockScreen> {
                             )
                           : ListView.separated(
                               itemCount: products.length,
-                              separatorBuilder: (_, _) => wide
-                                  ? const Divider(height: 1)
-                                  : const SizedBox(height: 8),
+                              separatorBuilder: (_, _) =>
+                                  const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 final item = products[index];
                                 final threshold = item.reorderLevel;
@@ -386,44 +461,60 @@ class _StockScreenState extends State<StockScreen> {
                                     duplicateNames.contains(
                                       item.name.trim().toLowerCase(),
                                     );
-                                final compact =
-                                    MediaQuery.sizeOf(context).width < 480;
+                                final compact = !wide;
                                 final textTheme = Theme.of(context).textTheme;
                                 final productTextStyle = wide
                                     ? textTheme.titleMedium
                                     : textTheme.bodyMedium;
                                 final colors = Theme.of(context).colorScheme;
+                                final priceLabel = shopCopy(
+                                  widget.myanmar,
+                                  '${shopNumber(item.priceMmk, myanmar: false)} MMK',
+                                  '${shopNumber(item.priceMmk, myanmar: true)} ကျပ်',
+                                );
+                                final conciseReference = [
+                                  if (item.sku?.trim().isNotEmpty ?? false)
+                                    item.sku!.trim(),
+                                  if (item.barcode?.trim().isNotEmpty ?? false)
+                                    item.barcode!.trim(),
+                                ].join(' / ');
+                                final displayReference =
+                                    conciseReference.isEmpty
+                                    ? item.id
+                                    : conciseReference;
                                 final details = Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       item.name,
-                                      maxLines: compact ? 3 : 2,
+                                      maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: productTextStyle?.copyWith(
                                         fontWeight: FontWeight.w600,
+                                        height: 1.3,
                                       ),
                                     ),
                                     Text(
-                                      shopCopy(
-                                        widget.myanmar,
-                                        '${shopNumber(item.priceMmk, myanmar: false)} MMK',
-                                        '${shopNumber(item.priceMmk, myanmar: true)} ကျပ်',
-                                      ),
+                                      compact && showReference
+                                          ? '$priceLabel · $displayReference'
+                                          : priceLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: textTheme.bodySmall?.copyWith(
                                         color: colors.onSurfaceVariant,
+                                        fontWeight: FontWeight.w500,
                                         fontFeatures: const [
                                           FontFeature.tabularFigures(),
                                         ],
                                       ),
                                     ),
-                                    if (showReference)
+                                    if (showReference && wide)
                                       Text(
                                         _stockProductReference(
                                           item,
                                           widget.myanmar,
                                         ),
-                                        maxLines: 2,
+                                        maxLines: compact ? 1 : 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: Theme.of(context)
                                             .textTheme
@@ -486,7 +577,7 @@ class _StockScreenState extends State<StockScreen> {
                                               ? textTheme.titleMedium
                                               : textTheme.bodyMedium)
                                           ?.copyWith(
-                                            fontWeight: FontWeight.w700,
+                                            fontWeight: FontWeight.w600,
                                             color: item.onHand == 0
                                                 ? colors.error
                                                 : lowAlertLevel == null
@@ -503,81 +594,94 @@ class _StockScreenState extends State<StockScreen> {
                                           'ပြန်မှာရန်: ${shopNumber(lowAlertLevel, myanmar: true)} ခု',
                                         ),
                                         style: textTheme.bodySmall?.copyWith(
-                                          color: colors.onSurfaceVariant,
+                                          color: const Color(0xff88530e),
                                         ),
                                       );
                                 Future<void> openStockChange() => _changeStock(
                                   item,
                                   showReference: showReference,
                                 );
-                                final update = OutlinedButton(
-                                  key: ValueKey('stock-update-${item.id}'),
-                                  onPressed: openStockChange,
-                                  child: Text(
-                                    shopCopy(
-                                      widget.myanmar,
-                                      'Adjust stock',
-                                      'လက်ကျန်ပြင်ရန်',
-                                    ),
-                                  ),
+                                final fullAdjustLabel = shopCopy(
+                                  widget.myanmar,
+                                  'Adjust stock',
+                                  'လက်ကျန်ပြင်ရန်',
                                 );
-                                final edit = Tooltip(
-                                  message: shopCopy(
-                                    widget.myanmar,
-                                    'Edit product',
-                                    'ကုန်ပစ္စည်း ပြင်ရန်',
-                                  ),
-                                  child: TextButton.icon(
-                                    key: ValueKey('stock-edit-${item.id}'),
-                                    onPressed: () => _editProduct(item),
-                                    icon: const Icon(Icons.edit_outlined),
-                                    label: Text(
-                                      shopCopy(
-                                        widget.myanmar,
-                                        'Edit',
-                                        'ပြင်ရန်',
-                                      ),
-                                    ),
-                                  ),
-                                );
-                                final compactEdit = Tooltip(
-                                  message: shopCopy(
-                                    widget.myanmar,
-                                    'Edit product',
-                                    'ကုန်ပစ္စည်း ပြင်ရန်',
-                                  ),
-                                  child: TextButton(
-                                    key: ValueKey('stock-edit-${item.id}'),
-                                    onPressed: () => _editProduct(item),
-                                    style: TextButton.styleFrom(
-                                      minimumSize: const Size(70, 56),
+                                final narrowPhone =
+                                    MediaQuery.sizeOf(context).width < 360;
+                                final update = Tooltip(
+                                  message: fullAdjustLabel,
+                                  excludeFromSemantics: true,
+                                  child: OutlinedButton(
+                                    key: ValueKey('stock-update-${item.id}'),
+                                    onPressed: openStockChange,
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(0, 48),
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 4,
+                                        horizontal: 8,
                                       ),
                                     ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.edit_outlined,
-                                          size: 19,
+                                    child: Semantics(
+                                      label: narrowPhone
+                                          ? fullAdjustLabel
+                                          : null,
+                                      child: ExcludeSemantics(
+                                        excluding: narrowPhone,
+                                        child: Text(
+                                          narrowPhone
+                                              ? shopCopy(
+                                                  widget.myanmar,
+                                                  'Adjust',
+                                                  'ပြင်ရန်',
+                                                )
+                                              : fullAdjustLabel,
+                                          maxLines: 1,
+                                          textAlign: TextAlign.center,
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          shopCopy(
-                                            widget.myanmar,
-                                            'Edit',
-                                            'ပြင်ရန်',
-                                          ),
-                                          style: textTheme.labelSmall?.copyWith(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ),
+                                );
+                                final more = PopupMenuButton<String>(
+                                  key: ValueKey('stock-more-${item.id}'),
+                                  tooltip: shopCopy(
+                                    widget.myanmar,
+                                    'More for ${item.name}',
+                                    '${item.name} အတွက် နောက်ထပ်',
+                                  ),
+                                  icon: const Icon(Icons.more_vert),
+                                  onSelected: (value) {
+                                    if (value == 'edit') {
+                                      unawaited(_editProduct(item));
+                                    } else if (value == 'activity') {
+                                      unawaited(_showStockActivity(item));
+                                    }
+                                  },
+                                  itemBuilder: (_) => [
+                                    PopupMenuItem(
+                                      key: ValueKey(
+                                        'stock-activity-${item.id}',
+                                      ),
+                                      value: 'activity',
+                                      child: Text(
+                                        shopCopy(
+                                          widget.myanmar,
+                                          'Recent stock activity',
+                                          'လက်ကျန် နောက်ဆုံးလှုပ်ရှားမှု',
+                                        ),
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      key: ValueKey('stock-edit-${item.id}'),
+                                      value: 'edit',
+                                      child: Text(
+                                        shopCopy(
+                                          widget.myanmar,
+                                          'Edit product',
+                                          'ကုန်ပစ္စည်း ပြင်ရန်',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 );
                                 final stockSummaryLabel = [
                                   item.name,
@@ -621,91 +725,84 @@ class _StockScreenState extends State<StockScreen> {
                                             ),
                                           ),
                                           SizedBox(width: 168, child: update),
-                                          edit,
+                                          more,
                                         ],
                                       ),
                                     ),
                                   );
                                 }
-                                return Card(
-                                  clipBehavior: Clip.antiAlias,
-                                  child: compact
-                                      ? Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 12,
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Semantics(
-                                                      label: stockSummaryLabel,
-                                                      child: ExcludeSemantics(
-                                                        child: Column(
-                                                          key: ValueKey(
-                                                            'stock-row-${item.id}',
-                                                          ),
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                            detailsWithPhoto,
-                                                            const SizedBox(
-                                                              height: 8,
-                                                            ),
-                                                            onHand,
-                                                            if (reorderNote !=
-                                                                null) ...[
-                                                              const SizedBox(
-                                                                height: 2,
-                                                              ),
-                                                              reorderNote,
-                                                            ],
-                                                          ],
-                                                        ),
-                                                      ),
+                                return ColoredBox(
+                                  color: colors.surface,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 8,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Semantics(
+                                                label: stockSummaryLabel,
+                                                child: ExcludeSemantics(
+                                                  child: Container(
+                                                    key: ValueKey(
+                                                      'stock-row-${item.id}',
                                                     ),
+                                                    child: detailsWithPhoto,
                                                   ),
-                                                  const SizedBox(width: 8),
-                                                  compactEdit,
-                                                ],
+                                                ),
                                               ),
-                                              const SizedBox(height: 8),
+                                            ),
+                                            more,
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        if (narrowPhone) ...[
+                                          ExcludeSemantics(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [onHand, ?reorderNote],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: SizedBox(
+                                              width: 120,
+                                              child: update,
+                                            ),
+                                          ),
+                                        ] else
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: ExcludeSemantics(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      onHand,
+                                                      ?reorderNote,
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
                                               SizedBox(
-                                                height: 48,
+                                                width: 120,
                                                 child: update,
                                               ),
                                             ],
                                           ),
-                                        )
-                                      : Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    detailsWithPhoto,
-                                                    onHand,
-                                                    ?reorderNote,
-                                                  ],
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              update,
-                                              edit,
-                                            ],
-                                          ),
-                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 );
                               },
                             ),
@@ -721,8 +818,8 @@ class _StockScreenState extends State<StockScreen> {
   );
 }
 
-class _EditProductDialog extends StatefulWidget {
-  const _EditProductDialog({
+class _StockActivityDialog extends StatelessWidget {
+  const _StockActivityDialog({
     required this.database,
     required this.product,
     required this.myanmar,
@@ -732,6 +829,168 @@ class _EditProductDialog extends StatefulWidget {
   final ShopProduct product;
   final bool myanmar;
 
+  String _reasonLabel(String reason) => switch (reason) {
+    'opening_stock' => shopCopy(myanmar, 'Opening stock', 'အစလက်ကျန်'),
+    'menu_import_opening_stock' => shopCopy(
+      myanmar,
+      'Imported opening stock',
+      'တင်သွင်းထားသော အစလက်ကျန်',
+    ),
+    'stock_received' => shopCopy(
+      myanmar,
+      'Delivery received',
+      'ကုန်ပစ္စည်း လက်ခံရရှိ',
+    ),
+    'stock_counted' => shopCopy(myanmar, 'Physical count', 'လက်တွေ့ရေတွက်မှု'),
+    'cash_sale' || 'wallet_sale' => shopCopy(myanmar, 'Sale', 'ရောင်းချမှု'),
+    'sale_reversal_restock' => shopCopy(
+      myanmar,
+      'Returned sale restocked',
+      'ပြန်အပ်ပစ္စည်း လက်ကျန်ပြန်ထည့်',
+    ),
+    _ => shopCopy(myanmar, 'Stock adjustment', 'လက်ကျန်ပြင်ဆင်မှု'),
+  };
+
+  String _dateLabel(int milliseconds) {
+    final value = DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
+    String two(int number) => number.toString().padLeft(2, '0');
+    final latin =
+        '${value.year}-${two(value.month)}-${two(value.day)} '
+        '${two(value.hour)}:${two(value.minute)}';
+    if (!myanmar) return latin;
+    return String.fromCharCodes(
+      latin.runes.map(
+        (character) => character >= 0x30 && character <= 0x39
+            ? character - 0x30 + 0x1040
+            : character,
+      ),
+    );
+  }
+
+  String _deltaLabel(int delta) {
+    final sign = delta > 0 ? '+' : '';
+    return '$sign${shopNumber(delta, myanmar: myanmar)}';
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    key: const ValueKey('stock-activity-dialog'),
+    title: Text(
+      shopCopy(
+        myanmar,
+        'Recent stock activity',
+        'လက်ကျန် နောက်ဆုံးလှုပ်ရှားမှု',
+      ),
+    ),
+    content: SizedBox(
+      width: 520,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(product.name, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 2),
+          Text(
+            _stockProductReference(product, myanmar),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Flexible(
+            child: FutureBuilder<List<ShopStockMovement>>(
+              future: database.readRecentStockMovements(
+                product.id,
+                limit: _stockActivityLimit,
+              ),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      shopCopy(
+                        myanmar,
+                        'Could not load stock activity.',
+                        'လက်ကျန်လှုပ်ရှားမှု မဖွင့်နိုင်ပါ။',
+                      ),
+                    ),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final movements = snapshot.data!;
+                if (movements.isEmpty) {
+                  return Center(
+                    child: Text(
+                      shopCopy(
+                        myanmar,
+                        'No stock activity yet.',
+                        'လက်ကျန်လှုပ်ရှားမှု မရှိသေးပါ။',
+                      ),
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: movements.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final movement = movements[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(_reasonLabel(movement.reason)),
+                      subtitle: Text(_dateLabel(movement.createdAtMillis)),
+                      trailing: Text(
+                        _deltaLabel(movement.quantityDelta),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: movement.quantityDelta < 0
+                                  ? Theme.of(context).colorScheme.error
+                                  : Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            shopCopy(
+              myanmar,
+              'Shows up to the latest $_stockActivityLimit movements. '
+                  'Read-only; it does not change stock.',
+              'နောက်ဆုံး လှုပ်ရှားမှု '
+                  '${shopNumber(_stockActivityLimit, myanmar: true)} ခုအထိ ပြထားသည်။ '
+                  'ဖတ်ရန်သာဖြစ်ပြီး လက်ကျန်ကို မပြောင်းပါ။',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: Text(shopCopy(myanmar, 'Close', 'ပိတ်မည်')),
+      ),
+    ],
+  );
+}
+
+class _EditProductDialog extends StatefulWidget {
+  const _EditProductDialog({
+    required this.database,
+    required this.product,
+    required this.myanmar,
+    required this.staffContext,
+  });
+
+  final ShopDatabase database;
+  final ShopProduct product;
+  final bool myanmar;
+  final ShopStaffCommandContext staffContext;
+
   @override
   State<_EditProductDialog> createState() => _EditProductDialogState();
 }
@@ -740,6 +999,7 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   final _formKey = GlobalKey<FormState>();
   final _operationId = const Uuid().v4();
   late final _name = TextEditingController(text: widget.product.name);
+  late final _category = TextEditingController(text: widget.product.category);
   late final _barcode = TextEditingController(
     text: widget.product.barcode ?? '',
   );
@@ -752,6 +1012,7 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _category.dispose();
     _barcode.dispose();
     _price.dispose();
     super.dispose();
@@ -768,11 +1029,15 @@ class _EditProductDialogState extends State<_EditProductDialog> {
         operationId: _operationId,
         productId: widget.product.id,
         expectedName: widget.product.name,
+        expectedCategory: widget.product.category,
         expectedPriceMmk: widget.product.priceMmk,
         expectedBarcode: widget.product.barcode,
         name: _name.text,
-        priceMmk: parseStockQuantity(_price.text)!,
+        category: _category.text,
+        priceMmk: parseShopMmkInput(_price.text, maximum: 2000000000)!,
         barcode: _barcode.text,
+        staffActorId: widget.staffContext.actorId,
+        staffAuthorizer: widget.staffContext.authorizer,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
@@ -836,13 +1101,31 @@ class _EditProductDialogState extends State<_EditProductDialog> {
           ),
           const SizedBox(height: 12),
           TextFormField(
+            key: const ValueKey('stock-edit-category'),
+            controller: _category,
+            enabled: !_saving,
+            maxLength: 80,
+            decoration: InputDecoration(
+              labelText: shopCopy(
+                widget.myanmar,
+                'Category (optional)',
+                'အမျိုးအစား (မထည့်လည်းရ)',
+              ),
+            ),
+            validator: (value) => (value?.trim().length ?? 0) > 80
+                ? shopCopy(
+                    widget.myanmar,
+                    'Category is too long.',
+                    'အမျိုးအစားအမည် ရှည်လွန်းပါသည်။',
+                  )
+                : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
             key: const ValueKey('stock-edit-price'),
             controller: _price,
             enabled: !_saving,
             keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp('[0-9\u1040-\u1049]')),
-            ],
             decoration: InputDecoration(
               labelText: shopCopy(
                 widget.myanmar,
@@ -851,8 +1134,8 @@ class _EditProductDialogState extends State<_EditProductDialog> {
               ),
             ),
             validator: (value) {
-              final amount = parseStockQuantity(value);
-              return amount == null || amount < 0 || amount > 2000000000
+              final amount = parseShopMmkInput(value, maximum: 2000000000);
+              return amount == null
                   ? shopCopy(
                       widget.myanmar,
                       'Enter a whole MMK amount.',
@@ -920,12 +1203,14 @@ class _StockChangeDialog extends StatefulWidget {
     required this.product,
     required this.myanmar,
     required this.showReference,
+    required this.staffContext,
   });
 
   final ShopDatabase database;
   final ShopProduct product;
   final bool myanmar;
   final bool showReference;
+  final ShopStaffCommandContext staffContext;
 
   @override
   State<_StockChangeDialog> createState() => _StockChangeDialogState();
@@ -958,6 +1243,53 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
     super.dispose();
   }
 
+  String _deltaLabel(int delta) {
+    final sign = delta > 0 ? '+' : '';
+    return '$sign${shopNumber(delta, myanmar: widget.myanmar)}';
+  }
+
+  Future<bool> _confirmPhysicalCount(int quantity) async {
+    if (quantity == widget.product.onHand) return true;
+    final delta = quantity - widget.product.onHand;
+    return await showDialog<bool>(
+          context: context,
+          builder: (confirmContext) => AlertDialog(
+            key: const ValueKey('stock-count-confirm'),
+            title: Text(
+              shopCopy(
+                widget.myanmar,
+                'Confirm physical count',
+                'လက်တွေ့ရေတွက်မှု အတည်ပြုရန်',
+              ),
+            ),
+            content: Text(
+              shopCopy(
+                widget.myanmar,
+                'Stock will change from ${shopNumber(widget.product.onHand)} '
+                    'to ${shopNumber(quantity)} (${_deltaLabel(delta)}).',
+                'လက်ကျန် ${shopNumber(widget.product.onHand, myanmar: true)} ခုမှ '
+                    '${shopNumber(quantity, myanmar: true)} ခုသို့ '
+                    'ပြောင်းမည် (${_deltaLabel(delta)})။',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(confirmContext).pop(false),
+                child: Text(shopCopy(widget.myanmar, 'Go back', 'ပြန်စစ်ရန်')),
+              ),
+              FilledButton(
+                key: const ValueKey('stock-count-confirm-save'),
+                onPressed: () => Navigator.of(confirmContext).pop(true),
+                child: Text(
+                  shopCopy(widget.myanmar, 'Save count', 'ရေတွက်မှုသိမ်းရန်'),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<void> _save() async {
     if (_saving || _savingAlert) return;
     if (_showAlertEditor && parseStockQuantity(_level.text) != _reorderLevel) {
@@ -971,6 +1303,9 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
       return;
     }
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final quantity = parseStockQuantity(_quantity.text)!;
+    if (_kind == 'count' && !await _confirmPhysicalCount(quantity)) return;
+    if (!mounted) return;
     setState(() {
       _saving = true;
       _error = null;
@@ -980,8 +1315,10 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
         operationId: _operationId,
         productId: widget.product.id,
         kind: _kind,
-        quantity: parseStockQuantity(_quantity.text)!,
+        quantity: quantity,
         expectedOnHand: widget.product.onHand,
+        staffActorId: widget.staffContext.actorId,
+        staffAuthorizer: widget.staffContext.authorizer,
       );
       if (mounted) Navigator.of(context).pop(result);
     } catch (error) {
@@ -1154,6 +1491,31 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
                   );
                 }
                 return null;
+              },
+            ),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _quantity,
+              builder: (context, value, _) {
+                final quantity = parseStockQuantity(value.text);
+                if (quantity == null) return const SizedBox.shrink();
+                final resulting = _kind == 'receive'
+                    ? widget.product.onHand + quantity
+                    : quantity;
+                final delta = resulting - widget.product.onHand;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'After save: ${shopNumber(resulting)} on hand · '
+                          'change ${_deltaLabel(delta)}',
+                      'သိမ်းပြီးနောက် လက်ကျန် '
+                          '${shopNumber(resulting, myanmar: true)} ခု · '
+                          'ပြောင်းလဲမှု ${_deltaLabel(delta)}',
+                    ),
+                    key: const ValueKey('stock-change-preview'),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 16),

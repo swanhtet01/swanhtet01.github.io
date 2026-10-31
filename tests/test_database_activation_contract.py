@@ -465,13 +465,13 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
 
 
 class ActivationWrapperContractTests(unittest.TestCase):
-    def test_v13_profile_and_billing_values_are_bound_before_future_writes(self) -> None:
+    def test_v14_profile_and_billing_values_are_bound_before_future_writes(self) -> None:
         source = _read(ACTIVATOR)
         from supermega_runtime.managed_activation import TRIAL_SCHEMA_VERSION, TRIAL_SCHEMA_PROFILE, TRIAL_DATABASE_CONTRACT
-        from tools.private_trial_v13_contract import PROFILE, CONTRACT
+        from tools.private_trial_v14_contract import PROFILE, CONTRACT
 
-        self.assertEqual((TRIAL_SCHEMA_VERSION, TRIAL_SCHEMA_PROFILE, TRIAL_DATABASE_CONTRACT), (13, PROFILE, CONTRACT))
-        self.assertIn("if ($activationSchemaVersion -ne '13')", source)
+        self.assertEqual((TRIAL_SCHEMA_VERSION, TRIAL_SCHEMA_PROFILE, TRIAL_DATABASE_CONTRACT), (14, PROFILE, CONTRACT))
+        self.assertIn("if ($activationSchemaVersion -ne '14')", source)
         self.assertIn(f"target.schemaProfile -cne '{PROFILE}'", source)
         self.assertIn(f"target.databaseContract -cne '{CONTRACT}'", source)
         self.assertLess(source.index("target.schemaProfile -cne"), source.index("$resolved = Resolve-SecretValue"))
@@ -493,13 +493,13 @@ class ActivationWrapperContractTests(unittest.TestCase):
     def test_exact_powershell_profile_guard_rejects_old_plans_without_running_activator(self) -> None:
         source = _read(ACTIVATOR)
         guard = source[source.index("$activationSchemaVersion ="):source.index("if ($activationReleaseCommit -notmatch")]
-        profile = "v13-self-serve"
-        contract = "supermega_private_trial_database_v13_self_serve_v1"
+        profile = "v14-shop-correction"
+        contract = "supermega_private_trial_database_v14_shop_correction_v1"
         cases = [
-            (13, profile, contract, True), (11, profile, contract, False),
-            (12, profile, contract, False), (13, "legacy-v11", contract, False),
-            (13, None, contract, False), (13, profile, None, False),
-            (13, profile.upper(), contract, False), (13, profile, "unknown", False),
+            (14, profile, contract, True), (11, profile, contract, False),
+            (13, profile, contract, False), (14, "v13-self-serve", contract, False),
+            (14, None, contract, False), (14, profile, None, False),
+            (14, profile.upper(), contract, False), (14, profile, "unknown", False),
         ]
         script = "$ErrorActionPreference = 'Stop'\n$checks = 0\n"
         for version, selected_profile, selected_contract, accepted in cases:

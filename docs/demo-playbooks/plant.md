@@ -1,18 +1,18 @@
-# Plant — client demo playbook
+# Plant — internal operator rehearsal
 
 ## 1. Client and the 30-second pitch
 
 Who this is for: factories and workshops that plan jobs and record output by shift — the manifest ships internal template packs for `General manufacturing`, `Batch and process`, `Food and beverage`, `Apparel`, and `Assembly`, over the workflow templates `Production control`, `Maintenance and downtime`, and `Quality and traceability`.
 
-The pitch, verbatim from approved copy (eyebrow `Plant operations`):
+The retained manifest copy (eyebrow `Plant operations`) supports an internal rehearsal only; Plant is not a current public product page:
 
-- `Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.`
+- `SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and daily insight.`
 - `Plan jobs, record output, and close shifts.`
 - `Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.`
 
 ## 2. Pre-demo setup
 
-1. Open `https://app.supermega.dev/settings/?product=plant` only for an internal compatibility rehearsal. Plant is not part of the current Shop, Website and Ecommerce offer.
+1. Open `https://app.supermega.dev/settings/?product=plant` only for an internal compatibility rehearsal. Plant is not part of the current Shop-only customer offer.
 2. Under `Name your workspace`, enter the client's name in `Business name`.
 3. Press `Create Plant and open the job`. The app provisions a scheduled job, materials, and line, and opens `/plant/?tab=production`. The stated first result is `Run a sample production job`.
 4. Confirm the sidebar badge reads `Local workspace` and the `Start here` panel names the loaded industry working sample (source line: `Local sample records on this device`).
@@ -40,6 +40,6 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 ## 5. The close
 
 - No public Plant sales close: the retained `https://app.supermega.dev/settings/?product=plant` route is internal compatibility work only. Do not offer Plant as a currently launched product.
-- Retained compatibility route: the historical `Request assisted setup` target is `/contact/?product=plant`. Plant is not in the current public product selector; do not promise Plant pre-selection or sell this retained sample as an active offering. For an explicitly requested enquiry, use `Help me choose` under `What do you need?` and submit with `Request setup` only with authorization; a `Request received: ` ID confirms the brief, not Plant activation.
+- Retained compatibility route: the historical `Request assisted setup` target is `/contact/?product=plant`. Plant is not in the current public product navigation; do not promise Plant pre-selection or sell this retained sample as an active offering. For an explicitly requested enquiry, explain the scope in the plain Message field and submit with `Send message` only with authorization. A contact receipt is not Plant activation.
 - From inside the app: the setup page's "Ask SuperMega to set up Plant" link carries the template, for example `https://supermega.dev/contact/?product=plant&template=production-control&utm_source=app&utm_medium=guided_trial`.
-- Existing-workspace assistance: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Plant is not a current acquisition offer; any retained-workspace support requires an explicitly agreed scope, not automatic managed activation.
+- Existing-workspace assistance: `/contact/?product=guide&source=assisted-setup` — submit with `Send message` only after authorization. Plant is not a current acquisition offer; any retained-workspace support requires an explicitly agreed scope, not automatic managed activation.

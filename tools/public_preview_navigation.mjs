@@ -1,6 +1,9 @@
 // Build-time navigation binding only. The deploy orchestrator must independently
 // verify project ownership, effective environment isolation and access protection.
 // Possession of this metadata is not deployment or tenant authorization.
+export const PUBLIC_PREVIEW_LOGIN_PATH = '/login?entry=shop-public-preview-v1&product=shop'
+export const PUBLIC_PREVIEW_LOGIN_HTML_PATH = '/login?entry=shop-public-preview-v1&amp;product=shop'
+
 export function parsePreviewAppBinding(raw, releaseCommit, checkoutCommit) {
   if (raw === undefined) return null
   let binding
@@ -24,6 +27,9 @@ export function bindPreviewNavigation(html, binding) {
   // prose, assets, forms and server functions are deliberately left untouched.
   return html.replace(/(<a\b[^>]*\bhref=")([^"<>]*)(")/g, (match, prefix, href, suffix) => {
     if (href !== 'https://app.supermega.dev' && !href.startsWith('https://app.supermega.dev/')) return match
+    if (href === 'https://app.supermega.dev/login') {
+      return `${prefix}${binding.origin}${PUBLIC_PREVIEW_LOGIN_HTML_PATH}${suffix}`
+    }
     return `${prefix}${binding.origin}${href.slice('https://app.supermega.dev'.length)}${suffix}`
   })
 }

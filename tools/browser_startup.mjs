@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process'
 
+export const BROWSER_STARTUP_TIMEOUT_MS = 60_000
+
 // Bound each probe as well as the complete startup. Never retry another browser:
 // doing so would obscure which executable supplied the rendered evidence.
 export async function startBrowser(browserBin, args, debugPort, {
   spawnBrowser = spawn,
   fetchVersion = fetch,
-  timeoutMs = 30_000,
+  timeoutMs = BROWSER_STARTUP_TIMEOUT_MS,
   probeTimeoutMs = 1_000,
   pollMs = 250,
 } = {}) {

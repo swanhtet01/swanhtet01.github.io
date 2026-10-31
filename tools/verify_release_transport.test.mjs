@@ -21,7 +21,7 @@ test('app fetch rejects redirects without following another release endpoint', a
 })
 
 test('protected app and public page CLI reads have deadlines and preserve deployment arguments', async () => {
-  for (const [code, invocation] of [[appGet, "get('/__release.json', 1)"], [extract(preview, 'function get(', 'for (const page of manifest.pages)'), "get('/__release.json')"]]) {
+  for (const [code, invocation] of [[appGet, "get('/__release.json', 1)"], [extract(preview, 'function get(', 'function status('), "get('/__release.json')"]]) {
     let call
     const value = await vm.runInNewContext(`${code}; ${invocation}`, {
       protectedPreview: true, baseUrl: 'https://candidate.vercel.app', expectedCommit: '', process: {platform:'linux'}, cliEnv:{}, maxAttempts:1,
@@ -39,6 +39,19 @@ test('all deployment inspection calls have the same timeout', () => {
     const calls=[...source.matchAll(/maxBuffer: 8 \* 1024 \* 1024, timeout: 15000, killSignal: 'SIGKILL'/g)]
     assert.equal(calls.length,count)
   }
+})
+
+test('protected public status probes preserve the target and report retired routes', () => {
+  let call
+  const code = extract(preview, 'function status(', 'const publicPages =')
+  const result = vm.runInNewContext(`${code}; status('/plant/')`, {
+    process: { platform: 'linux' }, baseUrl: 'https://candidate.vercel.app', cliEnv: {},
+    execFileSync: (exe, args, options) => { call = { exe, args, options }; return '404' },
+  })
+  assert.equal(result, 404)
+  assert.equal(call.options.timeout, 15000)
+  assert.equal(call.args[call.args.indexOf('--deployment') + 1], 'https://candidate.vercel.app')
+  assert.deepEqual(Array.from(call.args.slice(-5)), ['--', '--output', '/dev/null', '--write-out', '%{http_code}'])
 })
 
 test('public content fails redirects while explicit redirect probes remain manual', async () => {

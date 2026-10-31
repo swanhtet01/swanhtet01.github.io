@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
+import { PUBLIC_PREVIEW_LOGIN_HTML_PATH, bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
@@ -37,6 +37,12 @@ test('preserve escaped path/query/hash and leave SEO and unrelated targets uncha
   assert.equal(bindPreviewNavigation(html, parse(binding)), html.replace('<a href="https://app.supermega.dev/', `<a href="${binding.origin}/`))
 })
 
+test('paired public login carries one restrictive display marker while other app links retain their route', () => {
+  const html = '<a href="https://app.supermega.dev/login">Login</a><a href="https://app.supermega.dev/shop/?tab=today">Shop</a>'
+  assert.equal(bindPreviewNavigation(html, parse(binding)),
+    `<a href="${binding.origin}${PUBLIC_PREVIEW_LOGIN_HTML_PATH}">Login</a><a href="${binding.origin}/shop/?tab=today">Shop</a>`)
+})
+
 test('actual generator maps every production app anchor, preserves default contract and SEO', () => {
   const env = { ...process.env, SUPERMEGA_RELEASE_COMMIT: commit }
   delete env.SUPERMEGA_PUBLIC_PREVIEW_APP_BINDING
@@ -48,16 +54,21 @@ test('actual generator maps every production app anchor, preserves default contr
   build({})
   const pages = new Map(manifest.pages.map(page => [page.file, read(page.file)]))
   let mapped = 0
+  let headerPages = 0
   try {
     build({ SUPERMEGA_PUBLIC_PREVIEW_APP_BINDING: JSON.stringify(binding) })
     for (const [name, original] of pages) {
+      const loginLinks = (original.match(/<a\b[^>]*href="https:\/\/app\.supermega\.dev\//g) || []).length
+      const hasHeader = /<header\b[^>]*class="[^"]*site-header[^"]*"/.test(original)
+      assert.equal(loginLinks, hasHeader ? 1 : 0, `${name} header sign-in contract`)
+      headerPages += hasHeader ? 1 : 0
       const expected = bindPreviewNavigation(original, binding)
       const actual = read(name)
       assert.equal(actual, expected, name)
       assert.equal(/<a\b[^>]*href="https:\/\/app\.supermega\.dev(?:\/|")/.test(actual), false, name)
       mapped += (original.match(/<a\b[^>]*href="https:\/\/app\.supermega\.dev\//g) || []).length
     }
-    assert.equal(mapped, manifest.pages.length, `expected one Login per public page, got ${mapped}`)
+    assert.equal(mapped, headerPages, `expected one Login per header-bearing page, got ${mapped}`)
     assert.deepEqual(JSON.parse(read('__release.json')).previewNavigation, binding)
     assert.equal(read('robots.txt'), 'User-agent: *\nDisallow: /\n')
     const config = JSON.parse(readFileSync(resolve(root, '.vercel/output/config.json'), 'utf8'))

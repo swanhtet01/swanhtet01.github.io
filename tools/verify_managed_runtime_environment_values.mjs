@@ -7,7 +7,7 @@ const packageState = JSON.parse(await readFile(resolve(root, 'package.json'), 'u
 const projectRef = String(packageState?.supermega?.productionSupabaseProjectRef || '').trim()
 const runtimeRole = 'supermega_trial_login'
 const storageAuditRole = 'supermega_storage_audit'
-const managedSchemaVersion = '13'
+const managedSchemaVersion = '14'
 
 const databaseTargetReadyForRole = (value, role) => {
   try {
@@ -140,7 +140,7 @@ if (process.argv.includes('--self-test')) {
   assert.equal(evaluate({ SUPERMEGA_RELEASE_COMMIT: 'd'.repeat(40) }, 'isolated_demo').ok, false)
   assert.equal(evaluate(valid, 'isolated_demo').ok, false)
   let additionalChecks = 0
-  for (const value of ['', '10', '11', '12', '14', '13.0']) {
+  for (const value of ['', '10', '11', '12', '13', '14.0']) {
     assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_SCHEMA_VERSION: value }, 'staged').failures.includes('managed_schema_version_invalid'), true)
     additionalChecks++
     for (const mode of ['staged', 'managed_trial', 'self_serve']) {

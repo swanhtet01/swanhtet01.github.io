@@ -296,7 +296,7 @@ export function assessReleaseStackOwnerGates(input = {}) {
     addFailure(failures, 'release_stack_owner_gate_readiness_overall_invalid')
   }
   if (readiness.liveProduction?.operatingMode !== 'isolated_demo'
-    || readiness.liveProduction?.localTargetVersion !== 13
+    || readiness.liveProduction?.localTargetVersion !== 14
     || readiness.liveProduction?.currentStateRevalidated !== false
     || readiness.liveProduction?.managedWritesEnabled !== false
     || readiness.liveProduction?.productionMutationAuthorized !== false) {
@@ -363,7 +363,7 @@ export function assessReleaseStackOwnerGates(input = {}) {
     || supabaseProposal.previewBranch?.privilegedRuntimeCredentialsAllowed !== false
     || supabaseProposal.previewBranch?.deleteAfterEvidence !== true
     || supabaseProposal.previewBranch?.failedBranchReuseAllowed !== false
-    || supabaseProposal.migrationPlan?.schemaVersion !== 13
+    || supabaseProposal.migrationPlan?.schemaVersion !== 14
     || !/^sha256:[0-9a-f]{64}$/.test(String(supabaseProposal.migrationPlan?.chainDigest || ''))
     || supabaseProposal.migrationPlan?.productionApplyAllowed !== false
     || !includesAll(supabaseProposal.requiredEvidence, [
@@ -667,7 +667,7 @@ function sampleInput(overrides = {}) {
       blockingGateCount: REQUIRED_BLOCKING_GATES.length,
       blockingGateIds: [...REQUIRED_BLOCKING_GATES],
     },
-    liveProduction: { operatingMode: 'isolated_demo', localTargetVersion: 13, currentStateRevalidated: false, managedWritesEnabled: false, productionMutationAuthorized: false },
+    liveProduction: { operatingMode: 'isolated_demo', localTargetVersion: 14, currentStateRevalidated: false, managedWritesEnabled: false, productionMutationAuthorized: false },
     previewRehearsal: {
       proofComplete: false,
       productionRefsRejected: true,
@@ -731,7 +731,7 @@ function sampleInput(overrides = {}) {
       failedBranchReuseAllowed: false,
     },
     migrationPlan: {
-      schemaVersion: 13,
+      schemaVersion: 14,
       chainDigest: `sha256:${'c'.repeat(64)}`,
       productionApplyAllowed: false,
     },

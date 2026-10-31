@@ -19,7 +19,7 @@ export function inspectAcceptanceEnvironment(env, expectedCommit) {
   check(['SUPERMEGA_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_PUBLISHABLE_KEY',
     'SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY'].every(name =>
     !env[name] || String(env[name]).trim() === env.VITE_SUPABASE_PUBLISHABLE_KEY), 'server_auth_key_mismatch')
-  check(env.SUPERMEGA_TRIAL_SCHEMA_VERSION === '13' && env.SUPERMEGA_BILLING_SCHEMA_VERSION === '13', 'schema_version_mismatch')
+  check(env.SUPERMEGA_TRIAL_SCHEMA_VERSION === '14' && env.SUPERMEGA_BILLING_SCHEMA_VERSION === '14', 'schema_version_mismatch')
   check(['', 'false'].includes(env.SUPERMEGA_TRIAL_WRITES_ENABLED || ''), 'staging_writes_must_be_disabled')
   check(!env.SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW, 'self_serve_must_be_closed')
   let databaseValid = false

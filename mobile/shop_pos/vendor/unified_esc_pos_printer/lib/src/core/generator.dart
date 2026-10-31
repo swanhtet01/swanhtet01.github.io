@@ -33,6 +33,7 @@ class Generator {
   int _getMaxCharsPerLine(FontType? font) {
     return switch (paperSize) {
       PaperSize.mm58 => PaperSize.mm58.charsPerLine(font),
+      PaperSize.mm58Wide420 => PaperSize.mm58Wide420.charsPerLine(font),
       PaperSize.mm72 => PaperSize.mm72.charsPerLine(font),
       PaperSize.mm80 => PaperSize.mm80.charsPerLine(font),
     };
@@ -196,14 +197,12 @@ class Generator {
     if (widthPx % 8 != 0) {
       final targetWidth = (widthPx + 8) - (widthPx % 8);
       final missingPx = targetWidth - widthPx;
-      final extra = Uint8List(missingPx);
-
-      oneChannelBytes = List<int>.filled(heightPx * targetWidth, 0);
-
+      final source = oneChannelBytes;
+      oneChannelBytes = <int>[];
       for (int i = 0; i < heightPx; i++) {
-        // Corrected position calculation
-        final pos = (i * widthPx) + i * missingPx;
-        oneChannelBytes.insertAll(pos, extra);
+        final rowStart = i * widthPx;
+        oneChannelBytes.addAll(source.sublist(rowStart, rowStart + widthPx));
+        oneChannelBytes.addAll(List<int>.filled(missingPx, 0));
       }
     }
 

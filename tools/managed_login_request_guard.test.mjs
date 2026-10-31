@@ -17,15 +17,19 @@ function handler(name, context, parsedSource = ast) {
 }
 const event = { preventDefault() {} }
 function fixture() {
-  const passwords = [], busyStates = []
+  const passwords = [], busyStates = [], focusTargets = [], credentialErrors = []
   const noop = () => {}
-  return { passwords, busyStates, context: {
-    managedReady: true, publicApp: false, busy: false, accountRequestPending: { current: false }, directory: null, reviewReturnPath: null,
+  const focusRef = name => ({ current: { focus(options) { focusTargets.push({ name, preventScroll: options?.preventScroll }) } } })
+  return { passwords, busyStates, focusTargets, credentialErrors, context: {
+    managedReady: true, publicApp: false, publicPortalEntry: false, busy: false, accountRequestPending: { current: false }, directory: null, reviewReturnPath: null,
     email: 'synthetic@example.invalid', password: ['synthetic', 'test', 'input'].join('-'), workspaceId: '', existingIdentity: { workspaceId: 'one' },
     setBusy: value => busyStates.push(value), setPassword: value => passwords.push(value), setNoticeTone: noop, setNotice: noop,
     setActivating: noop, setDirectory: noop, setWorkspaceId: noop, setExistingIdentity: noop, setEmail: noop,
     setClaimCodeFieldError: noop, window: { localStorage: {} }, readTrialSignup: () => null, savedTrial: () => null,
-    trialSignupProductChoice: () => ({ id: 'shop' }), productIntent: 'shop', claimCode: 'synthetic', businessName: 'Synthetic',
+    emailInputRef: focusRef('email'), loginNoticeRef: focusRef('login-notice'), confirmationInputRef: focusRef('confirmation'), noticeRef: focusRef('notice'),
+    credentialFieldError: false, setCredentialFieldError: value => credentialErrors.push(value),
+    setPasswordMismatch: noop,
+    trialSignupProductChoice: () => ({ id: 'shop' }), productIntent: 'shop', accountProductIntent: 'shop', claimCode: 'synthetic', businessName: 'Synthetic',
     managedPortalEntryPath: value => value === 'commerce' ? '/shop/' : `/${value}/`,
     openWorkspace: async () => {}, alternateManagedWorkspaceId: () => null,
   } }
@@ -44,7 +48,7 @@ test('actual sign-in handler ignores duplicate submit before rendered busy state
   assert.equal(passwords.at(-1), '')
 })
 test('failed sign-in clears the password and permits a later deliberate attempt', async () => {
-  const { context, passwords } = fixture()
+  const { context, passwords, focusTargets, credentialErrors } = fixture()
   let calls = 0
   context.signInAndDiscoverManagedWorkspaces = async () => { calls++; throw new Error('Synthetic failure') }
   const submit = handler('submit', context)
@@ -52,7 +56,21 @@ test('failed sign-in clears the password and permits a later deliberate attempt'
   assert.equal(calls, 2)
   assert.equal(context.accountRequestPending.current, false)
   assert.deepEqual(passwords, ['', ''])
+  assert.deepEqual(focusTargets, [{ name: 'email', preventScroll: true }, { name: 'email', preventScroll: true }])
+  assert.deepEqual(credentialErrors, [false, true, false, true])
 })
+
+for (const directoryMode of [false, true]) {
+  test(`post-auth workspace failure focuses the notice without blaming credentials (${directoryMode ? 'directory' : 'single workspace'})`, async () => {
+    const { context, focusTargets, credentialErrors } = fixture()
+    if (directoryMode) context.directory = { workspaces: [{ workspaceId: 'one' }] }
+    else context.signInAndDiscoverManagedWorkspaces = async () => ({ workspaces: [{ workspaceId: 'one' }], email: context.email })
+    context.openWorkspace = async () => { throw new Error('Synthetic bootstrap failure') }
+    await handler('submit', context)(event)
+    assert.deepEqual(focusTargets, [{ name: 'login-notice', preventScroll: true }])
+    assert.deepEqual(credentialErrors, [false])
+  })
+}
 test('sign-in, activation, switching and sign-out cannot overlap an existing account request', async () => {
   const { context, busyStates } = fixture()
   context.accountRequestPending.current = true
@@ -76,6 +94,64 @@ test('unavailable managed runtime never starts sign-in or activation', async () 
   context.managedReady = false
   await handler('submit', context)(event); await handler('activate', context)(event)
   assert.deepEqual(busyStates, [])
+})
+
+for (const [name, setter] of [['editEmail', 'setEmail'], ['editPassword', 'setPassword']]) {
+  test(`${name} clears stale shared credential errors after correction`, () => {
+    const values = [], notices = [], tones = []
+    const context = {
+      credentialFieldError: true,
+      setNotice: value => notices.push(value),
+      setNoticeTone: value => tones.push(value),
+      setCredentialFieldError: value => { context.credentialFieldError = value },
+      [setter]: value => values.push(value),
+    }
+    context.clearCredentialError = handler('clearCredentialError', context)
+    handler(name, context)('corrected')
+    assert.deepEqual(values, ['corrected'])
+    assert.deepEqual(notices, [''])
+    assert.deepEqual(tones, ['quiet'])
+
+    context.credentialFieldError = false
+    handler(name, context)('again')
+    assert.deepEqual(values, ['corrected', 'again'])
+    assert.deepEqual(notices, [''])
+    assert.deepEqual(tones, ['quiet'])
+  })
+}
+
+test('claim-code correction clears only claim-attributed errors', () => {
+  for (const attributed of [true, false]) {
+    const codes = [], fieldErrors = [], notices = [], tones = []
+    const context = {
+      claimCodeFieldError: attributed,
+      setClaimCode: value => codes.push(value),
+      setClaimCodeFieldError: value => fieldErrors.push(value),
+      setNotice: value => notices.push(value),
+      setNoticeTone: value => tones.push(value),
+    }
+    handler('editClaimCode', context)('SM-CORRECTED')
+    assert.deepEqual(codes, ['SM-CORRECTED'])
+    assert.deepEqual(fieldErrors, attributed ? [false] : [])
+    assert.deepEqual(notices, attributed ? [''] : [])
+    assert.deepEqual(tones, attributed ? ['quiet'] : [])
+  }
+  assert.match(source, /onChange=\{\(event\) => editClaimCode\(event\.target\.value\)\}/)
+})
+
+test('credential-error clearing is limited to sign-in fields, not account creation', () => {
+  const signupStart = source.indexOf('creatingAccount && !reviewReturnPath ? <form')
+  const signupEnd = source.indexOf('managedReady && activating && publicPortalEntry', signupStart)
+  const signup = source.slice(signupStart, signupEnd)
+  assert.match(signup, /autoComplete="username"[^>]+onChange=\{\(event\) => setEmail\(event\.target\.value\)\}/)
+  assert.match(signup, /autoComplete="new-password"[^>]+onChange=\{\(event\) => setPassword\(event\.target\.value\)\}/)
+  assert.doesNotMatch(signup, /editEmail|editPassword/)
+
+  const loginStart = source.indexOf('managedReady ? <form aria-label="Login"')
+  const loginEnd = source.indexOf(': <section className="managed-login-panel" aria-label="Login unavailable">', loginStart)
+  const login = source.slice(loginStart, loginEnd)
+  assert.match(login, /autoComplete="username"[^>]+onChange=\{\(event\) => editEmail\(event\.target\.value\)\}/)
+  assert.match(login, /autoComplete="current-password"[^>]+onChange=\{\(event\) => editPassword\(event\.target\.value\)\}/)
 })
 
 test('unassigned Website reviewers never enter company activation; normal signup still does', async () => {
@@ -130,7 +206,7 @@ const accountSource = readFileSync(new URL('../showroom/src/core/ManagedAccountP
 const accountAst = ts.createSourceFile('account.tsx', accountSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
 for (const [name, provider] of [['requestRecovery', 'requestManagedPasswordRecovery'], ['savePassword', 'completeManagedAccountPassword'], ['chooseWorkspace', 'openWorkspace']]) {
   test(`${name} prevents rapid duplicate requests and releases its lock after failure`, async () => {
-    const { context } = fixture()
+    const { context, focusTargets } = fixture()
     Object.assign(context, { sent: false, setup: { purpose: 'recovery' }, directory: { workspaces: [] },
       confirmation: context.password, setSent() {}, setConfirmation() {} })
     let reject, calls = 0
@@ -146,6 +222,9 @@ for (const [name, provider] of [['requestRecovery', 'requestManagedPasswordRecov
     assert.equal(calls, 2)
     reject(new Error('Synthetic failure'))
     await retry
+    if (name === 'requestRecovery' || name === 'savePassword') {
+      assert.deepEqual(focusTargets, [{ name: 'notice', preventScroll: true }, { name: 'notice', preventScroll: true }])
+    }
   })
   test(`${name} cannot overlap another request or use unavailable managed auth`, async () => {
     const { context, busyStates } = fixture()
@@ -193,7 +272,7 @@ test('password save keeps the lock until the assigned company finishes opening',
 })
 
 test('confirmed signup and mismatched passwords cannot invoke password update', async () => {
-  const { context, busyStates } = fixture()
+  const { context, busyStates, focusTargets } = fixture()
   Object.assign(context, { setup: { purpose: 'signup' }, confirmation: context.password,
     completeManagedAccountPassword: () => assert.fail('password update not permitted') })
   await handler('savePassword', context, accountAst)(event)
@@ -202,6 +281,44 @@ test('confirmed signup and mismatched passwords cannot invoke password update', 
   await handler('savePassword', context, accountAst)(event)
   assert.deepEqual(busyStates, [])
   assert.equal(context.accountRequestPending.current, false)
+  assert.deepEqual(focusTargets, [{ name: 'confirmation', preventScroll: true }])
+})
+
+for (const name of ['editNewPassword', 'editConfirmation']) {
+  test(`${name} clears only an active mismatch notice`, () => {
+    const passwordValues = [], confirmationValues = [], mismatchStates = [], notices = []
+    const context = {
+      passwordMismatch: true,
+      notice: 'The passwords do not match.',
+      setPassword: value => passwordValues.push(value),
+      setConfirmation: value => confirmationValues.push(value),
+      setPasswordMismatch: value => mismatchStates.push(value),
+      setNotice: value => notices.push(value),
+    }
+    context.clearPasswordMismatch = handler('clearPasswordMismatch', context, accountAst)
+    handler(name, context, accountAst)('corrected')
+    assert.deepEqual(name === 'editNewPassword' ? passwordValues : confirmationValues, ['corrected'])
+    assert.deepEqual(mismatchStates, [false])
+    assert.deepEqual(notices, [''])
+
+    context.passwordMismatch = false
+    context.notice = 'Synthetic provider failure'
+    handler(name, context, accountAst)('again')
+    assert.deepEqual(mismatchStates, [false])
+    assert.deepEqual(notices, [''])
+  })
+}
+
+test('recovery and password forms expose busy state and focused field errors', () => {
+  assert.match(accountSource, /<form aria-busy=\{busy\} aria-label="Account recovery"/)
+  assert.match(accountSource, /id="managed-recovery-notice" ref=\{noticeRef\} role="status" tabIndex=\{-1\}/)
+  assert.match(accountSource, /<form aria-busy=\{busy\} className="managed-login-panel core-form" onSubmit=\{\(event\) => void savePassword\(event\)\}/)
+  assert.match(accountSource, /aria-describedby=\{passwordMismatch \? 'managed-password-notice' : undefined\}/)
+  assert.match(accountSource, /id="managed-password-notice" ref=\{noticeRef\} role="status" tabIndex=\{-1\}/)
+  assert.doesNotMatch(accountSource, /Work email<input[^>]*aria-invalid/)
+  assert.doesNotMatch(accountSource, /New password<input[^>]*aria-invalid/)
+  assert.match(source, /aria-describedby=\{credentialFieldError \? 'managed-login-notice' : undefined\}/)
+  assert.match(source, /id="managed-login-notice" ref=\{loginNoticeRef\} role="status" tabIndex=\{-1\}/)
 })
 
 
@@ -452,6 +569,7 @@ test('activation uses saved product only for the entered saved claim', async () 
     context.openWorkspace = handler('openWorkspace', context)
     context.claimCode = enteredClaim
     context.productIntent = 'ecommerce'
+    context.accountProductIntent = 'ecommerce'
     context.savedTrial = () => saved
     context.trialSignupProductChoice = value => ({ id: value })
     context.createSelfServeWorkspace = async (...args) => { calls.push(args); return { created: true, label: 'Synthetic', workspaceId: 'new' } }

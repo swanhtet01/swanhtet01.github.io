@@ -34,9 +34,10 @@ ACTIVATION_AUTHORIZATION_CONTRACT = "supermega.managed_workspace_activation_auth
 # Required candidate contract, not a claim about the live database. A fresh
 # plan and owner authorization must bind the billing + durable-admission profile;
 # an older version-only plan cannot be upgraded by reusing its authorization.
-TRIAL_SCHEMA_VERSION = 13
-TRIAL_SCHEMA_PROFILE = "v13-self-serve"
-TRIAL_DATABASE_CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
+TRIAL_SCHEMA_VERSION = 14
+TRIAL_SCHEMA_PROFILE = "v14-shop-correction"
+TRIAL_DATABASE_CONTRACT = "supermega_private_trial_database_v14_shop_correction_v1"
+TRIAL_SCHEMA_VERIFICATION_OPERATION = "verify_postgres17_schema_v14_shop_correction"
 MAX_INPUT_BYTES = 1024 * 1024
 PLAN_TTL = timedelta(days=7)
 AUTOMATIC_COMPENSATION_REASON = "Activation compensation after a downstream release gate failure."
@@ -579,7 +580,7 @@ def compile_activation_plan(
         },
         "evidence": deepcopy(source["evidence"]),
         "operations": [
-            "verify_postgres17_schema_v13_self_serve",
+            TRIAL_SCHEMA_VERIFICATION_OPERATION,
             "lock_workspace_identity",
             "verify_durable_owner_authorization",
             "insert_workspace_access_control",
@@ -791,7 +792,7 @@ def validate_activation_plan(
     if evidence["pilotOutcomeStatus"] not in {"target_met", "improved"}:
         raise ManagedActivationError("Activation pilot outcome status is invalid.")
     if plan["operations"] != [
-        "verify_postgres17_schema_v13_self_serve",
+        TRIAL_SCHEMA_VERIFICATION_OPERATION,
         "lock_workspace_identity",
         "verify_durable_owner_authorization",
         "insert_workspace_access_control",

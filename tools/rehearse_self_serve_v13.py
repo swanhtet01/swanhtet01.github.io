@@ -83,7 +83,12 @@ def source_identity(expected_head):
     require(git("rev-parse", "HEAD") == expected_head, "source_head_mismatch")
     observed = tuple(sorted(p.name for p in (ROOT / "supabase/migrations").glob("*.sql")
                             if p.name != "20260711081300_public_legacy_baseline.sql"))
-    require(observed == MIGRATIONS, "private_migration_inventory_mismatch")
+    # This proof intentionally replays the historical v13 account/billing
+    # chain, but its source binding still has to cover the exact current
+    # migration inventory.  The outer PostgreSQL 17 rehearsal owns that
+    # current inventory while MIGRATIONS remains the v13 subset below.
+    require(MIGRATIONS == pg.V13_MIGRATIONS, "v13_migration_contract_mismatch")
+    require(observed == pg.CURRENT_MIGRATIONS, "private_migration_inventory_mismatch")
     paths = sorted(set([
         "tools/rehearse_self_serve_v13.py", "tools/run_python_tool.mjs",
         "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",

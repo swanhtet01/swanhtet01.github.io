@@ -1805,6 +1805,18 @@ class $ShopSalesTable extends ShopSales
     requiredDuringInsert: false,
     defaultValue: const Constant('cash'),
   );
+  static const VerificationMeta _cashTenderedMmkMeta = const VerificationMeta(
+    'cashTenderedMmk',
+  );
+  @override
+  late final GeneratedColumn<int> cashTenderedMmk = GeneratedColumn<int>(
+    'cash_tendered_mmk',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL CHECK (cash_tendered_mmk IS NULL OR (payment_method = \'cash\' AND cash_tendered_mmk >= total_mmk AND cash_tendered_mmk <= 200000000000000))',
+  );
   static const VerificationMeta _createdAtMillisMeta = const VerificationMeta(
     'createdAtMillis',
   );
@@ -1823,6 +1835,7 @@ class $ShopSalesTable extends ShopSales
     requestFingerprint,
     totalMmk,
     paymentMethod,
+    cashTenderedMmk,
     createdAtMillis,
   ];
   @override
@@ -1881,6 +1894,15 @@ class $ShopSalesTable extends ShopSales
         ),
       );
     }
+    if (data.containsKey('cash_tendered_mmk')) {
+      context.handle(
+        _cashTenderedMmkMeta,
+        cashTenderedMmk.isAcceptableOrUnknown(
+          data['cash_tendered_mmk']!,
+          _cashTenderedMmkMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at_millis')) {
       context.handle(
         _createdAtMillisMeta,
@@ -1921,6 +1943,10 @@ class $ShopSalesTable extends ShopSales
         DriftSqlType.string,
         data['${effectivePrefix}payment_method'],
       )!,
+      cashTenderedMmk: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cash_tendered_mmk'],
+      ),
       createdAtMillis: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_at_millis'],
@@ -1940,6 +1966,7 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
   final String requestFingerprint;
   final int totalMmk;
   final String paymentMethod;
+  final int? cashTenderedMmk;
   final int createdAtMillis;
   const ShopSale({
     required this.id,
@@ -1947,6 +1974,7 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
     required this.requestFingerprint,
     required this.totalMmk,
     required this.paymentMethod,
+    this.cashTenderedMmk,
     required this.createdAtMillis,
   });
   @override
@@ -1957,6 +1985,9 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
     map['request_fingerprint'] = Variable<String>(requestFingerprint);
     map['total_mmk'] = Variable<int>(totalMmk);
     map['payment_method'] = Variable<String>(paymentMethod);
+    if (!nullToAbsent || cashTenderedMmk != null) {
+      map['cash_tendered_mmk'] = Variable<int>(cashTenderedMmk);
+    }
     map['created_at_millis'] = Variable<int>(createdAtMillis);
     return map;
   }
@@ -1968,6 +1999,9 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
       requestFingerprint: Value(requestFingerprint),
       totalMmk: Value(totalMmk),
       paymentMethod: Value(paymentMethod),
+      cashTenderedMmk: cashTenderedMmk == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cashTenderedMmk),
       createdAtMillis: Value(createdAtMillis),
     );
   }
@@ -1985,6 +2019,7 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
       ),
       totalMmk: serializer.fromJson<int>(json['totalMmk']),
       paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
+      cashTenderedMmk: serializer.fromJson<int?>(json['cashTenderedMmk']),
       createdAtMillis: serializer.fromJson<int>(json['createdAtMillis']),
     );
   }
@@ -1997,6 +2032,7 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
       'requestFingerprint': serializer.toJson<String>(requestFingerprint),
       'totalMmk': serializer.toJson<int>(totalMmk),
       'paymentMethod': serializer.toJson<String>(paymentMethod),
+      'cashTenderedMmk': serializer.toJson<int?>(cashTenderedMmk),
       'createdAtMillis': serializer.toJson<int>(createdAtMillis),
     };
   }
@@ -2007,6 +2043,7 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
     String? requestFingerprint,
     int? totalMmk,
     String? paymentMethod,
+    Value<int?> cashTenderedMmk = const Value.absent(),
     int? createdAtMillis,
   }) => ShopSale(
     id: id ?? this.id,
@@ -2014,6 +2051,9 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
     requestFingerprint: requestFingerprint ?? this.requestFingerprint,
     totalMmk: totalMmk ?? this.totalMmk,
     paymentMethod: paymentMethod ?? this.paymentMethod,
+    cashTenderedMmk: cashTenderedMmk.present
+        ? cashTenderedMmk.value
+        : this.cashTenderedMmk,
     createdAtMillis: createdAtMillis ?? this.createdAtMillis,
   );
   ShopSale copyWithCompanion(ShopSalesCompanion data) {
@@ -2029,6 +2069,9 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
       paymentMethod: data.paymentMethod.present
           ? data.paymentMethod.value
           : this.paymentMethod,
+      cashTenderedMmk: data.cashTenderedMmk.present
+          ? data.cashTenderedMmk.value
+          : this.cashTenderedMmk,
       createdAtMillis: data.createdAtMillis.present
           ? data.createdAtMillis.value
           : this.createdAtMillis,
@@ -2043,6 +2086,7 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
           ..write('requestFingerprint: $requestFingerprint, ')
           ..write('totalMmk: $totalMmk, ')
           ..write('paymentMethod: $paymentMethod, ')
+          ..write('cashTenderedMmk: $cashTenderedMmk, ')
           ..write('createdAtMillis: $createdAtMillis')
           ..write(')'))
         .toString();
@@ -2055,6 +2099,7 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
     requestFingerprint,
     totalMmk,
     paymentMethod,
+    cashTenderedMmk,
     createdAtMillis,
   );
   @override
@@ -2066,6 +2111,7 @@ class ShopSale extends DataClass implements Insertable<ShopSale> {
           other.requestFingerprint == this.requestFingerprint &&
           other.totalMmk == this.totalMmk &&
           other.paymentMethod == this.paymentMethod &&
+          other.cashTenderedMmk == this.cashTenderedMmk &&
           other.createdAtMillis == this.createdAtMillis);
 }
 
@@ -2075,6 +2121,7 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
   final Value<String> requestFingerprint;
   final Value<int> totalMmk;
   final Value<String> paymentMethod;
+  final Value<int?> cashTenderedMmk;
   final Value<int> createdAtMillis;
   final Value<int> rowid;
   const ShopSalesCompanion({
@@ -2083,6 +2130,7 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
     this.requestFingerprint = const Value.absent(),
     this.totalMmk = const Value.absent(),
     this.paymentMethod = const Value.absent(),
+    this.cashTenderedMmk = const Value.absent(),
     this.createdAtMillis = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2092,6 +2140,7 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
     required String requestFingerprint,
     required int totalMmk,
     this.paymentMethod = const Value.absent(),
+    this.cashTenderedMmk = const Value.absent(),
     required int createdAtMillis,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -2105,6 +2154,7 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
     Expression<String>? requestFingerprint,
     Expression<int>? totalMmk,
     Expression<String>? paymentMethod,
+    Expression<int>? cashTenderedMmk,
     Expression<int>? createdAtMillis,
     Expression<int>? rowid,
   }) {
@@ -2114,6 +2164,7 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
       if (requestFingerprint != null) 'request_fingerprint': requestFingerprint,
       if (totalMmk != null) 'total_mmk': totalMmk,
       if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (cashTenderedMmk != null) 'cash_tendered_mmk': cashTenderedMmk,
       if (createdAtMillis != null) 'created_at_millis': createdAtMillis,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2125,6 +2176,7 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
     Value<String>? requestFingerprint,
     Value<int>? totalMmk,
     Value<String>? paymentMethod,
+    Value<int?>? cashTenderedMmk,
     Value<int>? createdAtMillis,
     Value<int>? rowid,
   }) {
@@ -2134,6 +2186,7 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
       requestFingerprint: requestFingerprint ?? this.requestFingerprint,
       totalMmk: totalMmk ?? this.totalMmk,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      cashTenderedMmk: cashTenderedMmk ?? this.cashTenderedMmk,
       createdAtMillis: createdAtMillis ?? this.createdAtMillis,
       rowid: rowid ?? this.rowid,
     );
@@ -2157,6 +2210,9 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
     if (paymentMethod.present) {
       map['payment_method'] = Variable<String>(paymentMethod.value);
     }
+    if (cashTenderedMmk.present) {
+      map['cash_tendered_mmk'] = Variable<int>(cashTenderedMmk.value);
+    }
     if (createdAtMillis.present) {
       map['created_at_millis'] = Variable<int>(createdAtMillis.value);
     }
@@ -2174,6 +2230,7 @@ class ShopSalesCompanion extends UpdateCompanion<ShopSale> {
           ..write('requestFingerprint: $requestFingerprint, ')
           ..write('totalMmk: $totalMmk, ')
           ..write('paymentMethod: $paymentMethod, ')
+          ..write('cashTenderedMmk: $cashTenderedMmk, ')
           ..write('createdAtMillis: $createdAtMillis, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -4611,6 +4668,7 @@ typedef $$ShopSalesTableCreateCompanionBuilder = ShopSalesCompanion Function({
   required String requestFingerprint,
   required int totalMmk,
   Value<String> paymentMethod,
+  Value<int?> cashTenderedMmk,
   required int createdAtMillis,
   Value<int> rowid,
 });
@@ -4620,6 +4678,7 @@ typedef $$ShopSalesTableUpdateCompanionBuilder = ShopSalesCompanion Function({
   Value<String> requestFingerprint,
   Value<int> totalMmk,
   Value<String> paymentMethod,
+  Value<int?> cashTenderedMmk,
   Value<int> createdAtMillis,
   Value<int> rowid,
 });
@@ -4699,6 +4758,11 @@ class $$ShopSalesTableFilterComposer
 
   ColumnFilters<String> get paymentMethod => $composableBuilder(
     column: $table.paymentMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cashTenderedMmk => $composableBuilder(
+    column: $table.cashTenderedMmk,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4792,6 +4856,11 @@ class $$ShopSalesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get cashTenderedMmk => $composableBuilder(
+    column: $table.cashTenderedMmk,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAtMillis => $composableBuilder(
     column: $table.createdAtMillis,
     builder: (column) => ColumnOrderings(column),
@@ -4825,6 +4894,11 @@ class $$ShopSalesTableAnnotationComposer
 
   GeneratedColumn<String> get paymentMethod => $composableBuilder(
     column: $table.paymentMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cashTenderedMmk => $composableBuilder(
+    column: $table.cashTenderedMmk,
     builder: (column) => column,
   );
 
@@ -4921,6 +4995,7 @@ class $$ShopSalesTableTableManager
                 Value<String> requestFingerprint = const Value.absent(),
                 Value<int> totalMmk = const Value.absent(),
                 Value<String> paymentMethod = const Value.absent(),
+                Value<int?> cashTenderedMmk = const Value.absent(),
                 Value<int> createdAtMillis = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ShopSalesCompanion(
@@ -4929,6 +5004,7 @@ class $$ShopSalesTableTableManager
                 requestFingerprint: requestFingerprint,
                 totalMmk: totalMmk,
                 paymentMethod: paymentMethod,
+                cashTenderedMmk: cashTenderedMmk,
                 createdAtMillis: createdAtMillis,
                 rowid: rowid,
               ),
@@ -4939,6 +5015,7 @@ class $$ShopSalesTableTableManager
                 required String requestFingerprint,
                 required int totalMmk,
                 Value<String> paymentMethod = const Value.absent(),
+                Value<int?> cashTenderedMmk = const Value.absent(),
                 required int createdAtMillis,
                 Value<int> rowid = const Value.absent(),
               }) => ShopSalesCompanion.insert(
@@ -4947,6 +5024,7 @@ class $$ShopSalesTableTableManager
                 requestFingerprint: requestFingerprint,
                 totalMmk: totalMmk,
                 paymentMethod: paymentMethod,
+                cashTenderedMmk: cashTenderedMmk,
                 createdAtMillis: createdAtMillis,
                 rowid: rowid,
               ),

@@ -2,15 +2,18 @@ import 'dart:io';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'shop_backup.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_qa_evidence_store.dart';
+import 'shop_runtime_scope.dart';
 
-typedef SaveEncryptedShopArchive =
-    Future<String?> Function(File archive, String suggestedName);
+typedef SaveEncryptedShopArchive = Future<String?> Function(
+  File archive,
+  String suggestedName,
+);
 
 enum ShopBackupExportResult { saved, cancelled }
 
@@ -25,15 +28,33 @@ abstract final class ShopBackupExporter {
     required SaveEncryptedShopArchive saveArchive,
     Directory? scratchRoot,
     Directory? encryptedRoot,
+    ShopRuntimeScope? runtimeScope,
+    bool allowTestFileAccessWithoutScope = false,
     DateTime? now,
   }) async {
-    if (_active) throw StateError('A Shop backup export is already in progress.');
+    if (runtimeScope == null) {
+      if (!allowTestFileAccessWithoutScope ||
+          scratchRoot == null ||
+          encryptedRoot == null) {
+        throw StateError('shop_runtime_scope_required');
+      }
+    } else if (!runtimeScope.capabilities.externalFileSaving) {
+      throw StateError('shop_external_file_access_unavailable');
+    }
+    if (_active) {
+      throw StateError('A Shop backup export is already in progress.');
+    }
     _active = true;
     File? encryptedArchive;
     try {
       final privateRoot =
-          scratchRoot ?? await getApplicationDocumentsDirectory();
-      final cacheRoot = encryptedRoot ?? await getTemporaryDirectory();
+          scratchRoot ??
+          runtimeScope?.documentsRoot ??
+          (throw StateError('shop_runtime_scope_required'));
+      final cacheRoot =
+          encryptedRoot ??
+          runtimeScope?.temporaryRoot ??
+          (throw StateError('shop_runtime_scope_required'));
       await cacheRoot.create(recursive: true);
       encryptedArchive = File(
         '${cacheRoot.path}${Platform.pathSeparator}'
@@ -79,6 +100,9 @@ class ShopBackupExportScreen extends StatefulWidget {
     this.exportAction,
     this.scratchRoot,
     this.encryptedRoot,
+    this.runtimeScope,
+    this.qaEvidenceStore,
+    this.allowTestFileAccessWithoutScope = false,
     super.key,
   });
 
@@ -91,6 +115,21 @@ class ShopBackupExportScreen extends StatefulWidget {
   final Future<ShopBackupExportResult> Function(String password)? exportAction;
   final Directory? scratchRoot;
   final Directory? encryptedRoot;
+  final ShopRuntimeScope? runtimeScope;
+  final ShopQaEvidenceStore? qaEvidenceStore;
+  final bool allowTestFileAccessWithoutScope;
+
+  bool get backupSavingAllowed =>
+      (runtimeScope?.capabilities.externalFileSaving ??
+          (allowTestFileAccessWithoutScope &&
+              (exportAction != null ||
+                  (saveArchive != null &&
+                      scratchRoot != null &&
+                      encryptedRoot != null)))) ||
+      (runtimeScope?.configuration.isSyntheticQa == true &&
+          runtimeScope?.capabilities.syntheticEvidence == true &&
+          ((qaEvidenceStore?.isBoundTo(runtimeScope!) ?? false) ||
+              (qaEvidenceStore == null && Platform.isAndroid)));
 
   @override
   State<ShopBackupExportScreen> createState() => _ShopBackupExportScreenState();
@@ -103,6 +142,11 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   String? _message;
 
   Future<String?> _saveAs(File archive, String suggestedName) {
+    final runtimeScope = widget.runtimeScope;
+    if (runtimeScope == null) throw StateError('shop_runtime_scope_required');
+    if (!runtimeScope.capabilities.externalFileSaving) {
+      throw StateError('shop_external_file_access_unavailable');
+    }
     if (!Platform.isAndroid && !Platform.isIOS && !Platform.isWindows) {
       throw UnsupportedError('Shop backup export is unavailable here.');
     }
@@ -117,6 +161,16 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
 
   Future<void> _export() async {
     if (_busy) return;
+    if (!widget.backupSavingAllowed) {
+      setState(() {
+        _message = shopCopy(
+          widget.myanmar,
+          'External backup files are unavailable in this synthetic preview.',
+          'ဤစမ်းသပ်မြင်ကွင်းတွင် ပြင်ပအရန်ကူးဖိုင်များ အသုံးပြု၍မရပါ။',
+        );
+      });
+      return;
+    }
     final password = _password.text;
     if (password.runes.length < 12) {
       setState(() {
@@ -144,15 +198,32 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
       _message = null;
     });
     try {
-      final result = await (widget.exportAction != null
-          ? widget.exportAction!(password)
-          : ShopBackupExporter.export(
-              database: widget.database,
-              password: password,
-              saveArchive: widget.saveArchive ?? _saveAs,
-              scratchRoot: widget.scratchRoot,
-              encryptedRoot: widget.encryptedRoot,
-            ));
+      final runtimeScope = widget.runtimeScope;
+      final ShopBackupExportResult result;
+      if (runtimeScope?.configuration.isSyntheticQa == true) {
+        final store =
+            widget.qaEvidenceStore ??
+            ShopQaEvidenceStore.forRuntime(runtimeScope!);
+        store.requireBoundTo(runtimeScope!);
+        await store.exportEncryptedBackup(
+          database: widget.database,
+          password: password,
+        );
+        result = ShopBackupExportResult.saved;
+      } else {
+        result = await (widget.exportAction != null
+            ? widget.exportAction!(password)
+            : ShopBackupExporter.export(
+                database: widget.database,
+                password: password,
+                saveArchive: widget.saveArchive ?? _saveAs,
+                scratchRoot: widget.scratchRoot,
+                encryptedRoot: widget.encryptedRoot,
+                runtimeScope: runtimeScope,
+                allowTestFileAccessWithoutScope:
+                    widget.allowTestFileAccessWithoutScope,
+              ));
+      }
       if (!mounted) return;
       _password.clear();
       _confirmation.clear();
@@ -160,8 +231,12 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
         _message = result == ShopBackupExportResult.saved
             ? shopCopy(
                 widget.myanmar,
-                'Backup file saved. Keep its password separately and store the file somewhere safe.',
-                'အရန်ကူးဖိုင်ကို သိမ်းပြီးပါပြီ။ စကားဝှက်ကို သီးခြားသိမ်းပြီး ဖိုင်ကို လုံခြုံသောနေရာတွင် ထားပါ။',
+                runtimeScope?.configuration.isSyntheticQa == true
+                    ? 'Synthetic QA recovery evidence saved inside this isolated app. It is not a production backup.'
+                    : 'Backup file saved. Keep its password separately and store the file somewhere safe.',
+                runtimeScope?.configuration.isSyntheticQa == true
+                    ? 'သီးခြားစမ်းသပ်အက်ပ်အတွင်း စမ်းသပ်ပြန်လည်ရယူရေးအထောက်အထားကို သိမ်းပြီးပါပြီ။ ထုတ်လုပ်ရေးအရန်ကူးမဟုတ်ပါ။'
+                    : 'အရန်ကူးဖိုင်ကို သိမ်းပြီးပါပြီ။ စကားဝှက်ကို သီးခြားသိမ်းပြီး ဖိုင်ကို လုံခြုံသောနေရာတွင် ထားပါ။',
               )
             : shopCopy(
                 widget.myanmar,
@@ -197,7 +272,9 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
     canPop: !_busy,
     child: Scaffold(
       appBar: AppBar(
-        title: Text(shopCopy(widget.myanmar, 'Export backup', 'အရန်ကူးဖိုင် ထုတ်ယူရန်')),
+        title: Text(
+          shopCopy(widget.myanmar, 'Export backup', 'အရန်ကူးဖိုင် ထုတ်ယူရန်'),
+        ),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -217,8 +294,8 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
               Text(
                 shopCopy(
                   widget.myanmar,
-                  'Includes sales, photos and payment settings. Keep the file and password safe. Online backup and in-app restore are not available yet.',
-                  'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။ ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူးနှင့် အက်ပ်အတွင်း ပြန်လည်ရယူခြင်း မရနိုင်သေးပါ။',
+                  'Includes sales, photos and payment settings. Keep the file and password safe. Online backup is not available. Restore this encrypted file from the start screen when this device has no local Shop yet.',
+                  'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။ ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။ ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။',
                 ),
               ),
               const SizedBox(height: 24),
@@ -229,7 +306,11 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                 enableSuggestions: false,
                 enabled: !_busy,
                 decoration: InputDecoration(
-                  labelText: shopCopy(widget.myanmar, 'Backup password', 'အရန်ကူးစကားဝှက်'),
+                  labelText: shopCopy(
+                    widget.myanmar,
+                    'Backup password',
+                    'အရန်ကူးစကားဝှက်',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -249,12 +330,28 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: _busy ? null : _export,
+                onPressed: !widget.backupSavingAllowed || _busy
+                    ? null
+                    : _export,
                 icon: const Icon(Icons.save_alt_outlined),
                 label: Text(
                   _busy
-                      ? shopCopy(widget.myanmar, 'Preparing backup…', 'အရန်ကူးဖိုင် ပြင်ဆင်နေသည်…')
-                      : shopCopy(widget.myanmar, 'Choose where to save', 'သိမ်းမည့်နေရာ ရွေးပါ'),
+                      ? shopCopy(
+                          widget.myanmar,
+                          'Preparing backup…',
+                          'အရန်ကူးဖိုင် ပြင်ဆင်နေသည်…',
+                        )
+                      : shopCopy(
+                          widget.myanmar,
+                          widget.runtimeScope?.configuration.isSyntheticQa ==
+                                  true
+                              ? 'Save synthetic QA evidence'
+                              : 'Choose where to save',
+                          widget.runtimeScope?.configuration.isSyntheticQa ==
+                                  true
+                              ? 'စမ်းသပ်အထောက်အထား သိမ်းရန်'
+                              : 'သိမ်းမည့်နေရာ ရွေးပါ',
+                        ),
                 ),
               ),
               if (_message != null) ...[

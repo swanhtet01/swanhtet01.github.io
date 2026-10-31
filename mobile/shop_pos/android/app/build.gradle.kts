@@ -4,6 +4,69 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val shopReleaseKeystorePath = providers.gradleProperty("SHOP_ANDROID_KEYSTORE_PATH").orNull
+val shopReleaseKeyAlias = providers.gradleProperty("SHOP_ANDROID_KEY_ALIAS").orNull
+val shopReleaseStorePassword = providers.gradleProperty("SHOP_ANDROID_STORE_PASSWORD").orNull
+val shopReleaseKeyPassword = providers.gradleProperty("SHOP_ANDROID_KEY_PASSWORD").orNull
+val shopReleaseSigningAvailable = listOf(
+    shopReleaseKeystorePath,
+    shopReleaseKeyAlias,
+    shopReleaseStorePassword,
+    shopReleaseKeyPassword,
+).all { !it.isNullOrBlank() }
+val shopGeneratedIdentity = rootProject.file("../lib/shop_build_identity.g.dart")
+
+fun verifyShopGeneratedIdentity(profile: String, qaProfile: String, identity: String) {
+    if (!shopGeneratedIdentity.isFile) {
+        throw GradleException("shop_android_build_identity_missing")
+    }
+    val source = shopGeneratedIdentity.readText()
+    val required = listOf(
+        "shopBuildIdentityProfile = '$profile'",
+        "shopBuildIdentityQaProfileId = '$qaProfile'",
+        "shopBuildIdentityPlatformIdentity = '$identity'",
+    )
+    if (!required.all(source::contains)) {
+        throw GradleException("shop_android_build_identity_mismatch")
+    }
+}
+
+val verifyShopAndroidProductionIdentity by tasks.registering {
+    doLast {
+        verifyShopGeneratedIdentity("production", "", "dev.supermega.supermega_shop")
+    }
+}
+val verifyShopAndroidQaIdentity by tasks.registering {
+    doLast {
+        verifyShopGeneratedIdentity(
+            "synthetic_qa_v1",
+            "synthetic-qa-v1",
+            "dev.supermega.supermega_shop.qa",
+        )
+    }
+}
+
+tasks.configureEach {
+    when {
+        name.startsWith("preProduction") && name.endsWith("Build") ->
+            dependsOn(verifyShopAndroidProductionIdentity)
+        name.startsWith("preQa") && name.endsWith("Build") ->
+            dependsOn(verifyShopAndroidQaIdentity)
+    }
+}
+
+gradle.taskGraph.whenReady {
+    val shopReleaseTaskPresent = allTasks.any {
+        it.project == project && it.name.contains("release", ignoreCase = true)
+    }
+    if (shopReleaseTaskPresent && !shopReleaseSigningAvailable) {
+        throw GradleException("shop_android_release_signing_unavailable")
+    }
+    if (shopReleaseTaskPresent && !file(shopReleaseKeystorePath!!).isFile) {
+        throw GradleException("shop_android_release_keystore_unavailable")
+    }
+}
+
 android {
     namespace = "dev.supermega.supermega_shop"
     compileSdk = flutter.compileSdkVersion
@@ -29,11 +92,33 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "runtimeProfile"
+    productFlavors {
+        create("production") {
+            dimension = "runtimeProfile"
+        }
+        create("qa") {
+            dimension = "runtimeProfile"
+            applicationIdSuffix = ".qa"
+        }
+    }
+
+    signingConfigs {
+        if (shopReleaseSigningAvailable) {
+            create("release") {
+                storeFile = file(shopReleaseKeystorePath!!)
+                keyAlias = shopReleaseKeyAlias
+                storePassword = shopReleaseStorePassword
+                keyPassword = shopReleaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (shopReleaseSigningAvailable) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }

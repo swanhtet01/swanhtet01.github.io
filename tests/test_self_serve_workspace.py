@@ -228,6 +228,41 @@ class SelfServeWorkspaceTests(unittest.TestCase):
         self.assertEqual(replay_body["workspace"]["label"], BUSINESS_NAME)
         self.assertEqual(replay_body["created_at"], first_body["created_at"])
 
+    def test_historical_owner_capabilities_remain_replayable_without_silent_upgrade(self) -> None:
+        historical_capabilities = frozenset(
+            {
+                "approvals.decide",
+                "approvals.read",
+                "approvals.request",
+                "company.baseline.approve",
+                "company.control.approve",
+                "company.read",
+                "company.write",
+                "commerce.read",
+                "commerce.write",
+                "setup.read",
+                "setup.write",
+            }
+        )
+        with activation_window("open"):
+            first = self._post()
+            workspace_id = self_serve_workspace_id(CLAIM_CODE)
+            membership_key = (workspace_id, OWNER_ACTOR_ID)
+            status, actor_kind, _capabilities = self.store._memberships[membership_key]
+            self.store._memberships[membership_key] = (
+                status,
+                actor_kind,
+                historical_capabilities,
+            )
+            replay = self._post()
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(replay.status_code, 200)
+        self.assertTrue(replay.json()["idempotent_replay"])
+        self.assertEqual(
+            self.store._memberships[membership_key][2],
+            historical_capabilities,
+        )
+
     def test_different_user_replay_of_the_same_claim_is_rejected(self) -> None:
         with activation_window("open"):
             first = self._post()

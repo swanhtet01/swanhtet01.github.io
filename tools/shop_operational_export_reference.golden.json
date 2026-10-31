@@ -1,0 +1,9 @@
+{
+  "contract": "supermega.shop.operational-csv.reference.golden.v1",
+  "fixture": "shop_operational_export_reference.fixture.json",
+  "sha256": "ac6b761b6401cbc004293012d8f8452d2e30f055bb19325f240982284f0cd778",
+  "byteLength": 6129,
+  "rowCount": 13,
+  "rowTypes": ["shift_summary", "sale", "sale_line", "stock_movement", "sale", "sale_line", "stock_movement", "reversal", "reversal_line", "stock_movement", "reversal", "reversal_line", "wallet_reconciliation"],
+  "summary": {"grossMmk":8000,"reversalMmk":8000,"netMmk":0,"cashReversalCount":1,"cashReversalMmk":5000,"expectedCashMmk":10000,"countedCashMmk":10000,"differenceMmk":0,"pendingWalletCount":1,"pendingWalletMmk":3000}
+}
