@@ -12,6 +12,7 @@ import 'shop_models.dart';
 import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_site_reconciliation.dart';
+import 'shop_connected_stock_reservation.dart';
 import 'shop_correction_consumption.dart';
 import 'shop_correction_receipt.dart';
 import 'shop_operational_export.dart';
@@ -1764,6 +1765,185 @@ const shopSiteAuditV23Sql = '''
   )
 ''';
 
+const shopConnectedStockReservationHeadersV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_stock_reservation_headers (
+    reservation_id TEXT PRIMARY KEY NOT NULL CHECK (length(reservation_id) BETWEEN 1 AND 128),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    capability TEXT NOT NULL CHECK (length(capability) BETWEEN 1 AND 80),
+    workflow_type TEXT CHECK (workflow_type IS NULL OR workflow_type IN ('retailCart', 'cafeOrder')),
+    subject_id TEXT CHECK (subject_id IS NULL OR length(subject_id) BETWEEN 1 AND 128),
+    basket_digest TEXT NOT NULL CHECK (length(basket_digest) = 64),
+    initial_reservation_digest TEXT NOT NULL CHECK (length(initial_reservation_digest) = 64),
+    reservation_json TEXT CHECK (reservation_json IS NULL OR json_valid(reservation_json)),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > issued_at_millis),
+    legacy_source INTEGER NOT NULL DEFAULT 0 CHECK (legacy_source IN (0, 1)),
+    CHECK ((legacy_source = 0 AND reservation_json IS NOT NULL AND
+      workflow_type IS NOT NULL AND subject_id IS NOT NULL) OR
+      (legacy_source = 1 AND reservation_json IS NULL AND
+       workflow_type IS NULL AND subject_id IS NULL))
+  )
+''';
+
+const shopConnectedStockReservationLinesV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_stock_reservation_lines (
+    reservation_id TEXT NOT NULL REFERENCES shop_connected_stock_reservation_headers(reservation_id),
+    product_id TEXT NOT NULL REFERENCES shop_products(id),
+    quantity INTEGER NOT NULL CHECK (quantity > 0 AND quantity <= 1000),
+    PRIMARY KEY (reservation_id, product_id)
+  )
+''';
+
+const shopConnectedStockReservationTransitionsV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_stock_reservation_transitions (
+    transition_id TEXT PRIMARY KEY NOT NULL CHECK (length(transition_id) BETWEEN 1 AND 160),
+    operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 160),
+    reservation_id TEXT NOT NULL REFERENCES shop_connected_stock_reservation_headers(reservation_id),
+    from_state TEXT NOT NULL CHECK (from_state = 'held'),
+    to_state TEXT NOT NULL CHECK (to_state IN ('released', 'expired', 'committed')),
+    before_digest TEXT NOT NULL CHECK (length(before_digest) = 64),
+    after_digest TEXT NOT NULL CHECK (length(after_digest) = 64),
+    transition_digest TEXT NOT NULL CHECK (length(transition_digest) = 64),
+    transition_json TEXT CHECK (transition_json IS NULL OR json_valid(transition_json)),
+    sale_id TEXT,
+    occurred_at_millis INTEGER NOT NULL CHECK (occurred_at_millis > 0),
+    legacy_source INTEGER NOT NULL DEFAULT 0 CHECK (legacy_source IN (0, 1)),
+    CHECK ((to_state = 'committed' AND
+      ((legacy_source = 0 AND sale_id IS NOT NULL) OR legacy_source = 1)) OR
+      (to_state != 'committed' AND sale_id IS NULL)),
+    CHECK ((legacy_source = 0 AND transition_json IS NOT NULL) OR
+      (legacy_source = 1 AND transition_json IS NULL))
+  )
+''';
+
+const shopConnectedStockReservationTransitionInsertGuardV24Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_stock_reservation_transition_insert_guard
+  BEFORE INSERT ON shop_connected_stock_reservation_transitions
+  WHEN EXISTS (
+    SELECT 1 FROM shop_connected_stock_reservation_transitions prior
+    WHERE prior.reservation_id = NEW.reservation_id
+  ) OR NOT EXISTS (
+    SELECT 1 FROM shop_connected_stock_reservation_headers header
+    WHERE header.reservation_id = NEW.reservation_id
+      AND NEW.occurred_at_millis >= header.issued_at_millis
+      AND (NEW.to_state != 'committed' OR header.legacy_source = 1 OR
+        NEW.occurred_at_millis < header.expires_at_millis)
+      AND (NEW.to_state != 'expired' OR NEW.occurred_at_millis >= header.expires_at_millis)
+  ) BEGIN
+    SELECT RAISE(ABORT, 'connected_stock_reservation_transition_invalid');
+  END
+''';
+
+const shopConnectedTrustedTimeV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_trusted_time (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id)
+  )
+''';
+
+const shopConnectedScopeBindingV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_scope_binding (
+    singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    enrollment_evidence_digest TEXT NOT NULL CHECK (length(enrollment_evidence_digest) = 64),
+    bound_at_millis INTEGER NOT NULL CHECK (bound_at_millis > 0)
+  )
+''';
+
+const shopConnectedTenderReservationBindingsV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_tender_reservation_bindings (
+    operation_id TEXT NOT NULL CHECK (length(operation_id) BETWEEN 1 AND 120),
+    tender_kind TEXT NOT NULL CHECK (tender_kind IN ('cash', 'wallet')),
+    reservation_id TEXT NOT NULL REFERENCES shop_connected_stock_reservation_headers(reservation_id),
+    reservation_digest TEXT NOT NULL CHECK (length(reservation_digest) = 64),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    workflow_type TEXT NOT NULL CHECK (workflow_type IN ('retailCart', 'cafeOrder')),
+    subject_id TEXT NOT NULL CHECK (length(subject_id) BETWEEN 1 AND 128),
+    basket_digest TEXT NOT NULL CHECK (length(basket_digest) = 64),
+    binding_digest TEXT NOT NULL CHECK (length(binding_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    PRIMARY KEY (operation_id, tender_kind)
+  )
+''';
+
+const shopConnectedTrustedTimeUpdateGuardV24Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_trusted_time_update_guard
+  BEFORE UPDATE ON shop_connected_trusted_time
+  WHEN NEW.tenant_id != OLD.tenant_id OR NEW.site_id != OLD.site_id OR
+    NEW.observed_at_millis < OLD.observed_at_millis
+  BEGIN
+    SELECT RAISE(ABORT, 'connected_trusted_time_regressed');
+  END
+''';
+
+Map<String, String> shopConnectedStockReservationSchemaDefinitionsV24() => {
+  'shop_connected_stock_reservation_headers':
+      shopConnectedStockReservationHeadersV24Sql,
+  'shop_connected_stock_reservation_lines':
+      shopConnectedStockReservationLinesV24Sql,
+  'shop_connected_stock_reservation_transitions':
+      shopConnectedStockReservationTransitionsV24Sql,
+  'shop_connected_stock_reservation_transition_insert_guard':
+      shopConnectedStockReservationTransitionInsertGuardV24Sql,
+  'shop_connected_trusted_time': shopConnectedTrustedTimeV24Sql,
+  'shop_connected_scope_binding': shopConnectedScopeBindingV24Sql,
+  'shop_connected_tender_reservation_bindings':
+      shopConnectedTenderReservationBindingsV24Sql,
+  'shop_connected_trusted_time_update_guard':
+      shopConnectedTrustedTimeUpdateGuardV24Sql,
+  'shop_connected_trusted_time_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_trusted_time',
+    operation: 'delete',
+    message: 'Connected trusted time cannot be removed',
+  ),
+  'shop_connected_scope_binding_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_scope_binding',
+    operation: 'update',
+    message: 'Connected stock scope binding is immutable',
+  ),
+  'shop_connected_scope_binding_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_scope_binding',
+    operation: 'delete',
+    message: 'Connected stock scope binding is immutable',
+  ),
+  'shop_connected_tender_reservation_bindings_no_update':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_connected_tender_reservation_bindings',
+        operation: 'update',
+        message: 'Connected tender reservation binding is immutable',
+      ),
+  'shop_connected_tender_reservation_bindings_no_delete':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_connected_tender_reservation_bindings',
+        operation: 'delete',
+        message: 'Connected tender reservation binding is immutable',
+      ),
+  for (final table in const [
+    'shop_connected_stock_reservation_headers',
+    'shop_connected_stock_reservation_lines',
+    'shop_connected_stock_reservation_transitions',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected stock reservation evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected stock reservation evidence is immutable',
+    ),
+  },
+};
+
 Map<String, String> shopConnectedSiteSchemaDefinitionsV23() {
   final definitions = <String, String>{
     'shop_site_devices': shopSiteDevicesV23Sql,
@@ -1818,6 +1998,440 @@ Map<String, String> shopConnectedSiteSchemaDefinitionsV23() {
   return definitions;
 }
 
+Map<String, String> shopConnectedSiteSchemaDefinitionsV24() => {
+  ...shopConnectedSiteSchemaDefinitionsV23(),
+  ...shopConnectedStockReservationSchemaDefinitionsV24(),
+};
+
+bool shopConnectedStockReservationRowsValidV24({
+  required Iterable<Map<String, Object?>> commands,
+  required Iterable<Map<String, Object?>> events,
+  required Iterable<Map<String, Object?>> headers,
+  required Iterable<Map<String, Object?>> lines,
+  required Iterable<Map<String, Object?>> transitions,
+  required Iterable<Map<String, Object?>> sales,
+  required Iterable<Map<String, Object?>> trustedTimes,
+  required Iterable<Map<String, Object?>> scopeBindings,
+  required Iterable<Map<String, Object?>> tenderBindings,
+  required Iterable<Map<String, Object?>> pendingCashCheckouts,
+  required Iterable<Map<String, Object?>> walletCheckoutIntents,
+}) {
+  try {
+    final commandById = <String, Map<String, Object?>>{
+      for (final row in commands) row['command_id']! as String: row,
+    };
+    final eventByCommand = <String, Map<String, Object?>>{};
+    for (final row in events) {
+      final commandId = row['command_id'];
+      if (commandId is! String ||
+          eventByCommand.putIfAbsent(commandId, () => row) != row) {
+        return false;
+      }
+    }
+    bool eventMatches({
+      required Map<String, Object?> event,
+      required String commandId,
+      required String tenantId,
+      required String siteId,
+      required String aggregateType,
+      required String aggregateId,
+      required String eventType,
+      required Map<String, Object?> payload,
+    }) {
+      final createdAt = event['created_at_millis'];
+      final eventId = event['event_id'];
+      final aggregateVersion = event['aggregate_version'];
+      if (createdAt is! int ||
+          createdAt <= 0 ||
+          eventId is! String ||
+          aggregateVersion is! int ||
+          aggregateVersion <= 0 ||
+          event['command_id'] != commandId ||
+          event['tenant_id'] != tenantId ||
+          event['site_id'] != siteId ||
+          event['aggregate_type'] != aggregateType ||
+          event['aggregate_id'] != aggregateId ||
+          event['event_type'] != eventType ||
+          event['payload_json'] != canonicalConnectedSiteJson(payload)) {
+        return false;
+      }
+      final envelope = <String, Object?>{
+        'eventId': eventId,
+        'workspaceId': tenantId,
+        'siteId': siteId,
+        'aggregateType': aggregateType,
+        'aggregateId': aggregateId,
+        'aggregateVersion': aggregateVersion,
+        'eventType': eventType,
+        'occurredAt': DateTime.fromMillisecondsSinceEpoch(
+          createdAt,
+          isUtc: true,
+        ).toIso8601String(),
+        'payload': payload,
+      };
+      return event['event_digest'] == connectedSiteSha256(envelope);
+    }
+
+    final saleById = <String, Map<String, Object?>>{
+      for (final row in sales) row['id']! as String: row,
+    };
+    final trustedByScope = <String, int>{};
+    for (final row in trustedTimes) {
+      final tenantId = row['tenant_id'];
+      final siteId = row['site_id'];
+      final observed = row['observed_at_millis'];
+      if (tenantId is! String ||
+          siteId is! String ||
+          observed is! int ||
+          observed <= 0) {
+        return false;
+      }
+      trustedByScope['$tenantId\u0000$siteId'] = observed;
+    }
+    final scopeRows = scopeBindings.toList(growable: false);
+    if (scopeRows.length > 1) return false;
+    String? boundScope;
+    if (scopeRows.isNotEmpty) {
+      final row = scopeRows.single;
+      final tenantId = row['tenant_id'];
+      final siteId = row['site_id'];
+      final singleton = row['singleton'];
+      final boundAt = row['bound_at_millis'];
+      final evidenceDigest = row['enrollment_evidence_digest'];
+      if (singleton != 1 ||
+          tenantId is! String ||
+          siteId is! String ||
+          evidenceDigest is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(evidenceDigest) ||
+          boundAt is! int ||
+          boundAt <= 0) {
+        return false;
+      }
+      boundScope = '$tenantId\u0000$siteId';
+    }
+    final linesByReservation = <String, List<Map<String, Object?>>>{};
+    for (final row in lines) {
+      final reservationId = row['reservation_id'];
+      final productId = row['product_id'];
+      final quantity = row['quantity'];
+      if (reservationId is! String ||
+          productId is! String ||
+          quantity is! int ||
+          quantity < 1 ||
+          quantity > 1000) {
+        return false;
+      }
+      linesByReservation.putIfAbsent(reservationId, () => []).add(row);
+    }
+    final transitionsByReservation = <String, List<Map<String, Object?>>>{};
+    for (final row in transitions) {
+      final reservationId = row['reservation_id'];
+      if (reservationId is! String) return false;
+      transitionsByReservation.putIfAbsent(reservationId, () => []).add(row);
+    }
+    final knownReservations = <String>{};
+    final headerByReservation = <String, Map<String, Object?>>{};
+    for (final header in headers) {
+      final reservationId = header['reservation_id'];
+      final commandId = header['command_id'];
+      if (reservationId is! String || commandId is! String) return false;
+      if (!knownReservations.add(reservationId)) return false;
+      headerByReservation[reservationId] = header;
+      if (boundScope != '${header['tenant_id']}\u0000${header['site_id']}') {
+        return false;
+      }
+      final command = commandById[commandId];
+      final reserveEvent = eventByCommand[commandId];
+      if (command == null ||
+          command['tenant_id'] != header['tenant_id'] ||
+          command['site_id'] != header['site_id'] ||
+          command['actor_id'] != header['actor_id'] ||
+          command['device_id'] != header['device_id'] ||
+          command['capability'] != header['capability'] ||
+          reserveEvent == null) {
+        return false;
+      }
+      final storedLines = linesByReservation[reservationId] ?? const [];
+      if (storedLines.isEmpty) return false;
+      final terminalRows = transitionsByReservation[reservationId] ?? const [];
+      if (terminalRows.length > 1) return false;
+      final legacy = header['legacy_source'] == 1;
+      if (legacy) {
+        if (header['reservation_json'] != null ||
+            header['workflow_type'] != null ||
+            header['subject_id'] != null ||
+            terminalRows.any(
+              (row) =>
+                  row['legacy_source'] != 1 || row['transition_json'] != null,
+            )) {
+          return false;
+        }
+        continue;
+      }
+      if (header['legacy_source'] != 0 ||
+          header['reservation_json'] is! String ||
+          header['workflow_type'] is! String ||
+          header['subject_id'] is! String) {
+        return false;
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(
+        jsonDecode(header['reservation_json']! as String),
+      );
+      if (reservation.state != ConnectedStockReservationState.held ||
+          reservation.stateVersion != 1 ||
+          reservation.reservationId != reservationId ||
+          reservation.workspaceId != header['tenant_id'] ||
+          reservation.siteId != header['site_id'] ||
+          reservation.actorId != header['actor_id'] ||
+          reservation.deviceId != header['device_id'] ||
+          reservation.capability.name != header['capability'] ||
+          reservation.workflowType.name != header['workflow_type'] ||
+          reservation.subjectId != header['subject_id'] ||
+          reservation.basketDigest != header['basket_digest'] ||
+          reservation.reservationDigest !=
+              header['initial_reservation_digest'] ||
+          DateTime.parse(reservation.issuedAt).millisecondsSinceEpoch !=
+              header['issued_at_millis'] ||
+          DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch !=
+              header['expires_at_millis'] ||
+          canonicalConnectedSiteJson(reservation.toJson()) !=
+              header['reservation_json']) {
+        return false;
+      }
+      final reservePayload = <String, Object?>{
+        'contract': _shopConnectedStockReservePayloadContract,
+        'reservation': reservation.toJson(),
+      };
+      if (command['payload_digest'] != connectedSiteSha256(reservePayload) ||
+          !eventMatches(
+            event: reserveEvent,
+            commandId: commandId,
+            tenantId: reservation.workspaceId,
+            siteId: reservation.siteId,
+            aggregateType: reservation.workflowType.name,
+            aggregateId: reservation.subjectId,
+            eventType: shopConnectedStockReservedEventType,
+            payload: reservePayload,
+          )) {
+        return false;
+      }
+      final expectedLines = reservation.lines;
+      storedLines.sort(
+        (left, right) => (left['product_id']! as String).compareTo(
+          right['product_id']! as String,
+        ),
+      );
+      if (storedLines.length != expectedLines.length) return false;
+      for (var index = 0; index < expectedLines.length; index++) {
+        if (storedLines[index]['product_id'] !=
+                expectedLines[index].productId ||
+            storedLines[index]['quantity'] != expectedLines[index].quantity) {
+          return false;
+        }
+      }
+      if (terminalRows.isEmpty) continue;
+      final terminal = terminalRows.single;
+      if (terminal['legacy_source'] != 0 ||
+          terminal['transition_json'] is! String) {
+        return false;
+      }
+      final transition = ConnectedStockReservationTransitionV1.fromJson(
+        jsonDecode(terminal['transition_json']! as String),
+      );
+      if (canonicalConnectedSiteJson(transition.before.toJson()) !=
+              canonicalConnectedSiteJson(reservation.toJson()) ||
+          transition.before.state.name != terminal['from_state'] ||
+          transition.after.state.name != terminal['to_state'] ||
+          transition.before.reservationDigest != terminal['before_digest'] ||
+          transition.after.reservationDigest != terminal['after_digest'] ||
+          transition.transitionDigest != terminal['transition_digest'] ||
+          canonicalConnectedSiteJson(transition.toJson()) !=
+              terminal['transition_json'] ||
+          DateTime.parse(transition.transitionedAt).millisecondsSinceEpoch !=
+              terminal['occurred_at_millis']) {
+        return false;
+      }
+      if (transition.after.state == ConnectedStockReservationState.committed) {
+        final saleId = terminal['sale_id'];
+        final binding = transition.saleBinding;
+        final sale = saleId is String ? saleById[saleId] : null;
+        if (binding == null ||
+            sale == null ||
+            binding.saleId != saleId ||
+            binding.saleCommandId != sale['operation_id'] ||
+            binding.saleCommandDigest !=
+                connectedSiteSha256({
+                  'operationId': sale['operation_id'],
+                  'requestFingerprint': sale['request_fingerprint'],
+                })) {
+          return false;
+        }
+      } else if (terminal['sale_id'] != null) {
+        return false;
+      }
+      if (transition.after.state == ConnectedStockReservationState.released) {
+        final releaseCommandId = terminal['operation_id'];
+        if (releaseCommandId is! String) return false;
+        final releaseCommand = commandById[releaseCommandId];
+        final releaseEvent = eventByCommand[releaseCommandId];
+        final releasePayload = <String, Object?>{
+          'contract': _shopConnectedStockReleasePayloadContract,
+          'reservationId': reservation.reservationId,
+          'expectedReservationDigest': reservation.reservationDigest,
+          'targetState': ConnectedStockReservationState.released.name,
+          'reason': transition.reason,
+        };
+        if (releaseCommand == null ||
+            releaseEvent == null ||
+            releaseCommand['payload_digest'] !=
+                connectedSiteSha256(releasePayload) ||
+            !eventMatches(
+              event: releaseEvent,
+              commandId: releaseCommandId,
+              tenantId: reservation.workspaceId,
+              siteId: reservation.siteId,
+              aggregateType: reservation.workflowType.name,
+              aggregateId: reservation.subjectId,
+              eventType: shopConnectedStockReleasedEventType,
+              payload: releasePayload,
+            )) {
+          return false;
+        }
+      } else {
+        final identityDigest = connectedSiteSha256({
+          'reservationId': reservation.reservationId,
+          'transitionDigest': transition.transitionDigest,
+          'state': transition.after.state.name,
+        });
+        final terminalCommandId = 'terminal:$identityDigest';
+        final terminalCommand = commandById[terminalCommandId];
+        final terminalEvent = eventByCommand[terminalCommandId];
+        final terminalPayload = <String, Object?>{
+          'contract': 'supermega.shop.connected-stock-terminal.v1',
+          'operationId':
+              transition.after.state == ConnectedStockReservationState.committed
+              ? transition.saleBinding!.saleCommandId
+              : terminal['operation_id'],
+          'reservationId': reservation.reservationId,
+          'beforeDigest': reservation.reservationDigest,
+          'afterDigest': transition.after.reservationDigest,
+          'state': transition.after.state.name,
+          'transitionDigest': transition.transitionDigest,
+          'transition': transition.toJson(),
+        };
+        final terminalEventType =
+            transition.after.state == ConnectedStockReservationState.committed
+            ? shopConnectedStockCommittedEventType
+            : shopConnectedStockExpiredEventType;
+        if (terminalCommand == null ||
+            terminalEvent == null ||
+            terminalCommand['payload_digest'] !=
+                connectedSiteSha256(terminalPayload) ||
+            !eventMatches(
+              event: terminalEvent,
+              commandId: terminalCommandId,
+              tenantId: reservation.workspaceId,
+              siteId: reservation.siteId,
+              aggregateType: reservation.workflowType.name,
+              aggregateId: reservation.subjectId,
+              eventType: terminalEventType,
+              payload: terminalPayload,
+            )) {
+          return false;
+        }
+      }
+      if (transition.after.state == ConnectedStockReservationState.committed ||
+          transition.after.state == ConnectedStockReservationState.expired) {
+        final observed =
+            trustedByScope['${reservation.workspaceId}\u0000${reservation.siteId}'];
+        if (observed == null ||
+            observed < (terminal['occurred_at_millis']! as int)) {
+          return false;
+        }
+      }
+    }
+    if (pendingCashCheckouts.any((row) => row['operation_id'] is! String) ||
+        walletCheckoutIntents.any(
+          (row) =>
+              row['operation_id'] is! String ||
+              !const {
+                'pending',
+                'cancelled',
+                'completed',
+              }.contains(row['state']),
+        )) {
+      return false;
+    }
+    final seenTenderOperations = <String>{};
+    for (final row in tenderBindings) {
+      final operationId = row['operation_id'];
+      final tenderKind = row['tender_kind'];
+      final reservationId = row['reservation_id'];
+      final createdAt = row['created_at_millis'];
+      if (operationId is! String ||
+          operationId.isEmpty ||
+          tenderKind is! String ||
+          !const {'cash', 'wallet'}.contains(tenderKind) ||
+          !seenTenderOperations.add('$operationId\u0000$tenderKind') ||
+          reservationId is! String ||
+          createdAt is! int ||
+          createdAt <= 0) {
+        return false;
+      }
+      final header = headerByReservation[reservationId];
+      if (header == null ||
+          header['legacy_source'] != 0 ||
+          header['reservation_json'] is! String) {
+        return false;
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(
+        jsonDecode(header['reservation_json']! as String),
+      );
+      final payload = <String, Object>{
+        'contract': 'supermega.shop.connected-tender-reservation.v1',
+        'operationId': operationId,
+        'tenderKind': tenderKind,
+        'reservationId': reservation.reservationId,
+        'reservationDigest': reservation.reservationDigest,
+        'workspaceId': reservation.workspaceId,
+        'siteId': reservation.siteId,
+        'workflowType': reservation.workflowType.name,
+        'subjectId': reservation.subjectId,
+        'basketDigest': reservation.basketDigest,
+      };
+      if (row['reservation_digest'] != reservation.reservationDigest ||
+          row['tenant_id'] != reservation.workspaceId ||
+          row['site_id'] != reservation.siteId ||
+          row['workflow_type'] != reservation.workflowType.name ||
+          row['subject_id'] != reservation.subjectId ||
+          row['basket_digest'] != reservation.basketDigest ||
+          row['binding_digest'] != connectedSiteSha256(payload) ||
+          (tenderKind == 'wallet' &&
+              reservation.workflowType !=
+                  ConnectedStockWorkflowType.retailCart) ||
+          trustedByScope['${reservation.workspaceId}\u0000${reservation.siteId}'] ==
+              null ||
+          trustedByScope['${reservation.workspaceId}\u0000${reservation.siteId}']! <
+              createdAt) {
+        return false;
+      }
+    }
+    return (knownReservations.isEmpty
+            ? boundScope == null
+            : boundScope != null) &&
+        linesByReservation.keys.every(knownReservations.contains) &&
+        transitionsByReservation.keys.every(knownReservations.contains) &&
+        trustedByScope.keys.every((scope) {
+          return headers.any(
+            (header) =>
+                '${header['tenant_id']}\u0000${header['site_id']}' == scope,
+          );
+        });
+  } on Object {
+    return false;
+  }
+}
+
 final shopKnownBaseObjectNames = <String>{
   'menu_import_drafts',
   'merchant_wallet_profiles',
@@ -1842,7 +2456,7 @@ final shopKnownBaseObjectNames = <String>{
   'shop_pending_cash_checkouts_counter_delete_freeze',
   'shop_pending_cash_checkouts_cafe_freeze',
   'shop_pending_cash_checkouts_shift_freeze',
-  ...{for (final name in shopConnectedSiteSchemaDefinitionsV23().keys) name},
+  ...{for (final name in shopConnectedSiteSchemaDefinitionsV24().keys) name},
 };
 
 const shopBaseTableColumnsV6 = <String, Set<String>>{
@@ -1966,7 +2580,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 23) return const {};
+  if (schemaVersion < 5 || schemaVersion > 24) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -2734,6 +3348,7 @@ enum _ShopUpgradeOrigin {
   unifiedV20,
   unifiedV21,
   unifiedV22,
+  unifiedV23,
 }
 
 enum ShopConnectedSiteCommandStatus { accepted, replayed, conflict }
@@ -2745,6 +3360,8 @@ class ShopConnectedSiteCommandResult {
     required this.ackDigest,
     required this.canonicalVersion,
     required this.eventSequence,
+    required this.eventDigest,
+    this.conflictCode,
   });
 
   final ShopConnectedSiteCommandStatus status;
@@ -2752,6 +3369,71 @@ class ShopConnectedSiteCommandResult {
   final String ackDigest;
   final int canonicalVersion;
   final int? eventSequence;
+  final String? eventDigest;
+  final String? conflictCode;
+}
+
+abstract interface class ShopConnectedSiteCoordinatorTimeAuthority {
+  Future<int> readValidatedNowMillis({
+    required String tenantId,
+    required String siteId,
+  });
+}
+
+class ShopConnectedSiteTimeUnavailable
+    implements ShopConnectedSiteCoordinatorTimeAuthority {
+  const ShopConnectedSiteTimeUnavailable();
+
+  @override
+  Future<int> readValidatedNowMillis({
+    required String tenantId,
+    required String siteId,
+  }) => throw StateError('Connected-site trusted time is unavailable.');
+}
+
+enum ShopConnectedStockReservationDisposition { accepted, replayed, conflict }
+
+const shopConnectedStockReservedEventType = 'shop.connected_stock.reserved.v1';
+const shopConnectedStockReleasedEventType = 'shop.connected_stock.released.v1';
+const shopConnectedStockCommittedEventType =
+    'shop.connected_stock.committed.v1';
+const shopConnectedStockExpiredEventType = 'shop.connected_stock.expired.v1';
+const _shopConnectedStockReservePayloadContract =
+    'supermega.shop.connected-stock-reserve.v1';
+const _shopConnectedStockReleasePayloadContract =
+    'supermega.shop.connected-stock-release.v1';
+
+class ShopConnectedStockReservationResult {
+  const ShopConnectedStockReservationResult({
+    required this.disposition,
+    required this.canonicalVersion,
+    required this.eventDigest,
+    required this.ackDigest,
+    this.conflictCode,
+    this.reservation,
+    this.transition,
+  });
+
+  final ShopConnectedStockReservationDisposition disposition;
+  final int canonicalVersion;
+  final String? eventDigest;
+  final String ackDigest;
+  final String? conflictCode;
+  final ConnectedStockReservationV1? reservation;
+  final ConnectedStockReservationTransitionV1? transition;
+}
+
+class ShopConnectedStockReservationLifecycleInput {
+  const ShopConnectedStockReservationLifecycleInput.release({
+    required this.reservationId,
+    required this.expectedReservationDigest,
+    required this.reason,
+  }) : targetState = ConnectedStockReservationState.released;
+
+  final String reservationId;
+  final String expectedReservationDigest;
+  final String reason;
+  final ConnectedStockReservationState targetState;
 }
 
 class ShopConnectedSiteCommandInput {
@@ -2780,6 +3462,8 @@ class ShopConnectedSiteCommandInput {
     this.reservationProductId,
     this.reservationQuantity,
     this.reservationExpiresAtMillis,
+    this.stockReservation,
+    this.stockReservationLifecycle,
   });
 
   final String commandId;
@@ -2806,6 +3490,8 @@ class ShopConnectedSiteCommandInput {
   final String? reservationProductId;
   final int? reservationQuantity;
   final int? reservationExpiresAtMillis;
+  final ConnectedStockReservationV1? stockReservation;
+  final ShopConnectedStockReservationLifecycleInput? stockReservationLifecycle;
 }
 
 class _ShopCorrectionReconciliationRequired implements Exception {
@@ -2877,7 +3563,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v23.');
+        throw StateError('The staged Shop restore did not reach schema v24.');
       }
     } finally {
       await database.close();
@@ -2944,7 +3630,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2970,6 +3656,8 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV22Schema();
       await _createConnectedSiteSchemaV23();
       await _requireUnifiedV23Schema();
+      await _createConnectedStockReservationSchemaV24();
+      await _requireUnifiedV24Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
@@ -3121,6 +3809,7 @@ class ShopDatabase extends _$ShopDatabase {
         allowCafeV20: from >= 20,
         allowCashCheckoutV21: from >= 21,
         allowCashTenderV22: from >= 22,
+        allowConnectedV23: from >= 23,
       );
       if (from < 20) {
         await _createCafeCancellationSchemaV20();
@@ -3128,27 +3817,35 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV20Schema(
         allowCashCheckoutV21: from >= 21,
         allowCashTenderV22: from >= 22,
+        allowConnectedV23: from >= 23,
       );
       if (from < 21) {
         await _createPendingCashCheckoutSchemaV21();
       }
-      await _requireUnifiedV21Schema(allowCashTenderV22: from >= 22);
+      await _requireUnifiedV21Schema(
+        allowCashTenderV22: from >= 22,
+        allowConnectedV23: from >= 23,
+      );
       if (from < 22) {
         await _createCashTenderSchemaV22();
       }
-      await _requireUnifiedV22Schema();
+      await _requireUnifiedV22Schema(allowConnectedV23: from >= 23);
       if (from < 23) {
         await _createConnectedSiteSchemaV23();
       }
       await _requireUnifiedV23Schema();
+      if (from < 24) {
+        await _migrateConnectedStockReservationSchemaV24();
+      }
+      await _requireUnifiedV24Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV23Schema();
+      await _requireUnifiedV24Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV23Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV24Schema();
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
     final qrSnapshotColumns = includeQrSnapshot
@@ -3271,6 +3968,120 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedSiteSchemaV23() async {
     for (final definition in shopConnectedSiteSchemaDefinitionsV23().values) {
       await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedStockReservationSchemaV24() async {
+    for (final definition
+        in shopConnectedStockReservationSchemaDefinitionsV24().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _migrateConnectedStockReservationSchemaV24() async {
+    await _createConnectedStockReservationSchemaV24();
+    final legacy = await customSelect(
+      'SELECT reservation.*, command.tenant_id, command.site_id, '
+      'command.actor_id, command.device_id, command.capability '
+      'FROM shop_site_stock_reservations reservation '
+      'JOIN shop_site_commands command ON command.command_id = reservation.command_id '
+      'ORDER BY reservation.reservation_id',
+    ).get();
+    final legacyScopes = {
+      for (final row in legacy)
+        '${row.read<String>('tenant_id')}\u0000${row.read<String>('site_id')}',
+    };
+    if (legacyScopes.length > 1) {
+      throw StateError(
+        'Legacy connected stock reservations span multiple local scopes.',
+      );
+    }
+    if (legacy.isNotEmpty) {
+      final first = legacy.first;
+      await customInsert(
+        'INSERT INTO shop_connected_scope_binding '
+        '(singleton, tenant_id, site_id, enrollment_evidence_digest, '
+        'bound_at_millis) VALUES (1, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(first.read<String>('tenant_id')),
+          Variable<String>(first.read<String>('site_id')),
+          Variable<String>(
+            await _sha256Hex(
+              'legacy-v23-scope:${first.read<String>('tenant_id')}:'
+              '${first.read<String>('site_id')}',
+            ),
+          ),
+          Variable<int>(first.read<int>('created_at_millis')),
+        ],
+      );
+    }
+    for (final row in legacy) {
+      final reservationId = row.read<String>('reservation_id');
+      final productId = row.read<String>('product_id');
+      final quantity = row.read<int>('quantity');
+      final created = row.read<int>('created_at_millis');
+      final linesDigest = await _sha256Hex(
+        canonicalConnectedSiteJson([
+          {'productId': productId, 'quantity': quantity},
+        ]),
+      );
+      final initialDigest = await _sha256Hex(
+        'legacy-v23:$reservationId:$linesDigest:$created',
+      );
+      await customInsert(
+        'INSERT INTO shop_connected_stock_reservation_headers '
+        '(reservation_id, command_id, tenant_id, site_id, actor_id, device_id, '
+        'capability, workflow_type, subject_id, basket_digest, initial_reservation_digest, reservation_json, '
+        'issued_at_millis, expires_at_millis, legacy_source) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, ?, ?, 1)',
+        variables: [
+          Variable<String>(reservationId),
+          Variable<String>(row.read<String>('command_id')),
+          Variable<String>(row.read<String>('tenant_id')),
+          Variable<String>(row.read<String>('site_id')),
+          Variable<String>(row.read<String>('actor_id')),
+          Variable<String>(row.read<String>('device_id')),
+          Variable<String>(row.read<String>('capability')),
+          Variable<String>(linesDigest),
+          Variable<String>(initialDigest),
+          Variable<int>(created),
+          Variable<int>(row.read<int>('expires_at_millis')),
+        ],
+      );
+      await customInsert(
+        'INSERT INTO shop_connected_stock_reservation_lines '
+        '(reservation_id, product_id, quantity) VALUES (?, ?, ?)',
+        variables: [
+          Variable<String>(reservationId),
+          Variable<String>(productId),
+          Variable<int>(quantity),
+        ],
+      );
+      final state = row.read<String>('state');
+      if (state != 'held') {
+        final resolved = row.read<int>('resolved_at_millis');
+        final afterDigest = await _sha256Hex('$initialDigest:$state:$resolved');
+        final transitionDigest = await _sha256Hex(
+          'legacy-v23-transition:$reservationId:$state:$resolved',
+        );
+        await customInsert(
+          'INSERT INTO shop_connected_stock_reservation_transitions '
+          '(transition_id, operation_id, reservation_id, from_state, to_state, '
+          'before_digest, after_digest, transition_digest, transition_json, '
+          'sale_id, occurred_at_millis, legacy_source) '
+          "VALUES (?, ?, ?, 'held', ?, ?, ?, ?, NULL, NULL, ?, 1)",
+          variables: [
+            Variable<String>('legacy-v23:$reservationId'),
+            Variable<String>('legacy-v23:$reservationId'),
+            Variable<String>(reservationId),
+            Variable<String>(state),
+            Variable<String>(initialDigest),
+            Variable<String>(afterDigest),
+            Variable<String>(transitionDigest),
+            Variable<int>(resolved),
+          ],
+        );
+      }
     }
   }
 
@@ -4123,8 +4934,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 22) {
-      throw StateError('This Shop database version cannot migrate to v23.');
+    if (from < 1 || from > 23) {
+      throw StateError('This Shop database version cannot migrate to v24.');
+    }
+    if (from == 23) {
+      await _requireUnifiedV23Schema();
+      return _ShopUpgradeOrigin.unifiedV23;
     }
     if (from == 22) {
       await _requireUnifiedV22Schema();
@@ -4642,6 +5457,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
     bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
   }) async {
     await _requireDatabaseIntegrity();
     final objects = await _readSchemaObjects();
@@ -4672,7 +5488,11 @@ class ShopDatabase extends _$ShopDatabase {
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
       if (allowConnectedV23)
-        for (final entry in shopConnectedSiteSchemaDefinitionsV23().entries)
+        for (final entry
+            in (allowReservationV24
+                    ? shopConnectedSiteSchemaDefinitionsV24()
+                    : shopConnectedSiteSchemaDefinitionsV23())
+                .entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
     };
@@ -4689,7 +5509,10 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCafeV20) ...shopCafeCancellationSchemaDefinitionsV20().keys,
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
-      if (allowConnectedV23) ...shopConnectedSiteSchemaDefinitionsV23().keys,
+      if (allowConnectedV23)
+        ...(allowReservationV24
+            ? shopConnectedSiteSchemaDefinitionsV24().keys
+            : shopConnectedSiteSchemaDefinitionsV23().keys),
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -4845,6 +5668,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
     bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
   }) async {
     await _requireUnifiedV18Schema(
       allowCafeV19: true,
@@ -4852,6 +5676,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowCashCheckoutV21: allowCashCheckoutV21,
       allowCashTenderV22: allowCashTenderV22,
       allowConnectedV23: allowConnectedV23,
+      allowReservationV24: allowReservationV24,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeOrderSchemaDefinitionsV19();
@@ -4872,7 +5697,10 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCafeV20) ...shopCafeCancellationSchemaDefinitionsV20().keys,
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
-      if (allowConnectedV23) ...shopConnectedSiteSchemaDefinitionsV23().keys,
+      if (allowConnectedV23)
+        ...(allowReservationV24
+            ? shopConnectedSiteSchemaDefinitionsV24().keys
+            : shopConnectedSiteSchemaDefinitionsV23().keys),
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -4887,12 +5715,14 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
     bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
   }) async {
     await _requireUnifiedV19Schema(
       allowCafeV20: true,
       allowCashCheckoutV21: allowCashCheckoutV21,
       allowCashTenderV22: allowCashTenderV22,
       allowConnectedV23: allowConnectedV23,
+      allowReservationV24: allowReservationV24,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeCancellationSchemaDefinitionsV20();
@@ -4907,11 +5737,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _requireUnifiedV21Schema({
     bool allowCashTenderV22 = false,
     bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
   }) async {
     await _requireUnifiedV20Schema(
       allowCashCheckoutV21: true,
       allowCashTenderV22: allowCashTenderV22,
       allowConnectedV23: allowConnectedV23,
+      allowReservationV24: allowReservationV24,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopPendingCashCheckoutSchemaDefinitionsV21();
@@ -5008,10 +5840,12 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _requireUnifiedV22Schema({
     bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
   }) async {
     await _requireUnifiedV21Schema(
       allowCashTenderV22: true,
       allowConnectedV23: allowConnectedV23,
+      allowReservationV24: allowReservationV24,
     );
     final columns = await customSelect('PRAGMA table_info(shop_sales)').get();
     if (!columns.any(
@@ -5064,8 +5898,13 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<void> _requireUnifiedV23Schema() async {
-    await _requireUnifiedV22Schema(allowConnectedV23: true);
+  Future<void> _requireUnifiedV23Schema({
+    bool allowReservationV24 = false,
+  }) async {
+    await _requireUnifiedV22Schema(
+      allowConnectedV23: true,
+      allowReservationV24: allowReservationV24,
+    );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedSiteSchemaDefinitionsV23();
     if (!_definitionGroupExact(
@@ -5153,6 +5992,60 @@ class ShopDatabase extends _$ShopDatabase {
         ) LIMIT 1
       ''').getSingleOrNull();
       return siteSequenceGap == null;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> _requireUnifiedV24Schema() async {
+    await _requireUnifiedV23Schema(allowReservationV24: true);
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedStockReservationSchemaDefinitionsV24();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v24ConnectedStockReservationRowsValid()) {
+      throw StateError(
+        'The unified Shop v24 connected-stock schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v24ConnectedStockReservationRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String sql) async =>
+          (await customSelect(sql).get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedStockReservationRowsValidV24(
+        commands: await rows('SELECT * FROM shop_site_commands'),
+        events: await rows('SELECT * FROM shop_site_events'),
+        headers: await rows(
+          'SELECT * FROM shop_connected_stock_reservation_headers',
+        ),
+        lines: await rows(
+          'SELECT * FROM shop_connected_stock_reservation_lines',
+        ),
+        transitions: await rows(
+          'SELECT * FROM shop_connected_stock_reservation_transitions',
+        ),
+        sales: await rows(
+          'SELECT id, operation_id, request_fingerprint FROM shop_sales',
+        ),
+        trustedTimes: await rows('SELECT * FROM shop_connected_trusted_time'),
+        scopeBindings: await rows('SELECT * FROM shop_connected_scope_binding'),
+        tenderBindings: await rows(
+          'SELECT * FROM shop_connected_tender_reservation_bindings',
+        ),
+        pendingCashCheckouts: await rows(
+          'SELECT operation_id FROM shop_pending_cash_checkouts',
+        ),
+        walletCheckoutIntents: await rows(
+          'SELECT operation_id, state FROM shop_wallet_checkout_intents',
+        ),
+      );
     } on Object {
       return false;
     }
@@ -6529,12 +7422,15 @@ class ShopDatabase extends _$ShopDatabase {
   Future<ShopConnectedSiteCommandResult> applyConnectedSiteCommand(
     ShopConnectedSiteCommandInput input, {
     required bool connectedSiteEnabled,
+    ShopConnectedSiteCoordinatorTimeAuthority timeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) async {
     if (!connectedSiteEnabled) {
       throw StateError('Connected-site commands are disabled.');
     }
     _validateConnectedSiteCommandInput(input);
     final payload = _connectedSiteEventPayload(input.eventPayloadJson);
+    final stockPayload = _connectedStockCommandPayload(input, payload);
     final canonicalPayloadJson = canonicalConnectedSiteJson(payload);
     final eventEnvelope = _connectedSiteEventEnvelope(
       input,
@@ -6546,16 +7442,37 @@ class ShopDatabase extends _$ShopDatabase {
     }
     return transaction(() async {
       final existing = await customSelect(
-        'SELECT command.command_digest, command.state, ack.status, '
-        'ack.site_sequence, ack.canonical_version, ack.ack_digest '
+        'SELECT command.command_digest, command.state, command.tenant_id, '
+        'command.site_id, command.actor_id, command.device_id, '
+        'command.aggregate_type, command.aggregate_id, command.capability, '
+        'command.expected_version, command.payload_digest, command.lease_digest, '
+        'command.received_at_millis, ack.status, '
+        'ack.site_sequence, ack.canonical_version, ack.ack_digest, '
+        'event.event_digest, conflict.reason_code '
         'FROM shop_site_commands command '
         'JOIN shop_site_command_acks ack '
         'ON ack.command_id = command.command_id '
+        'LEFT JOIN shop_site_events event ON event.command_id = command.command_id '
+        'LEFT JOIN shop_site_conflicts conflict ON conflict.command_id = command.command_id '
         'WHERE command.command_id = ?',
         variables: [Variable<String>(input.commandId)],
       ).getSingleOrNull();
       if (existing != null) {
-        if (existing.read<String>('command_digest') != input.commandDigest) {
+        if (existing.read<String>('command_digest') != input.commandDigest ||
+            existing.read<String>('tenant_id') != input.tenantId ||
+            existing.read<String>('site_id') != input.siteId ||
+            existing.read<String>('actor_id') != input.actorId ||
+            existing.read<String>('device_id') != input.deviceId ||
+            existing.read<String>('aggregate_type') != input.aggregateType ||
+            existing.read<String>('aggregate_id') != input.aggregateId ||
+            existing.read<String>('capability') != input.capability ||
+            existing.read<int>('expected_version') != input.expectedVersion ||
+            existing.read<String>('payload_digest') != input.payloadDigest ||
+            existing.read<String>('lease_digest') != input.leaseDigest ||
+            existing.read<int>('received_at_millis') != input.createdAtMillis ||
+            (existing.read<String>('state') == 'accepted' &&
+                existing.readNullable<String>('event_digest') !=
+                    input.eventDigest)) {
           throw StateError(
             'A connected-site command ID was reused with different bytes.',
           );
@@ -6569,8 +7486,19 @@ class ShopDatabase extends _$ShopDatabase {
           ackDigest: existing.read<String>('ack_digest'),
           canonicalVersion: existing.read<int>('canonical_version'),
           eventSequence: existing.readNullable<int>('site_sequence'),
+          eventDigest: existing.readNullable<String>('event_digest'),
+          conflictCode: existing.readNullable<String>('reason_code'),
         );
       }
+
+      final trustedNow =
+          stockPayload.reservation == null && stockPayload.lifecycle == null
+          ? null
+          : await _validatedConnectedSiteNow(
+              timeAuthority,
+              tenantId: input.tenantId,
+              siteId: input.siteId,
+            );
 
       final authority = await customSelect(
         'SELECT lease.capabilities_json, lease.session_generation, '
@@ -6610,6 +7538,52 @@ class ShopDatabase extends _$ShopDatabase {
           !capabilities.contains(input.capability)) {
         throw StateError('The offline lease lacks this capability.');
       }
+      if (trustedNow != null) {
+        const maxSkewMillis = 2 * 60 * 1000;
+        if ((input.createdAtMillis - trustedNow).abs() > maxSkewMillis ||
+            trustedNow < authority.read<int>('issued_at_millis') ||
+            trustedNow >= authority.read<int>('expires_at_millis')) {
+          throw StateError('Connected-site command time is outside policy.');
+        }
+        final reservation = stockPayload.reservation;
+        if (reservation != null) {
+          final issuedAt = DateTime.parse(reservation.issuedAt)
+              .millisecondsSinceEpoch;
+          final expiresAt = DateTime.parse(reservation.expiresAt)
+              .millisecondsSinceEpoch;
+          if ((issuedAt - trustedNow).abs() > maxSkewMillis ||
+              expiresAt <= trustedNow ||
+              expiresAt >
+                  trustedNow + const Duration(hours: 24).inMilliseconds ||
+              expiresAt > authority.read<int>('expires_at_millis')) {
+            throw StateError(
+              'Connected stock reservation time is outside policy.',
+            );
+          }
+        }
+      }
+
+      final scopeBinding = trustedNow == null
+          ? null
+          : await customSelect(
+              'SELECT tenant_id, site_id FROM shop_connected_scope_binding '
+              'WHERE singleton = 1',
+            ).getSingleOrNull();
+      final scopeMatches =
+          trustedNow == null ||
+          (scopeBinding != null &&
+              scopeBinding.read<String>('tenant_id') == input.tenantId &&
+              scopeBinding.read<String>('site_id') == input.siteId);
+      if (trustedNow != null && !scopeMatches) {
+        throw StateError('Connected stock scope does not match this database.');
+      }
+      if (trustedNow != null && scopeMatches) {
+        await _requireConnectedTrustedTimeNotRegressed(
+          tenantId: input.tenantId,
+          siteId: input.siteId,
+          nowMillis: trustedNow,
+        );
+      }
 
       final aggregate = await customSelect(
         'SELECT version FROM shop_site_aggregate_versions '
@@ -6625,24 +7599,92 @@ class ShopDatabase extends _$ShopDatabase {
       final currentVersion = aggregate?.read<int>('version') ?? 0;
 
       String? conflictReason;
-      if (currentVersion != input.expectedVersion) {
+      ConnectedStockReservationTransitionV1? lifecycleTransition;
+      if (!scopeMatches) {
+        conflictReason = 'connected_scope_mismatch';
+      } else if (currentVersion != input.expectedVersion) {
         conflictReason = 'aggregate_version_mismatch';
-      } else if (input.reservationProductId != null) {
-        final product = await customSelect(
-          'SELECT product.on_hand - COALESCE(SUM(reservation.quantity), 0) '
-          'AS available FROM shop_products product '
-          'LEFT JOIN shop_site_stock_reservations reservation '
-          "ON reservation.product_id = product.id AND reservation.state = 'held' "
-          'WHERE product.id = ? GROUP BY product.id, product.on_hand',
-          variables: [Variable<String>(input.reservationProductId!)],
+      } else if (stockPayload.reservation != null) {
+        for (final line in stockPayload.reservation!.lines) {
+          final product = await customSelect(
+            'SELECT on_hand FROM shop_products WHERE id = ? AND archived = 0',
+            variables: [Variable<String>(line.productId)],
+          ).getSingleOrNull();
+          final reserved = await _readTotalReservedStockQuantity(
+            line.productId,
+          );
+          if (product == null ||
+              product.read<int>('on_hand') - reserved < line.quantity) {
+            conflictReason = 'stock_reservation_unavailable';
+            break;
+          }
+        }
+      } else if (stockPayload.lifecycle case final lifecycle?) {
+        final header = await customSelect(
+          'SELECT reservation_json, legacy_source, workflow_type, subject_id, '
+          'capability FROM '
+          'shop_connected_stock_reservation_headers '
+          'WHERE reservation_id = ? AND tenant_id = ? AND site_id = ? '
+          'AND actor_id = ? AND device_id = ? '
+          'AND workflow_type = ? AND subject_id = ? AND capability = ?',
+          variables: [
+            Variable<String>(lifecycle.reservationId),
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+            Variable<String>(input.actorId),
+            Variable<String>(input.deviceId),
+            Variable<String>(input.aggregateType),
+            Variable<String>(input.aggregateId),
+            Variable<String>(input.capability),
+          ],
         ).getSingleOrNull();
-        if (product == null ||
-            product.read<int>('available') < input.reservationQuantity!) {
-          conflictReason = 'stock_reservation_unavailable';
+        if (header == null) {
+          conflictReason = 'reservation_not_found';
+        } else if (header.read<int>('legacy_source') == 1) {
+          conflictReason = 'reservation_legacy_unadoptable';
+        } else {
+          final terminal = await customSelect(
+            'SELECT 1 FROM shop_connected_stock_reservation_transitions '
+            'WHERE reservation_id = ? LIMIT 1',
+            variables: [Variable<String>(lifecycle.reservationId)],
+          ).getSingleOrNull();
+          if (terminal != null) {
+            conflictReason = 'reservation_terminal';
+          } else {
+            final reservation = ConnectedStockReservationV1.fromJson(
+              jsonDecode(header.read<String>('reservation_json')),
+            );
+            if (reservation.reservationDigest !=
+                lifecycle.expectedReservationDigest) {
+              conflictReason = 'reservation_digest_mismatch';
+            } else if (trustedNow! <
+                    DateTime.parse(reservation.issuedAt)
+                        .millisecondsSinceEpoch ||
+                trustedNow >=
+                    DateTime.parse(reservation.expiresAt)
+                        .millisecondsSinceEpoch) {
+              conflictReason = 'reservation_time_invalid';
+            } else {
+              lifecycleTransition = transitionConnectedStockReservation(
+                reservation: reservation,
+                expectedReservationDigest: lifecycle.expectedReservationDigest,
+                targetState: lifecycle.targetState,
+                transitionedAt: _connectedSiteOccurredAt(trustedNow),
+                reason: lifecycle.reason,
+              );
+            }
+          }
         }
       }
 
       if (conflictReason != null) {
+        if (trustedNow != null && scopeBinding != null && scopeMatches) {
+          await _recordConnectedTrustedTime(
+            tenantId: input.tenantId,
+            siteId: input.siteId,
+            nowMillis: trustedNow,
+          );
+        }
         final conflictDigest = await _sha256Hex(
           '${input.commandDigest}:$conflictReason:$currentVersion',
         );
@@ -6697,10 +7739,19 @@ class ShopDatabase extends _$ShopDatabase {
           ackDigest: conflictDigest,
           canonicalVersion: currentVersion,
           eventSequence: null,
+          eventDigest: null,
+          conflictCode: conflictReason,
         );
       }
 
       final nextVersion = currentVersion + 1;
+      if (trustedNow != null) {
+        await _recordConnectedTrustedTime(
+          tenantId: input.tenantId,
+          siteId: input.siteId,
+          nowMillis: trustedNow,
+        );
+      }
       await customInsert(
         'INSERT INTO shop_site_commands '
         '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
@@ -6774,20 +7825,17 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(input.createdAtMillis),
         ],
       );
-      if (input.reservationProductId != null) {
-        await customInsert(
-          'INSERT INTO shop_site_stock_reservations '
-          '(reservation_id, command_id, product_id, quantity, state, '
-          'expires_at_millis, created_at_millis) '
-          "VALUES (?, ?, ?, ?, 'held', ?, ?)",
-          variables: [
-            Variable<String>(input.reservationId!),
-            Variable<String>(input.commandId),
-            Variable<String>(input.reservationProductId!),
-            Variable<int>(input.reservationQuantity!),
-            Variable<int>(input.reservationExpiresAtMillis!),
-            Variable<int>(input.createdAtMillis),
-          ],
+      if (stockPayload.reservation != null) {
+        await _insertConnectedStockReservation(
+          stockPayload.reservation!,
+          commandId: input.commandId,
+        );
+      }
+      if (lifecycleTransition != null) {
+        await _insertConnectedStockTransition(
+          lifecycleTransition,
+          operationId: input.commandId,
+          saleId: null,
         );
       }
       await customInsert(
@@ -6822,6 +7870,8 @@ class ShopDatabase extends _$ShopDatabase {
         ackDigest: input.ackDigest,
         canonicalVersion: nextVersion,
         eventSequence: siteSequence,
+        eventDigest: input.eventDigest,
+        conflictCode: null,
       );
     });
   }
@@ -6890,6 +7940,1051 @@ class ShopDatabase extends _$ShopDatabase {
         .toList(growable: false);
   }
 
+  Future<void> _insertConnectedStockReservation(
+    ConnectedStockReservationV1 reservation, {
+    required String commandId,
+  }) async {
+    await customInsert(
+      'INSERT INTO shop_connected_stock_reservation_headers '
+      '(reservation_id, command_id, tenant_id, site_id, actor_id, device_id, '
+      'capability, workflow_type, subject_id, basket_digest, '
+      'initial_reservation_digest, reservation_json, issued_at_millis, '
+      'expires_at_millis, legacy_source) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+      variables: [
+        Variable<String>(reservation.reservationId),
+        Variable<String>(commandId),
+        Variable<String>(reservation.workspaceId),
+        Variable<String>(reservation.siteId),
+        Variable<String>(reservation.actorId),
+        Variable<String>(reservation.deviceId),
+        Variable<String>(reservation.capability.name),
+        Variable<String>(reservation.workflowType.name),
+        Variable<String>(reservation.subjectId),
+        Variable<String>(reservation.basketDigest),
+        Variable<String>(reservation.reservationDigest),
+        Variable<String>(canonicalConnectedSiteJson(reservation.toJson())),
+        Variable<int>(
+          DateTime.parse(reservation.issuedAt).millisecondsSinceEpoch,
+        ),
+        Variable<int>(
+          DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch,
+        ),
+      ],
+    );
+    for (final line in reservation.lines) {
+      await customInsert(
+        'INSERT INTO shop_connected_stock_reservation_lines '
+        '(reservation_id, product_id, quantity) VALUES (?, ?, ?)',
+        variables: [
+          Variable<String>(reservation.reservationId),
+          Variable<String>(line.productId),
+          Variable<int>(line.quantity),
+        ],
+      );
+    }
+  }
+
+  Future<int> _readConnectedHeldQuantity(
+    String productId, {
+    String? excludingReservationId,
+  }) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(line.quantity), 0) AS quantity '
+      'FROM shop_connected_stock_reservation_lines line '
+      'JOIN shop_connected_stock_reservation_headers header '
+      'ON header.reservation_id = line.reservation_id '
+      'WHERE line.product_id = ? '
+      "AND (? = '' OR header.reservation_id != ?) "
+      'AND NOT EXISTS (SELECT 1 FROM shop_connected_stock_reservation_transitions transition_row '
+      'WHERE transition_row.reservation_id = header.reservation_id)',
+      variables: [
+        Variable<String>(productId),
+        Variable<String>(excludingReservationId ?? ''),
+        Variable<String>(excludingReservationId ?? ''),
+      ],
+    ).getSingle();
+    return row.read<int>('quantity');
+  }
+
+  Future<int> _readPendingWalletReservedQuantity(
+    String productId, {
+    String? excludingOperationId,
+  }) async {
+    final rows = await customSelect(
+      'SELECT intent.operation_id, intent.basket_json, '
+      'binding.operation_id AS connected_binding_operation_id '
+      'FROM shop_wallet_checkout_intents intent '
+      'LEFT JOIN shop_connected_tender_reservation_bindings binding '
+      "ON binding.operation_id = intent.operation_id AND binding.tender_kind = 'wallet' "
+      "WHERE intent.state = 'pending'",
+    ).get();
+    var quantity = 0;
+    for (final row in rows) {
+      if (row.read<String>('operation_id') == excludingOperationId) continue;
+      if (row.readNullable<String>('connected_binding_operation_id') != null) {
+        continue;
+      }
+      final decoded = jsonDecode(row.read<String>('basket_json'));
+      if (decoded is! List) {
+        throw StateError('The pending wallet basket is invalid.');
+      }
+      for (final value in decoded) {
+        if (value is Map && value['productId'] == productId) {
+          final lineQuantity = value['quantity'];
+          if (lineQuantity is! int || lineQuantity < 1) {
+            throw StateError('The pending wallet basket is invalid.');
+          }
+          quantity += lineQuantity;
+        }
+      }
+    }
+    return quantity;
+  }
+
+  Future<int> _readTotalReservedStockQuantity(
+    String productId, {
+    String? excludingConnectedReservationId,
+    String? excludingPendingCashOperationId,
+    String? excludingWalletOperationId,
+    bool includeWallet = true,
+  }) async {
+    final connected = await _readConnectedHeldQuantity(
+      productId,
+      excludingReservationId: excludingConnectedReservationId,
+    );
+    final cash = await readPendingCashReservedQuantity(
+      productId,
+      excludingOperationId: excludingPendingCashOperationId,
+    );
+    final wallet = includeWallet
+        ? await _readPendingWalletReservedQuantity(
+            productId,
+            excludingOperationId: excludingWalletOperationId,
+          )
+        : 0;
+    final total = connected + cash + wallet;
+    if (total > 2000000000) {
+      throw StateError('Reserved stock exceeds the supported range.');
+    }
+    return total;
+  }
+
+  /// Shared stock-availability oracle for transaction-scoped sale workflows.
+  ///
+  /// Callers completing an existing hold must exclude only that exact hold.
+  /// The query includes connected reservations, pending cash checkouts, and
+  /// pending wallet checkouts in the caller's current SQLite transaction.
+  Future<int> readReservedStockQuantity(
+    String productId, {
+    String? excludingConnectedReservationId,
+    String? excludingPendingCashOperationId,
+    String? excludingWalletOperationId,
+  }) => _readTotalReservedStockQuantity(
+    productId,
+    excludingConnectedReservationId: excludingConnectedReservationId,
+    excludingPendingCashOperationId: excludingPendingCashOperationId,
+    excludingWalletOperationId: excludingWalletOperationId,
+  );
+
+  Map<String, Object> _connectedTenderBindingPayload({
+    required String operationId,
+    required String tenderKind,
+    required ConnectedStockReservationV1 reservation,
+  }) => {
+    'contract': 'supermega.shop.connected-tender-reservation.v1',
+    'operationId': operationId,
+    'tenderKind': tenderKind,
+    'reservationId': reservation.reservationId,
+    'reservationDigest': reservation.reservationDigest,
+    'workspaceId': reservation.workspaceId,
+    'siteId': reservation.siteId,
+    'workflowType': reservation.workflowType.name,
+    'subjectId': reservation.subjectId,
+    'basketDigest': reservation.basketDigest,
+  };
+
+  Future<void> _insertConnectedTenderReservationBinding({
+    required String operationId,
+    required String tenderKind,
+    required ConnectedStockReservationV1 reservation,
+    required int createdAtMillis,
+  }) async {
+    final payload = _connectedTenderBindingPayload(
+      operationId: operationId,
+      tenderKind: tenderKind,
+      reservation: reservation,
+    );
+    await customInsert(
+      'INSERT OR IGNORE INTO shop_connected_tender_reservation_bindings '
+      '(operation_id, tender_kind, reservation_id, reservation_digest, '
+      'tenant_id, site_id, workflow_type, subject_id, basket_digest, '
+      'binding_digest, created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(operationId),
+        Variable<String>(tenderKind),
+        Variable<String>(reservation.reservationId),
+        Variable<String>(reservation.reservationDigest),
+        Variable<String>(reservation.workspaceId),
+        Variable<String>(reservation.siteId),
+        Variable<String>(reservation.workflowType.name),
+        Variable<String>(reservation.subjectId),
+        Variable<String>(reservation.basketDigest),
+        Variable<String>(connectedSiteSha256(payload)),
+        Variable<int>(createdAtMillis),
+      ],
+    );
+    await _requireConnectedTenderReservationBinding(
+      operationId: operationId,
+      tenderKind: tenderKind,
+      reservation: reservation,
+    );
+  }
+
+  Future<void> _requireConnectedTenderReservationBinding({
+    required String operationId,
+    required String tenderKind,
+    required ConnectedStockReservationV1? reservation,
+  }) async {
+    final row = await customSelect(
+      'SELECT reservation_id, reservation_digest, tenant_id, site_id, '
+      'workflow_type, subject_id, basket_digest, binding_digest '
+      'FROM shop_connected_tender_reservation_bindings WHERE operation_id = ? '
+      'AND tender_kind = ?',
+      variables: [Variable<String>(operationId), Variable<String>(tenderKind)],
+    ).getSingleOrNull();
+    if (row == null && reservation == null) return;
+    if (row == null || reservation == null) {
+      throw StateError(
+        'The pending tender connected reservation binding changed.',
+      );
+    }
+    final payload = _connectedTenderBindingPayload(
+      operationId: operationId,
+      tenderKind: tenderKind,
+      reservation: reservation,
+    );
+    if (row.read<String>('reservation_id') != reservation.reservationId ||
+        row.read<String>('reservation_digest') !=
+            reservation.reservationDigest ||
+        row.read<String>('tenant_id') != reservation.workspaceId ||
+        row.read<String>('site_id') != reservation.siteId ||
+        row.read<String>('workflow_type') != reservation.workflowType.name ||
+        row.read<String>('subject_id') != reservation.subjectId ||
+        row.read<String>('basket_digest') != reservation.basketDigest ||
+        row.read<String>('binding_digest') != connectedSiteSha256(payload)) {
+      throw StateError(
+        'The pending tender connected reservation binding changed.',
+      );
+    }
+  }
+
+  /// Verifies that an already-persisted cash or wallet intent adopted exactly
+  /// the reservation supplied by its owning sale transaction.
+  Future<void> requireConnectedTenderReservationBindingForSale({
+    required String operationId,
+    required String tenderKind,
+    required ConnectedStockReservationV1? reservation,
+  }) => _requireConnectedTenderReservationBinding(
+    operationId: operationId,
+    tenderKind: tenderKind,
+    reservation: reservation,
+  );
+
+  /// Verifies an idempotent completed-sale replay without reading fresh time.
+  ///
+  /// A committed transition is immutable proof of the reservation and sale
+  /// command bytes that were accepted by the original transaction.
+  Future<void> requireConnectedStockReservationSaleReplay({
+    required String saleId,
+    required String saleCommandId,
+    required String saleRequestFingerprint,
+    required ConnectedStockReservationV1? reservation,
+  }) async {
+    final rows = await customSelect(
+      'SELECT transition_json FROM '
+      'shop_connected_stock_reservation_transitions '
+      "WHERE to_state = 'committed' AND sale_id = ?",
+      variables: [Variable<String>(saleId)],
+    ).get();
+    if (reservation == null) {
+      if (rows.isNotEmpty) {
+        throw StateError(
+          'The completed sale requires its connected reservation.',
+        );
+      }
+      return;
+    }
+    if (rows.length != 1 ||
+        rows.single.readNullable<String>('transition_json') == null) {
+      throw StateError('The connected reservation is not bound to this sale.');
+    }
+    final transition = ConnectedStockReservationTransitionV1.fromJson(
+      jsonDecode(rows.single.read<String>('transition_json')),
+    );
+    final saleCommandDigest = connectedSiteSha256({
+      'operationId': saleCommandId,
+      'requestFingerprint': saleRequestFingerprint,
+    });
+    if (canonicalConnectedSiteJson(transition.before.toJson()) !=
+            canonicalConnectedSiteJson(reservation.toJson()) ||
+        transition.saleBinding?.saleId != saleId ||
+        transition.saleBinding?.saleCommandId != saleCommandId ||
+        transition.saleBinding?.saleCommandDigest != saleCommandDigest) {
+      throw StateError('The connected reservation is not bound to this sale.');
+    }
+  }
+
+  Future<int> _validatedConnectedSiteNow(
+    ShopConnectedSiteCoordinatorTimeAuthority authority, {
+    required String tenantId,
+    required String siteId,
+  }) async {
+    final now = await authority.readValidatedNowMillis(
+      tenantId: tenantId,
+      siteId: siteId,
+    );
+    if (now <= 0) {
+      throw StateError('Connected-site trusted time is invalid.');
+    }
+    return now;
+  }
+
+  Future<void> _recordConnectedTrustedTime({
+    required String tenantId,
+    required String siteId,
+    required int nowMillis,
+  }) async {
+    await _requireConnectedTrustedTimeNotRegressed(
+      tenantId: tenantId,
+      siteId: siteId,
+      nowMillis: nowMillis,
+    );
+    await customInsert(
+      'INSERT INTO shop_connected_trusted_time '
+      '(tenant_id, site_id, observed_at_millis) VALUES (?, ?, ?) '
+      'ON CONFLICT(tenant_id, site_id) DO UPDATE SET '
+      'observed_at_millis = excluded.observed_at_millis',
+      variables: [
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<int>(nowMillis),
+      ],
+    );
+  }
+
+  Future<void> _requireConnectedTrustedTimeNotRegressed({
+    required String tenantId,
+    required String siteId,
+    required int nowMillis,
+  }) async {
+    final prior = await customSelect(
+      'SELECT observed_at_millis FROM shop_connected_trusted_time '
+      'WHERE tenant_id = ? AND site_id = ?',
+      variables: [Variable<String>(tenantId), Variable<String>(siteId)],
+    ).getSingleOrNull();
+    if (prior != null && prior.read<int>('observed_at_millis') > nowMillis) {
+      throw StateError('Connected-site trusted time regressed.');
+    }
+  }
+
+  /// Validates an exact connected hold for adoption by an outer sale
+  /// transaction and persists the coordinator's nondecreasing trusted time.
+  ///
+  /// A café or other owner must call this inside the same [transaction] that
+  /// writes its sale, stock movements, outbox event, receipt, and terminal
+  /// reservation transition.
+  Future<int> validateConnectedStockReservationForSale({
+    required ConnectedStockReservationV1 reservation,
+    required String operationId,
+    required ConnectedStockWorkflowType workflowType,
+    required ShopStaffCapability capability,
+    required String subjectId,
+    required Map<String, int> productQuantities,
+    required ShopConnectedSiteCoordinatorTimeAuthority timeAuthority,
+  }) async {
+    final binding = await customSelect(
+      'SELECT tenant_id, site_id FROM shop_connected_scope_binding '
+      'WHERE singleton = 1',
+    ).getSingleOrNull();
+    if (binding == null ||
+        binding.read<String>('tenant_id') != reservation.workspaceId ||
+        binding.read<String>('site_id') != reservation.siteId) {
+      throw StateError('Connected stock scope does not match this database.');
+    }
+    final nowMillis = await _validatedConnectedSiteNow(
+      timeAuthority,
+      tenantId: reservation.workspaceId,
+      siteId: reservation.siteId,
+    );
+    await _recordConnectedTrustedTime(
+      tenantId: reservation.workspaceId,
+      siteId: reservation.siteId,
+      nowMillis: nowMillis,
+    );
+    await _requireAdoptableConnectedStockReservation(
+      reservation,
+      operationId: operationId,
+      workflowType: workflowType,
+      capability: capability,
+      subjectId: subjectId,
+      productQuantities: productQuantities,
+      nowMillis: nowMillis,
+    );
+    return nowMillis;
+  }
+
+  /// Commits a previously validated connected hold inside the owner's outer
+  /// sale transaction. The referenced sale must already exist in that same
+  /// transaction, so rollback removes the sale and transition together.
+  Future<ConnectedStockReservationTransitionV1>
+  commitConnectedStockReservationForSale({
+    required ConnectedStockReservationV1 reservation,
+    required String saleId,
+    required String saleCommandId,
+    required String saleCommandDigest,
+    required ConnectedStockWorkflowType workflowType,
+    required ShopStaffCapability capability,
+    required String subjectId,
+    required Map<String, int> productQuantities,
+    required int validatedNowMillis,
+  }) async {
+    final trustedTime = await customSelect(
+      'SELECT observed_at_millis FROM shop_connected_trusted_time '
+      'WHERE tenant_id = ? AND site_id = ?',
+      variables: [
+        Variable<String>(reservation.workspaceId),
+        Variable<String>(reservation.siteId),
+      ],
+    ).getSingleOrNull();
+    if (trustedTime == null ||
+        trustedTime.read<int>('observed_at_millis') != validatedNowMillis) {
+      throw StateError(
+        'The connected reservation trusted-time validation is unavailable.',
+      );
+    }
+    await _requireAdoptableConnectedStockReservation(
+      reservation,
+      operationId: saleCommandId,
+      workflowType: workflowType,
+      capability: capability,
+      subjectId: subjectId,
+      productQuantities: productQuantities,
+      nowMillis: validatedNowMillis,
+    );
+    final sale = await customSelect(
+      'SELECT 1 FROM shop_sales WHERE id = ? AND operation_id = ?',
+      variables: [Variable<String>(saleId), Variable<String>(saleCommandId)],
+    ).getSingleOrNull();
+    if (sale == null) {
+      throw StateError(
+        'The connected reservation sale is not in this transaction.',
+      );
+    }
+    final committedAt = DateTime.fromMillisecondsSinceEpoch(
+      validatedNowMillis,
+      isUtc: true,
+    ).toIso8601String();
+    final binding = ConnectedStockSaleBindingV1.create(
+      reservation: reservation,
+      saleId: saleId,
+      saleCommandId: saleCommandId,
+      saleCommandDigest: saleCommandDigest,
+      committedAt: committedAt,
+    );
+    final transition = transitionConnectedStockReservation(
+      reservation: reservation,
+      expectedReservationDigest: reservation.reservationDigest,
+      targetState: ConnectedStockReservationState.committed,
+      transitionedAt: committedAt,
+      reason: 'sale_committed',
+      saleBinding: binding,
+    );
+    await _insertConnectedStockTransition(
+      transition,
+      operationId:
+          'commit:${connectedSiteSha256({'saleCommandId': saleCommandId})}',
+      saleId: saleId,
+    );
+    await _appendConnectedStockTerminalSiteEvent(
+      transition,
+      operationId: saleCommandId,
+    );
+    return transition;
+  }
+
+  Future<ShopConnectedStockReservationResult> expireConnectedStockReservation({
+    required String tenantId,
+    required String siteId,
+    required String reservationId,
+    required String expectedReservationDigest,
+    required String operationId,
+    required ShopConnectedSiteCoordinatorTimeAuthority timeAuthority,
+    bool connectedSiteEnabled = false,
+  }) {
+    if (!connectedSiteEnabled) {
+      throw StateError('Connected-site reservation expiry is disabled.');
+    }
+    return _transitionConnectedStockReservation(
+      tenantId: tenantId,
+      siteId: siteId,
+      reservationId: reservationId,
+      expectedReservationDigest: expectedReservationDigest,
+      operationId: operationId,
+      reason: 'trusted_time_expiry',
+      targetState: ConnectedStockReservationState.expired,
+      timeAuthority: timeAuthority,
+    );
+  }
+
+  Future<ShopConnectedStockReservationResult>
+  _transitionConnectedStockReservation({
+    required String tenantId,
+    required String siteId,
+    required String reservationId,
+    required String expectedReservationDigest,
+    required String operationId,
+    required String reason,
+    required ConnectedStockReservationState targetState,
+    required ShopConnectedSiteCoordinatorTimeAuthority timeAuthority,
+  }) async {
+    return transaction(() async {
+      final replay = await customSelect(
+        'SELECT reservation_id, to_state, before_digest, transition_json, '
+        'transition_digest FROM '
+        'shop_connected_stock_reservation_transitions WHERE operation_id = ?',
+        variables: [Variable<String>(operationId)],
+      ).getSingleOrNull();
+      if (replay != null) {
+        final json = replay.readNullable<String>('transition_json');
+        if (json == null) {
+          final expectedDigest = connectedSiteSha256({
+            'contract': 'supermega.shop.legacy-stock-transition.v1',
+            'tenantId': tenantId,
+            'siteId': siteId,
+            'reservationId': reservationId,
+            'expectedReservationDigest': expectedReservationDigest,
+            'targetState': targetState.name,
+            'reason': reason,
+            'operationId': operationId,
+          });
+          if (replay.read<String>('reservation_id') != reservationId ||
+              replay.read<String>('before_digest') !=
+                  expectedReservationDigest ||
+              replay.read<String>('to_state') != targetState.name ||
+              replay.read<String>('transition_digest') != expectedDigest) {
+            throw StateError(
+              'A reservation operation ID was reused differently.',
+            );
+          }
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.replayed,
+            canonicalVersion: 2,
+            eventDigest: expectedDigest,
+            ackDigest: expectedDigest,
+          );
+        }
+        final transition = ConnectedStockReservationTransitionV1.fromJson(
+          jsonDecode(json),
+        );
+        if (transition.before.reservationId != reservationId ||
+            transition.before.workspaceId != tenantId ||
+            transition.before.siteId != siteId ||
+            transition.before.reservationDigest != expectedReservationDigest ||
+            transition.after.state != targetState ||
+            transition.reason != reason) {
+          throw StateError(
+            'A reservation operation ID was reused differently.',
+          );
+        }
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.replayed,
+          canonicalVersion: transition.after.stateVersion,
+          eventDigest: transition.transitionDigest,
+          ackDigest: transition.transitionDigest,
+          transition: transition,
+        );
+      }
+      final now = await _validatedConnectedSiteNow(
+        timeAuthority,
+        tenantId: tenantId,
+        siteId: siteId,
+      );
+      final binding = await customSelect(
+        'SELECT tenant_id, site_id FROM shop_connected_scope_binding '
+        'WHERE singleton = 1',
+      ).getSingleOrNull();
+      if (binding == null ||
+          binding.read<String>('tenant_id') != tenantId ||
+          binding.read<String>('site_id') != siteId) {
+        throw StateError('Connected stock scope does not match this database.');
+      }
+      await _recordConnectedTrustedTime(
+        tenantId: tenantId,
+        siteId: siteId,
+        nowMillis: now,
+      );
+      final header = await customSelect(
+        'SELECT reservation_json, legacy_source, initial_reservation_digest, '
+        'issued_at_millis, expires_at_millis FROM '
+        'shop_connected_stock_reservation_headers '
+        'WHERE reservation_id = ? AND tenant_id = ? AND site_id = ?',
+        variables: [
+          Variable<String>(reservationId),
+          Variable<String>(tenantId),
+          Variable<String>(siteId),
+        ],
+      ).getSingleOrNull();
+      if (header == null) {
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.conflict,
+          canonicalVersion: 0,
+          eventDigest: null,
+          ackDigest: expectedReservationDigest,
+          conflictCode: 'reservation_not_found',
+        );
+      }
+      if (header.read<int>('legacy_source') == 1) {
+        if (targetState != ConnectedStockReservationState.expired) {
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.conflict,
+            canonicalVersion: 1,
+            eventDigest: null,
+            ackDigest: expectedReservationDigest,
+            conflictCode: 'reservation_legacy_unadoptable',
+          );
+        }
+        final storedDigest = header.read<String>('initial_reservation_digest');
+        if (storedDigest != expectedReservationDigest) {
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.conflict,
+            canonicalVersion: 1,
+            eventDigest: storedDigest,
+            ackDigest: storedDigest,
+            conflictCode: 'reservation_digest_mismatch',
+          );
+        }
+        final terminal = await customSelect(
+          'SELECT after_digest FROM '
+          'shop_connected_stock_reservation_transitions '
+          'WHERE reservation_id = ? LIMIT 1',
+          variables: [Variable<String>(reservationId)],
+        ).getSingleOrNull();
+        if (terminal != null) {
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.conflict,
+            canonicalVersion: 2,
+            eventDigest: terminal.read<String>('after_digest'),
+            ackDigest: terminal.read<String>('after_digest'),
+            conflictCode: 'reservation_terminal',
+          );
+        }
+        if (now < header.read<int>('expires_at_millis')) {
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.conflict,
+            canonicalVersion: 1,
+            eventDigest: null,
+            ackDigest: storedDigest,
+            conflictCode: 'reservation_not_expired',
+          );
+        }
+        final afterDigest = connectedSiteSha256({
+          'contract': 'supermega.shop.legacy-stock-after.v1',
+          'reservationId': reservationId,
+          'beforeDigest': storedDigest,
+          'targetState': targetState.name,
+          'occurredAtMillis': now,
+        });
+        final transitionDigest = connectedSiteSha256({
+          'contract': 'supermega.shop.legacy-stock-transition.v1',
+          'tenantId': tenantId,
+          'siteId': siteId,
+          'reservationId': reservationId,
+          'expectedReservationDigest': storedDigest,
+          'targetState': targetState.name,
+          'reason': reason,
+          'operationId': operationId,
+        });
+        await customInsert(
+          'INSERT INTO shop_connected_stock_reservation_transitions '
+          '(transition_id, operation_id, reservation_id, from_state, to_state, '
+          'before_digest, after_digest, transition_digest, transition_json, '
+          'sale_id, occurred_at_millis, legacy_source) '
+          "VALUES (?, ?, ?, 'held', 'expired', ?, ?, ?, NULL, NULL, ?, 1)",
+          variables: [
+            Variable<String>(
+              'transition:${connectedSiteSha256({'operationId': operationId})}',
+            ),
+            Variable<String>(operationId),
+            Variable<String>(reservationId),
+            Variable<String>(storedDigest),
+            Variable<String>(afterDigest),
+            Variable<String>(transitionDigest),
+            Variable<int>(now),
+          ],
+        );
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.accepted,
+          canonicalVersion: 2,
+          eventDigest: transitionDigest,
+          ackDigest: transitionDigest,
+        );
+      }
+      final priorTransition = await customSelect(
+        'SELECT to_state, after_digest FROM '
+        'shop_connected_stock_reservation_transitions WHERE reservation_id = ?',
+        variables: [Variable<String>(reservationId)],
+      ).getSingleOrNull();
+      if (priorTransition != null) {
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.conflict,
+          canonicalVersion: 2,
+          eventDigest: priorTransition.read<String>('after_digest'),
+          ackDigest: priorTransition.read<String>('after_digest'),
+          conflictCode: 'reservation_terminal',
+        );
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(
+        jsonDecode(header.read<String>('reservation_json')),
+      );
+      if (reservation.reservationDigest != expectedReservationDigest) {
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.conflict,
+          canonicalVersion: reservation.stateVersion,
+          eventDigest: reservation.reservationDigest,
+          ackDigest: reservation.reservationDigest,
+          conflictCode: 'reservation_digest_mismatch',
+        );
+      }
+      final at = DateTime.fromMillisecondsSinceEpoch(
+        now,
+        isUtc: true,
+      ).toIso8601String();
+      final transition = transitionConnectedStockReservation(
+        reservation: reservation,
+        expectedReservationDigest: expectedReservationDigest,
+        targetState: targetState,
+        transitionedAt: at,
+        reason: reason,
+      );
+      await _insertConnectedStockTransition(
+        transition,
+        operationId: operationId,
+        saleId: null,
+      );
+      if (targetState == ConnectedStockReservationState.expired) {
+        await _appendConnectedStockTerminalSiteEvent(
+          transition,
+          operationId: operationId,
+        );
+      }
+      return ShopConnectedStockReservationResult(
+        disposition: ShopConnectedStockReservationDisposition.accepted,
+        canonicalVersion: transition.after.stateVersion,
+        eventDigest: transition.transitionDigest,
+        ackDigest: transition.transitionDigest,
+        transition: transition,
+      );
+    });
+  }
+
+  Future<void> _insertConnectedStockTransition(
+    ConnectedStockReservationTransitionV1 transition, {
+    required String operationId,
+    required String? saleId,
+  }) async {
+    await customInsert(
+      'INSERT INTO shop_connected_stock_reservation_transitions '
+      '(transition_id, operation_id, reservation_id, from_state, to_state, '
+      'before_digest, after_digest, transition_digest, transition_json, sale_id, '
+      'occurred_at_millis, legacy_source) '
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, 0)",
+      variables: [
+        Variable<String>(
+          'transition:${connectedSiteSha256({'operationId': operationId})}',
+        ),
+        Variable<String>(operationId),
+        Variable<String>(transition.before.reservationId),
+        Variable<String>(transition.before.state.name),
+        Variable<String>(transition.after.state.name),
+        Variable<String>(transition.before.reservationDigest),
+        Variable<String>(transition.after.reservationDigest),
+        Variable<String>(transition.transitionDigest),
+        Variable<String>(canonicalConnectedSiteJson(transition.toJson())),
+        Variable<String>(saleId ?? ''),
+        Variable<int>(
+          DateTime.parse(transition.transitionedAt).millisecondsSinceEpoch,
+        ),
+      ],
+    );
+  }
+
+  /// Appends a coordinator-derived terminal reservation event atomically with
+  /// the sale or expiry transaction. The synthetic command retains the
+  /// authenticated authority of the original hold; it never invents a new
+  /// actor, lease, device, or client signature.
+  Future<void> _appendConnectedStockTerminalSiteEvent(
+    ConnectedStockReservationTransitionV1 transition, {
+    required String operationId,
+  }) async {
+    final state = transition.after.state;
+    if (state != ConnectedStockReservationState.committed &&
+        state != ConnectedStockReservationState.expired) {
+      throw StateError('Only terminal stock events can be appended here.');
+    }
+    final source = await customSelect(
+      'SELECT header.tenant_id, header.site_id, header.actor_id, '
+      'header.device_id, header.capability, header.workflow_type, '
+      'header.subject_id, command.lease_digest, command.received_at_millis '
+      'FROM shop_connected_stock_reservation_headers header '
+      'JOIN shop_site_commands command ON command.command_id = header.command_id '
+      'WHERE header.reservation_id = ? AND header.legacy_source = 0',
+      variables: [Variable<String>(transition.before.reservationId)],
+    ).getSingleOrNull();
+    if (source == null) {
+      throw StateError('Connected reservation event authority is unavailable.');
+    }
+    final tenantId = source.read<String>('tenant_id');
+    final siteId = source.read<String>('site_id');
+    final aggregateType = source.read<String>('workflow_type');
+    final aggregateId = source.read<String>('subject_id');
+    final occurredAtMillis = DateTime.parse(transition.transitionedAt)
+        .millisecondsSinceEpoch;
+    final eventType = state == ConnectedStockReservationState.committed
+        ? shopConnectedStockCommittedEventType
+        : shopConnectedStockExpiredEventType;
+    final payload = <String, Object?>{
+      'contract': 'supermega.shop.connected-stock-terminal.v1',
+      'operationId': operationId,
+      'reservationId': transition.before.reservationId,
+      'beforeDigest': transition.before.reservationDigest,
+      'afterDigest': transition.after.reservationDigest,
+      'state': state.name,
+      'transitionDigest': transition.transitionDigest,
+      'transition': transition.toJson(),
+    };
+    final payloadJson = canonicalConnectedSiteJson(payload);
+    final payloadDigest = connectedSiteSha256(payload);
+    final identityDigest = connectedSiteSha256({
+      'reservationId': transition.before.reservationId,
+      'transitionDigest': transition.transitionDigest,
+      'state': state.name,
+    });
+    final commandId = 'terminal:$identityDigest';
+    final eventId = 'terminal-event:$identityDigest';
+    final existing = await customSelect(
+      'SELECT event.event_digest, event.payload_json, event.event_type, '
+      'event.aggregate_version '
+      'FROM shop_site_commands command JOIN shop_site_events event '
+      'ON event.command_id = command.command_id WHERE command.command_id = ?',
+      variables: [Variable<String>(commandId)],
+    ).getSingleOrNull();
+    final versionRow = await customSelect(
+      'SELECT version FROM shop_site_aggregate_versions WHERE tenant_id = ? '
+      'AND site_id = ? AND aggregate_type = ? AND aggregate_id = ?',
+      variables: [
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(aggregateType),
+        Variable<String>(aggregateId),
+      ],
+    ).getSingleOrNull();
+    if (versionRow == null) {
+      throw StateError('Connected reservation aggregate is unavailable.');
+    }
+    final nextVersion = existing == null
+        ? versionRow.read<int>('version') + 1
+        : existing.read<int>('aggregate_version');
+    final eventEnvelope = <String, Object?>{
+      'eventId': eventId,
+      'workspaceId': tenantId,
+      'siteId': siteId,
+      'aggregateType': aggregateType,
+      'aggregateId': aggregateId,
+      'aggregateVersion': nextVersion,
+      'eventType': eventType,
+      'occurredAt': _connectedSiteOccurredAt(occurredAtMillis),
+      'payload': payload,
+    };
+    final eventDigest = connectedSiteSha256(eventEnvelope);
+    if (existing != null) {
+      if (existing.read<String>('event_digest') != eventDigest ||
+          existing.read<String>('payload_json') != payloadJson ||
+          existing.read<String>('event_type') != eventType) {
+        throw StateError('Connected terminal event identity changed.');
+      }
+      return;
+    }
+    final commandDigest = connectedSiteSha256({
+      'contract': 'supermega.shop.connected-stock-terminal-command.v1',
+      'commandId': commandId,
+      'workspaceId': tenantId,
+      'siteId': siteId,
+      'actorId': source.read<String>('actor_id'),
+      'deviceId': source.read<String>('device_id'),
+      'aggregateType': aggregateType,
+      'aggregateId': aggregateId,
+      'expectedVersion': nextVersion - 1,
+      'payloadDigest': payloadDigest,
+      'leaseDigest': source.read<String>('lease_digest'),
+    });
+    await customInsert(
+      'INSERT INTO shop_site_commands '
+      '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+      'aggregate_type, capability, expected_version, payload_digest, '
+      'lease_digest, command_digest, state, received_at_millis) '
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?)",
+      variables: [
+        Variable<String>(commandId),
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(source.read<String>('actor_id')),
+        Variable<String>(source.read<String>('device_id')),
+        Variable<String>(aggregateId),
+        Variable<String>(aggregateType),
+        Variable<String>(source.read<String>('capability')),
+        Variable<int>(nextVersion - 1),
+        Variable<String>(payloadDigest),
+        Variable<String>(source.read<String>('lease_digest')),
+        Variable<String>(commandDigest),
+        Variable<int>(source.read<int>('received_at_millis')),
+      ],
+    );
+    final sequenceRow = await customSelect(
+      'SELECT COALESCE(MAX(site_sequence), 0) + 1 AS next_sequence '
+      'FROM shop_site_events WHERE tenant_id = ? AND site_id = ?',
+      variables: [Variable<String>(tenantId), Variable<String>(siteId)],
+    ).getSingle();
+    final siteSequence = sequenceRow.read<int>('next_sequence');
+    final eventRowId = await customInsert(
+      'INSERT INTO shop_site_events '
+      '(site_sequence, event_id, command_id, tenant_id, site_id, '
+      'aggregate_type, aggregate_id, aggregate_version, event_type, '
+      'payload_json, event_digest, created_at_millis) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<int>(siteSequence),
+        Variable<String>(eventId),
+        Variable<String>(commandId),
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(aggregateType),
+        Variable<String>(aggregateId),
+        Variable<int>(nextVersion),
+        Variable<String>(eventType),
+        Variable<String>(payloadJson),
+        Variable<String>(eventDigest),
+        Variable<int>(occurredAtMillis),
+      ],
+    );
+    final updatedAggregate = await customUpdate(
+      'UPDATE shop_site_aggregate_versions SET version = ?, '
+      'last_event_row_id = ?, last_site_sequence = ?, updated_at_millis = ? '
+      'WHERE tenant_id = ? AND site_id = ? AND aggregate_type = ? '
+      'AND aggregate_id = ? AND version = ?',
+      variables: [
+        Variable<int>(nextVersion),
+        Variable<int>(eventRowId),
+        Variable<int>(siteSequence),
+        Variable<int>(occurredAtMillis),
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(aggregateType),
+        Variable<String>(aggregateId),
+        Variable<int>(nextVersion - 1),
+      ],
+    );
+    if (updatedAggregate != 1) {
+      throw StateError('Connected reservation aggregate changed.');
+    }
+    await customInsert(
+      'INSERT INTO shop_site_audit '
+      '(audit_id, command_id, actor_id, action, metadata_digest, '
+      'created_at_millis) VALUES (?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>('audit:$commandId'),
+        Variable<String>(commandId),
+        Variable<String>(source.read<String>('actor_id')),
+        Variable<String>('connected_stock_${state.name}'),
+        Variable<String>(transition.transitionDigest),
+        Variable<int>(occurredAtMillis),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_site_command_acks '
+      '(command_id, status, event_row_id, site_sequence, canonical_version, '
+      "ack_digest, created_at_millis) VALUES (?, 'accepted', ?, ?, ?, ?, ?)",
+      variables: [
+        Variable<String>(commandId),
+        Variable<int>(eventRowId),
+        Variable<int>(siteSequence),
+        Variable<int>(nextVersion),
+        Variable<String>(eventDigest),
+        Variable<int>(occurredAtMillis),
+      ],
+    );
+  }
+
+  Future<void> _requireAdoptableConnectedStockReservation(
+    ConnectedStockReservationV1 reservation, {
+    required String operationId,
+    required ConnectedStockWorkflowType workflowType,
+    required ShopStaffCapability capability,
+    required String subjectId,
+    required Map<String, int> productQuantities,
+    required int nowMillis,
+  }) async {
+    if (reservation.state != ConnectedStockReservationState.held ||
+        reservation.workflowType != workflowType ||
+        reservation.capability != capability ||
+        reservation.subjectId != subjectId ||
+        DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch <=
+            nowMillis ||
+        reservation.lines.length != productQuantities.length ||
+        reservation.lines.any(
+          (line) => productQuantities[line.productId] != line.quantity,
+        )) {
+      throw StateError('The connected reservation does not match this sale.');
+    }
+    final header = await customSelect(
+      'SELECT tenant_id, site_id, workflow_type, subject_id, capability, basket_digest, '
+      'initial_reservation_digest, reservation_json, legacy_source '
+      'FROM shop_connected_stock_reservation_headers WHERE reservation_id = ?',
+      variables: [Variable<String>(reservation.reservationId)],
+    ).getSingleOrNull();
+    if (header == null) {
+      throw StateError('The connected reservation was not found.');
+    }
+    if (header.read<int>('legacy_source') == 1 ||
+        header.read<String>('tenant_id') != reservation.workspaceId ||
+        header.read<String>('site_id') != reservation.siteId ||
+        header.read<String>('workflow_type') != workflowType.name ||
+        header.read<String>('subject_id') != reservation.subjectId ||
+        header.read<String>('capability') != capability.name ||
+        header.read<String>('basket_digest') != reservation.basketDigest ||
+        header.read<String>('initial_reservation_digest') !=
+            reservation.reservationDigest ||
+        canonicalConnectedSiteJson(
+              jsonDecode(header.read<String>('reservation_json')),
+            ) !=
+            canonicalConnectedSiteJson(reservation.toJson())) {
+      throw StateError('The connected reservation scope or bytes changed.');
+    }
+    final terminal = await customSelect(
+      'SELECT 1 FROM shop_connected_stock_reservation_transitions '
+      'WHERE reservation_id = ? LIMIT 1',
+      variables: [Variable<String>(reservation.reservationId)],
+    ).getSingleOrNull();
+    if (terminal != null) {
+      throw StateError('The connected reservation is already terminal.');
+    }
+    // The sale operation is independently bound in the immutable sale binding;
+    // subject identity must match before any stock or money row is written.
+    if (operationId.isEmpty) {
+      throw StateError('The connected sale operation is invalid.');
+    }
+  }
+
   Map<String, Object?> _connectedSiteEventPayload(String payloadJson) {
     final Object? decoded;
     try {
@@ -6906,6 +9001,132 @@ class ShopDatabase extends _$ShopDatabase {
     canonicalConnectedSiteJson(payload);
     return payload;
   }
+
+  ({
+    ConnectedStockReservationV1? reservation,
+    ShopConnectedStockReservationLifecycleInput? lifecycle,
+  })
+  _connectedStockCommandPayload(
+    ShopConnectedSiteCommandInput input,
+    Map<String, Object?> payload,
+  ) {
+    final reservationSidecar = input.stockReservation;
+    final lifecycleSidecar = input.stockReservationLifecycle;
+    if (reservationSidecar == null && lifecycleSidecar == null) {
+      if (input.eventType == shopConnectedStockReservedEventType ||
+          input.eventType == shopConnectedStockReleasedEventType ||
+          payload['contract'] == _shopConnectedStockReservePayloadContract ||
+          payload['contract'] == _shopConnectedStockReleasePayloadContract) {
+        throw ArgumentError(
+          'Connected stock events require their exact persistence sidecar.',
+        );
+      }
+      return (reservation: null, lifecycle: null);
+    }
+    if (reservationSidecar != null) {
+      if (input.eventType != shopConnectedStockReservedEventType ||
+          payload['contract'] != _shopConnectedStockReservePayloadContract ||
+          payload['reservation'] == null) {
+        throw ArgumentError('Connected stock reserve event is invalid.');
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(
+        payload['reservation'],
+      );
+      final expected = <String, Object?>{
+        'contract': _shopConnectedStockReservePayloadContract,
+        'reservation': reservation.toJson(),
+      };
+      if (canonicalConnectedSiteJson(payload) !=
+              canonicalConnectedSiteJson(expected) ||
+          canonicalConnectedSiteJson(reservation.toJson()) !=
+              canonicalConnectedSiteJson(reservationSidecar.toJson()) ||
+          input.payloadDigest != connectedSiteSha256(expected)) {
+        throw StateError(
+          'Connected stock reserve payload bytes are not authorized.',
+        );
+      }
+      return (reservation: reservation, lifecycle: null);
+    }
+    final lifecycle = lifecycleSidecar!;
+    final expected = <String, Object?>{
+      'contract': _shopConnectedStockReleasePayloadContract,
+      'reservationId': lifecycle.reservationId,
+      'expectedReservationDigest': lifecycle.expectedReservationDigest,
+      'targetState': lifecycle.targetState.name,
+      'reason': lifecycle.reason,
+    };
+    if (input.eventType != shopConnectedStockReleasedEventType ||
+        canonicalConnectedSiteJson(payload) !=
+            canonicalConnectedSiteJson(expected) ||
+        input.payloadDigest != connectedSiteSha256(expected)) {
+      throw StateError(
+        'Connected stock release payload bytes are not authorized.',
+      );
+    }
+    return (reservation: null, lifecycle: lifecycle);
+  }
+
+  /// Immutably binds this local inventory to an authenticated enrollment
+  /// scope before any connected stock command is accepted.
+  ///
+  /// The caller must supply the digest of its independently verified
+  /// enrollment evidence. Commands can never create this authority binding.
+  Future<void> bindConnectedStockScopeForEnrollment({
+    required String tenantId,
+    required String siteId,
+    required String enrollmentEvidenceDigest,
+    required int boundAtMillis,
+    bool connectedSiteEnabled = false,
+  }) => transaction(() async {
+    if (!connectedSiteEnabled ||
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$').hasMatch(tenantId) ||
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$').hasMatch(siteId) ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(enrollmentEvidenceDigest) ||
+        boundAtMillis <= 0) {
+      throw StateError('Connected stock enrollment binding is invalid.');
+    }
+    final existing = await customSelect(
+      'SELECT tenant_id, site_id, enrollment_evidence_digest, '
+      'bound_at_millis FROM shop_connected_scope_binding WHERE singleton = 1',
+    ).getSingleOrNull();
+    if (existing != null) {
+      if (existing.read<String>('tenant_id') != tenantId ||
+          existing.read<String>('site_id') != siteId ||
+          existing.read<String>('enrollment_evidence_digest') !=
+              enrollmentEvidenceDigest ||
+          existing.read<int>('bound_at_millis') != boundAtMillis) {
+        throw StateError('Connected stock scope does not match this database.');
+      }
+      return;
+    }
+    final history = await customSelect(
+      'SELECT 1 FROM shop_connected_stock_reservation_headers LIMIT 1',
+    ).getSingleOrNull();
+    final authority = await customSelect(
+      'SELECT 1 FROM shop_site_devices device '
+      'JOIN shop_site_offline_leases lease '
+      'ON lease.device_id = device.device_id '
+      'AND lease.tenant_id = device.tenant_id '
+      'AND lease.site_id = device.site_id '
+      'WHERE device.tenant_id = ? AND device.site_id = ? '
+      "AND device.state = 'active' LIMIT 1",
+      variables: [Variable<String>(tenantId), Variable<String>(siteId)],
+    ).getSingleOrNull();
+    if (history != null || authority == null) {
+      throw StateError('Connected stock enrollment authority is unavailable.');
+    }
+    await customInsert(
+      'INSERT INTO shop_connected_scope_binding '
+      '(singleton, tenant_id, site_id, enrollment_evidence_digest, '
+      'bound_at_millis) VALUES (1, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(enrollmentEvidenceDigest),
+        Variable<int>(boundAtMillis),
+      ],
+    );
+  });
 
   Map<String, Object?> _connectedSiteEventEnvelope(
     ShopConnectedSiteCommandInput input, {
@@ -6964,13 +9185,36 @@ class ShopDatabase extends _$ShopDatabase {
       input.reservationExpiresAtMillis,
     ];
     final hasReservation = reservationFields.every((value) => value != null);
-    if (reservationFields.any((value) => value != null) != hasReservation ||
-        (hasReservation &&
-            (!id.hasMatch(input.reservationId!) ||
-                !id.hasMatch(input.reservationProductId!) ||
-                input.reservationQuantity! <= 0 ||
-                input.reservationExpiresAtMillis! <= input.createdAtMillis))) {
+    if (reservationFields.any((value) => value != null) || hasReservation) {
       throw ArgumentError('Connected-site reservation values are invalid.');
+    }
+    final reservation = input.stockReservation;
+    final lifecycle = input.stockReservationLifecycle;
+    if (reservation != null && lifecycle != null) {
+      throw ArgumentError(
+        'A connected-site command cannot hold and release stock together.',
+      );
+    }
+    if (reservation != null &&
+        (reservation.workspaceId != input.tenantId ||
+            reservation.siteId != input.siteId ||
+            reservation.actorId != input.actorId ||
+            reservation.deviceId != input.deviceId ||
+            reservation.workflowType.name != input.aggregateType ||
+            reservation.subjectId != input.aggregateId ||
+            reservation.capability.name != input.capability ||
+            reservation.state != ConnectedStockReservationState.held ||
+            reservation.stateVersion != 1 ||
+            DateTime.parse(reservation.issuedAt).millisecondsSinceEpoch !=
+                input.createdAtMillis)) {
+      throw ArgumentError('Connected-site reservation scope is invalid.');
+    }
+    if (lifecycle != null &&
+        (!id.hasMatch(lifecycle.reservationId) ||
+            !digest.hasMatch(lifecycle.expectedReservationDigest) ||
+            !id.hasMatch(lifecycle.reason) ||
+            lifecycle.targetState != ConnectedStockReservationState.released)) {
+      throw ArgumentError('Connected-site reservation lifecycle is invalid.');
     }
   }
 
@@ -7277,8 +9521,11 @@ class ShopDatabase extends _$ShopDatabase {
     final rows = await customSelect(
       'SELECT intent.operation_id, intent.checkout_kind, '
       'draft.operation_id AS draft_operation_id, '
-      'draft.basket_json, draft.updated_at_millis, cafe.ticket_json '
+      'draft.basket_json, draft.updated_at_millis, cafe.ticket_json, '
+      'binding.operation_id AS connected_binding_operation_id '
       'FROM shop_pending_cash_checkouts intent '
+      'LEFT JOIN shop_connected_tender_reservation_bindings binding '
+      "ON binding.operation_id = intent.operation_id AND binding.tender_kind = 'cash' "
       'LEFT JOIN shop_counter_drafts draft '
       "ON intent.checkout_kind = 'counter' "
       'AND draft.operation_id = intent.subject_id '
@@ -7290,6 +9537,9 @@ class ShopDatabase extends _$ShopDatabase {
     var quantity = 0;
     for (final row in rows) {
       if (row.read<String>('operation_id') == excludingOperationId) continue;
+      if (row.readNullable<String>('connected_binding_operation_id') != null) {
+        continue;
+      }
       final kind = row.read<String>('checkout_kind');
       final pendingQuantity = kind == 'counter'
           ? _decodeCounterDraft(
@@ -7384,40 +9634,14 @@ class ShopDatabase extends _$ShopDatabase {
         throw StateError('Stock would exceed the supported quantity.');
       }
       if (kind == 'count') {
-        final pendingCashQuantity = await readPendingCashReservedQuantity(
+        final reservedQuantity = await _readTotalReservedStockQuantity(
           cleanProductId,
         );
-        if (resultingOnHand < pendingCashQuantity) {
+        if (resultingOnHand < reservedQuantity) {
           throw StateError(
-            'Finish or cancel the pending cash checkout before counting '
-            'this item below its saved quantity.',
+            'Finish or cancel reserved sales before counting this item below '
+            'their saved quantity.',
           );
-        }
-        final pendingRows = await customSelect(
-          'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
-          'merchant_phone, merchant_qr_payload, basket_json, state, created_at_millis '
-          'FROM shop_wallet_checkout_intents '
-          'WHERE state = ? LIMIT 2',
-          variables: [const Variable<String>('pending')],
-        ).get();
-        if (pendingRows.length > 1) {
-          throw StateError(
-            'Resolve the pending wallet payments before counting stock.',
-          );
-        }
-        final pendingWallet = pendingRows.isEmpty
-            ? null
-            : await _walletCheckoutFromRow(pendingRows.single);
-        if (pendingWallet != null) {
-          final pendingQuantity = pendingWallet.lines
-              .where((line) => line.productId == cleanProductId)
-              .fold<int>(0, (total, line) => total + line.quantity);
-          if (resultingOnHand < pendingQuantity) {
-            throw StateError(
-              'Finish or cancel the pending wallet payment before counting '
-              'this item below its saved quantity.',
-            );
-          }
         }
       }
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -7894,6 +10118,9 @@ class ShopDatabase extends _$ShopDatabase {
     required MerchantWalletSetup merchant,
     required List<ShopSaleLineInput> lines,
     String? memberCardToken,
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) async {
     final cleanOperationId = operationId.trim();
     final paymentMethod = merchant.provider == 'KBZPay' ? 'kbzpay' : 'wavepay';
@@ -7963,11 +10190,57 @@ class ShopDatabase extends _$ShopDatabase {
             for (final line in canonicalLines)
               {'productId': line.key, 'quantity': line.value},
           ],
+          if (connectedStockReservation != null)
+            'connectedReservation': connectedStockReservation.toJson(),
         });
         if (prior.state == 'pending' &&
             prior.paymentMethod == paymentMethod &&
             prior.requestFingerprint == retryFingerprint) {
+          await _requireConnectedTenderReservationBinding(
+            operationId: cleanOperationId,
+            tenderKind: 'wallet',
+            reservation: connectedStockReservation,
+          );
           return prior;
+        }
+        if (prior.state == 'cancelled' &&
+            prior.paymentMethod == paymentMethod &&
+            prior.requestFingerprint == retryFingerprint &&
+            connectedStockReservation != null) {
+          await _requireConnectedTenderReservationBinding(
+            operationId: cleanOperationId,
+            tenderKind: 'wallet',
+            reservation: connectedStockReservation,
+          );
+          await validateConnectedStockReservationForSale(
+            reservation: connectedStockReservation,
+            operationId: cleanOperationId,
+            workflowType: ConnectedStockWorkflowType.retailCart,
+            capability: ShopStaffCapability.counterSale,
+            subjectId: cleanOperationId,
+            productQuantities: quantities,
+            timeAuthority: connectedTimeAuthority,
+          );
+          final reopened = await customUpdate(
+            "UPDATE shop_wallet_checkout_intents SET state = 'pending' "
+            "WHERE operation_id = ? AND state = 'cancelled'",
+            variables: [Variable<String>(cleanOperationId)],
+          );
+          if (reopened != 1) {
+            throw StateError('This wallet checkout could not be reopened.');
+          }
+          return PendingWalletCheckout(
+            operationId: prior.operationId,
+            paymentMethod: prior.paymentMethod,
+            requestFingerprint: prior.requestFingerprint,
+            totalMmk: prior.totalMmk,
+            merchantPhone: prior.merchantPhone,
+            merchantQrPayload: prior.merchantQrPayload,
+            lines: prior.lines,
+            state: 'pending',
+            createdAtMillis: prior.createdAtMillis,
+            member: prior.member,
+          );
         }
         throw StateError('This wallet checkout ID was already used.');
       }
@@ -7987,6 +10260,8 @@ class ShopDatabase extends _$ShopDatabase {
           for (final line in canonicalLines)
             {'productId': line.key, 'quantity': line.value},
         ],
+        if (connectedStockReservation != null)
+          'connectedReservation': connectedStockReservation.toJson(),
       });
       final openIntent = await customSelect(
         'SELECT operation_id FROM shop_wallet_checkout_intents WHERE state = ? LIMIT 1',
@@ -8005,6 +10280,18 @@ class ShopDatabase extends _$ShopDatabase {
         throw StateError('This sale ID was already completed.');
       }
 
+      final connectedNow = connectedStockReservation == null
+          ? null
+          : await validateConnectedStockReservationForSale(
+              reservation: connectedStockReservation,
+              operationId: cleanOperationId,
+              workflowType: ConnectedStockWorkflowType.retailCart,
+              capability: ShopStaffCapability.counterSale,
+              subjectId: cleanOperationId,
+              productQuantities: quantities,
+              timeAuthority: connectedTimeAuthority,
+            );
+
       final snapshots = <WalletCheckoutLineSnapshot>[];
       var totalMmk = 0;
       for (final line in canonicalLines) {
@@ -8016,7 +10303,12 @@ class ShopDatabase extends _$ShopDatabase {
         if (product == null) {
           throw StateError('A selected product is no longer available.');
         }
-        if (product.onHand < line.value) {
+        final reserved = await _readTotalReservedStockQuantity(
+          product.id,
+          excludingConnectedReservationId:
+              connectedStockReservation?.reservationId,
+        );
+        if (product.onHand - reserved < line.value) {
           throw StateError('Not enough stock for ${product.name}.');
         }
         final lineTotal = product.priceMmk * line.value;
@@ -8056,6 +10348,14 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(createdAt),
         ],
       );
+      if (connectedStockReservation != null) {
+        await _insertConnectedTenderReservationBinding(
+          operationId: cleanOperationId,
+          tenderKind: 'wallet',
+          reservation: connectedStockReservation,
+          createdAtMillis: connectedNow!,
+        );
+      }
       final saleMember = member == null
           ? null
           : ShopSaleMember(
@@ -8115,6 +10415,27 @@ class ShopDatabase extends _$ShopDatabase {
       if (row == null) return false;
       final intent = await _walletCheckoutFromRow(row);
       if (resumeOperationId != null) {
+        final connectedBinding = await customSelect(
+          'SELECT reservation_id FROM '
+          'shop_connected_tender_reservation_bindings '
+          "WHERE operation_id = ? AND tender_kind = 'wallet'",
+          variables: [Variable<String>(operationId)],
+        ).getSingleOrNull();
+        if (connectedBinding != null) {
+          final released = await customSelect(
+            'SELECT 1 FROM shop_connected_stock_reservation_transitions '
+            "WHERE reservation_id = ? AND to_state = 'released'",
+            variables: [
+              Variable<String>(connectedBinding.read<String>('reservation_id')),
+            ],
+          ).getSingleOrNull();
+          if (released == null) {
+            throw StateError(
+              'Release the connected stock reservation before resuming '
+              'under a new sale ID.',
+            );
+          }
+        }
         final priorSale =
             await (select(shopSales)
                   ..where((sale) => sale.operationId.equals(resumeOperationId)))
@@ -8933,6 +11254,9 @@ class ShopDatabase extends _$ShopDatabase {
     required String subjectId,
     String? memberId,
     int? memberCardRevision,
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) => transaction(() async {
     final cleanOperationId = operationId.trim();
     final cleanSubjectId = subjectId.trim();
@@ -8959,7 +11283,14 @@ class ShopDatabase extends _$ShopDatabase {
       checkoutKind: checkoutKind,
       subjectId: cleanSubjectId,
     );
-    if (existing != null) return existing;
+    if (existing != null) {
+      await _requireConnectedTenderReservationBinding(
+        operationId: cleanOperationId,
+        tenderKind: 'cash',
+        reservation: connectedStockReservation,
+      );
+      return existing;
+    }
     final subjectFingerprint = await _cashCheckoutSubjectFingerprint(
       checkoutKind: checkoutKind,
       subjectId: cleanSubjectId,
@@ -8968,6 +11299,23 @@ class ShopDatabase extends _$ShopDatabase {
       checkoutKind: checkoutKind,
       subjectId: cleanSubjectId,
     );
+    final connectedWorkflow = checkoutKind == 'counter'
+        ? ConnectedStockWorkflowType.retailCart
+        : ConnectedStockWorkflowType.cafeOrder;
+    final connectedCapability = checkoutKind == 'counter'
+        ? ShopStaffCapability.counterSale
+        : ShopStaffCapability.cafeOrderWrite;
+    final connectedNow = connectedStockReservation == null
+        ? null
+        : await validateConnectedStockReservationForSale(
+            reservation: connectedStockReservation,
+            operationId: cleanOperationId,
+            workflowType: connectedWorkflow,
+            capability: connectedCapability,
+            subjectId: cleanSubjectId,
+            productQuantities: subjectQuantities,
+            timeAuthority: connectedTimeAuthority,
+          );
     for (final entry in subjectQuantities.entries) {
       final product = await customSelect(
         'SELECT name, on_hand FROM shop_products WHERE id = ?',
@@ -8976,7 +11324,11 @@ class ShopDatabase extends _$ShopDatabase {
       if (product == null) {
         throw StateError('A selected product is no longer available.');
       }
-      final alreadyReserved = await readPendingCashReservedQuantity(entry.key);
+      final alreadyReserved = await _readTotalReservedStockQuantity(
+        entry.key,
+        excludingConnectedReservationId:
+            connectedStockReservation?.reservationId,
+      );
       final available = product.read<int>('on_hand') - alreadyReserved;
       if (entry.value > available) {
         throw ShopStockUnavailableException(
@@ -9027,6 +11379,14 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<int>(createdAt),
       ],
     );
+    if (connectedStockReservation != null) {
+      await _insertConnectedTenderReservationBinding(
+        operationId: cleanOperationId,
+        tenderKind: 'cash',
+        reservation: connectedStockReservation,
+        createdAtMillis: connectedNow!,
+      );
+    }
     return ShopPendingCashCheckout(
       operationId: cleanOperationId,
       checkoutKind: checkoutKind,
@@ -10920,6 +13280,9 @@ class ShopDatabase extends _$ShopDatabase {
     String? staffActorId,
     ShopStaffCommandAuthorizer staffAuthorizer =
         const ShopStaffCommandAuthorizationUnavailable(),
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) => recordSale(
     operationId: operationId,
     lines: lines,
@@ -10928,6 +13291,8 @@ class ShopDatabase extends _$ShopDatabase {
     cashCheckoutSubjectId: requirePendingCashCheckout ? operationId : null,
     staffActorId: staffActorId,
     staffAuthorizer: staffAuthorizer,
+    connectedStockReservation: connectedStockReservation,
+    connectedTimeAuthority: connectedTimeAuthority,
   );
 
   Future<ShopSaleReceipt> recordSale({
@@ -10944,6 +13309,9 @@ class ShopDatabase extends _$ShopDatabase {
     String? staffActorId,
     ShopStaffCommandAuthorizer staffAuthorizer =
         const ShopStaffCommandAuthorizationUnavailable(),
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) async {
     final cleanOperationId = operationId.trim();
     final cleanWalletCheckoutId = walletCheckoutOperationId?.trim();
@@ -11034,7 +13402,7 @@ class ShopDatabase extends _$ShopDatabase {
     } else if (cleanWalletCheckoutId != null) {
       selectedMember = await _readWalletCheckoutMember(cleanWalletCheckoutId);
     }
-    final fingerprint = paymentMethod == 'cash'
+    final checkoutFingerprint = paymentMethod == 'cash'
         ? selectedMember == null && cashTenderedMmk == null
               ? jsonEncode(fingerprintLines)
               : jsonEncode({
@@ -11052,6 +13420,13 @@ class ShopDatabase extends _$ShopDatabase {
               'memberCardRevision': selectedMember.cardRevision,
             },
             'lines': fingerprintLines,
+          });
+    final fingerprint = connectedStockReservation == null
+        ? checkoutFingerprint
+        : jsonEncode({
+            'checkoutFingerprint': checkoutFingerprint,
+            'connectedReservation': connectedStockReservation.toJson(),
+            'saleOperationId': cleanOperationId,
           });
 
     return transaction(() async {
@@ -11113,6 +13488,45 @@ class ShopDatabase extends _$ShopDatabase {
             )) {
           throw StateError('Sale item changed. Review each line again.');
         }
+        final committedRows = await customSelect(
+          'SELECT transition_json FROM '
+          'shop_connected_stock_reservation_transitions '
+          "WHERE to_state = 'committed' AND sale_id = ?",
+          variables: [Variable<String>(priorSale.id)],
+        ).get();
+        if (connectedStockReservation == null) {
+          if (committedRows.isNotEmpty) {
+            throw StateError(
+              'The completed sale requires its connected reservation.',
+            );
+          }
+        } else {
+          if (committedRows.length != 1 ||
+              committedRows.single.readNullable<String>('transition_json') ==
+                  null) {
+            throw StateError(
+              'The connected reservation is not bound to this sale.',
+            );
+          }
+          final transition = ConnectedStockReservationTransitionV1.fromJson(
+            jsonDecode(committedRows.single.read<String>('transition_json')),
+          );
+          final saleCommandDigest = connectedSiteSha256({
+            'operationId': cleanOperationId,
+            'requestFingerprint': fingerprint,
+          });
+          if (canonicalConnectedSiteJson(transition.before.toJson()) !=
+                  canonicalConnectedSiteJson(
+                    connectedStockReservation.toJson(),
+                  ) ||
+              transition.saleBinding?.saleId != priorSale.id ||
+              transition.saleBinding?.saleCommandId != cleanOperationId ||
+              transition.saleBinding?.saleCommandDigest != saleCommandDigest) {
+            throw StateError(
+              'The connected reservation is not bound to this sale.',
+            );
+          }
+        }
         await clearCounterSaleDraft(cleanOperationId);
         return ShopSaleReceipt(
           id: priorSale.id,
@@ -11142,6 +13556,11 @@ class ShopDatabase extends _$ShopDatabase {
           checkoutKind: 'counter',
           subjectId: cashCheckoutSubjectId,
         );
+        await _requireConnectedTenderReservationBinding(
+          operationId: cleanOperationId,
+          tenderKind: 'cash',
+          reservation: connectedStockReservation,
+        );
         if (pendingCash.memberId != selectedMember?.memberId ||
             pendingCash.memberCardRevision != selectedMember?.cardRevision) {
           throw StateError(
@@ -11160,6 +13579,18 @@ class ShopDatabase extends _$ShopDatabase {
           );
         }
       }
+
+      final connectedNow = connectedStockReservation == null
+          ? null
+          : await validateConnectedStockReservationForSale(
+              reservation: connectedStockReservation,
+              operationId: cleanOperationId,
+              workflowType: ConnectedStockWorkflowType.retailCart,
+              capability: ShopStaffCapability.counterSale,
+              subjectId: cashCheckoutSubjectId ?? cleanOperationId,
+              productQuantities: productQuantities,
+              timeAuthority: connectedTimeAuthority,
+            );
 
       // Read the persisted intent inside the same transaction as the stock
       // mutation. Startup UI recovery can still be loading or can fail, so a
@@ -11196,8 +13627,23 @@ class ShopDatabase extends _$ShopDatabase {
           throw StateError('The wallet checkout is no longer pending.');
         }
         final intent = await _walletCheckoutFromRow(intentRow);
+        await _requireConnectedTenderReservationBinding(
+          operationId: cleanWalletCheckoutId,
+          tenderKind: 'wallet',
+          reservation: connectedStockReservation,
+        );
+        final expectedIntentFingerprint = jsonEncode({
+          'paymentMethod': paymentMethod,
+          if (selectedMember case final member?) ...{
+            'memberId': member.memberId,
+            'memberCardRevision': member.cardRevision,
+          },
+          'lines': fingerprintLines,
+          if (connectedStockReservation != null)
+            'connectedReservation': connectedStockReservation.toJson(),
+        });
         if (intent.paymentMethod != paymentMethod ||
-            intent.requestFingerprint != fingerprint) {
+            intent.requestFingerprint != expectedIntentFingerprint) {
           throw StateError('The pending checkout does not match this sale.');
         }
         if (intent.lines.length != canonicalLines.length ||
@@ -11331,14 +13777,16 @@ class ShopDatabase extends _$ShopDatabase {
         final productName = snapshot?.productName ?? product.name;
         final unitPriceMmk = snapshot?.unitPriceMmk ?? product.priceMmk;
         final lineTotal = unitPriceMmk * quantity;
-        final reservedByOtherCashCheckouts =
-            await readPendingCashReservedQuantity(
-              product.id,
-              excludingOperationId: cashCheckoutSubjectId == null
-                  ? null
-                  : cleanOperationId,
-            );
-        final requiredOnHand = quantity + reservedByOtherCashCheckouts;
+        final reservedByOthers = await _readTotalReservedStockQuantity(
+          product.id,
+          excludingConnectedReservationId:
+              connectedStockReservation?.reservationId,
+          excludingPendingCashOperationId: cashCheckoutSubjectId == null
+              ? null
+              : cleanOperationId,
+          excludingWalletOperationId: cleanWalletCheckoutId,
+        );
+        final requiredOnHand = quantity + reservedByOthers;
         final changedRows = await customUpdate(
           'UPDATE shop_products '
           'SET on_hand = on_hand - ?, updated_at_millis = ? '
@@ -11428,6 +13876,23 @@ class ShopDatabase extends _$ShopDatabase {
           operationId: cleanOperationId,
           checkoutKind: 'counter',
           subjectId: cashCheckoutSubjectId,
+        );
+      }
+      if (connectedStockReservation != null) {
+        final saleCommandDigest = connectedSiteSha256({
+          'operationId': cleanOperationId,
+          'requestFingerprint': fingerprint,
+        });
+        await commitConnectedStockReservationForSale(
+          reservation: connectedStockReservation,
+          saleId: saleId,
+          saleCommandId: cleanOperationId,
+          saleCommandDigest: saleCommandDigest,
+          workflowType: ConnectedStockWorkflowType.retailCart,
+          capability: ShopStaffCapability.counterSale,
+          subjectId: cashCheckoutSubjectId ?? cleanOperationId,
+          productQuantities: productQuantities,
+          validatedNowMillis: connectedNow!,
         );
       }
       await clearCounterSaleDraft(cleanOperationId);

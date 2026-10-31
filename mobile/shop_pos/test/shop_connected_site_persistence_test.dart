@@ -5,9 +5,15 @@ import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' show sqlite3;
 import 'package:supermega_shop/shop_backup.dart';
+import 'package:supermega_shop/shop_cafe_order_contract.dart';
+import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_stock_reservation.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_models.dart';
+import 'package:supermega_shop/shop_staff_authorization.dart';
 
 const _now = 2000000000000;
 const _tenant = 'tenant-1';
@@ -17,15 +23,16 @@ const _device = 'device-1';
 final _leaseDigest = _digest('lease:$_tenant:$_site:$_device');
 
 void main() {
-  test('connected-site persistence is default-off and schema is v23', () async {
+  test('connected-site persistence is default-off and schema is v24', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 23);
+      expect(database.schemaVersion, 24);
       final tables =
           (await database
                   .customSelect(
                     "SELECT name FROM sqlite_master WHERE type = 'table' "
-                    "AND name LIKE 'shop_site_%'",
+                    "AND (name LIKE 'shop_site_%' OR "
+                    "name LIKE 'shop_connected_%')",
                   )
                   .get())
               .map((row) => row.read<String>('name'))
@@ -43,12 +50,17 @@ void main() {
           'shop_site_cloud_acks',
           'shop_site_conflicts',
           'shop_site_recovery_checkpoints',
-          'shop_site_stock_reservations',
+          'shop_connected_stock_reservation_headers',
+          'shop_connected_stock_reservation_lines',
+          'shop_connected_stock_reservation_transitions',
+          'shop_connected_trusted_time',
+          'shop_connected_scope_binding',
+          'shop_connected_tender_reservation_bindings',
           'shop_site_audit',
         }),
       );
       await expectLater(
-        database.applyConnectedSiteCommand(
+        database.applyConnectedSiteCommandForTest(
           _command('disabled-command'),
           connectedSiteEnabled: false,
         ),
@@ -72,7 +84,7 @@ void main() {
           openingStock: 1,
         );
         final command = _command('reserve-rice', reservationProductId: 'rice');
-        final accepted = await database.applyConnectedSiteCommand(
+        final accepted = await database.applyConnectedSiteCommandForTest(
           command,
           connectedSiteEnabled: true,
         );
@@ -97,7 +109,7 @@ void main() {
           'eventId': command.eventId,
           'eventType': command.eventType,
           'occurredAt': '2033-05-18T03:33:20.000Z',
-          'payload': {'commandId': command.commandId},
+          'payload': jsonDecode(command.eventPayloadJson),
           'siteId': _site,
           'workspaceId': _tenant,
         });
@@ -108,11 +120,12 @@ void main() {
               variables: [Variable<String>(command.eventId)],
             )
             .getSingle();
-        expect(jsonDecode(storedPayload.read<String>('payload_json')), {
-          'commandId': command.commandId,
-        });
+        expect(
+          jsonDecode(storedPayload.read<String>('payload_json')),
+          jsonDecode(command.eventPayloadJson),
+        );
 
-        final replayed = await database.applyConnectedSiteCommand(
+        final replayed = await database.applyConnectedSiteCommandForTest(
           command,
           connectedSiteEnabled: true,
         );
@@ -125,7 +138,8 @@ void main() {
           'shop_site_events',
           'shop_site_command_acks',
           'shop_site_audit',
-          'shop_site_stock_reservations',
+          'shop_connected_stock_reservation_headers',
+          'shop_connected_stock_reservation_lines',
         ]) {
           final count = await database
               .customSelect('SELECT COUNT(*) AS count FROM $table')
@@ -133,7 +147,7 @@ void main() {
           expect(count.read<int>('count'), 1, reason: table);
         }
         await expectLater(
-          database.applyConnectedSiteCommand(
+          database.applyConnectedSiteCommandForTest(
             _command(
               'reserve-rice',
               commandDigest: _digest('different-command'),
@@ -144,7 +158,7 @@ void main() {
           throwsStateError,
         );
         await expectLater(
-          database.applyConnectedSiteCommand(
+          database.applyConnectedSiteCommandForTest(
             _command(
               'invalid-event-digest',
               aggregateId: 'stock:invalid-digest',
@@ -172,34 +186,40 @@ void main() {
           priceMmk: 1000,
           openingStock: 1,
         );
-        final first = await database.applyConnectedSiteCommand(
+        final first = await database.applyConnectedSiteCommandForTest(
           _command('first', reservationProductId: 'last-item'),
           connectedSiteEnabled: true,
         );
         expect(first.status, ShopConnectedSiteCommandStatus.accepted);
 
-        final otherAggregateType = await database.applyConnectedSiteCommand(
-          _command('same-id-different-type', aggregateType: 'cafeOrder'),
-          connectedSiteEnabled: true,
-        );
+        final otherAggregateType = await database
+            .applyConnectedSiteCommandForTest(
+              _command('same-id-different-type', aggregateType: 'cafeOrder'),
+              connectedSiteEnabled: true,
+            );
         expect(
           otherAggregateType.status,
           ShopConnectedSiteCommandStatus.accepted,
         );
         expect(otherAggregateType.canonicalVersion, 1);
 
-        final versionConflict = await database.applyConnectedSiteCommand(
-          _command('stale-version', expectedVersion: 0),
+        final versionConflict = await database.applyConnectedSiteCommandForTest(
+          _command(
+            'stale-version',
+            aggregateType: 'cafeOrder',
+            expectedVersion: 0,
+          ),
           connectedSiteEnabled: true,
         );
         expect(versionConflict.status, ShopConnectedSiteCommandStatus.conflict);
         expect(versionConflict.canonicalVersion, 1);
         expect(versionConflict.eventSequence, isNull);
 
-        final stockConflict = await database.applyConnectedSiteCommand(
+        final stockConflict = await database.applyConnectedSiteCommandForTest(
           _command(
             'second-reservation',
-            aggregateId: 'stock:last-item:second',
+            aggregateType: ConnectedStockWorkflowType.retailCart.name,
+            aggregateId: 'second-reservation',
             reservationProductId: 'last-item',
           ),
           connectedSiteEnabled: true,
@@ -222,6 +242,499 @@ void main() {
   );
 
   test(
+    'multi-line holds are atomic and protect the last retail unit',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seedAuthority(database);
+        await database.addProduct(
+          id: 'multi-a',
+          name: 'Multi A',
+          priceMmk: 1000,
+          openingStock: 1,
+        );
+        await database.addProduct(
+          id: 'multi-b',
+          name: 'Multi B',
+          priceMmk: 1000,
+          openingStock: 0,
+        );
+
+        ConnectedStockReservationV1 reservation(
+          String id,
+        ) => ConnectedStockReservationV1.held(
+          reservationId: 'reservation:$id',
+          workspaceId: _tenant,
+          siteId: _site,
+          actorId: _actor,
+          deviceId: _device,
+          workflowType: ConnectedStockWorkflowType.retailCart,
+          subjectId: id,
+          capability: ShopStaffCapability.counterSale,
+          lines: [
+            ConnectedStockReservationLineV1(productId: 'multi-a', quantity: 1),
+            ConnectedStockReservationLineV1(productId: 'multi-b', quantity: 1),
+          ],
+          issuedAt: '2033-05-18T03:33:20.000Z',
+          expiresAt: '2033-05-18T03:33:50.000Z',
+        );
+
+        final unavailable = await database.applyConnectedSiteCommandForTest(
+          _command(
+            'multi-unavailable',
+            aggregateType: ConnectedStockWorkflowType.retailCart.name,
+            aggregateId: 'multi-unavailable',
+            stockReservation: reservation('multi-unavailable'),
+          ),
+          connectedSiteEnabled: true,
+        );
+        expect(unavailable.status, ShopConnectedSiteCommandStatus.conflict);
+        expect(unavailable.conflictCode, 'stock_reservation_unavailable');
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS total FROM '
+                    'shop_connected_stock_reservation_headers',
+                  )
+                  .getSingle())
+              .read<int>('total'),
+          0,
+        );
+
+        await database.changeStock(
+          operationId: 'receive-multi-b',
+          productId: 'multi-b',
+          kind: 'receive',
+          quantity: 1,
+          expectedOnHand: 0,
+        );
+        final held = reservation('multi-held');
+        expect(
+          (await database.applyConnectedSiteCommandForTest(
+            _command(
+              'multi-held',
+              aggregateType: ConnectedStockWorkflowType.retailCart.name,
+              aggregateId: 'multi-held',
+              stockReservation: held,
+            ),
+            connectedSiteEnabled: true,
+          )).status,
+          ShopConnectedSiteCommandStatus.accepted,
+        );
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS total FROM '
+                    'shop_connected_stock_reservation_lines',
+                  )
+                  .getSingle())
+              .read<int>('total'),
+          2,
+        );
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'ordinary-last-unit',
+            lines: const [ShopSaleLineInput(productId: 'multi-a', quantity: 1)],
+          ),
+          throwsStateError,
+        );
+        expect(await database.countSales(), 0);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test('connected and pending cash holds compete and exact adoption keeps foreign holds', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seedAuthority(database);
+      for (final values in const [
+        ('connected-first', 1),
+        ('cash-first', 1),
+        ('shared-adoption', 3),
+      ]) {
+        await database.addProduct(
+          id: values.$1,
+          name: values.$1,
+          priceMmk: 1000,
+          openingStock: values.$2,
+        );
+      }
+
+      Future<ConnectedStockReservationV1> hold(
+        String commandId,
+        String subjectId,
+        String productId,
+      ) async {
+        final reservation = ConnectedStockReservationV1.held(
+          reservationId: 'reservation:$commandId',
+          workspaceId: _tenant,
+          siteId: _site,
+          actorId: _actor,
+          deviceId: _device,
+          workflowType: ConnectedStockWorkflowType.retailCart,
+          subjectId: subjectId,
+          capability: ShopStaffCapability.counterSale,
+          lines: [
+            ConnectedStockReservationLineV1(productId: productId, quantity: 1),
+          ],
+          issuedAt: '2033-05-18T03:33:30.000Z',
+          expiresAt: '2033-05-18T03:33:50.000Z',
+        );
+        final result = await database.applyConnectedSiteCommandForTest(
+          _command(
+            commandId,
+            aggregateType: ConnectedStockWorkflowType.retailCart.name,
+            aggregateId: subjectId,
+            createdAtMillis: _now + 10000,
+            stockReservation: reservation,
+          ),
+          connectedSiteEnabled: true,
+        );
+        expect(result.status, ShopConnectedSiteCommandStatus.accepted);
+        return reservation;
+      }
+
+      final connectedFirst = await hold(
+        'connected-first-hold',
+        'connected-first-sale',
+        'connected-first',
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'connected-first-sale',
+        quantities: const {'connected-first': 1},
+      );
+      await database.beginPendingCashCheckout(
+        operationId: 'connected-first-sale',
+        checkoutKind: 'counter',
+        subjectId: 'connected-first-sale',
+        connectedStockReservation: connectedFirst,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      expect(await database.readReservedStockQuantity('connected-first'), 1);
+      await database.cancelPendingCashCheckout(
+        checkoutKind: 'counter',
+        subjectId: 'connected-first-sale',
+      );
+      final reopenedCash = await database.beginPendingCashCheckout(
+        operationId: 'connected-first-sale',
+        checkoutKind: 'counter',
+        subjectId: 'connected-first-sale',
+        connectedStockReservation: connectedFirst,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      expect(reopenedCash.operationId, 'connected-first-sale');
+      await database.cancelPendingCashCheckout(
+        checkoutKind: 'counter',
+        subjectId: 'connected-first-sale',
+      );
+      await database.clearCounterSaleDraft('connected-first-sale');
+
+      await database.saveCounterSaleDraft(
+        operationId: 'cash-first-sale',
+        quantities: const {'cash-first': 1},
+      );
+      await database.beginPendingCashCheckout(
+        operationId: 'cash-first-sale',
+        checkoutKind: 'counter',
+        subjectId: 'cash-first-sale',
+      );
+      final cashFirst = ConnectedStockReservationV1.held(
+        reservationId: 'reservation:cash-first-hold',
+        workspaceId: _tenant,
+        siteId: _site,
+        actorId: _actor,
+        deviceId: _device,
+        workflowType: ConnectedStockWorkflowType.retailCart,
+        subjectId: 'cash-first-other',
+        capability: ShopStaffCapability.counterSale,
+        lines: [
+          ConnectedStockReservationLineV1(productId: 'cash-first', quantity: 1),
+        ],
+        issuedAt: '2033-05-18T03:33:30.000Z',
+        expiresAt: '2033-05-18T03:33:50.000Z',
+      );
+      final cashBlocksConnected = await database
+          .applyConnectedSiteCommandForTest(
+            _command(
+              'cash-first-hold',
+              aggregateType: ConnectedStockWorkflowType.retailCart.name,
+              aggregateId: cashFirst.subjectId,
+              createdAtMillis: _now + 10000,
+              stockReservation: cashFirst,
+            ),
+            connectedSiteEnabled: true,
+          );
+      expect(cashBlocksConnected.conflictCode, 'stock_reservation_unavailable');
+      await database.cancelPendingCashCheckout(
+        checkoutKind: 'counter',
+        subjectId: 'cash-first-sale',
+      );
+      await database.clearCounterSaleDraft('cash-first-sale');
+
+      final own = await hold(
+        'shared-own-hold',
+        'shared-adoption-sale',
+        'shared-adoption',
+      );
+      await hold(
+        'shared-foreign-hold',
+        'shared-foreign-sale',
+        'shared-adoption',
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'shared-adoption-sale',
+        quantities: const {'shared-adoption': 1},
+      );
+      await database.beginPendingCashCheckout(
+        operationId: 'shared-adoption-sale',
+        checkoutKind: 'counter',
+        subjectId: 'shared-adoption-sale',
+        connectedStockReservation: own,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      await expectLater(
+        database.changeStock(
+          operationId: 'count-below-combined-holds',
+          productId: 'shared-adoption',
+          kind: 'count',
+          quantity: 1,
+          expectedOnHand: 3,
+        ),
+        throwsStateError,
+      );
+      await database.recordCashSale(
+        operationId: 'shared-adoption-sale',
+        lines: [ShopSaleLineInput(productId: 'shared-adoption', quantity: 1)],
+        requirePendingCashCheckout: true,
+        connectedStockReservation: own,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      expect(await database.readReservedStockQuantity('shared-adoption'), 1);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test('connected and pending wallet holds block each other', () async {
+    Future<ShopDatabase> createDatabase() async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      await _seedAuthority(database);
+      await database.addProduct(
+        id: 'wallet-last',
+        name: 'Wallet last',
+        priceMmk: 1000,
+        openingStock: 1,
+      );
+      return database;
+    }
+
+    final connectedFirst = await createDatabase();
+    try {
+      final command = _command(
+        'wallet-connected-first',
+        aggregateType: ConnectedStockWorkflowType.retailCart.name,
+        aggregateId: 'wallet-connected-first',
+        reservationProductId: 'wallet-last',
+      );
+      final reservation = command.stockReservation!;
+      expect(
+        (await connectedFirst.applyConnectedSiteCommandForTest(
+          command,
+          connectedSiteEnabled: true,
+        )).status,
+        ShopConnectedSiteCommandStatus.accepted,
+      );
+      await connectedFirst.createWalletCheckoutIntent(
+        operationId: 'wallet-connected-first',
+        merchant: _walletSetup(),
+        lines: const [ShopSaleLineInput(productId: 'wallet-last', quantity: 1)],
+        connectedStockReservation: reservation,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      await expectLater(
+        connectedFirst.cancelWalletCheckoutIntent(
+          'wallet-connected-first',
+          resumeOperationId: 'wallet-connected-replacement',
+        ),
+        throwsStateError,
+      );
+      expect(
+        await connectedFirst.cancelWalletCheckoutIntent(
+          'wallet-connected-first',
+        ),
+        isTrue,
+      );
+      final reopened = await connectedFirst.createWalletCheckoutIntent(
+        operationId: 'wallet-connected-first',
+        merchant: _walletSetup(),
+        lines: const [ShopSaleLineInput(productId: 'wallet-last', quantity: 1)],
+        connectedStockReservation: reservation,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      expect(reopened.state, 'pending');
+      final receipt = await connectedFirst.recordSale(
+        operationId: 'wallet-connected-first',
+        lines: const [ShopSaleLineInput(productId: 'wallet-last', quantity: 1)],
+        paymentMethod: 'kbzpay',
+        walletCheckoutOperationId: 'wallet-connected-first',
+        connectedStockReservation: reservation,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      expect(receipt.totalMmk, 1000);
+      expect(await connectedFirst.readReservedStockQuantity('wallet-last'), 0);
+    } finally {
+      await connectedFirst.close();
+    }
+
+    final walletFirst = await createDatabase();
+    try {
+      await walletFirst.createWalletCheckoutIntent(
+        operationId: 'wallet-first',
+        merchant: _walletSetup(),
+        lines: const [ShopSaleLineInput(productId: 'wallet-last', quantity: 1)],
+      );
+      final conflict = await walletFirst.applyConnectedSiteCommandForTest(
+        _command(
+          'connected-after-wallet',
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: 'connected-after-wallet',
+          reservationProductId: 'wallet-last',
+        ),
+        connectedSiteEnabled: true,
+      );
+      expect(conflict.conflictCode, 'stock_reservation_unavailable');
+    } finally {
+      await walletFirst.close();
+    }
+  });
+
+  test('cafe cash completion adopts only its exact connected hold', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    final store = ShopCafeOrderStore(database);
+    try {
+      await _seedAuthority(database);
+      await database.addProduct(
+        id: 'cafe-connected-item',
+        name: 'Connected café item',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      final order = await store.applyCommand(
+        CafeOrderCommand(
+          id: 'cafe-connected-create',
+          ticketId: 'cafe-connected-order',
+          expectedVersion: 0,
+          lines: [
+            CafeOrderLine.local(
+              id: 'cafe-connected-line',
+              productId: 'cafe-connected-item',
+              quantity: 1,
+              baseUnitPriceMmk: 2500,
+              remark: '',
+              modifiers: const [],
+            ),
+          ],
+        ),
+        const {},
+      );
+      ConnectedStockReservationV1 cafeReservation({
+        required String id,
+        required String subjectId,
+      }) => ConnectedStockReservationV1.held(
+        reservationId: 'reservation:$id',
+        workspaceId: _tenant,
+        siteId: _site,
+        actorId: _actor,
+        deviceId: _device,
+        workflowType: ConnectedStockWorkflowType.cafeOrder,
+        subjectId: subjectId,
+        capability: ShopStaffCapability.cafeOrderWrite,
+        lines: [
+          ConnectedStockReservationLineV1(
+            productId: 'cafe-connected-item',
+            quantity: 1,
+          ),
+        ],
+        issuedAt: '2033-05-18T03:33:20.000Z',
+        expiresAt: '2033-05-18T03:33:50.000Z',
+      );
+
+      final own = cafeReservation(
+        id: 'cafe-connected-own',
+        subjectId: order.ticket.id,
+      );
+      final foreign = cafeReservation(
+        id: 'cafe-connected-foreign',
+        subjectId: 'another-cafe-order',
+      );
+      for (final values in [
+        ('cafe-connected-own', own),
+        ('cafe-connected-foreign', foreign),
+      ]) {
+        expect(
+          (await database.applyConnectedSiteCommandForTest(
+            _command(
+              values.$1,
+              aggregateType: ConnectedStockWorkflowType.cafeOrder.name,
+              aggregateId: values.$2.subjectId,
+              capability: ShopStaffCapability.cafeOrderWrite,
+              stockReservation: values.$2,
+            ),
+            connectedSiteEnabled: true,
+          )).status,
+          ShopConnectedSiteCommandStatus.accepted,
+        );
+      }
+      await database.beginPendingCashCheckout(
+        operationId: 'cafe-connected-sale',
+        checkoutKind: 'cafe',
+        subjectId: order.ticket.id,
+        connectedStockReservation: own,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      final receipt = await store.completeCash(
+        orderId: order.ticket.id,
+        operationId: 'cafe-connected-sale',
+        expectedTicketVersion: order.ticket.version,
+        expectedStateRevision: order.stateRevision,
+        requirePendingCashCheckout: true,
+        connectedStockReservation: own,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      expect(receipt.totalMmk, 2500);
+      expect(
+        await database.readReservedStockQuantity('cafe-connected-item'),
+        1,
+      );
+      expect((await database.readActiveProducts()).single.onHand, 1);
+      final replay = await store.completeCash(
+        orderId: order.ticket.id,
+        operationId: 'cafe-connected-sale',
+        expectedTicketVersion: order.ticket.version,
+        expectedStateRevision: order.stateRevision,
+        requirePendingCashCheckout: true,
+        connectedStockReservation: own,
+      );
+      expect(replay.id, receipt.id);
+      await expectLater(
+        store.completeCash(
+          orderId: order.ticket.id,
+          operationId: 'cafe-connected-sale',
+          expectedTicketVersion: order.ticket.version,
+          expectedStateRevision: order.stateRevision,
+          requirePendingCashCheckout: true,
+        ),
+        throwsStateError,
+      );
+      expect(await database.countSales(), 1);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test(
     'site sequences and recovery identities stay tenant-site scoped',
     () async {
       final database = ShopDatabase(NativeDatabase.memory());
@@ -231,23 +744,25 @@ void main() {
           database,
           siteId: 'site-2',
           deviceId: 'device-2',
+          bindStockScope: false,
         );
         final secondTenantLease = await _seedAuthority(
           database,
           tenantId: 'tenant-2',
           actorId: 'actor-2',
           deviceId: 'device-3',
+          bindStockScope: false,
         );
 
-        final first = await database.applyConnectedSiteCommand(
+        final first = await database.applyConnectedSiteCommandForTest(
           _command('site-1-first', aggregateId: 'one'),
           connectedSiteEnabled: true,
         );
-        final second = await database.applyConnectedSiteCommand(
+        final second = await database.applyConnectedSiteCommandForTest(
           _command('site-1-second', aggregateId: 'two'),
           connectedSiteEnabled: true,
         );
-        final otherSite = await database.applyConnectedSiteCommand(
+        final otherSite = await database.applyConnectedSiteCommandForTest(
           _command(
             'site-2-first',
             aggregateId: 'one',
@@ -257,7 +772,7 @@ void main() {
           ),
           connectedSiteEnabled: true,
         );
-        final otherTenant = await database.applyConnectedSiteCommand(
+        final otherTenant = await database.applyConnectedSiteCommandForTest(
           _command(
             'tenant-2-site-1-first',
             aggregateId: 'one',
@@ -305,14 +820,597 @@ void main() {
     },
   );
 
+  test('foreign scope cannot persist reservation or trusted time', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seedAuthority(database);
+      await database.addProduct(
+        id: 'scope-item',
+        name: 'Scope item',
+        priceMmk: 1000,
+        openingStock: 3,
+      );
+      expect(
+        (await database.applyConnectedSiteCommandForTest(
+          _command('scope-owner', reservationProductId: 'scope-item'),
+          connectedSiteEnabled: true,
+        )).status,
+        ShopConnectedSiteCommandStatus.accepted,
+      );
+      final foreignLease = await _seedAuthority(
+        database,
+        siteId: 'site-foreign',
+        deviceId: 'device-foreign',
+        bindStockScope: false,
+      );
+      final foreign = ConnectedStockReservationV1.held(
+        reservationId: 'reservation:scope-foreign',
+        workspaceId: _tenant,
+        siteId: 'site-foreign',
+        actorId: _actor,
+        deviceId: 'device-foreign',
+        workflowType: ConnectedStockWorkflowType.retailCart,
+        subjectId: 'scope-foreign',
+        capability: ShopStaffCapability.counterSale,
+        lines: [
+          ConnectedStockReservationLineV1(productId: 'scope-item', quantity: 1),
+        ],
+        issuedAt: '2033-05-18T03:33:20.000Z',
+        expiresAt: '2033-05-18T03:33:50.000Z',
+      );
+      await expectLater(
+        database.applyConnectedSiteCommandForTest(
+          _command(
+            'scope-foreign',
+            siteId: 'site-foreign',
+            deviceId: 'device-foreign',
+            leaseDigest: foreignLease,
+            aggregateType: ConnectedStockWorkflowType.retailCart.name,
+            aggregateId: foreign.subjectId,
+            stockReservation: foreign,
+          ),
+          connectedSiteEnabled: true,
+        ),
+        throwsStateError,
+      );
+      expect(
+        await database
+            .customSelect(
+              'SELECT 1 FROM shop_site_commands WHERE command_id = ?',
+              variables: const [Variable<String>('scope-foreign')],
+            )
+            .getSingleOrNull(),
+        isNull,
+      );
+      expect(
+        await database
+            .customSelect(
+              'SELECT 1 FROM shop_connected_trusted_time WHERE site_id = ?',
+              variables: const [Variable<String>('site-foreign')],
+            )
+            .getSingleOrNull(),
+        isNull,
+      );
+      expect(
+        await database
+            .customSelect(
+              'SELECT 1 FROM shop_connected_stock_reservation_headers '
+              'WHERE reservation_id = ?',
+              variables: [Variable<String>(foreign.reservationId)],
+            )
+            .getSingleOrNull(),
+        isNull,
+      );
+      await expectLater(
+        database.expireConnectedStockReservation(
+          tenantId: _tenant,
+          siteId: 'site-foreign',
+          reservationId: foreign.reservationId,
+          expectedReservationDigest: foreign.reservationDigest,
+          operationId: 'scope-foreign-expire',
+          timeAuthority: const _FixedTime(_now + 30000),
+          connectedSiteEnabled: true,
+        ),
+        throwsStateError,
+      );
+      expect(
+        await database
+            .customSelect(
+              'SELECT 1 FROM shop_connected_trusted_time WHERE site_id = ?',
+              variables: const [Variable<String>('site-foreign')],
+            )
+            .getSingleOrNull(),
+        isNull,
+      );
+    } finally {
+      await database.close();
+    }
+  });
+
+  test('stock commands cannot create their own enrollment scope', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seedAuthority(database, bindStockScope: false);
+      await database.addProduct(
+        id: 'unbound-item',
+        name: 'Unbound item',
+        priceMmk: 1000,
+        openingStock: 2,
+      );
+      await expectLater(
+        database.applyConnectedSiteCommandForTest(
+          _command('unbound-hold', reservationProductId: 'unbound-item'),
+          connectedSiteEnabled: true,
+        ),
+        throwsStateError,
+      );
+      for (final table in const [
+        'shop_connected_scope_binding',
+        'shop_connected_trusted_time',
+        'shop_connected_stock_reservation_headers',
+        'shop_site_commands',
+        'shop_site_events',
+      ]) {
+        final count = await database
+            .customSelect('SELECT COUNT(*) AS count FROM $table')
+            .getSingle();
+        expect(count.read<int>('count'), 0, reason: table);
+      }
+    } finally {
+      await database.close();
+    }
+  });
+
   test(
-    'v22 migrates to v23 and encrypted-backup snapshot remains valid',
+    'release is authenticated, subject-bound, pre-expiry and replay-safe',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seedAuthority(database);
+        await database.addProduct(
+          id: 'release-item',
+          name: 'Release item',
+          priceMmk: 1000,
+          openingStock: 2,
+        );
+        final holdCommand = _command(
+          'release-subject',
+          reservationProductId: 'release-item',
+        );
+        final reservation = holdCommand.stockReservation!;
+        expect(
+          (await database.applyConnectedSiteCommandForTest(
+            holdCommand,
+            connectedSiteEnabled: true,
+          )).status,
+          ShopConnectedSiteCommandStatus.accepted,
+        );
+        final lateHoldCommand = _command(
+          'late-release-subject',
+          reservationProductId: 'release-item',
+        );
+        final lateReservation = lateHoldCommand.stockReservation!;
+        expect(
+          (await database.applyConnectedSiteCommandForTest(
+            lateHoldCommand,
+            connectedSiteEnabled: true,
+          )).status,
+          ShopConnectedSiteCommandStatus.accepted,
+        );
+        final secondLease = await _seedAuthority(
+          database,
+          actorId: 'actor-2',
+          deviceId: 'device-2',
+        );
+
+        Future<ShopConnectedSiteCommandResult> release({
+          required String id,
+          required String aggregateType,
+          required String aggregateId,
+          ShopStaffCapability capability = ShopStaffCapability.counterSale,
+          int createdAtMillis = _now + 1000,
+          int expectedVersion = 0,
+        }) => database.applyConnectedSiteCommandForTest(
+          _command(
+            id,
+            aggregateType: aggregateType,
+            aggregateId: aggregateId,
+            actorId: 'actor-2',
+            deviceId: 'device-2',
+            leaseDigest: secondLease,
+            capability: capability,
+            createdAtMillis: createdAtMillis,
+            expectedVersion: expectedVersion,
+            stockReservationLifecycle:
+                ShopConnectedStockReservationLifecycleInput.release(
+                  reservationId: reservation.reservationId,
+                  expectedReservationDigest: reservation.reservationDigest,
+                  reason: 'operator_cancelled',
+                ),
+          ),
+          connectedSiteEnabled: true,
+        );
+
+        final wrongSubject = await release(
+          id: 'wrong-subject-release',
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: 'another-subject',
+        );
+        expect(wrongSubject.status, ShopConnectedSiteCommandStatus.conflict);
+        expect(wrongSubject.conflictCode, 'reservation_not_found');
+        final wrongDomain = await release(
+          id: 'wrong-domain-release',
+          aggregateType: ConnectedStockWorkflowType.cafeOrder.name,
+          aggregateId: reservation.subjectId,
+        );
+        expect(wrongDomain.status, ShopConnectedSiteCommandStatus.conflict);
+        expect(wrongDomain.conflictCode, 'reservation_not_found');
+        final wrongCapability = await release(
+          id: 'wrong-capability-release',
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: reservation.subjectId,
+          capability: ShopStaffCapability.cafeOrderWrite,
+          expectedVersion: 1,
+        );
+        expect(wrongCapability.status, ShopConnectedSiteCommandStatus.conflict);
+        expect(wrongCapability.conflictCode, 'reservation_not_found');
+        final releaseCommand = _command(
+          'cross-device-release',
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: reservation.subjectId,
+          actorId: 'actor-2',
+          deviceId: 'device-2',
+          leaseDigest: secondLease,
+          createdAtMillis: _now + 1000,
+          expectedVersion: 1,
+          stockReservationLifecycle:
+              ShopConnectedStockReservationLifecycleInput.release(
+                reservationId: reservation.reservationId,
+                expectedReservationDigest: reservation.reservationDigest,
+                reason: 'operator_cancelled',
+              ),
+        );
+        final deniedCrossDevice = await database
+            .applyConnectedSiteCommandForTest(
+              releaseCommand,
+              connectedSiteEnabled: true,
+            );
+        expect(
+          deniedCrossDevice.status,
+          ShopConnectedSiteCommandStatus.conflict,
+        );
+        expect(deniedCrossDevice.conflictCode, 'reservation_not_found');
+
+        final originalActorRelease = _command(
+          'original-actor-release',
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: reservation.subjectId,
+          createdAtMillis: _now + 1000,
+          expectedVersion: 1,
+          stockReservationLifecycle:
+              ShopConnectedStockReservationLifecycleInput.release(
+                reservationId: reservation.reservationId,
+                expectedReservationDigest: reservation.reservationDigest,
+                reason: 'operator_cancelled',
+              ),
+        );
+        final accepted = await database.applyConnectedSiteCommandForTest(
+          originalActorRelease,
+          connectedSiteEnabled: true,
+        );
+        expect(accepted.status, ShopConnectedSiteCommandStatus.accepted);
+        final replay = await database.applyConnectedSiteCommandForTest(
+          originalActorRelease,
+          connectedSiteEnabled: true,
+        );
+        expect(replay.status, ShopConnectedSiteCommandStatus.replayed);
+        final transitions = await database
+            .customSelect(
+              'SELECT to_state FROM '
+              'shop_connected_stock_reservation_transitions',
+            )
+            .get();
+        expect(transitions, hasLength(1));
+        expect(transitions.single.read<String>('to_state'), 'released');
+
+        final atExpiryCommand = _command(
+          'late-release',
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: lateReservation.subjectId,
+          createdAtMillis: DateTime.parse(lateReservation.expiresAt)
+              .millisecondsSinceEpoch,
+          expectedVersion: 1,
+          stockReservationLifecycle:
+              ShopConnectedStockReservationLifecycleInput.release(
+                reservationId: lateReservation.reservationId,
+                expectedReservationDigest: lateReservation.reservationDigest,
+                reason: 'operator_cancelled',
+              ),
+        );
+        final atExpiry = await database.applyConnectedSiteCommandForTest(
+          atExpiryCommand,
+          connectedSiteEnabled: true,
+        );
+        expect(atExpiry.status, ShopConnectedSiteCommandStatus.conflict);
+        expect(atExpiry.conflictCode, 'reservation_time_invalid');
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test(
+    'sale adoption is exact, replay-safe, and trusted-time monotonic',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seedAuthority(database);
+        await database.addProduct(
+          id: 'adoption-item',
+          name: 'Adoption item',
+          priceMmk: 1000,
+          openingStock: 8,
+        );
+
+        Future<ConnectedStockReservationV1> hold(String operationId) async {
+          final command = _command(
+            operationId,
+            reservationProductId: 'adoption-item',
+          );
+          final result = await database.applyConnectedSiteCommandForTest(
+            command,
+            connectedSiteEnabled: true,
+          );
+          expect(result.status, ShopConnectedSiteCommandStatus.accepted);
+          return command.stockReservation!;
+        }
+
+        final committedReservation = await hold('connected-sale');
+        final swapReservation = await hold('swap-sale');
+        final ordinaryReservation = await hold('ordinary-sale');
+        final boundaryReservation = await hold('boundary-sale');
+        final rollbackReservation = await hold('rollback-sale');
+        const line = ShopSaleLineInput(productId: 'adoption-item', quantity: 1);
+        final receipt = await database.recordCashSale(
+          operationId: 'connected-sale',
+          lines: const [line],
+          connectedStockReservation: committedReservation,
+          connectedTimeAuthority: const _FixedTime(_now + 10000),
+        );
+        expect(receipt.id, 'connected-sale');
+
+        final replay = await database.recordCashSale(
+          operationId: 'connected-sale',
+          lines: const [line],
+          connectedStockReservation: committedReservation,
+        );
+        expect(replay.id, receipt.id);
+        final committedEvents = await database
+            .customSelect(
+              'SELECT site_sequence, event_type FROM shop_site_events '
+              'WHERE event_type = ?',
+              variables: const [
+                Variable<String>(shopConnectedStockCommittedEventType),
+              ],
+            )
+            .get();
+        expect(committedEvents, hasLength(1));
+        final replicated = await database.readConnectedSitePendingEvents(
+          tenantId: _tenant,
+          siteId: _site,
+          afterSequence: 0,
+        );
+        expect(
+          replicated.where(
+            (event) =>
+                event.event['eventType'] ==
+                shopConnectedStockCommittedEventType,
+          ),
+          hasLength(1),
+        );
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'connected-sale',
+            lines: const [line],
+          ),
+          throwsStateError,
+        );
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'connected-sale',
+            lines: const [line],
+            connectedStockReservation: swapReservation,
+          ),
+          throwsStateError,
+        );
+
+        final ordinary = await database.recordCashSale(
+          operationId: 'ordinary-sale',
+          lines: const [line],
+        );
+        expect(ordinary.id, 'ordinary-sale');
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'ordinary-sale',
+            lines: const [line],
+            connectedStockReservation: ordinaryReservation,
+          ),
+          throwsStateError,
+        );
+
+        final trustedBefore = await database
+            .customSelect(
+              'SELECT observed_at_millis FROM shop_connected_trusted_time '
+              'WHERE tenant_id = ? AND site_id = ?',
+              variables: const [
+                Variable<String>(_tenant),
+                Variable<String>(_site),
+              ],
+            )
+            .getSingle();
+        expect(trustedBefore.read<int>('observed_at_millis'), _now + 10000);
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'boundary-sale',
+            lines: const [line],
+            connectedStockReservation: boundaryReservation,
+            connectedTimeAuthority: const _FixedTime(_now + 30000),
+          ),
+          throwsStateError,
+        );
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'rollback-sale',
+            lines: const [line],
+            connectedStockReservation: rollbackReservation,
+            connectedTimeAuthority: const _FixedTime(_now + 5000),
+          ),
+          throwsStateError,
+        );
+        final trustedAfter = await database
+            .customSelect(
+              'SELECT observed_at_millis FROM shop_connected_trusted_time '
+              'WHERE tenant_id = ? AND site_id = ?',
+              variables: const [
+                Variable<String>(_tenant),
+                Variable<String>(_site),
+              ],
+            )
+            .getSingle();
+        expect(trustedAfter.read<int>('observed_at_millis'), _now + 10000);
+        expect(await database.countSales(), 2);
+
+        final cafeReservation = ConnectedStockReservationV1.held(
+          reservationId: 'reservation:cafe-cross-workflow',
+          workspaceId: _tenant,
+          siteId: _site,
+          actorId: _actor,
+          deviceId: _device,
+          workflowType: ConnectedStockWorkflowType.cafeOrder,
+          subjectId: 'cafe-cross-workflow',
+          capability: ShopStaffCapability.cafeOrderWrite,
+          lines: [
+            ConnectedStockReservationLineV1(
+              productId: 'adoption-item',
+              quantity: 1,
+            ),
+          ],
+          issuedAt: '2033-05-18T03:33:30.000Z',
+          expiresAt: '2033-05-18T03:33:50.000Z',
+        );
+        final cafeHold = _command(
+          'cafe-cross-workflow',
+          aggregateType: ConnectedStockWorkflowType.cafeOrder.name,
+          aggregateId: 'cafe-cross-workflow',
+          capability: ShopStaffCapability.cafeOrderWrite,
+          createdAtMillis: _now + 10000,
+          stockReservation: cafeReservation,
+        );
+        expect(
+          (await database.applyConnectedSiteCommandForTest(
+            cafeHold,
+            connectedSiteEnabled: true,
+          )).status,
+          ShopConnectedSiteCommandStatus.accepted,
+        );
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'cafe-cross-workflow',
+            lines: const [line],
+            connectedStockReservation: cafeReservation,
+            connectedTimeAuthority: const _FixedTime(_now + 10000),
+          ),
+          throwsStateError,
+        );
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test('expiry is replicated once and replays without fresh time', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seedAuthority(database);
+      await database.addProduct(
+        id: 'expiry-item',
+        name: 'Expiry item',
+        priceMmk: 1000,
+        openingStock: 2,
+      );
+      final command = _command(
+        'expiry-hold',
+        reservationProductId: 'expiry-item',
+      );
+      expect(
+        (await database.applyConnectedSiteCommandForTest(
+          command,
+          connectedSiteEnabled: true,
+        )).status,
+        ShopConnectedSiteCommandStatus.accepted,
+      );
+      final reservation = command.stockReservation!;
+      final accepted = await database.expireConnectedStockReservation(
+        tenantId: _tenant,
+        siteId: _site,
+        reservationId: reservation.reservationId,
+        expectedReservationDigest: reservation.reservationDigest,
+        operationId: 'expiry-operation',
+        timeAuthority: const _FixedTime(_now + 30000),
+        connectedSiteEnabled: true,
+      );
+      expect(
+        accepted.disposition,
+        ShopConnectedStockReservationDisposition.accepted,
+      );
+      final replay = await database.expireConnectedStockReservation(
+        tenantId: _tenant,
+        siteId: _site,
+        reservationId: reservation.reservationId,
+        expectedReservationDigest: reservation.reservationDigest,
+        operationId: 'expiry-operation',
+        timeAuthority: const ShopConnectedSiteTimeUnavailable(),
+        connectedSiteEnabled: true,
+      );
+      expect(
+        replay.disposition,
+        ShopConnectedStockReservationDisposition.replayed,
+      );
+      final events = await database
+          .customSelect(
+            'SELECT event_type FROM shop_site_events WHERE event_type = ?',
+            variables: const [
+              Variable<String>(shopConnectedStockExpiredEventType),
+            ],
+          )
+          .get();
+      expect(events, hasLength(1));
+    } finally {
+      await database.close();
+    }
+  });
+
+  test(
+    'v22 migrates to v24 and encrypted-backup snapshot remains valid',
     () async {
       final root = await Directory.systemTemp.createTemp('shop-site-v23-');
       final file = File('${root.path}/shop.sqlite');
       var database = ShopDatabase(NativeDatabase(file));
       try {
         await database.verifyReadyForUse();
+        for (final entry
+            in shopConnectedStockReservationSchemaDefinitionsV24().entries
+                .toList()
+                .reversed) {
+          final type = shopSchemaObjectTypeForDefinition(entry.value);
+          await database.customStatement(
+            'DROP ${type == 'table'
+                ? 'TABLE'
+                : type == 'index'
+                ? 'INDEX'
+                : 'TRIGGER'} IF EXISTS ${entry.key}',
+          );
+        }
         for (final entry
             in shopConnectedSiteSchemaDefinitionsV23().entries
                 .toList()
@@ -331,7 +1429,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 23);
+        expect(database.schemaVersion, 24);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(
@@ -347,6 +1445,495 @@ void main() {
       }
     },
   );
+
+  test('encrypted fresh-target restore preserves active released and committed holds', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'shop-site-v24-restore-',
+    );
+    final sourceFile = File('${root.path}/source.sqlite');
+    final archive = File('${root.path}/connected.smbak');
+    final targetFile = File('${root.path}/restored/shop.sqlite');
+    final source = ShopDatabase(NativeDatabase(sourceFile));
+    try {
+      await _seedAuthority(source);
+      for (final productId in const [
+        'restore-active',
+        'restore-released',
+        'restore-committed',
+      ]) {
+        await source.addProduct(
+          id: productId,
+          name: productId,
+          priceMmk: 1000,
+          openingStock: 2,
+        );
+      }
+
+      Future<ConnectedStockReservationV1> reserve(
+        String commandId,
+        String subjectId,
+        String productId, {
+        int createdAtMillis = _now,
+      }) async {
+        final reservation = ConnectedStockReservationV1.held(
+          reservationId: 'reservation:$commandId',
+          workspaceId: _tenant,
+          siteId: _site,
+          actorId: _actor,
+          deviceId: _device,
+          workflowType: ConnectedStockWorkflowType.retailCart,
+          subjectId: subjectId,
+          capability: ShopStaffCapability.counterSale,
+          lines: [
+            ConnectedStockReservationLineV1(productId: productId, quantity: 1),
+          ],
+          issuedAt: DateTime.fromMillisecondsSinceEpoch(
+            createdAtMillis,
+            isUtc: true,
+          ).toIso8601String(),
+          expiresAt: '2033-05-18T03:33:50.000Z',
+        );
+        final command = _command(
+          commandId,
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: subjectId,
+          createdAtMillis: createdAtMillis,
+          stockReservation: reservation,
+        );
+        expect(
+          (await source.applyConnectedSiteCommandForTest(
+            command,
+            connectedSiteEnabled: true,
+          )).status,
+          ShopConnectedSiteCommandStatus.accepted,
+        );
+        return reservation;
+      }
+
+      final active = await reserve(
+        'restore-active-command',
+        'restore-active-sale',
+        'restore-active',
+      );
+      final released = await reserve(
+        'restore-released-command',
+        'restore-released-sale',
+        'restore-released',
+      );
+      final releaseCommand = _command(
+        'restore-release-command',
+        aggregateType: ConnectedStockWorkflowType.retailCart.name,
+        aggregateId: released.subjectId,
+        expectedVersion: 1,
+        createdAtMillis: _now + 1000,
+        stockReservationLifecycle:
+            ShopConnectedStockReservationLifecycleInput.release(
+              reservationId: released.reservationId,
+              expectedReservationDigest: released.reservationDigest,
+              reason: 'operator_cancelled',
+            ),
+      );
+      expect(
+        (await source.applyConnectedSiteCommandForTest(
+          releaseCommand,
+          connectedSiteEnabled: true,
+        )).status,
+        ShopConnectedSiteCommandStatus.accepted,
+      );
+      final committed = await reserve(
+        'restore-committed-command',
+        'restore-committed-sale',
+        'restore-committed',
+        createdAtMillis: _now + 1000,
+      );
+      final committedReceipt = await source.recordCashSale(
+        operationId: committed.subjectId,
+        lines: const [
+          ShopSaleLineInput(productId: 'restore-committed', quantity: 1),
+        ],
+        connectedStockReservation: committed,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+
+      await ShopBackup.exportEncrypted(
+        database: source,
+        archive: archive,
+        password: 'connected-restore-passphrase',
+        scratchRoot: root,
+      );
+      await targetFile.parent.create(recursive: true);
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: targetFile,
+        password: 'connected-restore-passphrase',
+      );
+
+      final restored = ShopDatabase(NativeDatabase(targetFile));
+      try {
+        await restored.verifyReadyForUse();
+        expect(await restored.readReservedStockQuantity('restore-active'), 1);
+        expect(await restored.readReservedStockQuantity('restore-released'), 0);
+        expect(
+          await restored.readReservedStockQuantity('restore-committed'),
+          0,
+        );
+        expect(await restored.countSales(), 1);
+        expect(
+          (await restored.applyConnectedSiteCommandForTest(
+            releaseCommand,
+            connectedSiteEnabled: true,
+          )).status,
+          ShopConnectedSiteCommandStatus.replayed,
+        );
+        final saleReplay = await restored.recordCashSale(
+          operationId: committed.subjectId,
+          lines: const [
+            ShopSaleLineInput(productId: 'restore-committed', quantity: 1),
+          ],
+          connectedStockReservation: committed,
+        );
+        expect(saleReplay.id, committedReceipt.id);
+        expect(await restored.countSales(), 1);
+        await expectLater(
+          restored.recordCashSale(
+            operationId: active.subjectId,
+            lines: const [
+              ShopSaleLineInput(productId: 'restore-active', quantity: 2),
+            ],
+          ),
+          throwsStateError,
+        );
+        final evidenceCounts = await restored
+            .customSelect(
+              'SELECT '
+              '(SELECT COUNT(*) FROM shop_site_commands) AS commands, '
+              '(SELECT COUNT(*) FROM shop_site_events) AS events, '
+              '(SELECT COUNT(*) FROM shop_site_command_acks) AS acks, '
+              '(SELECT COUNT(*) FROM '
+              'shop_connected_stock_reservation_transitions) AS transitions',
+            )
+            .getSingle();
+        expect(evidenceCounts.read<int>('commands'), 5);
+        expect(evidenceCounts.read<int>('events'), 5);
+        expect(evidenceCounts.read<int>('acks'), 5);
+        expect(evidenceCounts.read<int>('transitions'), 2);
+      } finally {
+        await restored.close();
+      }
+    } finally {
+      await source.close();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('v23 cafe and unknown legacy rows migrate without invented binding', () async {
+    final root = await Directory.systemTemp.createTemp('shop-site-v23-legacy-');
+    final file = File('${root.path}/shop.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      await _seedAuthority(database);
+      for (final productId in const ['legacy-cafe', 'legacy-unknown']) {
+        await database.addProduct(
+          id: productId,
+          name: productId,
+          priceMmk: 1000,
+          openingStock: 2,
+        );
+      }
+      var sequence = 0;
+      for (final values in const [
+        ('legacy-cafe-command', 'cafeOrder'),
+        ('legacy-unknown-command', 'futureWorkflow'),
+      ]) {
+        sequence++;
+        await database.customInsert(
+          'INSERT INTO shop_site_commands '
+          '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+          'aggregate_type, capability, expected_version, payload_digest, '
+          'lease_digest, command_digest, state, received_at_millis) '
+          "VALUES (?, ?, ?, ?, ?, ?, ?, 'counterSale', 0, ?, ?, ?, "
+          "'accepted', ?)",
+          variables: [
+            Variable<String>(values.$1),
+            const Variable<String>(_tenant),
+            const Variable<String>(_site),
+            const Variable<String>(_actor),
+            const Variable<String>(_device),
+            Variable<String>(values.$1),
+            Variable<String>(values.$2),
+            Variable<String>(_digest('payload:${values.$1}')),
+            Variable<String>(_leaseDigest),
+            Variable<String>(_digest('command:${values.$1}')),
+            const Variable<int>(_now),
+          ],
+        );
+        final eventRowId = await database.customInsert(
+          'INSERT INTO shop_site_events '
+          '(site_sequence, event_id, command_id, tenant_id, site_id, '
+          'aggregate_type, aggregate_id, aggregate_version, event_type, '
+          'payload_json, event_digest, created_at_millis) '
+          "VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'legacy.event', '{}', ?, ?)",
+          variables: [
+            Variable<int>(sequence),
+            Variable<String>('event:${values.$1}'),
+            Variable<String>(values.$1),
+            const Variable<String>(_tenant),
+            const Variable<String>(_site),
+            Variable<String>(values.$2),
+            Variable<String>(values.$1),
+            Variable<String>(_digest('event:${values.$1}')),
+            const Variable<int>(_now),
+          ],
+        );
+        await database.customInsert(
+          'INSERT INTO shop_site_aggregate_versions '
+          '(tenant_id, site_id, aggregate_type, aggregate_id, version, '
+          'last_event_row_id, last_site_sequence, updated_at_millis) '
+          'VALUES (?, ?, ?, ?, 1, ?, ?, ?)',
+          variables: [
+            const Variable<String>(_tenant),
+            const Variable<String>(_site),
+            Variable<String>(values.$2),
+            Variable<String>(values.$1),
+            Variable<int>(eventRowId),
+            Variable<int>(sequence),
+            const Variable<int>(_now),
+          ],
+        );
+        await database.customInsert(
+          'INSERT INTO shop_site_command_acks '
+          '(command_id, status, event_row_id, site_sequence, canonical_version, '
+          "ack_digest, created_at_millis) VALUES (?, 'accepted', ?, ?, 1, ?, ?)",
+          variables: [
+            Variable<String>(values.$1),
+            Variable<int>(eventRowId),
+            Variable<int>(sequence),
+            Variable<String>(_digest('ack:${values.$1}')),
+            const Variable<int>(_now),
+          ],
+        );
+        await database.customInsert(
+          'INSERT INTO shop_site_audit '
+          '(audit_id, command_id, actor_id, action, metadata_digest, '
+          "created_at_millis) VALUES (?, ?, ?, 'legacy.reserve', ?, ?)",
+          variables: [
+            Variable<String>('audit:${values.$1}'),
+            Variable<String>(values.$1),
+            const Variable<String>(_actor),
+            Variable<String>(_digest('audit:${values.$1}')),
+            const Variable<int>(_now),
+          ],
+        );
+      }
+      await database.customInsert(
+        'INSERT INTO shop_site_stock_reservations '
+        '(reservation_id, command_id, product_id, quantity, state, '
+        'expires_at_millis, created_at_millis, resolved_at_millis) '
+        "VALUES ('legacy-cafe-reservation', 'legacy-cafe-command', "
+        "'legacy-cafe', 1, 'held', ?, ?, NULL), "
+        "('legacy-unknown-reservation', 'legacy-unknown-command', "
+        "'legacy-unknown', 2, 'released', ?, ?, ?)",
+        variables: const [
+          Variable<int>(_now + 30000),
+          Variable<int>(_now),
+          Variable<int>(_now + 30000),
+          Variable<int>(_now),
+          Variable<int>(_now + 1000),
+        ],
+      );
+      for (final entry
+          in shopConnectedStockReservationSchemaDefinitionsV24().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(entry.value);
+        await database.customStatement(
+          'DROP ${type == 'table' ? 'TABLE' : 'TRIGGER'} IF EXISTS ${entry.key}',
+        );
+      }
+      await database.customStatement('PRAGMA user_version = 23');
+      await database.close();
+
+      database = ShopDatabase(NativeDatabase(file));
+      await database.verifyReadyForUse();
+      final migrated = await database
+          .customSelect(
+            'SELECT reservation_id, workflow_type, subject_id, legacy_source '
+            'FROM shop_connected_stock_reservation_headers '
+            'ORDER BY reservation_id',
+          )
+          .get();
+      expect(migrated, hasLength(2));
+      for (final row in migrated) {
+        expect(row.readNullable<String>('workflow_type'), isNull);
+        expect(row.readNullable<String>('subject_id'), isNull);
+        expect(row.read<int>('legacy_source'), 1);
+      }
+      final transition = await database
+          .customSelect(
+            'SELECT to_state, transition_json, legacy_source FROM '
+            'shop_connected_stock_reservation_transitions',
+          )
+          .getSingle();
+      expect(transition.read<String>('to_state'), 'released');
+      expect(transition.readNullable<String>('transition_json'), isNull);
+      expect(transition.read<int>('legacy_source'), 1);
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('snapshot rejects semantically corrupted reservation evidence', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'shop-site-v24-corrupt-',
+    );
+    final file = File('${root.path}/shop.sqlite');
+    final snapshot = File('${root.path}/snapshot.sqlite');
+    final tenderSnapshot = File('${root.path}/tender-snapshot.sqlite');
+    final eventSnapshot = File('${root.path}/event-snapshot.sqlite');
+    final database = ShopDatabase(NativeDatabase(file));
+    try {
+      await _seedAuthority(database);
+      await database.addProduct(
+        id: 'snapshot-item',
+        name: 'Snapshot item',
+        priceMmk: 1000,
+        openingStock: 2,
+      );
+      final command = _command(
+        'snapshot-sale',
+        reservationProductId: 'snapshot-item',
+      );
+      expect(
+        (await database.applyConnectedSiteCommandForTest(
+          command,
+          connectedSiteEnabled: true,
+        )).status,
+        ShopConnectedSiteCommandStatus.accepted,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'snapshot-sale',
+        quantities: const {'snapshot-item': 1},
+      );
+      await database.beginPendingCashCheckout(
+        operationId: 'snapshot-sale',
+        checkoutKind: 'counter',
+        subjectId: 'snapshot-sale',
+        connectedStockReservation: command.stockReservation,
+        connectedTimeAuthority: const _FixedTime(_now + 10000),
+      );
+      await database.exportVerifiedLocalSnapshot(snapshot);
+      await database.exportVerifiedLocalSnapshot(tenderSnapshot);
+      await database.exportVerifiedLocalSnapshot(eventSnapshot);
+      expect(
+        () => ShopBackup.verifySnapshot(
+          snapshot,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+        ),
+        returnsNormally,
+      );
+      final raw = sqlite3.open(snapshot.path);
+      try {
+        raw.execute(
+          'DROP TRIGGER shop_connected_stock_reservation_headers_no_update',
+        );
+        raw.execute(
+          'UPDATE shop_connected_stock_reservation_headers '
+          "SET basket_digest = '${_digest('corrupted-basket')}'",
+        );
+        raw.execute(
+          shopConnectedStockReservationSchemaDefinitionsV24()['shop_connected_stock_reservation_headers_no_update']!,
+        );
+      } finally {
+        raw.close();
+      }
+      expect(
+        () => ShopBackup.verifySnapshot(
+          snapshot,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+        ),
+        throwsFormatException,
+      );
+      final tenderRaw = sqlite3.open(tenderSnapshot.path);
+      try {
+        tenderRaw.execute(
+          'DROP TRIGGER '
+          'shop_connected_tender_reservation_bindings_no_update',
+        );
+        tenderRaw.execute(
+          'UPDATE shop_connected_tender_reservation_bindings '
+          "SET binding_digest = '${_digest('corrupted-tender-binding')}'",
+        );
+        tenderRaw.execute(
+          shopConnectedStockReservationSchemaDefinitionsV24()['shop_connected_tender_reservation_bindings_no_update']!,
+        );
+      } finally {
+        tenderRaw.close();
+      }
+      expect(
+        () => ShopBackup.verifySnapshot(
+          tenderSnapshot,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+        ),
+        throwsFormatException,
+      );
+      final eventRaw = sqlite3.open(eventSnapshot.path);
+      try {
+        eventRaw.execute('DROP TRIGGER shop_site_commands_no_update');
+        eventRaw.execute('DROP TRIGGER shop_site_events_no_update');
+        final row = eventRaw.select(
+          'SELECT * FROM shop_site_events WHERE command_id = ?',
+          ['snapshot-sale'],
+        ).single;
+        final payload = Map<String, Object?>.from(
+          jsonDecode(row['payload_json'] as String) as Map,
+        )..['contract'] = 'supermega.shop.substituted-reserve.v1';
+        final payloadJson = canonicalConnectedSiteJson(payload);
+        final envelope = <String, Object?>{
+          'eventId': row['event_id'],
+          'workspaceId': row['tenant_id'],
+          'siteId': row['site_id'],
+          'aggregateType': row['aggregate_type'],
+          'aggregateId': row['aggregate_id'],
+          'aggregateVersion': row['aggregate_version'],
+          'eventType': row['event_type'],
+          'occurredAt': DateTime.fromMillisecondsSinceEpoch(
+            row['created_at_millis'] as int,
+            isUtc: true,
+          ).toIso8601String(),
+          'payload': payload,
+        };
+        eventRaw.execute(
+          'UPDATE shop_site_commands SET payload_digest = ? '
+          'WHERE command_id = ?',
+          [connectedSiteSha256(payload), 'snapshot-sale'],
+        );
+        eventRaw.execute(
+          'UPDATE shop_site_events SET payload_json = ?, event_digest = ? '
+          'WHERE command_id = ?',
+          [payloadJson, connectedSiteSha256(envelope), 'snapshot-sale'],
+        );
+        eventRaw.execute(
+          shopConnectedSiteSchemaDefinitionsV24()['shop_site_commands_no_update']!,
+        );
+        eventRaw.execute(
+          shopConnectedSiteSchemaDefinitionsV24()['shop_site_events_no_update']!,
+        );
+      } finally {
+        eventRaw.close();
+      }
+      expect(
+        () => ShopBackup.verifySnapshot(
+          eventSnapshot,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+        ),
+        throwsFormatException,
+      );
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
 }
 
 Future<String> _seedAuthority(
@@ -355,6 +1942,7 @@ Future<String> _seedAuthority(
   String siteId = _site,
   String actorId = _actor,
   String deviceId = _device,
+  bool bindStockScope = true,
 }) async {
   final leaseDigest = _digest('lease:$tenantId:$siteId:$deviceId');
   await database.customInsert(
@@ -371,7 +1959,7 @@ Future<String> _seedAuthority(
     ],
   );
   await database.customInsert(
-    'INSERT INTO shop_site_revocation_observations '
+    'INSERT OR REPLACE INTO shop_site_revocation_observations '
     '(tenant_id, site_id, generation, observed_at_millis, source_digest) '
     'VALUES (?, ?, 3, ?, ?)',
     variables: [
@@ -392,7 +1980,7 @@ Future<String> _seedAuthority(
       Variable<String>(tenantId),
       Variable<String>(siteId),
       Variable<String>(actorId),
-      Variable<String>(jsonEncode(const ['shop.stock.reserve'])),
+      Variable<String>(jsonEncode(const ['counterSale', 'cafeOrderWrite'])),
       Variable<String>(deviceId),
       Variable<int>(_now - 1000),
       Variable<int>(_now + 60000),
@@ -400,6 +1988,15 @@ Future<String> _seedAuthority(
       Variable<String>(List.filled(64, 's').join()),
     ],
   );
+  if (bindStockScope) {
+    await database.bindConnectedStockScopeForEnrollment(
+      tenantId: tenantId,
+      siteId: siteId,
+      enrollmentEvidenceDigest: _digest('enrollment:$tenantId:$siteId'),
+      boundAtMillis: _now - 500,
+      connectedSiteEnabled: true,
+    );
+  }
   return leaseDigest;
 }
 
@@ -416,8 +2013,59 @@ ShopConnectedSiteCommandInput _command(
   String actorId = _actor,
   String deviceId = _device,
   String? leaseDigest,
+  int createdAtMillis = _now,
+  ShopStaffCapability capability = ShopStaffCapability.counterSale,
+  ShopConnectedStockReservationLifecycleInput? stockReservationLifecycle,
+  ConnectedStockReservationV1? stockReservation,
 }) {
-  final payload = <String, Object?>{'commandId': id};
+  if (reservationProductId != null &&
+      aggregateType == 'stockItem' &&
+      aggregateId == 'stock:rice') {
+    aggregateType = ConnectedStockWorkflowType.retailCart.name;
+    aggregateId = id;
+  }
+  final selectedReservation =
+      stockReservation ??
+      (reservationProductId == null
+          ? null
+          : ConnectedStockReservationV1.held(
+              reservationId: 'reservation:$id',
+              workspaceId: tenantId,
+              siteId: siteId,
+              actorId: actorId,
+              deviceId: deviceId,
+              workflowType: ConnectedStockWorkflowType.retailCart,
+              subjectId: id,
+              capability: ShopStaffCapability.counterSale,
+              lines: [
+                ConnectedStockReservationLineV1(
+                  productId: reservationProductId,
+                  quantity: 1,
+                ),
+              ],
+              issuedAt: '2033-05-18T03:33:20.000Z',
+              expiresAt: '2033-05-18T03:33:50.000Z',
+            ));
+  final eventType = selectedReservation != null
+      ? shopConnectedStockReservedEventType
+      : stockReservationLifecycle != null
+      ? shopConnectedStockReleasedEventType
+      : 'shop.stock.reserved.v1';
+  final payload = selectedReservation != null
+      ? <String, Object?>{
+          'contract': 'supermega.shop.connected-stock-reserve.v1',
+          'reservation': selectedReservation.toJson(),
+        }
+      : stockReservationLifecycle != null
+      ? <String, Object?>{
+          'contract': 'supermega.shop.connected-stock-release.v1',
+          'reservationId': stockReservationLifecycle.reservationId,
+          'expectedReservationDigest':
+              stockReservationLifecycle.expectedReservationDigest,
+          'targetState': stockReservationLifecycle.targetState.name,
+          'reason': stockReservationLifecycle.reason,
+        }
+      : <String, Object?>{'commandId': id};
   final event = <String, Object?>{
     'eventId': 'event:$id',
     'workspaceId': tenantId,
@@ -425,8 +2073,11 @@ ShopConnectedSiteCommandInput _command(
     'aggregateType': aggregateType,
     'aggregateId': aggregateId,
     'aggregateVersion': expectedVersion + 1,
-    'eventType': 'shop.stock.reserved.v1',
-    'occurredAt': '2033-05-18T03:33:20.000Z',
+    'eventType': eventType,
+    'occurredAt': DateTime.fromMillisecondsSinceEpoch(
+      createdAtMillis,
+      isUtc: true,
+    ).toIso8601String(),
     'payload': payload,
   };
   return ShopConnectedSiteCommandInput(
@@ -437,26 +2088,89 @@ ShopConnectedSiteCommandInput _command(
     deviceId: deviceId,
     aggregateType: aggregateType,
     aggregateId: aggregateId,
-    capability: 'shop.stock.reserve',
+    capability: capability.name,
     expectedVersion: expectedVersion,
-    payloadDigest: _digest('payload:$id'),
+    payloadDigest: connectedSiteSha256(payload),
     leaseDigest: leaseDigest ?? _leaseDigest,
     commandDigest: commandDigest ?? _digest('command:$id'),
     eventId: 'event:$id',
-    eventType: 'shop.stock.reserved.v1',
+    eventType: eventType,
     eventPayloadJson: jsonEncode(payload),
     eventDigest: eventDigest ?? connectedSiteSha256(event),
     ackDigest: _digest('ack:$id'),
     auditAction: 'shop.stock.reserve',
     auditMetadataDigest: _digest('audit:$id'),
-    createdAtMillis: _now,
-    reservationId: reservationProductId == null ? null : 'reservation:$id',
-    reservationProductId: reservationProductId,
-    reservationQuantity: reservationProductId == null ? null : 1,
-    reservationExpiresAtMillis: reservationProductId == null
-        ? null
-        : _now + 30000,
+    createdAtMillis: createdAtMillis,
+    stockReservation: selectedReservation,
+    stockReservationLifecycle: stockReservationLifecycle,
   );
 }
 
 String _digest(String value) => sha256.convert(utf8.encode(value)).toString();
+
+class _FixedTime implements ShopConnectedSiteCoordinatorTimeAuthority {
+  const _FixedTime(this.nowMillis);
+
+  final int nowMillis;
+
+  @override
+  Future<int> readValidatedNowMillis({
+    required String tenantId,
+    required String siteId,
+  }) async => nowMillis;
+}
+
+extension _ConnectedCommandTestHarness on ShopDatabase {
+  Future<ShopConnectedSiteCommandResult> applyConnectedSiteCommandForTest(
+    ShopConnectedSiteCommandInput input, {
+    required bool connectedSiteEnabled,
+    ShopConnectedSiteCoordinatorTimeAuthority? timeAuthority,
+  }) => applyConnectedSiteCommand(
+    input,
+    connectedSiteEnabled: connectedSiteEnabled,
+    timeAuthority: timeAuthority ?? _FixedTime(input.createdAtMillis),
+  );
+}
+
+MerchantWalletSetup _walletSetup() => MerchantWalletSetup(
+  provider: 'KBZPay',
+  merchantPhone: null,
+  officialQrPayload: _syntheticStaticMmqr(),
+  issuerConfirmed: true,
+);
+
+String _syntheticStaticMmqr() {
+  String field(String id, String value) =>
+      '$id${utf8.encode(value).length.toString().padLeft(2, '0')}$value';
+  final merchant = [
+    field('00', 'MM.COM.MMQR'),
+    field('01', '999999999999999'),
+    field('02', '000000'),
+  ].join();
+  final language = [field('00', 'my'), field('01', 'ဆိုင်')].join();
+  final body = [
+    field('00', '01'),
+    field('01', '11'),
+    field('26', merchant),
+    field('52', '5411'),
+    field('53', '104'),
+    field('58', 'MM'),
+    field('59', 'TEST STORE'),
+    field('60', 'Yangon'),
+    field('64', language),
+    '6304',
+  ].join();
+  return '$body${_testCrc16(utf8.encode(body))}';
+}
+
+String _testCrc16(List<int> bytes) {
+  var crc = 0xffff;
+  for (final byte in bytes) {
+    crc ^= byte << 8;
+    for (var bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x8000) != 0 ? ((crc << 1) ^ 0x1021) : crc << 1;
+      crc &= 0xffff;
+    }
+  }
+  return crc.toRadixString(16).toUpperCase().padLeft(4, '0');
+}

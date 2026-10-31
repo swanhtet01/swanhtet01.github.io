@@ -4,6 +4,8 @@ import 'package:drift/drift.dart';
 
 import 'shop_cafe_order_contract.dart';
 import 'shop_cafe_kitchen_entitlement.dart';
+import 'shop_connected_site_contracts.dart';
+import 'shop_connected_stock_reservation.dart';
 import 'shop_database.dart';
 import 'shop_staff_authorization.dart';
 
@@ -66,11 +68,13 @@ class ShopCafeStartedKitchenLineException implements Exception {
 
 /// Device-local café persistence and cash completion.
 ///
-/// This is not a reservation, split-tender, printer, or cross-device contract.
+/// This is not a split-tender, printer, or cross-device contract.
 /// Basic local orders and table labels remain available without kitchen
 /// routing. Routed kitchen/bar snapshots require the injected entitlement at
 /// the transactional store boundary. Whole unrouted line instances can be
-/// separated into two local bills that are completed as distinct sales.
+/// separated into two local bills that are completed as distinct sales. An
+/// injected, already-authenticated connected stock reservation can be adopted
+/// atomically by cash completion while connected mode remains default-off.
 class ShopCafeOrderStore {
   ShopCafeOrderStore(
     this.database, {
@@ -1035,6 +1039,9 @@ class ShopCafeOrderStore {
     required int expectedStateRevision,
     int? cashTenderedMmk,
     bool requirePendingCashCheckout = false,
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) => database.transaction(() async {
     final cleanOrderId = _operationId(orderId, 'order');
     final cleanOperationId = _operationId(operationId, 'operation');
@@ -1065,6 +1072,12 @@ class ShopCafeOrderStore {
           replay.readNullable<String>('sale_id') != cleanOperationId) {
         throw StateError('A café sale operation ID was reused differently.');
       }
+      await database.requireConnectedStockReservationSaleReplay(
+        saleId: cleanOperationId,
+        saleCommandId: cleanOperationId,
+        saleRequestFingerprint: fingerprint,
+        reservation: connectedStockReservation,
+      );
       return _receipt(cleanOperationId);
     }
     if (requirePendingCashCheckout) {
@@ -1072,6 +1085,11 @@ class ShopCafeOrderStore {
         operationId: cleanOperationId,
         checkoutKind: 'cafe',
         subjectId: cleanOrderId,
+      );
+      await database.requireConnectedTenderReservationBindingForSale(
+        operationId: cleanOperationId,
+        tenderKind: 'cash',
+        reservation: connectedStockReservation,
       );
     }
     if (order == null ||
@@ -1121,6 +1139,17 @@ class ShopCafeOrderStore {
         ifAbsent: () => line.quantity,
       );
     }
+    final connectedNow = connectedStockReservation == null
+        ? null
+        : await database.validateConnectedStockReservationForSale(
+            reservation: connectedStockReservation,
+            operationId: cleanOperationId,
+            workflowType: ConnectedStockWorkflowType.cafeOrder,
+            capability: ShopStaffCapability.cafeOrderWrite,
+            subjectId: cleanOrderId,
+            productQuantities: requiredStock,
+            timeAuthority: connectedTimeAuthority,
+          );
     final stockByProduct =
         <String, ({String name, int onHand, int reservedByOther})>{};
     for (final requirement in requiredStock.entries) {
@@ -1133,9 +1162,11 @@ class ShopCafeOrderStore {
       if (product == null) {
         throw StateError('A café product is no longer available.');
       }
-      final reservedByOther = await database.readPendingCashReservedQuantity(
+      final reservedByOther = await database.readReservedStockQuantity(
         requirement.key,
-        excludingOperationId: requirePendingCashCheckout
+        excludingConnectedReservationId:
+            connectedStockReservation?.reservationId,
+        excludingPendingCashOperationId: requirePendingCashCheckout
             ? cleanOperationId
             : null,
       );
@@ -1302,6 +1333,22 @@ class ShopCafeOrderStore {
       saleId: cleanOperationId,
       now: now,
     );
+    if (connectedStockReservation != null) {
+      await database.commitConnectedStockReservationForSale(
+        reservation: connectedStockReservation,
+        saleId: cleanOperationId,
+        saleCommandId: cleanOperationId,
+        saleCommandDigest: connectedSiteSha256({
+          'operationId': cleanOperationId,
+          'requestFingerprint': fingerprint,
+        }),
+        workflowType: ConnectedStockWorkflowType.cafeOrder,
+        capability: ShopStaffCapability.cafeOrderWrite,
+        subjectId: cleanOrderId,
+        productQuantities: requiredStock,
+        validatedNowMillis: connectedNow!,
+      );
+    }
     if (requirePendingCashCheckout) {
       await database.consumePendingCashCheckout(
         operationId: cleanOperationId,

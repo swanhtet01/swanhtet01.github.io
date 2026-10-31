@@ -31,6 +31,7 @@ enum _ShopSnapshotSchemaKind {
   unifiedV21,
   unifiedV22,
   unifiedV23,
+  unifiedV24,
 }
 
 enum _SnapshotColumnGroupState { none, partial, exact }
@@ -55,7 +56,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 23;
+  static const supportedSchemaVersion = 24;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -917,7 +918,8 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasWorkspaceSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
@@ -931,7 +933,8 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasProfileSchema =
           schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
@@ -945,7 +948,8 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasAuthorizationProofSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
@@ -956,7 +960,8 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasMemberSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
@@ -965,7 +970,8 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasConsumptionSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
@@ -973,31 +979,37 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasCashMovementSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasCafeOrderSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasCafeCancellationSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasPendingCashCheckoutSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final hasConnectedSiteSchema =
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV23;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24;
       final objects = _readSnapshotSchemaObjects(connection);
       final baseSchemaValid =
           objects != null &&
@@ -1822,7 +1834,9 @@ abstract final class ShopBackup {
         })) {
       return _ShopSnapshotSchemaKind.unifiedV20;
     }
-    final connectedSiteDefinitions = shopConnectedSiteSchemaDefinitionsV23();
+    final connectedSiteDefinitions = schemaVersion >= 24
+        ? shopConnectedSiteSchemaDefinitionsV24()
+        : shopConnectedSiteSchemaDefinitionsV23();
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1830,7 +1844,10 @@ abstract final class ShopBackup {
           connectedSiteDefinitions,
           connectedSiteDefinitions.keys.toSet(),
         );
-    if ((schemaVersion == 21 || schemaVersion == 22 || schemaVersion == 23) &&
+    if ((schemaVersion == 21 ||
+            schemaVersion == 22 ||
+            schemaVersion == 23 ||
+            schemaVersion == 24) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -1852,6 +1869,8 @@ abstract final class ShopBackup {
         (schemaVersion < 22 || _v22CashTenderRowsValid(connection)) &&
         connectedSiteExact &&
         (schemaVersion < 23 || _v23ConnectedSiteRowsValid(connection)) &&
+        (schemaVersion < 24 ||
+            _v24ConnectedStockReservationRowsValid(connection)) &&
         _snapshotDefinitionGroupExact(
           objects,
           const {
@@ -1892,7 +1911,9 @@ abstract final class ShopBackup {
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
-      return schemaVersion == 23
+      return schemaVersion == 24
+          ? _ShopSnapshotSchemaKind.unifiedV24
+          : schemaVersion == 23
           ? _ShopSnapshotSchemaKind.unifiedV23
           : schemaVersion == 22
           ? _ShopSnapshotSchemaKind.unifiedV22
@@ -3255,6 +3276,40 @@ abstract final class ShopBackup {
                 AND candidate.site_sequence <= event.site_sequence
             ) LIMIT 1
           ''').isEmpty;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v24ConnectedStockReservationRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String sql) => connection
+          .select(sql)
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedStockReservationRowsValidV24(
+        commands: rows('SELECT * FROM shop_site_commands'),
+        events: rows('SELECT * FROM shop_site_events'),
+        headers: rows('SELECT * FROM shop_connected_stock_reservation_headers'),
+        lines: rows('SELECT * FROM shop_connected_stock_reservation_lines'),
+        transitions: rows(
+          'SELECT * FROM shop_connected_stock_reservation_transitions',
+        ),
+        sales: rows(
+          'SELECT id, operation_id, request_fingerprint FROM shop_sales',
+        ),
+        trustedTimes: rows('SELECT * FROM shop_connected_trusted_time'),
+        scopeBindings: rows('SELECT * FROM shop_connected_scope_binding'),
+        tenderBindings: rows(
+          'SELECT * FROM shop_connected_tender_reservation_bindings',
+        ),
+        pendingCashCheckouts: rows(
+          'SELECT operation_id FROM shop_pending_cash_checkouts',
+        ),
+        walletCheckoutIntents: rows(
+          'SELECT operation_id, state FROM shop_wallet_checkout_intents',
+        ),
+      );
     } on Object {
       return false;
     }
