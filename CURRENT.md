@@ -37,10 +37,10 @@ before acting; a newer fact never widens authority.
 
 | Item | Verified fact |
 |---|---|
-| Exact private technical checkpoint | Runtime implementation `0b07170cc00308a9e977d37541902f4b0658506e`, repository tree `12fd0c0601e84ed24bc8c7157ef2bda01adb9a2f`; publication remains prohibited |
-| Native identities | Current test-inclusive `mobile/shop_pos` tree `12c50dd4a5bbbd8cda24925123343fa75c29c085`; current runtime `lib/` tree `b717e114e9bca9c810973a5b5437d506a81f4aa2`. The retained QA APK remains bound to older accepted runtime `cc0efa4f` / `lib/` tree `504d6113d88163a066371462cd26e8fa64633658` and is therefore stale for the current reservation fix |
+| Exact private technical checkpoint | Runtime implementation `8305a207437dc79b9d4dfd57b5237c3af2648944`, repository tree `67a7a81fe56f6eefa9902f4aa40f93ca89ae7bc5`; publication remains prohibited |
+| Native identities | Current test-inclusive `mobile/shop_pos` tree `f62edf75d768deac194337fd3a33965602bf39d8`; current runtime `lib/` tree `b2b4ef901a003eec8d757522d8c82305b792d4f9`. The retained QA APK remains bound to older accepted runtime `cc0efa4f` / `lib/` tree `504d6113d88163a066371462cd26e8fa64633658` and is therefore stale for the current reservation fix |
 | Runtime successor | `cc0efa4f56174c636fcd28cbdcf1e24c2db8349c`, containing cash-tender runtime `35d5b1d2`, v1 migration repair `1b2686bc`, and immutable cafe product-name snapshots |
-| Pending-cash stock-reservation successor | Private implementation `0b07170c` makes a pending counter or cafe cash intent reserve its saved quantities. Intent creation rejects insufficient unreserved stock; counter, cafe and wallet sale commits atomically preserve every other pending cash reservation; only a successfully validated current pending operation excludes its own reservation. Cancellation releases the reservation. File-backed restart regressions prove both counter-to-cafe and cafe-to-counter protection, rejected competitors leave sale/stock/outbox/order/pending state unchanged, and cancel-then-retry remains usable |
+| Pending-cash stock-reservation successor | Private implementation `8305a207` makes a pending counter or cafe cash intent reserve its saved quantities. Intent creation rejects insufficient unreserved stock; counter, cafe and wallet sale commits atomically preserve every other pending cash reservation; only a successfully validated current pending operation excludes its own reservation. Cancellation releases the reservation. Counter EN/MY and cafe UI now report the quantity available for the specific sale/order instead of misreporting physical on-hand stock. File-backed restart and widget regressions prove both reservation directions, rejected competitors leave sale/stock/outbox/order/pending state unchanged, and cancel-then-retry remains usable |
 | Native local verification head | `f58be5f7bcdaf8b3f83ee5d7c89712fca282a4bd`, repository tree `919a1368d86f6c87d4e875b51adcf72d8587416b`; later evidence/docs/tooling changes leave native tree `f110be98` unchanged |
 | Reviewed implementation/provenance head | `0af2750165f7d3925d4b106e7e91e44bc069350b`, repository tree `eefc0089c8ed17dead51fe5718a63aee218d807d`; includes release-truth reconciliation and source-only iOS/Windows QA provenance hardening, with native tree still `f110be98` |
 | Latest private release-integrity checkpoint | `1213fa189de3912d95e0c3e18c6bb8913a257234`, repository tree `b5d182d1a748d176c4068da60dd6059dc28af5e9`; aligns the gallery verifier/refresher with the independently reviewed current native-CI workflow bytes, while leaving the native tree `f110be98` unchanged |
@@ -49,7 +49,7 @@ before acting; a newer fact never widens authority.
 | Branch | `codex/postgres17-provenance-integration-20261031`, the single authorized replacement technical lane layered on the post-#734 merge branch |
 | Successor classification | Includes reviewed website telemetry privacy `897a207c` + `64d26887`, managed/local workspace-controls privacy `2a80479d` + `957fcd12` + `87651b97`, Settings/company-recovery privacy `40f47962`, managed-account support routing `f0030f28`, privacy-aligned app verifier `040ffbff`, managed access-entry clarity `9fa44b4a`, public signup transition guard `ec0919cd`, verifier/contact-contract repairs through `8cb51ee0`, PostgreSQL version-binding hardening `d7399679`, durable native cash-tender v22 runtime `35d5b1d2`, empty-v1 migration repair `1b2686bc`, and cafe product-name snapshot repair `cc0efa4f` |
 | Publication | Draft integration only; not merged, deployed, signed, or release-ready. Automatic CI on the replacement lane remains evidence, not production approval |
-| Worktree note | Exact-current gallery captures are absent. Accepted private QA APK for native `cc0efa4f` is retained at SHA-256 `ca5c7fa4...bf11`; installation is absent and the APK is stale for private runtime `0b07170c`. A bounded handoff from Local Tech Lead task `01a0d249-2b5d-7d83-a769-79336eeb777c` now appoints this task as the single Cloud Tech Lead coordinator and reserves machine-specific evidence plus independent final review to Local. Full Local thread readback, source/worktree reconciliation and receiver acknowledgement remain **UNVERIFIED** because direct thread reads previously returned `connection closed before server request was answered`. Do not claim full synchronization, recreate the Local task or duplicate its branch |
+| Worktree note | Exact-current gallery captures are absent. Accepted private QA APK for native `cc0efa4f` is retained at SHA-256 `ca5c7fa4...bf11`; installation is absent and the APK is stale for private runtime `8305a207`. A bounded handoff from Local Tech Lead task `01a0d249-2b5d-7d83-a769-79336eeb777c` now appoints this task as the single Cloud Tech Lead coordinator and reserves machine-specific evidence plus independent final review to Local. Full Local thread readback, source/worktree reconciliation and receiver acknowledgement remain **UNVERIFIED** because direct thread reads previously returned `connection closed before server request was answered`. Do not claim full synchronization, recreate the Local task or duplicate its branch |
 
 The runtime successor composes the reviewed retail foundation, durable
 cash-movement records, device-local cafe orders, modifiers and remarks,
@@ -170,14 +170,24 @@ Source-bound verification:
   suites **69/69 PASS**; backup suite **101/101 PASS**; contract suite **8/8
   PASS**; rename/archive/reopen, encrypted restore and rendered snapshot cases
   **PASS**; independent final review **PASS**;
-- pending-cash stock-reservation checkpoint `0b07170c` / native tree
-  `12c50dd4`: focused analyzer **PASS**; pending-cash suite **14/14 PASS**;
-  cafe store suite **25/25 PASS**; foundation suite **76/76 PASS**; claims guard
-  **179/179 PASS**. File-backed SQLite regressions cover both reservation
-  directions across restart, cancellation release, exact-once completion and
-  rollback of rejected competing sale, movement, outbox and cafe-state effects.
-  Independent final source review **PASS**. This is synthetic local evidence,
-  not installed-device, cross-device or merchant acceptance;
+- pending-cash stock-reservation checkpoint `8305a207` / native tree
+  `f62edf75` / runtime `lib/` tree `b2b4ef90`: exact-source analyzer
+  **PASS**; sequential behavior shard **361/361 PASS** in 2:34, log SHA-256
+  `5660cf38443e107d184fc36c60404d4ca61cf0557441b28ed4db5ebf7387c4fb`;
+  sequential persistence/recovery shard **265 PASS, 33 intentional
+  visual-capture SKIP, 0 FAIL** in 3:44, log SHA-256
+  `8de14a7283507d7cb7f9dc3e1ad88be780edbdb3327754b21758d281b4173537`;
+  real subprocess interruption harness **14/14 PASS**, log SHA-256
+  `bef2eb9490a59eefb01c02bb8b39b62a5117999dee22c1ed1ab55ae2871e2fda`;
+  claims guard **179/179 PASS**. Focused reservation-conflict UI regressions
+  **3/3 PASS** cover counter EN/MY and cafe, preserve physical on-hand truth,
+  and assert no sale, movement, outbox or order-state effects. File-backed
+  SQLite tests cover both reservation directions across restart, cancellation
+  release, exact-once completion and rollback. An initial behavior run exposed
+  three misleading stock-copy failures; the failed log remains preserved, the
+  copy was corrected to say quantity available for the sale/order, and
+  independent final source re-review is **PASS**. This is synthetic local
+  evidence, not installed-device, cross-device or merchant acceptance;
 - exact-native-tree local verification at whole-repository `f58be5f7`, native
   tree `f110be98`: sequential behavior shard **358 PASS, 0 SKIP, 0 FAIL** in
   2:47, log SHA-256
