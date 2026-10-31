@@ -169,10 +169,11 @@ test('pending source-controlled profile pins EDB bytes but stays fail-closed', a
   assert.equal(profile.sources[0].fileName, 'postgresql-17.11-5-windows-x64.exe')
   assert.equal(profile.sources[0].bytes, 413001200)
   assert.equal(profile.sources[0].sha256, '612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072')
+  const pendingSourceId = profile.sources[0].sourceId
   for (const blocker of ['profile_not_reviewed', 'load_closure_incomplete',
     'source_component_missing:python', 'source_component_missing:psycopg',
     'source_component_missing:node', 'source_component_missing:git',
-    'source_authentication_unverified:edb-postgresql-17.11-5-windows-x64',
+    `source_authentication_unverified:${pendingSourceId}`,
     'independent_approval_missing', 'binding_missing:postgres']) assert.ok(result.blockers.includes(blocker), blocker)
   assert.equal(result.blockers.some((value) => value.includes('materialization')), false)
 })
