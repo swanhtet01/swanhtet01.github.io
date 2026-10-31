@@ -479,6 +479,220 @@ void main() {
     }
   });
 
+  test(
+    'restarted counter cash reservation blocks cafe until cancelled',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'shop-pending-counter-stock-reservation-',
+      );
+      final file = File('${root.path}/shop.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await database.addProduct(
+          id: 'last-tea',
+          name: 'Last tea',
+          priceMmk: 2000,
+          openingStock: 1,
+        );
+        await database.saveCounterSaleDraft(
+          operationId: 'reserved-counter-sale',
+          quantities: const {'last-tea': 1},
+        );
+        await database.beginPendingCashCheckout(
+          operationId: 'reserved-counter-sale',
+          checkoutKind: 'counter',
+          subjectId: 'reserved-counter-sale',
+        );
+        final cafeStore = ShopCafeOrderStore(database);
+        final cafeOrder = await cafeStore.applyCommand(
+          CafeOrderCommand(
+            id: 'competing-cafe-create',
+            ticketId: 'competing-cafe-order',
+            expectedVersion: 0,
+            lines: [
+              CafeOrderLine.local(
+                id: 'competing-cafe-line',
+                productId: 'last-tea',
+                quantity: 1,
+                baseUnitPriceMmk: 2000,
+                remark: '',
+                modifiers: const [],
+              ),
+            ],
+          ),
+          const {},
+        );
+        await database.close();
+
+        database = ShopDatabase(NativeDatabase(file));
+        final reopenedCafeStore = ShopCafeOrderStore(database);
+        final movementsBeforeRejectedCafe = await database
+            .countStockMovements();
+        final outboxBeforeRejectedCafe = await database.countOutboxOperations();
+        await expectLater(
+          database.beginPendingCashCheckout(
+            operationId: 'competing-cafe-sale',
+            checkoutKind: 'cafe',
+            subjectId: cafeOrder.ticket.id,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        await expectLater(
+          reopenedCafeStore.completeCash(
+            orderId: cafeOrder.ticket.id,
+            operationId: 'competing-cafe-without-reservation',
+            expectedTicketVersion: cafeOrder.ticket.version,
+            expectedStateRevision: cafeOrder.stateRevision,
+          ),
+          throwsA(isA<ShopCafeInsufficientStockException>()),
+        );
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        expect(
+          await database.countStockMovements(),
+          movementsBeforeRejectedCafe,
+        );
+        expect(
+          await database.countOutboxOperations(),
+          outboxBeforeRejectedCafe,
+        );
+        expect(
+          (await reopenedCafeStore.read(cafeOrder.ticket.id))?.state,
+          'open',
+        );
+        expect(
+          await database.readPendingCashCheckout(
+            checkoutKind: 'cafe',
+            subjectId: cafeOrder.ticket.id,
+          ),
+          isNull,
+        );
+        expect(
+          await database.readPendingCashCheckout(
+            checkoutKind: 'counter',
+            subjectId: 'reserved-counter-sale',
+          ),
+          isNotNull,
+        );
+
+        await database.cancelPendingCashCheckout(
+          checkoutKind: 'counter',
+          subjectId: 'reserved-counter-sale',
+        );
+        await database.beginPendingCashCheckout(
+          operationId: 'competing-cafe-sale',
+          checkoutKind: 'cafe',
+          subjectId: cafeOrder.ticket.id,
+        );
+        final cafeReceipt = await reopenedCafeStore.completeCash(
+          orderId: cafeOrder.ticket.id,
+          operationId: 'competing-cafe-sale',
+          expectedTicketVersion: cafeOrder.ticket.version,
+          expectedStateRevision: cafeOrder.stateRevision,
+          requirePendingCashCheckout: true,
+        );
+        expect(cafeReceipt.totalMmk, 2000);
+        expect(await database.countSales(), 1);
+        expect((await database.readActiveProducts()).single.onHand, 0);
+      } finally {
+        await database.close();
+        await root.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'restarted cafe cash reservation blocks a competing counter sale',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'shop-pending-cafe-stock-reservation-',
+      );
+      final file = File('${root.path}/shop.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await database.addProduct(
+          id: 'last-coffee',
+          name: 'Last coffee',
+          priceMmk: 3000,
+          openingStock: 1,
+        );
+        var cafeStore = ShopCafeOrderStore(database);
+        final cafeOrder = await cafeStore.applyCommand(
+          CafeOrderCommand(
+            id: 'reserved-cafe-create',
+            ticketId: 'reserved-cafe-order',
+            expectedVersion: 0,
+            lines: [
+              CafeOrderLine.local(
+                id: 'reserved-cafe-line',
+                productId: 'last-coffee',
+                quantity: 1,
+                baseUnitPriceMmk: 3000,
+                remark: '',
+                modifiers: const [],
+              ),
+            ],
+          ),
+          const {},
+        );
+        await database.beginPendingCashCheckout(
+          operationId: 'reserved-cafe-sale',
+          checkoutKind: 'cafe',
+          subjectId: cafeOrder.ticket.id,
+        );
+        await database.close();
+
+        database = ShopDatabase(NativeDatabase(file));
+        cafeStore = ShopCafeOrderStore(database);
+        final movementsBeforeRejectedCounter = await database
+            .countStockMovements();
+        final outboxBeforeRejectedCounter = await database
+            .countOutboxOperations();
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'competing-counter-sale',
+            lines: const [
+              ShopSaleLineInput(productId: 'last-coffee', quantity: 1),
+            ],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        expect(
+          await database.countStockMovements(),
+          movementsBeforeRejectedCounter,
+        );
+        expect(
+          await database.countOutboxOperations(),
+          outboxBeforeRejectedCounter,
+        );
+        expect((await cafeStore.read(cafeOrder.ticket.id))?.state, 'open');
+        expect(
+          await database.readPendingCashCheckout(
+            checkoutKind: 'cafe',
+            subjectId: cafeOrder.ticket.id,
+          ),
+          isNotNull,
+        );
+
+        final cafeReceipt = await cafeStore.completeCash(
+          orderId: cafeOrder.ticket.id,
+          operationId: 'reserved-cafe-sale',
+          expectedTicketVersion: cafeOrder.ticket.version,
+          expectedStateRevision: cafeOrder.stateRevision,
+          requirePendingCashCheckout: true,
+        );
+        expect(cafeReceipt.totalMmk, 3000);
+        expect(await database.countSales(), 1);
+        expect((await database.readActiveProducts()).single.onHand, 0);
+      } finally {
+        await database.close();
+        await root.delete(recursive: true);
+      }
+    },
+  );
+
   test('closed captured shift fails runtime and backup verification', () async {
     final root = await Directory.systemTemp.createTemp('shop-cash-corrupt-');
     final file = File('${root.path}/shop.sqlite');

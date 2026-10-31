@@ -1125,7 +1125,8 @@ class ShopCafeOrderStore {
         ifAbsent: () => line.quantity,
       );
     }
-    final stockByProduct = <String, ({String name, int available})>{};
+    final stockByProduct =
+        <String, ({String name, int onHand, int reservedByOther})>{};
     for (final requirement in requiredStock.entries) {
       final product = await database
           .customSelect(
@@ -1136,15 +1137,24 @@ class ShopCafeOrderStore {
       if (product == null) {
         throw StateError('A café product is no longer available.');
       }
+      final reservedByOther = await database.readPendingCashReservedQuantity(
+        requirement.key,
+        excludingOperationId: requirePendingCashCheckout
+            ? cleanOperationId
+            : null,
+      );
+      final onHand = product.read<int>('on_hand');
       final stock = (
         name: product.read<String>('name'),
-        available: product.read<int>('on_hand'),
+        onHand: onHand,
+        reservedByOther: reservedByOther,
       );
       stockByProduct[requirement.key] = stock;
-      if (stock.available < requirement.value) {
+      final available = onHand - reservedByOther;
+      if (available < requirement.value) {
         throw ShopCafeInsufficientStockException(
           productName: stock.name,
-          available: stock.available,
+          available: available < 0 ? 0 : available,
           requiredQuantity: requirement.value,
         );
       }
@@ -1181,6 +1191,7 @@ class ShopCafeOrderStore {
     final eventLines = <Map<String, Object>>[];
     for (final line in order.ticket.lines) {
       final product = stockByProduct[line.productId]!;
+      final requiredOnHand = line.quantity + product.reservedByOther;
       final changed = await database.customUpdate(
         'UPDATE shop_products SET on_hand = on_hand - ?, '
         'updated_at_millis = ? WHERE id = ? AND on_hand >= ?',
@@ -1188,7 +1199,7 @@ class ShopCafeOrderStore {
           Variable<int>(line.quantity),
           Variable<int>(now),
           Variable<String>(line.productId),
-          Variable<int>(line.quantity),
+          Variable<int>(requiredOnHand),
         ],
       );
       if (changed != 1) {
@@ -1198,9 +1209,12 @@ class ShopCafeOrderStore {
               variables: [Variable<String>(line.productId)],
             )
             .getSingleOrNull();
+        final currentAvailable = current == null
+            ? 0
+            : current.read<int>('on_hand') - product.reservedByOther;
         throw ShopCafeInsufficientStockException(
           productName: product.name,
-          available: current?.read<int>('on_hand') ?? 0,
+          available: currentAvailable < 0 ? 0 : currentAvailable,
           requiredQuantity: requiredStock[line.productId]!,
         );
       }

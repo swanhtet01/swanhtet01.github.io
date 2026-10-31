@@ -6263,9 +6263,13 @@ class ShopDatabase extends _$ShopDatabase {
         .get();
   }
 
-  Future<int> _pendingCashQuantityForProduct(String productId) async {
+  Future<int> readPendingCashReservedQuantity(
+    String productId, {
+    String? excludingOperationId,
+  }) async {
     final rows = await customSelect(
-      'SELECT intent.checkout_kind, draft.operation_id AS draft_operation_id, '
+      'SELECT intent.operation_id, intent.checkout_kind, '
+      'draft.operation_id AS draft_operation_id, '
       'draft.basket_json, draft.updated_at_millis, cafe.ticket_json '
       'FROM shop_pending_cash_checkouts intent '
       'LEFT JOIN shop_counter_drafts draft '
@@ -6278,6 +6282,7 @@ class ShopDatabase extends _$ShopDatabase {
     ).get();
     var quantity = 0;
     for (final row in rows) {
+      if (row.read<String>('operation_id') == excludingOperationId) continue;
       final kind = row.read<String>('checkout_kind');
       final pendingQuantity = kind == 'counter'
           ? _decodeCounterDraft(
@@ -6372,7 +6377,7 @@ class ShopDatabase extends _$ShopDatabase {
         throw StateError('Stock would exceed the supported quantity.');
       }
       if (kind == 'count') {
-        final pendingCashQuantity = await _pendingCashQuantityForProduct(
+        final pendingCashQuantity = await readPendingCashReservedQuantity(
           cleanProductId,
         );
         if (resultingOnHand < pendingCashQuantity) {
@@ -7852,6 +7857,45 @@ class ShopDatabase extends _$ShopDatabase {
     return _sha256Hex(row.read<String>('ticket_json'));
   }
 
+  Future<Map<String, int>> _cashCheckoutSubjectQuantities({
+    required String checkoutKind,
+    required String subjectId,
+  }) async {
+    if (checkoutKind == 'counter') {
+      final row = await customSelect(
+        'SELECT basket_json, updated_at_millis FROM shop_counter_drafts '
+        'WHERE operation_id = ?',
+        variables: [Variable<String>(subjectId)],
+      ).getSingleOrNull();
+      if (row == null) {
+        throw StateError('The counter sale changed. Review it again.');
+      }
+      return _decodeCounterDraft(
+        operationId: subjectId,
+        basketJson: row.read<String>('basket_json'),
+        updatedAtMillis: row.read<int>('updated_at_millis'),
+      ).quantities;
+    }
+    final row = await customSelect(
+      "SELECT ticket_json FROM shop_cafe_orders WHERE id = ? AND state = 'open'",
+      variables: [Variable<String>(subjectId)],
+    ).getSingleOrNull();
+    if (row == null) {
+      throw StateError('The café order changed. Refresh and review it.');
+    }
+    final quantities = <String, int>{};
+    for (final line in CafeOrderTicket.fromJson(
+      jsonDecode(row.read<String>('ticket_json')),
+    ).lines) {
+      quantities.update(
+        line.productId,
+        (quantity) => quantity + line.quantity,
+        ifAbsent: () => line.quantity,
+      );
+    }
+    return quantities;
+  }
+
   ShopPendingCashCheckout _pendingCashCheckoutFromRow(QueryRow row) =>
       ShopPendingCashCheckout(
         operationId: row.read<String>('operation_id'),
@@ -7913,6 +7957,27 @@ class ShopDatabase extends _$ShopDatabase {
       checkoutKind: checkoutKind,
       subjectId: cleanSubjectId,
     );
+    final subjectQuantities = await _cashCheckoutSubjectQuantities(
+      checkoutKind: checkoutKind,
+      subjectId: cleanSubjectId,
+    );
+    for (final entry in subjectQuantities.entries) {
+      final product = await customSelect(
+        'SELECT on_hand FROM shop_products WHERE id = ?',
+        variables: [Variable<String>(entry.key)],
+      ).getSingleOrNull();
+      if (product == null) {
+        throw StateError('A selected product is no longer available.');
+      }
+      final alreadyReserved = await readPendingCashReservedQuantity(entry.key);
+      final available = product.read<int>('on_hand') - alreadyReserved;
+      if (entry.value > available) {
+        throw StateError(
+          'Not enough unreserved stock. Finish or cancel another pending '
+          'cash checkout first.',
+        );
+      }
+    }
     if (memberId != null) {
       final card = await customSelect(
         'SELECT 1 FROM shop_member_cards '
@@ -10235,6 +10300,14 @@ class ShopDatabase extends _$ShopDatabase {
         final productName = snapshot?.productName ?? product.name;
         final unitPriceMmk = snapshot?.unitPriceMmk ?? product.priceMmk;
         final lineTotal = unitPriceMmk * quantity;
+        final reservedByOtherCashCheckouts =
+            await readPendingCashReservedQuantity(
+              product.id,
+              excludingOperationId: cashCheckoutSubjectId == null
+                  ? null
+                  : cleanOperationId,
+            );
+        final requiredOnHand = quantity + reservedByOtherCashCheckouts;
         final changedRows = await customUpdate(
           'UPDATE shop_products '
           'SET on_hand = on_hand - ?, updated_at_millis = ? '
@@ -10243,7 +10316,7 @@ class ShopDatabase extends _$ShopDatabase {
             Variable<int>(quantity),
             Variable<int>(now),
             Variable<String>(product.id),
-            Variable<int>(quantity),
+            Variable<int>(requiredOnHand),
             Variable<int>(walletSnapshots == null ? 0 : 1),
           ],
         );
