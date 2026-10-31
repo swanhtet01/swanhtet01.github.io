@@ -181,7 +181,31 @@ void main() {
           ),
         );
         expect(await store.consumeAndCreatePending(claim), isTrue);
-        expect(await store.consumeAndCreatePending(claim), isFalse);
+        expect(
+          await store.consumeAndCreatePending(claim),
+          isTrue,
+          reason: 'an identical retry can recover a lost pending ack',
+        );
+        final substitutedKey = List<int>.generate(32, (index) => 255 - index);
+        expect(
+          await store.consumeAndCreatePending(
+            PairingNonceClaim(
+              workspaceId: claim.workspaceId,
+              siteId: claim.siteId,
+              coordinatorDeviceId: claim.coordinatorDeviceId,
+              nonce: claim.nonce,
+              clientFingerprint: claim.clientFingerprint,
+              clientPublicKey: base64Url
+                  .encode(substitutedKey)
+                  .replaceAll('=', ''),
+              keyAlgorithm: claim.keyAlgorithm,
+              observedAt: claim.observedAt,
+              expiresAt: claim.expiresAt,
+            ),
+          ),
+          isFalse,
+          reason: 'a consumed nonce cannot be rebound to another key',
+        );
         expect(
           await store.stateFor(
             workspaceId: _tenant,
@@ -243,6 +267,11 @@ void main() {
         await store.importOwnerEvidence(
           approval,
           verifier: const _EvidenceVerifier(true),
+        );
+        expect(
+          await store.consumeAndCreatePending(claim),
+          isFalse,
+          reason: 'pairing retries stop once the pending key is bound',
         );
         await expectLater(
           store.importOwnerEvidence(

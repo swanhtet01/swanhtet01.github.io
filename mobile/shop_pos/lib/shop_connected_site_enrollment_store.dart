@@ -153,6 +153,49 @@ class ShopConnectedSiteEnrollmentStore
         return false;
       }
       return await database.transaction(() async {
+        final registered = await database
+            .customSelect(
+              'SELECT consumed_at_millis FROM shop_site_pairing_nonces '
+              'WHERE nonce = ? AND tenant_id = ? AND site_id = ? '
+              'AND coordinator_device_id = ? AND expires_at_millis = ? '
+              'AND issued_at_millis <= ? AND expires_at_millis > ?',
+              variables: [
+                Variable<String>(claim.nonce),
+                Variable<String>(claim.workspaceId),
+                Variable<String>(claim.siteId),
+                Variable<String>(claim.coordinatorDeviceId),
+                Variable<int>(claim.expiresAt.millisecondsSinceEpoch),
+                Variable<int>(observedAtMillis),
+                Variable<int>(observedAtMillis),
+              ],
+            )
+            .getSingleOrNull();
+        if (registered == null) return false;
+        if (registered.readNullable<int>('consumed_at_millis') != null) {
+          final pending = await database
+              .customSelect(
+                'SELECT pending.public_key, pending.key_algorithm, '
+                'device.device_id AS bound_device_id '
+                'FROM shop_site_pending_enrollments pending '
+                'LEFT JOIN shop_site_devices device ON '
+                'device.public_key_fingerprint = pending.client_fingerprint '
+                'WHERE pending.client_fingerprint = ? AND pending.nonce = ? '
+                'AND pending.tenant_id = ? AND pending.site_id = ? '
+                'AND pending.coordinator_device_id = ?',
+                variables: [
+                  Variable<String>(claim.clientFingerprint),
+                  Variable<String>(claim.nonce),
+                  Variable<String>(claim.workspaceId),
+                  Variable<String>(claim.siteId),
+                  Variable<String>(claim.coordinatorDeviceId),
+                ],
+              )
+              .getSingleOrNull();
+          return pending != null &&
+              pending.readNullable<String>('bound_device_id') == null &&
+              pending.read<String>('key_algorithm') == claim.keyAlgorithm &&
+              _bytesEqual(pending.read<Uint8List>('public_key'), publicKey);
+        }
         final updated = await database.customUpdate(
           'UPDATE shop_site_pairing_nonces SET consumed_at_millis = ? '
           'WHERE nonce = ? AND tenant_id = ? AND site_id = ? '
@@ -192,6 +235,15 @@ class ShopConnectedSiteEnrollmentStore
     } on Object {
       return false;
     }
+  }
+
+  static bool _bytesEqual(List<int> left, List<int> right) {
+    if (left.length != right.length) return false;
+    var difference = 0;
+    for (var index = 0; index < left.length; index += 1) {
+      difference |= left[index] ^ right[index];
+    }
+    return difference == 0;
   }
 
   Future<void> importOwnerEvidence(
