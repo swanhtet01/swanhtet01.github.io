@@ -592,6 +592,34 @@ physical scanner/printer support, signed downloads, domestic competitor parity,
 or current-platform availability. The contact path provides guidance; it does
 not create an account or grant access.
 
+## Connected pilot Phase 2 checkpoint — 2026-10-31
+
+Private commit `af51d53a2a9b0b6c0e93a0ed35e45a9eedf77106`, tree
+`3fa3f741b60e6132dca15e05157da5efdf63b458`, is the reviewed default-off
+connected stock and coordinator-database checkpoint. It advances schema v24
+with explicit enrollment-scope binding, immutable retail/cafe reservations,
+cash/wallet adoption, canonical release/commit/expiry events, trusted-time
+rollback defense, encrypted backup/restore validation and the strict four-type
+database adapter. Production, synthetic-QA and fallback runtime profiles remain
+disabled; the checkpoint provides no LAN, cloud, issuer, key-store, installed
+device or merchant proof.
+
+Exact local evidence: focused analyzer **PASS** with no issues; native CI
+contract **17/17 PASS**; connected/cafe/cash regression set **133/133 PASS**
+under the 300-second outer ceiling; `git diff --check` **PASS**; independent
+security re-review **PASS for default-off Phase 2 only**. Tests cover explicit
+scope-before-write, final-unit competition, cash/wallet cancel and exact retry,
+cafe adoption, commit/expiry replication and response-loss replay, v22/v23
+migration, encrypted fresh-target restore, and coherent event-byte substitution.
+
+Phase 3 remains blocked from enablement until durable authenticated enrollment
+evidence replaces the test-only digest seam, pairing/public-key/nonces survive
+restart, platform key custody exists, system-derived terminal events have a
+reviewed cloud authority contract, and the real issuer/revocation/RLS path is
+proved. Higher-level abandon-sale orchestration must require authenticated hold
+release before a replacement operation. Do not call this checkpoint connected,
+pilot-ready or production-ready.
+
 ## External release gates
 
 1. **PostgreSQL evidence:** the tracked rehearsal receipt is stale. The
