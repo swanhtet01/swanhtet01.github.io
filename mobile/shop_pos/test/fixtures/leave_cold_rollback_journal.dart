@@ -46,8 +46,7 @@ void main(List<String> arguments) {
   if (Platform.isWindows) {
     final sqliteAsset = File(arguments[1]);
     if (!sqliteAsset.isAbsolute ||
-        sqliteAsset.path.split(Platform.pathSeparator).last.toLowerCase() !=
-            'sqlite3.dll' ||
+        sqliteAsset.uri.pathSegments.last.toLowerCase() != 'sqlite3.dll' ||
         FileSystemEntity.typeSync(sqliteAsset.path, followLinks: false) !=
             FileSystemEntityType.file) {
       stderr.writeln(
