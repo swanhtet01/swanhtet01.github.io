@@ -36,7 +36,7 @@
   },
   "materialization": {
     "status": "pending",
-    "method": "deterministic-read-only-extraction-v1",
+    "method": "two-pass-reviewed-installer-v1",
     "evidencePath": null,
     "evidenceBytes": null,
     "evidenceSha256": null
@@ -52,7 +52,7 @@
     "Publisher-authenticated archive provenance is not established.",
     "The Windows Authenticode verifier is implemented, but the canonical publisher policy remains pending with no independently reviewed signer certificate pinned.",
     "The current historical ZIP cannot inherit publisher identity from a sibling installer; the exact signed official installer must replace it as the profile archive/materialization root, with its byte digest and a matching fresh Authenticode observation.",
-    "No reviewed deterministic read-only extractor currently proves that the execution tree was materialized from the signed installer; production profiles remain blocked even when Authenticode checks pass.",
+    "The source verifier now requires an exact reviewed inventory and two byte-identical materialization passes, but no reviewed Windows executor or verified official-installer argument contract currently produces those passes; production profiles remain blocked even when Authenticode checks pass.",
     "Extracted PostgreSQL executable and loaded-library hashes are not recorded.",
     "OpenSSL, Python, and psycopg versions and file hashes are not bound.",
     "Independent profile approval is absent."

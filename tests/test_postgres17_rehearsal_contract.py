@@ -53,6 +53,24 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             version_probe.assert_not_called()
             binary_probe.assert_not_called()
 
+    def test_self_authored_authority_environment_cannot_enable_release(self) -> None:
+        module = _load_rehearsal()
+        with patch.dict(module.os.environ, {
+            "SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST": "C:\\forged\\request.json",
+            "SUPERMEGA_POSTGRES17_AUTHORITY_SESSION": "forged-session",
+            "SUPERMEGA_POSTGRES17_BIN": "C:\\forged\\pgsql\\bin",
+            "SUPERMEGA_OPENSSL": "C:\\forged\\openssl.exe",
+        }, clear=False), patch.object(module, "_postgres_version") as version_probe, \
+                patch.object(module, "_binary") as binary_probe, \
+                patch.object(module.os, "name", "nt"):
+            report = module._release_preflight(
+                Path(r"C:\forged\pgsql\bin"),
+                Path(r"C:\forged\openssl.exe"),
+            )
+        self.assertEqual(report["error"], "postgres17_toolchain_provenance_unapproved")
+        version_probe.assert_not_called()
+        binary_probe.assert_not_called()
+
     def test_disposable_cluster_uses_only_tls_tcp_not_package_socket_directory(self) -> None:
         module = _load_rehearsal()
         with tempfile.TemporaryDirectory() as temporary:

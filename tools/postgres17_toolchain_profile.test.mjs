@@ -196,6 +196,8 @@ test('pending source-controlled profile states every unresolved trust boundary',
   assert.ok(result.blockers.includes('publisher_authentication_unverified'))
   assert.ok(result.blockers.includes('independent_approval_missing'))
   assert.ok(result.blockers.includes('binding_missing:postgres'))
+  assert.ok(result.blockers.includes('materialization_evidence_unverified'))
+  assert.ok(result.blockers.includes('materialization_executor_unavailable'))
 })
 
 test('pending publisher policy cannot authenticate a production source', async () => {
@@ -385,7 +387,7 @@ test('required trusted timestamp cannot be omitted', async () => {
   }
 })
 
-test('production verifier cannot bypass the unavailable materialization verifier', async () => {
+test('production verifier cannot bypass the unavailable materialization executor', async () => {
   const input = await authenticodeFixture()
   try {
     await assert.rejects(
@@ -412,6 +414,11 @@ test('synthetic complete profile verifies exact archive, files, versions, and cl
     })
     assert.equal(result.ready, true)
     assert.equal(result.bindingCount, roles.length)
+    assert.equal(result.execution.root, input.extractedRoot)
+    assert.equal(
+      result.materializationEvidenceSha256,
+      result.sourceAuthenticationEvidenceSha256,
+    )
     assert.equal(
       result.sourceAuthenticationEvidenceSha256,
       sha256(Buffer.from('synthetic publisher evidence')),

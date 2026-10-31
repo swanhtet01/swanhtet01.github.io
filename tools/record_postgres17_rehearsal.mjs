@@ -122,8 +122,15 @@ export function toolchainChildEnvironment(verifiedToolchain, baseEnvironment = {
   if (!execution?.postgresBin || !execution?.openssl || !execution?.python || !execution?.psycopg) {
     fail('database_rehearsal_toolchain_execution_binding_missing')
   }
+  const environment = { ...baseEnvironment }
+  // Environment is transport, never authority. Strip caller-authored request
+  // selectors before inserting only paths returned by the toolchain verifier.
+  // The Python release gate remains disabled until it can independently
+  // revalidate a one-time request and the complete materialized tree.
+  delete environment.SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST
+  delete environment.SUPERMEGA_POSTGRES17_AUTHORITY_SESSION
   return {
-    ...baseEnvironment,
+    ...environment,
     SUPERMEGA_POSTGRES17_BIN: execution.postgresBin,
     SUPERMEGA_OPENSSL: execution.openssl,
     SUPERMEGA_PYTHON: execution.python,

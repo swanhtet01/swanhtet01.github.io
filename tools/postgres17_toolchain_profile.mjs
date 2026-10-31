@@ -4,6 +4,11 @@ import { createReadStream } from 'node:fs'
 import { lstat, readFile, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
+import {
+  inspectPostgres17MaterializationEvidence,
+  verifyTwoPassMaterializationRoots,
+} from './postgres17_materialization.mjs'
+
 export const POSTGRES17_TOOLCHAIN_PROFILE_CONTRACT =
   'supermega.postgres17-toolchain-provenance.v1'
 export const POSTGRES17_PUBLISHER_POLICY_CONTRACT =
@@ -199,17 +204,18 @@ export function inspectPostgres17ToolchainProfile(profile) {
   }
   if (profile.testOnly !== true && (!isObject(profile.materialization)
     || profile.materialization.status !== 'reviewed'
-    || profile.materialization.method !== 'deterministic-read-only-extraction-v1'
+    || profile.materialization.method !== 'two-pass-reviewed-installer-v1'
     || !safeRelativePath(profile.materialization.evidencePath)
     || !Number.isSafeInteger(profile.materialization.evidenceBytes)
     || profile.materialization.evidenceBytes <= 0
     || !SHA256.test(profile.materialization.evidenceSha256 || ''))) {
     blockers.push('materialization_evidence_unverified')
   }
-  // No reviewed extractor currently proves that a file tree was materialized
-  // from the signed installer without executing it. Keep every production
-  // profile blocked until that bridge is implemented and independently tested.
-  if (profile.testOnly !== true) blockers.push('materialization_verifier_unavailable')
+  // The source verifier can validate an exact reviewed inventory and compare
+  // two materialization passes, but no reviewed Windows executor currently
+  // performs those passes from the authenticated installer. A manifest is not
+  // proof that the installer produced a tree, so production stays blocked.
+  if (profile.testOnly !== true) blockers.push('materialization_executor_unavailable')
   if (profile.sourceAuthentication.status !== 'reviewed'
     || typeof profile.sourceAuthentication.method !== 'string'
     || profile.sourceAuthentication.method.length === 0
@@ -450,6 +456,7 @@ export async function verifyPostgres17ToolchainProfile({
   manifestPath,
   archivePath,
   extractedRoot = null,
+  secondExtractedRoot = null,
   allowSynthetic = false,
   requireHostPlatform = false,
 }) {
@@ -509,6 +516,32 @@ export async function verifyPostgres17ToolchainProfile({
       profile,
       parseJsonEvidence(await readFile(closurePath), 'database_rehearsal_load_closure_invalid'),
     )
+    const materializationPath = resolve(
+      dirname(manifestPath),
+      profile.materialization.evidencePath,
+    )
+    await verifyRegularFile(
+      materializationPath,
+      {
+        bytes: profile.materialization.evidenceBytes,
+        sha256: profile.materialization.evidenceSha256,
+      },
+      dirname(manifestPath),
+    )
+    const materializationEvidence = parseJsonEvidence(
+      await readFile(materializationPath),
+      'database_rehearsal_materialization_manifest_invalid',
+    )
+    inspectPostgres17MaterializationEvidence(profile, materializationEvidence)
+    if (typeof secondExtractedRoot !== 'string') {
+      fail('database_rehearsal_materialization_second_pass_missing')
+    }
+    await verifyTwoPassMaterializationRoots({
+      profile,
+      evidence: materializationEvidence,
+      firstRoot: extractedRoot,
+      secondRoot: secondExtractedRoot,
+    })
   }
   let publisherAuthentication = null
   if (profile.testOnly === false) {
@@ -561,6 +594,9 @@ export async function verifyPostgres17ToolchainProfile({
     loadClosureEvidenceSha256: profile.testOnly === false
       ? profile.loadClosure.evidenceSha256
       : profile.sourceAuthentication.evidenceSha256,
+    materializationEvidenceSha256: profile.testOnly === false
+      ? profile.materialization.evidenceSha256
+      : profile.sourceAuthentication.evidenceSha256,
     executionBundleSha256: createHash('sha256').update(JSON.stringify(
       [...profile.artifacts, ...profile.dependencies].map((binding) => ({
         role: binding.role,
@@ -574,6 +610,7 @@ export async function verifyPostgres17ToolchainProfile({
     )).digest('hex'),
     publisherAuthentication,
     execution: {
+      root: expectedRoot,
       postgresBin,
       openssl: execution.openssl,
       python: execution.python,

@@ -52,11 +52,15 @@ test('verified toolchain paths override every child tool selector', () => {
     SUPERMEGA_OPENSSL: 'C:\\untrusted.exe',
     SUPERMEGA_PYTHON: 'C:\\untrusted-python.exe',
     SUPERMEGA_PSYCOPG_FILE: 'C:\\untrusted-psycopg.py',
+    SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST: 'C:\\forged\\request.json',
+    SUPERMEGA_POSTGRES17_AUTHORITY_SESSION: 'forged-session',
   })
   assert.equal(environment.SUPERMEGA_POSTGRES17_BIN, 'C:\\verified\\pgsql\\bin')
   assert.equal(environment.SUPERMEGA_OPENSSL, 'C:\\verified\\openssl.exe')
   assert.equal(environment.SUPERMEGA_PYTHON, 'C:\\verified\\python.exe')
   assert.equal(environment.SUPERMEGA_PSYCOPG_FILE, 'C:\\verified\\psycopg\\__init__.py')
+  assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST' in environment, false)
+  assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_SESSION' in environment, false)
   assert.throws(() => toolchainChildEnvironment({ execution: {} }), /execution_binding_missing/)
 })
 
