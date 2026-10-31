@@ -624,6 +624,45 @@ proved. Higher-level abandon-sale orchestration must require authenticated hold
 release before a replacement operation. Do not call this checkpoint connected,
 pilot-ready or production-ready.
 
+## Connected pilot Phase 3 local authority checkpoint — 2026-10-31
+
+Private implementation commit `baa6c437dc3f3c5643fe84cb235aef2d62204888`,
+tree `a66e7e78ce9aa7e5ea20e7b220ec14d2030b8b06`, advances the default-off
+native database to schema v25. It adds durable pairing-nonce consumption,
+pending client enrollment, retained owner approval/revocation evidence,
+one-key/one-device binding, immutable request replay tombstones and exact
+public-key recovery. The preceding composition checkpoint
+`9886f0931c1d9b8f4d7bebb7903f455342195137` proves the real signed coordinator
+dispatch path reaches the real SQLite command/event transaction only after
+request, enrollment, lease, scope and capability checks.
+
+Live-open and encrypted-backup verification share one semantic authority-chain
+reconstructor. It re-hashes the Ed25519 public key, canonical evidence and
+digest, binds nonce/pending/coordinator/site/device state, permits exactly one
+approval and at most one later higher-generation revocation, validates request
+nonce timing, and rejects altered bytes. Valid revocation survives reopen,
+encrypted export and fresh-target restore; stale or future evidence, a second
+device using the same key, replayed requests and changed evidence fail closed.
+The v24→v25 migration creates empty authority tables and invents no enrollment.
+
+Exact implementation-runner evidence: focused enrollment/migration/restore
+tests **3/3 PASS**; affected persistence/enrollment/backup suite **121/121
+PASS** in 2:52; targeted analyzer **PASS** with no issues; native CI contract
+**17/17 PASS**; `git diff --check` **PASS**. An earlier affected run exposed a
+legacy fixture that dropped an index as a trigger; it remained a failure until
+the fixture was corrected, then the exact test and complete affected suite
+passed. Independent static security re-review **PASS for this default-off local
+checkpoint**, after first placing the slice on HOLD for revocation self-brick,
+multi-device key reuse and incomplete restore validation.
+
+This checkpoint still has no production issuer verifier or trusted owner key,
+no Android Keystore/Windows DPAPI custody, no LAN TLS client/server lifecycle,
+no cloud/RLS issuer and two-tenant proof, and no installed-device evidence.
+Request nonce retention is intentionally fail-closed and unbounded pending a
+reviewed epoch/compaction protocol. The complete Flutter suite is **NOT RUN**
+at this exact commit; its Phase 2 result must not be relabelled as Phase 3
+evidence. Connected operation remains disabled in every runtime profile.
+
 ## External release gates
 
 1. **PostgreSQL evidence:** the tracked rehearsal receipt is stale. The
