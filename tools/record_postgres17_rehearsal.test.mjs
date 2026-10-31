@@ -104,6 +104,21 @@ test('recorder authority requires the current exact verified Node executable', a
   )
 })
 
+test('record rejects a substituted Node before inspecting source or invoking Git', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-node-'))
+  let sourceInspections = 0
+  try {
+    const substituted = verifiedToolchainFixture()
+    substituted.execution.node = join(folder, 'substituted-node.exe')
+    await assert.rejects(record(join(folder, 'receipt.json'), {
+      revalidateToolchain: async () => substituted,
+      cleanSource: () => { sourceInspections += 1; throw new Error('must_not_run') },
+      gitOutput: () => { throw new Error('must_not_run') },
+    }), /recorder_node_unverified/)
+    assert.equal(sourceInspections, 0)
+  } finally { await rm(folder, { recursive: true, force: true }) }
+})
+
 test('recorder launches only the verified Python and explicit verified tool paths', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-launch-'))
   const destination = join(folder, 'receipt.json')
