@@ -4380,6 +4380,11 @@ void main() {
         isNotNull,
         reason: 'Flutter test did not expose its pinned Dart SDK executable.',
       );
+      final fixtureArguments = <String>[
+        '--packages=${File('.dart_tool/package_config.json').absolute.path}',
+        File('test/fixtures/leave_cold_rollback_journal.dart').absolute.path,
+        target.path,
+      ];
       if (Platform.isLinux) {
         final sqliteAsset = File('build/native_assets/linux/libsqlite3.so')
             .absolute;
@@ -4395,13 +4400,26 @@ void main() {
             inheritedPreload,
         ].join(':');
       }
+      if (Platform.isWindows) {
+        final sqliteAsset = File('build/native_assets/windows/sqlite3.dll')
+            .absolute;
+        expect(
+          await FileSystemEntity.type(sqliteAsset.path, followLinks: false),
+          FileSystemEntityType.file,
+          reason:
+              'Flutter did not prepare the exact Windows SQLite native test '
+              'asset as a regular file.',
+        );
+        expect(
+          sqliteAsset.path.split(Platform.pathSeparator).last.toLowerCase(),
+          'sqlite3.dll',
+          reason: 'The Windows cold-journal fixture must use sqlite3.dll.',
+        );
+        fixtureArguments.add(sqliteAsset.path);
+      }
       final abruptExit = await Process.run(
         dartExecutable!.path,
-        [
-          '--packages=${File('.dart_tool/package_config.json').absolute.path}',
-          File('test/fixtures/leave_cold_rollback_journal.dart').absolute.path,
-          target.path,
-        ],
+        fixtureArguments,
         workingDirectory: documents.path,
         environment: childEnvironment,
       );
