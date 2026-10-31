@@ -177,6 +177,22 @@ class ShopPendingCashCheckout {
   final int createdAtMillis;
 }
 
+/// A recoverable stock conflict that leaves every sale effect unchanged.
+///
+/// Pending cash creation and final sale commits use this shared shape so
+/// counter and cafe screens can report the exact item and usable quantity.
+class ShopStockUnavailableException implements Exception {
+  const ShopStockUnavailableException({
+    required this.productName,
+    required this.available,
+    required this.requiredQuantity,
+  });
+
+  final String productName;
+  final int available;
+  final int requiredQuantity;
+}
+
 /// A device-local counter basket. It is neither an order nor a stock hold.
 class CounterSaleDraft {
   const CounterSaleDraft({
@@ -7963,7 +7979,7 @@ class ShopDatabase extends _$ShopDatabase {
     );
     for (final entry in subjectQuantities.entries) {
       final product = await customSelect(
-        'SELECT on_hand FROM shop_products WHERE id = ?',
+        'SELECT name, on_hand FROM shop_products WHERE id = ?',
         variables: [Variable<String>(entry.key)],
       ).getSingleOrNull();
       if (product == null) {
@@ -7972,9 +7988,10 @@ class ShopDatabase extends _$ShopDatabase {
       final alreadyReserved = await readPendingCashReservedQuantity(entry.key);
       final available = product.read<int>('on_hand') - alreadyReserved;
       if (entry.value > available) {
-        throw StateError(
-          'Not enough unreserved stock. Finish or cancel another pending '
-          'cash checkout first.',
+        throw ShopStockUnavailableException(
+          productName: product.read<String>('name'),
+          available: available < 0 ? 0 : available,
+          requiredQuantity: entry.value,
         );
       }
     }

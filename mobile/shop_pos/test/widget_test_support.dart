@@ -20,6 +20,8 @@ import 'package:supermega_shop/menu_import_screen.dart';
 import 'package:supermega_shop/printer_setup_screen.dart';
 import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/recent_sales_screen.dart';
+import 'package:supermega_shop/shop_cafe_order_contract.dart';
+import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_correction_authorization_service.dart';
@@ -6262,6 +6264,100 @@ void registerWidgetTests(WidgetTestPartition partition) {
       expect(find.text('Cash received?'), findsNothing);
       await database.close();
     });
+
+    for (final myanmar in [false, true]) {
+      testWidgets(
+        'pending cafe stock reservation blocks counter cash in ${myanmar ? 'Myanmar' : 'English'}',
+        (tester) async {
+          _usePhoneViewport(tester);
+          final database = ShopDatabase(NativeDatabase.memory());
+          try {
+            await database.addProduct(
+              id: 'reserved-tea',
+              name: 'Reserved tea',
+              priceMmk: 2500,
+              openingStock: 1,
+            );
+            final cafeStore = ShopCafeOrderStore(database);
+            final reservedOrder = await cafeStore.applyCommand(
+              CafeOrderCommand(
+                id: 'reserve-cafe-command',
+                ticketId: 'reserve-cafe-ticket',
+                expectedVersion: 0,
+                lines: [
+                  CafeOrderLine.local(
+                    id: 'reserve-cafe-line',
+                    productId: 'reserved-tea',
+                    quantity: 1,
+                    baseUnitPriceMmk: 2500,
+                    remark: '',
+                    modifiers: const [],
+                  ),
+                ],
+              ),
+              const {},
+            );
+            await database.beginPendingCashCheckout(
+              operationId: 'reserved-cafe-screen-sale',
+              checkoutKind: 'cafe',
+              subjectId: reservedOrder.ticket.id,
+            );
+            final movementsBefore = await database.countStockMovements();
+            final outboxBefore = await database.countOutboxOperations();
+
+            await tester.pumpWidget(
+              ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
+                initialCounter: true,
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://app.supermega.dev',
+                initialMyanmar: myanmar,
+              ),
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(
+              find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(
+              find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(find.text(myanmar ? 'ငွေသား' : 'Cash sale'));
+            await tester.pumpAndSettle();
+            await tester.tap(
+              find.text(myanmar ? 'အတည်ပြုရန်' : 'Complete sale'),
+            );
+            await tester.pumpAndSettle();
+
+            expect(
+              find.text(
+                myanmar
+                    ? 'ဤအရောင်းအတွက် Reserved tea ၀ ခုသာ ရနိုင်ပြီး ၁ ခုလိုပါသည်။ အရောင်းစာရင်းကို ပြန်စစ်ပါ။'
+                    : 'Reserved tea has 0 available for this sale, but it needs 1. Review the basket.',
+              ),
+              findsOneWidget,
+            );
+            expect(await database.countSales(), 0);
+            expect((await database.readActiveProducts()).single.onHand, 1);
+            expect(await database.countStockMovements(), movementsBefore);
+            expect(await database.countOutboxOperations(), outboxBefore);
+            expect(
+              await database.readPendingCashCheckout(
+                checkoutKind: 'cafe',
+                subjectId: reservedOrder.ticket.id,
+              ),
+              isNotNull,
+            );
+          } finally {
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pump(const Duration(milliseconds: 1));
+            await database.close();
+          }
+        },
+      );
+    }
 
     testWidgets('clearing an unfinished sale requires confirmation', (
       tester,

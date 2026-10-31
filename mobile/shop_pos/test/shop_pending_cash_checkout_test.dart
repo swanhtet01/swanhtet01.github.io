@@ -535,7 +535,7 @@ void main() {
             checkoutKind: 'cafe',
             subjectId: cafeOrder.ticket.id,
           ),
-          throwsA(isA<StateError>()),
+          throwsA(isA<ShopStockUnavailableException>()),
         );
         await expectLater(
           reopenedCafeStore.completeCash(

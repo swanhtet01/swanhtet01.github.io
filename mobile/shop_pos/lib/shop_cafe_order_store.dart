@@ -47,16 +47,12 @@ class CafeOrderSplitReversalCandidate {
 ///
 /// The order remains open and the surrounding transaction records no sale,
 /// stock movement, payment, or outbox effect.
-class ShopCafeInsufficientStockException implements Exception {
+class ShopCafeInsufficientStockException extends ShopStockUnavailableException {
   const ShopCafeInsufficientStockException({
-    required this.productName,
-    required this.available,
-    required this.requiredQuantity,
+    required super.productName,
+    required super.available,
+    required super.requiredQuantity,
   });
-
-  final String productName;
-  final int available;
-  final int requiredQuantity;
 }
 
 /// A routed kitchen/bar line cannot change after preparation has started.

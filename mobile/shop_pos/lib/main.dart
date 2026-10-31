@@ -5175,6 +5175,17 @@ String _productSaveError(Object error, bool myanmar) {
 }
 
 String _saleSaveError(Object error, bool myanmar) {
+  if (error is ShopStockUnavailableException) {
+    final available = shopNumber(error.available, myanmar: myanmar);
+    final required = shopNumber(error.requiredQuantity, myanmar: myanmar);
+    return shopCopy(
+      myanmar,
+      '${error.productName} has $available available for this sale, but it '
+          'needs $required. Review the basket.',
+      'ဤအရောင်းအတွက် ${error.productName} $available ခုသာ ရနိုင်ပြီး '
+          '$required ခုလိုပါသည်။ အရောင်းစာရင်းကို ပြန်စစ်ပါ။',
+    );
+  }
   if (error is StateError) {
     final detail = error.message.toString();
     if (detail.startsWith('Not enough stock for ')) {
