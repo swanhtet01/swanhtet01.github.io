@@ -1,60 +1,53 @@
 {
-  "contract": "supermega.postgres17-toolchain-provenance.v1",
-  "profileId": "windows-x64-postgresql-17.10-2-pending",
+  "contract": "supermega.postgres17-toolchain-provenance.v2",
+  "profileId": "windows-x64-postgresql-17.11-5-multisource-pending",
   "status": "pending",
   "testOnly": false,
-  "platform": {
-    "os": "windows",
-    "arch": "x64"
+  "platform": { "os": "windows", "arch": "x64" },
+  "postgres": { "version": "17.11-5" },
+  "runtimeRootName": "supermega-postgres17-reviewed-runtime",
+  "trustedBoundary": {
+    "method": "isolated-single-purpose-windows-x64-v1",
+    "singlePurpose": true,
+    "concurrentSameUserWorkloadsAllowed": false,
+    "interactiveUsersAllowed": false,
+    "hostileSameUserMutationInScope": false
   },
-  "postgres": {
-    "version": "17.10-2"
-  },
-  "archive": {
-    "fileName": "postgresql-17.10-2-windows-x64-binaries.zip",
-    "bytes": 333927270,
-    "sha256": "ef9b1e5e23d2e8a83914ba13d9dc536a72210fba53fd1808ff1f7e06bb22b106"
-  },
-  "extractedRootName": "postgresql-17.10-2-windows-x64-binaries",
-  "sourceAuthentication": {
-    "status": "unverified",
-    "method": "historical-local-observation",
-    "reference": "hq/research/postgres17-rehearsal.json",
-    "evidencePath": null,
-    "evidenceBytes": null,
-    "evidenceSha256": null
-  },
+  "sources": [
+    {
+      "sourceId": "edb-postgresql-17.11-5-windows-x64",
+      "component": "postgresql",
+      "fileName": "postgresql-17.11-5-windows-x64.exe",
+      "bytes": 413001200,
+      "sha256": "612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072",
+      "authentication": {
+        "status": "observed-unretained",
+        "method": "windows-authenticode-v1",
+        "reference": "https://get.enterprisedb.com/postgresql/postgresql-17.11-5-windows-x64.exe",
+        "policyId": "edb-postgresql-windows-authenticode-v1-pending-review",
+        "evidencePath": null,
+        "evidenceBytes": null,
+        "evidenceSha256": null
+      }
+    }
+  ],
+  "bindings": [],
   "loadClosureComplete": false,
   "loadClosure": {
     "status": "pending",
-    "captureMethod": "windows-loaded-module-capture-v1",
+    "captureMethod": "windows-process-tree-runtime-closure-v1",
     "evidencePath": null,
     "evidenceBytes": null,
     "evidenceSha256": null,
     "unexpectedNonSystemModules": null,
     "systemModulePolicy": "windows-system32-os-component-v1"
   },
-  "materialization": {
-    "status": "pending",
-    "method": "two-pass-reviewed-installer-v1",
-    "evidencePath": null,
-    "evidenceBytes": null,
-    "evidenceSha256": null
-  },
-  "artifacts": [],
-  "dependencies": [],
-  "approval": {
-    "status": "pending",
-    "reviewedBy": null,
-    "reviewedAt": null
-  },
+  "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
   "blockers": [
-    "Publisher-authenticated archive provenance is not established.",
-    "The Windows Authenticode verifier is implemented, but the canonical publisher policy remains pending with no independently reviewed signer certificate pinned.",
-    "The current historical ZIP cannot inherit publisher identity from a sibling installer; the exact signed official installer must replace it as the profile archive/materialization root, with its byte digest and a matching fresh Authenticode observation.",
-    "The source verifier now requires an exact reviewed inventory and two byte-identical materialization passes, but no reviewed Windows executor or verified official-installer argument contract currently produces those passes; production profiles remain blocked even when Authenticode checks pass.",
-    "Extracted PostgreSQL executable and loaded-library hashes are not recorded.",
-    "OpenSSL, Python, and psycopg versions and file hashes are not bound.",
-    "Independent profile approval is absent."
+    "The exact EDB 17.11-5 installer digest, valid Authenticode signature, code-signing EKU, signer raw-DER SHA-256 and timestamp raw-DER SHA-256 were observed twice read-only on Windows, but no canonical observer record is retained yet.",
+    "Authenticated Python, Psycopg/native-extension, OpenSSL, Node and Git artifacts are not retained or bound.",
+    "The isolated runtime bindings and complete executed, imported and loaded non-system closure are not recorded.",
+    "Independent profile and publisher-policy approvals are absent.",
+    "Hostile same-user mutation is outside this trusted isolated-runner design; no rehearsal may run with concurrent or interactive same-user workloads."
   ]
 }

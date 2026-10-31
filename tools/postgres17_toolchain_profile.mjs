@@ -4,23 +4,21 @@ import { createReadStream } from 'node:fs'
 import { lstat, readFile, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
-import {
-  inspectPostgres17MaterializationEvidence,
-  verifyTwoPassMaterializationRoots,
-} from './postgres17_materialization.mjs'
-
 export const POSTGRES17_TOOLCHAIN_PROFILE_CONTRACT =
-  'supermega.postgres17-toolchain-provenance.v1'
+  'supermega.postgres17-toolchain-provenance.v2'
 export const POSTGRES17_PUBLISHER_POLICY_CONTRACT =
   'supermega.postgres17-publisher-policy.v1'
 export const WINDOWS_AUTHENTICODE_METHOD = 'windows-authenticode-v1'
 export const WINDOWS_AUTHENTICODE_OBSERVATION_CONTRACT =
   'supermega.windows-authenticode-observation.v1'
-export const WINDOWS_LOAD_CLOSURE_CONTRACT = 'supermega.windows-load-closure.v1'
+export const WINDOWS_LOAD_CLOSURE_CONTRACT = 'supermega.windows-load-closure.v2'
+export const REVIEWED_SOURCE_DIGEST_METHOD = 'reviewed-source-digest-v1'
 
 const SHA256 = /^[0-9a-f]{64}$/
 const VERSION = /^17\.[0-9]+(?:-[0-9]+)?$/
 const CODE_SIGNING_EKU = '1.3.6.1.5.5.7.3.3'
+const TRUST_BOUNDARY = 'isolated-single-purpose-windows-x64-v1'
+const SYSTEM_MODULE_POLICY = 'windows-system32-os-component-v1'
 const defaultPublisherPolicyPath = resolve(
   import.meta.dirname,
   '..',
@@ -41,17 +39,27 @@ const REQUIRED_ROLES = new Set([
   'openssl',
   'python',
   'psycopg',
+  'node',
+  'git',
 ])
 const POSTGRES_EXECUTABLE_ROLES = new Set([
   'postgres', 'initdb', 'pg_ctl', 'pg_isready', 'pg_dump', 'pg_restore', 'psql',
 ])
-// Production authentication is never established by a profile assertion. The
-// method below requires a canonical reviewed signer policy plus a fresh Windows
-// Authenticode observation of the exact source artifact bytes.
-const TRUSTED_PRODUCTION_AUTHENTICATION_METHODS = new Set([
-  WINDOWS_AUTHENTICODE_METHOD,
+const SINGLETON_ROLES = new Set(REQUIRED_ROLES)
+const REQUIRED_COMPONENTS = new Set(['postgresql', 'python', 'psycopg', 'openssl', 'node', 'git'])
+const ROLE_COMPONENT = new Map([
+  ['postgres', 'postgresql'], ['initdb', 'postgresql'], ['pg_ctl', 'postgresql'],
+  ['pg_isready', 'postgresql'], ['pg_dump', 'postgresql'], ['pg_restore', 'postgresql'],
+  ['psql', 'postgresql'], ['libpq', 'postgresql'], ['python', 'python'],
+  ['psycopg', 'psycopg'], ['openssl', 'openssl'], ['node', 'node'], ['git', 'git'],
 ])
-
+const ROLE_REQUIRED_USE = new Map([
+  ['postgres', 'executed'], ['initdb', 'executed'], ['pg_ctl', 'executed'],
+  ['pg_isready', 'executed'], ['pg_dump', 'executed'], ['pg_restore', 'executed'],
+  ['psql', 'executed'], ['libpq', 'loaded'], ['python', 'executed'],
+  ['psycopg', 'imported'], ['openssl', 'executed'], ['node', 'executed'], ['git', 'executed'],
+])
+const USE_KINDS = new Set(['executed', 'imported', 'loaded'])
 function fail(code) {
   throw new Error(code)
 }
@@ -60,17 +68,33 @@ function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
+function hasExactKeys(value, required, optional = []) {
+  if (!isObject(value)) return false
+  const allowed = new Set([...required, ...optional])
+  return required.every((key) => Object.hasOwn(value, key))
+    && Object.keys(value).every((key) => allowed.has(key))
+}
+
 function safeRelativePath(value) {
   return typeof value === 'string'
     && value.length > 0
     && !isAbsolute(value)
     && !value.split(/[\\/]/).includes('..')
+    && !value.includes(':')
 }
 
 function exactBinding(binding) {
-  return isObject(binding)
+  return hasExactKeys(binding, [
+    'bindingId', 'role', 'sourceId', 'relativePath', 'bytes', 'sha256',
+    'observedVersion', 'versionEvidencePath', 'versionEvidenceBytes',
+    'versionOutputSha256', 'uses',
+  ])
+    && typeof binding.bindingId === 'string'
+    && binding.bindingId.length > 0
     && typeof binding.role === 'string'
     && binding.role.length > 0
+    && typeof binding.sourceId === 'string'
+    && binding.sourceId.length > 0
     && safeRelativePath(binding.relativePath)
     && Number.isSafeInteger(binding.bytes)
     && binding.bytes >= 0
@@ -81,17 +105,66 @@ function exactBinding(binding) {
     && Number.isSafeInteger(binding.versionEvidenceBytes)
     && binding.versionEvidenceBytes > 0
     && SHA256.test(binding.versionOutputSha256 || '')
+    && Array.isArray(binding.uses)
+    && binding.uses.length > 0
+    && new Set(binding.uses).size === binding.uses.length
+    && binding.uses.every((use) => USE_KINDS.has(use))
+}
+
+function exactSource(source) {
+  return hasExactKeys(source, [
+    'sourceId', 'component', 'fileName', 'bytes', 'sha256', 'authentication',
+  ])
+    && typeof source.sourceId === 'string'
+    && source.sourceId.length > 0
+    && typeof source.component === 'string'
+    && source.component.length > 0
+    && typeof source.fileName === 'string'
+    && source.fileName === basename(source.fileName)
+    && Number.isSafeInteger(source.bytes)
+    && source.bytes > 0
+    && SHA256.test(source.sha256 || '')
+    && isObject(source.authentication)
+    && exactAuthenticationShape(source.authentication)
+    && typeof source.authentication.status === 'string'
+    && typeof source.authentication.method === 'string'
+    && typeof source.authentication.reference === 'string'
+    && source.authentication.reference.length > 0
+}
+
+function validApproval(approval) {
+  return hasExactKeys(approval, ['status', 'reviewedBy', 'reviewedAt'])
+    && approval.status === 'reviewed'
+    && typeof approval.reviewedBy === 'string'
+    && approval.reviewedBy.length > 0
+    && Number.isFinite(Date.parse(approval.reviewedAt))
+}
+
+function validBoundEvidence(value) {
+  return isObject(value)
+    && safeRelativePath(value.evidencePath)
+    && Number.isSafeInteger(value.evidenceBytes)
+    && value.evidenceBytes > 0
+    && SHA256.test(value.evidenceSha256 || '')
+}
+
+function exactAuthenticationShape(authentication) {
+  const required = [
+    'status', 'method', 'reference', 'evidencePath', 'evidenceBytes', 'evidenceSha256',
+  ]
+  const optional = authentication?.method === WINDOWS_AUTHENTICODE_METHOD ? ['policyId'] : []
+  return hasExactKeys(authentication, required, optional)
 }
 
 function exactAuthenticodeAuthentication(authentication) {
-  return isObject(authentication)
+  return exactAuthenticationShape(authentication)
     && authentication.method === WINDOWS_AUTHENTICODE_METHOD
     && typeof authentication.policyId === 'string'
     && authentication.policyId.length > 0
 }
 
 function exactApprovedSigner(signer) {
-  return isObject(signer)
+  return hasExactKeys(signer, ['certificateSha256', 'subject', 'issuer'])
     && SHA256.test(signer.certificateSha256 || '')
     && typeof signer.subject === 'string'
     && signer.subject.length > 0
@@ -100,12 +173,16 @@ function exactApprovedSigner(signer) {
 }
 
 export function inspectPostgres17PublisherPolicy(policy) {
-  if (!isObject(policy)
+  if (!hasExactKeys(policy, [
+    'contract', 'policyId', 'status', 'testOnly', 'method', 'platform',
+    'requiredSignatureType', 'timestampRequired', 'requiredEkuOids',
+    'approvedSigners', 'approvedTimestampCertificateSha256', 'approval',
+  ], ['blockers'])
     || policy.contract !== POSTGRES17_PUBLISHER_POLICY_CONTRACT
     || typeof policy.policyId !== 'string'
     || policy.policyId.length === 0
     || policy.method !== WINDOWS_AUTHENTICODE_METHOD
-    || !isObject(policy.platform)
+    || !hasExactKeys(policy.platform, ['os', 'arch'])
     || policy.platform.os !== 'windows'
     || policy.platform.arch !== 'x64'
     || policy.testOnly !== false
@@ -115,12 +192,20 @@ export function inspectPostgres17PublisherPolicy(policy) {
     || !policy.approvedSigners.every(exactApprovedSigner)
     || !Array.isArray(policy.requiredEkuOids)
     || !policy.requiredEkuOids.includes(CODE_SIGNING_EKU)
-    || !isObject(policy.approval)) {
+    || !Array.isArray(policy.approvedTimestampCertificateSha256)
+    || !policy.approvedTimestampCertificateSha256.every((value) => SHA256.test(value || ''))
+    || !hasExactKeys(policy.approval, ['status', 'reviewedBy', 'reviewedAt'])
+    || (Object.hasOwn(policy, 'blockers')
+      && (!Array.isArray(policy.blockers)
+        || !policy.blockers.every((value) => typeof value === 'string')))) {
     fail('database_rehearsal_publisher_policy_invalid')
   }
   const blockers = []
   if (policy.status !== 'reviewed') blockers.push('publisher_policy_not_reviewed')
   if (policy.approvedSigners.length === 0) blockers.push('publisher_signer_not_pinned')
+  if (policy.approvedTimestampCertificateSha256.length === 0) {
+    blockers.push('publisher_timestamp_signer_not_pinned')
+  }
   if (policy.approval.status !== 'reviewed'
     || typeof policy.approval.reviewedBy !== 'string'
     || policy.approval.reviewedBy.length === 0
@@ -146,115 +231,147 @@ function observedPostgresVersionMatches(observedVersion, declaredVersion) {
 
 export function inspectPostgres17ToolchainProfile(profile) {
   const blockers = []
-  if (!isObject(profile)
+  if (!hasExactKeys(profile, [
+    'contract', 'profileId', 'status', 'testOnly', 'platform', 'postgres',
+    'runtimeRootName', 'trustedBoundary', 'sources', 'bindings',
+    'loadClosureComplete', 'loadClosure', 'approval',
+  ], ['blockers'])
     || profile.contract !== POSTGRES17_TOOLCHAIN_PROFILE_CONTRACT
     || typeof profile.profileId !== 'string'
-    || !isObject(profile.platform)
+    || !hasExactKeys(profile.platform, ['os', 'arch'])
     || profile.platform.os !== 'windows'
     || profile.platform.arch !== 'x64'
-    || !isObject(profile.postgres)
+    || !hasExactKeys(profile.postgres, ['version'])
     || !VERSION.test(profile.postgres.version || '')
-    || !isObject(profile.archive)
-    || typeof profile.archive.fileName !== 'string'
-    || !Number.isSafeInteger(profile.archive.bytes)
-    || profile.archive.bytes <= 0
-    || !SHA256.test(profile.archive.sha256 || '')
-    || !safeRelativePath(profile.extractedRootName)
-    || !Array.isArray(profile.artifacts)
-    || !Array.isArray(profile.dependencies)
-    || !isObject(profile.sourceAuthentication)
-    || !isObject(profile.approval)) {
+    || !safeRelativePath(profile.runtimeRootName)
+    || !Array.isArray(profile.sources)
+    || !Array.isArray(profile.bindings)
+    || !profile.sources.every(exactSource)
+    || !profile.bindings.every(exactBinding)
+    || !hasExactKeys(profile.trustedBoundary, [
+      'method', 'singlePurpose', 'concurrentSameUserWorkloadsAllowed',
+      'interactiveUsersAllowed', 'hostileSameUserMutationInScope',
+    ])
+    || !hasExactKeys(profile.loadClosure, [
+      'status', 'captureMethod', 'evidencePath', 'evidenceBytes', 'evidenceSha256',
+      'unexpectedNonSystemModules', 'systemModulePolicy',
+    ])
+    || !hasExactKeys(profile.approval, ['status', 'reviewedBy', 'reviewedAt'])
+    || (Object.hasOwn(profile, 'blockers')
+      && (!Array.isArray(profile.blockers)
+        || !profile.blockers.every((value) => typeof value === 'string')))) {
     fail('database_rehearsal_toolchain_profile_invalid')
   }
 
-  const bindings = [...profile.artifacts, ...profile.dependencies]
-  if (!bindings.every(exactBinding)) {
-    fail('database_rehearsal_toolchain_profile_binding_invalid')
+  const sources = new Map()
+  for (const source of profile.sources) {
+    if (sources.has(source.sourceId)) fail('database_rehearsal_toolchain_source_duplicate')
+    sources.set(source.sourceId, source)
   }
-  const roles = new Set(bindings.map(({ role }) => role))
-  if (roles.size !== bindings.length) {
-    fail('database_rehearsal_toolchain_profile_role_duplicate')
-  }
-
-  for (const binding of bindings) {
+  const bindingIds = new Set()
+  const foldedPaths = new Set()
+  const singletonRoles = new Set()
+  const usedSourceIds = new Set()
+  const boundComponents = new Set()
+  const executionBindings = {}
+  for (const binding of profile.bindings) {
+    if (bindingIds.has(binding.bindingId)) fail('database_rehearsal_toolchain_binding_duplicate')
+    bindingIds.add(binding.bindingId)
+    const folded = binding.relativePath.replace(/\\/g, '/').toLowerCase()
+    if (foldedPaths.has(folded)) fail('database_rehearsal_toolchain_path_duplicate')
+    foldedPaths.add(folded)
+    const source = sources.get(binding.sourceId)
+    if (!source) {
+      blockers.push(`binding_source_missing:${binding.bindingId}`)
+    } else {
+      usedSourceIds.add(binding.sourceId)
+      const expectedComponent = ROLE_COMPONENT.get(binding.role)
+      if (expectedComponent && source.component !== expectedComponent) {
+        blockers.push(`binding_component_mismatch:${binding.bindingId}`)
+      } else if (expectedComponent) {
+        boundComponents.add(expectedComponent)
+        executionBindings[binding.role] = {
+          bindingId: binding.bindingId,
+          sourceId: binding.sourceId,
+          relativePath: binding.relativePath.replace(/\\/g, '/'),
+        }
+      }
+    }
+    const requiredUse = ROLE_REQUIRED_USE.get(binding.role)
+    if (requiredUse && !binding.uses.includes(requiredUse)) {
+      blockers.push(`binding_use_mismatch:${binding.bindingId}`)
+    }
+    if (SINGLETON_ROLES.has(binding.role)) {
+      if (singletonRoles.has(binding.role)) fail('database_rehearsal_toolchain_role_duplicate')
+      singletonRoles.add(binding.role)
+    }
     if (POSTGRES_EXECUTABLE_ROLES.has(binding.role)
       && !observedPostgresVersionMatches(binding.observedVersion, profile.postgres.version)) {
       blockers.push(`postgres_version_mismatch:${binding.role}`)
     }
   }
 
-  if (profile.testOnly === false && bindings.some((binding) =>
-    binding.sourceArtifactSha256 !== profile.archive.sha256)) {
-    blockers.push('binding_source_artifact_unverified')
-  }
-
   if (profile.status !== 'reviewed') blockers.push('profile_not_reviewed')
   if (profile.testOnly !== false) blockers.push('synthetic_profile')
-  if (profile.loadClosureComplete !== true) blockers.push('load_closure_incomplete')
-  if (profile.testOnly !== true && (!isObject(profile.loadClosure)
-    || profile.loadClosure.status !== 'reviewed'
-    || profile.loadClosure.captureMethod !== 'windows-loaded-module-capture-v1'
-    || !safeRelativePath(profile.loadClosure.evidencePath)
-    || !Number.isSafeInteger(profile.loadClosure.evidenceBytes)
-    || profile.loadClosure.evidenceBytes <= 0
-    || !SHA256.test(profile.loadClosure.evidenceSha256 || '')
-    || profile.loadClosure.unexpectedNonSystemModules !== 0
-    || profile.loadClosure.systemModulePolicy !== 'windows-system32-os-component-v1')) {
-    blockers.push('load_closure_evidence_unverified')
+  if (profile.trustedBoundary.method !== TRUST_BOUNDARY
+    || profile.trustedBoundary.singlePurpose !== true
+    || profile.trustedBoundary.concurrentSameUserWorkloadsAllowed !== false
+    || profile.trustedBoundary.interactiveUsersAllowed !== false
+    || profile.trustedBoundary.hostileSameUserMutationInScope !== false) {
+    blockers.push('trusted_boundary_unreviewed')
   }
-  if (profile.testOnly !== true && (!isObject(profile.materialization)
-    || profile.materialization.status !== 'reviewed'
-    || profile.materialization.method !== 'two-pass-reviewed-installer-v1'
-    || !safeRelativePath(profile.materialization.evidencePath)
-    || !Number.isSafeInteger(profile.materialization.evidenceBytes)
-    || profile.materialization.evidenceBytes <= 0
-    || !SHA256.test(profile.materialization.evidenceSha256 || ''))) {
-    blockers.push('materialization_evidence_unverified')
+  for (const component of REQUIRED_COMPONENTS) {
+    if (!boundComponents.has(component)) blockers.push(`source_component_missing:${component}`)
   }
-  // The source verifier can validate an exact reviewed inventory and compare
-  // two materialization passes, but no reviewed Windows executor currently
-  // performs those passes from the authenticated installer. A manifest is not
-  // proof that the installer produced a tree, so production stays blocked.
-  if (profile.testOnly !== true) blockers.push('materialization_executor_unavailable')
-  if (profile.sourceAuthentication.status !== 'reviewed'
-    || typeof profile.sourceAuthentication.method !== 'string'
-    || profile.sourceAuthentication.method.length === 0
-    || typeof profile.sourceAuthentication.reference !== 'string'
-    || profile.sourceAuthentication.reference.length === 0
-    || !safeRelativePath(profile.sourceAuthentication.evidencePath)
-    || !Number.isSafeInteger(profile.sourceAuthentication.evidenceBytes)
-    || profile.sourceAuthentication.evidenceBytes <= 0
-    || !SHA256.test(profile.sourceAuthentication.evidenceSha256 || '')) {
-    blockers.push('publisher_authentication_unverified')
-  }
-  if (profile.testOnly !== true
-    && !TRUSTED_PRODUCTION_AUTHENTICATION_METHODS.has(profile.sourceAuthentication.method)) {
-    blockers.push('publisher_authentication_verifier_unavailable')
-  }
-  if (profile.testOnly !== true
-    && profile.sourceAuthentication.method === WINDOWS_AUTHENTICODE_METHOD) {
-    if (!exactAuthenticodeAuthentication(profile.sourceAuthentication)
-      || !profile.archive.fileName.toLowerCase().endsWith('.exe')) {
-      blockers.push('publisher_authentication_unverified')
+  for (const source of profile.sources) {
+    if (!usedSourceIds.has(source.sourceId)) blockers.push(`source_unused:${source.sourceId}`)
+    const authentication = source.authentication
+    if (!exactAuthenticationShape(authentication)) {
+      blockers.push(`source_authentication_invalid:${source.sourceId}`)
+      continue
+    }
+    if (authentication.status !== 'reviewed' || !validBoundEvidence(authentication)) {
+      blockers.push(`source_authentication_unverified:${source.sourceId}`)
+    }
+    if (profile.testOnly !== true
+      && source.component === 'postgresql'
+      && authentication.method !== WINDOWS_AUTHENTICODE_METHOD) {
+      blockers.push(`postgresql_source_authentication_invalid:${source.sourceId}`)
+    }
+    if (authentication.method === WINDOWS_AUTHENTICODE_METHOD) {
+      if (!exactAuthenticodeAuthentication(authentication) || !source.fileName.toLowerCase().endsWith('.exe')) {
+        blockers.push(`source_authentication_invalid:${source.sourceId}`)
+      } else if (profile.testOnly !== true) {
+        blockers.push(`source_authentication_runtime_verification_required:${source.sourceId}`)
+      }
+    } else if (authentication.method === REVIEWED_SOURCE_DIGEST_METHOD) {
+      if (profile.testOnly !== true) {
+        blockers.push(`source_authentication_production_unsupported:${source.sourceId}`)
+      }
     } else {
-      blockers.push('publisher_authentication_runtime_verification_required')
+      blockers.push(`source_authentication_unsupported:${source.sourceId}`)
     }
   }
-  if (profile.approval.status !== 'reviewed'
-    || typeof profile.approval.reviewedBy !== 'string'
-    || profile.approval.reviewedBy.length === 0
-    || !Number.isFinite(Date.parse(profile.approval.reviewedAt))) {
-    blockers.push('independent_approval_missing')
+  if (profile.loadClosureComplete !== true) blockers.push('load_closure_incomplete')
+  if (profile.loadClosure.status !== 'reviewed'
+    || profile.loadClosure.captureMethod !== 'windows-process-tree-runtime-closure-v1'
+    || profile.loadClosure.unexpectedNonSystemModules !== 0
+    || profile.loadClosure.systemModulePolicy !== SYSTEM_MODULE_POLICY
+    || !validBoundEvidence(profile.loadClosure)) {
+    blockers.push('load_closure_evidence_unverified')
   }
+  if (!validApproval(profile.approval)) blockers.push('independent_approval_missing')
   for (const role of REQUIRED_ROLES) {
-    if (!roles.has(role)) blockers.push(`binding_missing:${role}`)
+    if (!singletonRoles.has(role)) blockers.push(`binding_missing:${role}`)
   }
   return {
     contract: POSTGRES17_TOOLCHAIN_PROFILE_CONTRACT,
     profileId: profile.profileId,
     ready: blockers.length === 0,
     blockers,
-    bindingCount: bindings.length,
+    sourceCount: profile.sources.length,
+    bindingCount: profile.bindings.length,
+    executionBindings,
   }
 }
 
@@ -296,7 +413,12 @@ function parseJsonEvidence(bytes, code) {
 }
 
 function exactAuthenticodeObservation(value) {
-  return isObject(value)
+  return hasExactKeys(value, [
+    'contract', 'artifactFileName', 'artifactBytes', 'artifactSha256',
+    'signatureStatus', 'signatureType', 'signerCertificateSha256',
+    'signerSubject', 'signerIssuer', 'timestampCertificateSha256',
+    'timestampSubject', 'ekuOids',
+  ])
     && value.contract === WINDOWS_AUTHENTICODE_OBSERVATION_CONTRACT
     && value.signatureStatus === 'Valid'
     && value.signatureType === 'Authenticode'
@@ -333,26 +455,38 @@ function sameAuthenticodeObservation(left, right) {
 }
 
 export function verifyWindowsLoadClosureEvidence(profile, evidence) {
-  if (!isObject(evidence)
+  if (!hasExactKeys(evidence, [
+    'contract', 'captureMethod', 'systemModulePolicy',
+    'unexpectedNonSystemModules', 'files',
+  ])
     || evidence.contract !== WINDOWS_LOAD_CLOSURE_CONTRACT
-    || evidence.sourceArtifactSha256 !== profile.archive.sha256
-    || evidence.captureMethod !== 'windows-loaded-module-capture-v1'
-    || evidence.systemModulePolicy !== 'windows-system32-os-component-v1'
+    || evidence.captureMethod !== 'windows-process-tree-runtime-closure-v1'
+    || evidence.systemModulePolicy !== SYSTEM_MODULE_POLICY
     || evidence.unexpectedNonSystemModules !== 0
     || !Array.isArray(evidence.files)) {
     fail('database_rehearsal_load_closure_invalid')
   }
-  const expected = [...profile.artifacts, ...profile.dependencies]
-    .map(({ relativePath, bytes, sha256 }) => ({ relativePath, bytes, sha256 }))
-    .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
-  const observed = evidence.files.map((file) => {
-    if (!isObject(file) || !safeRelativePath(file.relativePath)
+  const normalize = (files) => files.map((file) => {
+    if (!hasExactKeys(file, [
+      'bindingId', 'sourceId', 'relativePath', 'bytes', 'sha256', 'uses',
+    ])
+      || typeof file.bindingId !== 'string'
+      || typeof file.sourceId !== 'string'
+      || !safeRelativePath(file.relativePath)
       || !Number.isSafeInteger(file.bytes) || file.bytes < 0
-      || !SHA256.test(file.sha256 || '')) {
+      || !SHA256.test(file.sha256 || '')
+      || !Array.isArray(file.uses) || file.uses.length === 0
+      || file.uses.some((use) => !USE_KINDS.has(use))) {
       fail('database_rehearsal_load_closure_invalid')
     }
-    return { relativePath: file.relativePath, bytes: file.bytes, sha256: file.sha256 }
-  }).sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+    return { bindingId: file.bindingId, sourceId: file.sourceId,
+      relativePath: file.relativePath.replace(/\\/g, '/'), bytes: file.bytes,
+      sha256: file.sha256, uses: [...file.uses].sort() }
+  }).sort((left, right) => left.bindingId.localeCompare(right.bindingId))
+  const expected = normalize(profile.bindings.map(({
+    bindingId, sourceId, relativePath, bytes, sha256, uses,
+  }) => ({ bindingId, sourceId, relativePath, bytes, sha256, uses })))
+  const observed = normalize(evidence.files)
   if (JSON.stringify(observed) !== JSON.stringify(expected)) {
     fail('database_rehearsal_load_closure_incomplete')
   }
@@ -392,12 +526,12 @@ export async function inspectWindowsAuthenticode(artifactPath) {
 }
 
 export function verifyWindowsAuthenticodePublisherEvidence({
-  profile,
+  source,
   policy,
   evidence,
   observed,
 }) {
-  const authentication = profile.sourceAuthentication
+  const authentication = source.authentication
   if (authentication.method !== WINDOWS_AUTHENTICODE_METHOD) {
     fail('database_rehearsal_publisher_authentication_unsupported')
   }
@@ -407,12 +541,12 @@ export function verifyWindowsAuthenticodePublisherEvidence({
   }
   if (!exactAuthenticodeObservation(evidence)
     || !exactAuthenticodeObservation(observed)
-    || evidence.artifactSha256 !== profile.archive.sha256
-    || observed.artifactSha256 !== profile.archive.sha256
-    || evidence.artifactFileName !== profile.archive.fileName
-    || observed.artifactFileName !== profile.archive.fileName
-    || evidence.artifactBytes !== profile.archive.bytes
-    || observed.artifactBytes !== profile.archive.bytes
+    || evidence.artifactSha256 !== source.sha256
+    || observed.artifactSha256 !== source.sha256
+    || evidence.artifactFileName !== source.fileName
+    || observed.artifactFileName !== source.fileName
+    || evidence.artifactBytes !== source.bytes
+    || observed.artifactBytes !== source.bytes
     || !sameAuthenticodeObservation(evidence, observed)) {
     fail('database_rehearsal_authenticode_observation_mismatch')
   }
@@ -421,6 +555,9 @@ export function verifyWindowsAuthenticodePublisherEvidence({
     && signer.subject === observed.signerSubject
     && signer.issuer === observed.signerIssuer)
   if (!approvedSigner) fail('database_rehearsal_authenticode_signer_unapproved')
+  if (!policy.approvedTimestampCertificateSha256.includes(observed.timestampCertificateSha256)) {
+    fail('database_rehearsal_authenticode_timestamp_unapproved')
+  }
   for (const requiredEku of policy.requiredEkuOids) {
     if (!observed.ekuOids.includes(requiredEku)) {
       fail('database_rehearsal_authenticode_eku_missing')
@@ -428,55 +565,66 @@ export function verifyWindowsAuthenticodePublisherEvidence({
   }
   return {
     policyId: policy.policyId,
+    sourceId: source.sourceId,
     signerCertificateSha256: observed.signerCertificateSha256,
     sourceArtifactSha256: observed.artifactSha256,
     timestampCertificateSha256: observed.timestampCertificateSha256,
   }
 }
 
-async function verifyPublisherAuthentication({ profile, manifestPath, archivePath, publisherPolicyPath }) {
+async function verifySourceAuthentication({ source, manifestPath, sourcePath, publisherPolicyPath }) {
   const policyBytes = await readFile(publisherPolicyPath)
   const policy = parseJsonEvidence(policyBytes, 'database_rehearsal_publisher_policy_invalid')
-  const policyInspection = inspectPostgres17PublisherPolicy(policy)
-  if (!policyInspection.ready || profile.sourceAuthentication.policyId !== policy.policyId) {
-    fail('database_rehearsal_publisher_policy_unapproved')
-  }
+  const authentication = source.authentication
   const evidence = parseJsonEvidence(
-    await readFile(resolve(dirname(manifestPath), profile.sourceAuthentication.evidencePath)),
-    'database_rehearsal_authenticode_observation_invalid',
+    await readFile(resolve(dirname(manifestPath), authentication.evidencePath)),
+    'database_rehearsal_source_authentication_invalid',
   )
-  const observed = await inspectWindowsAuthenticode(archivePath)
-  return {
-    ...verifyWindowsAuthenticodePublisherEvidence({ profile, policy, evidence, observed }),
-    policySha256: createHash('sha256').update(policyBytes).digest('hex'),
+  if (authentication.method === WINDOWS_AUTHENTICODE_METHOD) {
+    return {
+      ...verifyWindowsAuthenticodePublisherEvidence({
+        source, policy, evidence, observed: await inspectWindowsAuthenticode(sourcePath),
+      }),
+      evidenceSha256: authentication.evidenceSha256,
+    }
   }
+  if (authentication.method !== REVIEWED_SOURCE_DIGEST_METHOD
+    || !hasExactKeys(evidence, [
+      'contract', 'status', 'sourceId', 'artifactBytes', 'artifactSha256',
+    ])
+    || evidence.contract !== 'supermega.reviewed-source-digest.v1'
+    || evidence.status !== 'reviewed'
+    || evidence.sourceId !== source.sourceId
+    || evidence.artifactSha256 !== source.sha256
+    || evidence.artifactBytes !== source.bytes) {
+    fail('database_rehearsal_source_authentication_invalid')
+  }
+  return { sourceId: source.sourceId, sourceArtifactSha256: source.sha256,
+    evidenceSha256: authentication.evidenceSha256 }
 }
 
 export async function verifyPostgres17ToolchainProfile({
   manifestPath,
-  archivePath,
+  archivePath = null,
+  sourcePaths = {},
   extractedRoot = null,
-  secondExtractedRoot = null,
   allowSynthetic = false,
   requireHostPlatform = false,
+  publisherPolicyPath = defaultPublisherPolicyPath,
 }) {
   const manifestMetadata = await lstat(manifestPath)
   if (!manifestMetadata.isFile() || manifestMetadata.isSymbolicLink()) {
     fail('database_rehearsal_toolchain_profile_file_invalid')
   }
   const manifestBytes = await readFile(manifestPath)
-  let profile
-  try {
-    profile = JSON.parse(manifestBytes.toString('utf8'))
-  } catch {
-    fail('database_rehearsal_toolchain_profile_invalid')
-  }
+  const profile = parseJsonEvidence(manifestBytes, 'database_rehearsal_toolchain_profile_invalid')
   const inspection = inspectPostgres17ToolchainProfile(profile)
   const ignoredBlockers = new Set()
   if (allowSynthetic && profile.testOnly === true) ignoredBlockers.add('synthetic_profile')
-  if (profile.testOnly === false
-    && profile.sourceAuthentication.method === WINDOWS_AUTHENTICODE_METHOD) {
-    ignoredBlockers.add('publisher_authentication_runtime_verification_required')
+  for (const source of profile.sources) {
+    if (profile.testOnly === false && source.authentication.method === WINDOWS_AUTHENTICODE_METHOD) {
+      ignoredBlockers.add(`source_authentication_runtime_verification_required:${source.sourceId}`)
+    }
   }
   const blockers = inspection.blockers.filter((blocker) => !ignoredBlockers.has(blocker))
   if (blockers.length > 0) fail('database_rehearsal_toolchain_provenance_unapproved')
@@ -484,84 +632,40 @@ export async function verifyPostgres17ToolchainProfile({
     && (process.platform !== 'win32' || process.arch !== 'x64')) {
     fail('database_rehearsal_toolchain_host_mismatch')
   }
-  if (profile.archive.fileName !== archivePath.split(/[\\/]/).at(-1)) {
-    fail('database_rehearsal_toolchain_profile_archive_name_mismatch')
+  const primary = profile.sources.find(({ component }) => component === 'postgresql')
+  if (!primary) fail('database_rehearsal_toolchain_source_missing')
+  if (archivePath !== null) sourcePaths = { ...sourcePaths, [primary.sourceId]: archivePath }
+  const sourceAuthentication = []
+  for (const source of profile.sources) {
+    const sourcePath = sourcePaths[source.sourceId]
+    if (typeof sourcePath !== 'string' || basename(sourcePath) !== source.fileName) {
+      fail('database_rehearsal_toolchain_source_path_missing')
+    }
+    await verifyRegularFile(sourcePath, source)
+    await verifyRegularFile(
+      resolve(dirname(manifestPath), source.authentication.evidencePath),
+      { bytes: source.authentication.evidenceBytes, sha256: source.authentication.evidenceSha256 },
+      dirname(manifestPath),
+    )
+    sourceAuthentication.push(await verifySourceAuthentication({
+      source, manifestPath, sourcePath, publisherPolicyPath,
+    }))
   }
-  extractedRoot ??= resolve(dirname(archivePath), profile.extractedRootName)
-  const expectedRoot = resolve(dirname(archivePath), profile.extractedRootName)
+  extractedRoot ??= resolve(dirname(sourcePaths[primary.sourceId]), profile.runtimeRootName)
+  const expectedRoot = resolve(extractedRoot)
   const rootMetadata = await lstat(extractedRoot)
   if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()
-    || basename(extractedRoot) !== profile.extractedRootName
-    || resolve(extractedRoot) !== expectedRoot
+    || basename(extractedRoot) !== profile.runtimeRootName
     || await realpath(extractedRoot) !== expectedRoot) {
     fail('database_rehearsal_toolchain_profile_root_mismatch')
   }
-  await verifyRegularFile(archivePath, profile.archive)
-  await verifyRegularFile(
-    resolve(dirname(manifestPath), profile.sourceAuthentication.evidencePath),
-    {
-      bytes: profile.sourceAuthentication.evidenceBytes,
-      sha256: profile.sourceAuthentication.evidenceSha256,
-    },
-    dirname(manifestPath),
-  )
-  let materializationInventory = null
-  if (profile.testOnly === false) {
-    const closurePath = resolve(dirname(manifestPath), profile.loadClosure.evidencePath)
-    await verifyRegularFile(
-      closurePath,
-      { bytes: profile.loadClosure.evidenceBytes, sha256: profile.loadClosure.evidenceSha256 },
-      dirname(manifestPath),
-    )
-    verifyWindowsLoadClosureEvidence(
-      profile,
-      parseJsonEvidence(await readFile(closurePath), 'database_rehearsal_load_closure_invalid'),
-    )
-    const materializationPath = resolve(
-      dirname(manifestPath),
-      profile.materialization.evidencePath,
-    )
-    await verifyRegularFile(
-      materializationPath,
-      {
-        bytes: profile.materialization.evidenceBytes,
-        sha256: profile.materialization.evidenceSha256,
-      },
-      dirname(manifestPath),
-    )
-    const materializationEvidence = parseJsonEvidence(
-      await readFile(materializationPath),
-      'database_rehearsal_materialization_manifest_invalid',
-    )
-    inspectPostgres17MaterializationEvidence(profile, materializationEvidence)
-    if (typeof secondExtractedRoot !== 'string') {
-      fail('database_rehearsal_materialization_second_pass_missing')
-    }
-    materializationInventory = await verifyTwoPassMaterializationRoots({
-      profile,
-      evidence: materializationEvidence,
-      firstRoot: extractedRoot,
-      secondRoot: secondExtractedRoot,
-    })
-  }
-  let publisherAuthentication = null
-  if (profile.testOnly === false) {
-    publisherAuthentication = await verifyPublisherAuthentication({
-      profile,
-      manifestPath,
-      archivePath,
-      publisherPolicyPath: defaultPublisherPolicyPath,
-    })
-  }
+  const closurePath = resolve(dirname(manifestPath), profile.loadClosure.evidencePath)
+  await verifyRegularFile(closurePath, { bytes: profile.loadClosure.evidenceBytes,
+    sha256: profile.loadClosure.evidenceSha256 }, dirname(manifestPath))
+  verifyWindowsLoadClosureEvidence(profile,
+    parseJsonEvidence(await readFile(closurePath), 'database_rehearsal_load_closure_invalid'))
   const execution = {}
-  const seenPaths = new Set()
-  const seenHashes = new Set()
-  for (const binding of [...profile.artifacts, ...profile.dependencies]) {
-    if (seenPaths.has(binding.relativePath) || seenHashes.has(binding.sha256)) {
-      fail('database_rehearsal_toolchain_profile_binding_duplicate')
-    }
-    seenPaths.add(binding.relativePath)
-    seenHashes.add(binding.sha256)
+  for (const binding of profile.bindings) {
     await verifyRegularFile(resolve(extractedRoot, binding.relativePath), binding, extractedRoot)
     const versionEvidence = {
       bytes: binding.versionEvidenceBytes,
@@ -573,7 +677,9 @@ export async function verifyPostgres17ToolchainProfile({
     if (versionBytes.toString('utf8') !== binding.observedVersion) {
       fail('database_rehearsal_toolchain_profile_version_evidence_mismatch')
     }
-    execution[binding.role] = resolve(extractedRoot, binding.relativePath)
+    if (SINGLETON_ROLES.has(binding.role)) {
+      execution[binding.role] = resolve(extractedRoot, binding.relativePath)
+    }
   }
   const postgresBin = dirname(execution.postgres)
   for (const role of POSTGRES_EXECUTABLE_ROLES) {
@@ -581,47 +687,160 @@ export async function verifyPostgres17ToolchainProfile({
       fail('database_rehearsal_toolchain_postgres_bin_incomplete')
     }
   }
-  return {
+  const policyBytes = await readFile(publisherPolicyPath)
+  const sourceDigest = createHash('sha256').update(JSON.stringify(profile.sources)).digest('hex')
+  const bindingDigest = createHash('sha256').update(JSON.stringify(profile.bindings)).digest('hex')
+  const verified = {
     ...inspection,
     ready: true,
     profileId: profile.profileId,
     manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
-    archiveSha256: profile.archive.sha256,
-    archiveBytes: profile.archive.bytes,
-    archiveFileName: profile.archive.fileName,
-    archivePath,
+    policySha256: createHash('sha256').update(policyBytes).digest('hex'),
+    sourceDigest,
+    bindingDigest,
+    executionBundleSha256: bindingDigest,
+    archiveSha256: primary.sha256,
+    archiveBytes: primary.bytes,
+    archiveFileName: primary.fileName,
+    archivePath: sourcePaths[primary.sourceId],
     postgresVersion: profile.postgres.version,
-    sourceAuthenticationEvidenceSha256: profile.sourceAuthentication.evidenceSha256,
-    loadClosureEvidenceSha256: profile.testOnly === false
-      ? profile.loadClosure.evidenceSha256
-      : profile.sourceAuthentication.evidenceSha256,
-    materializationEvidenceSha256: profile.testOnly === false
-      ? profile.materialization.evidenceSha256
-      : profile.sourceAuthentication.evidenceSha256,
-    materializationInventorySha256: materializationInventory === null
-      ? createHash('sha256').update('synthetic-materialization-not-authoritative').digest('hex')
-      : createHash('sha256').update(JSON.stringify(materializationInventory)).digest('hex'),
-    executionBundleSha256: createHash('sha256').update(JSON.stringify(
-      [...profile.artifacts, ...profile.dependencies].map((binding) => ({
-        role: binding.role,
-        relativePath: binding.relativePath,
-        bytes: binding.bytes,
-        sha256: binding.sha256,
-        sourceArtifactSha256: binding.sourceArtifactSha256,
-        observedVersion: binding.observedVersion,
-        versionOutputSha256: binding.versionOutputSha256,
-      })),
-    )).digest('hex'),
-    publisherAuthentication,
+    sourceAuthenticationEvidenceSha256: primary.authentication.evidenceSha256,
+    loadClosureEvidenceSha256: profile.loadClosure.evidenceSha256,
+    sourceAuthentication,
+    publisherAuthentication: sourceAuthentication.find(({ sourceId }) => sourceId === primary.sourceId),
     execution: {
       root: expectedRoot,
-      materializationRoots: profile.testOnly === false
-        ? [expectedRoot, resolve(secondExtractedRoot)]
-        : [expectedRoot],
       postgresBin,
       openssl: execution.openssl,
       python: execution.python,
       psycopg: execution.psycopg,
+      node: execution.node,
+      git: execution.git,
     },
   }
+  verified.receiptEvidence = toolchainReceiptEvidence(verified)
+  return verified
+}
+
+export function toolchainReceiptEvidence(verified) {
+  const rawSourceAuthentication = [...(verified.sourceAuthentication || [])]
+  const sourceAuthentication = rawSourceAuthentication
+    .map((value) => {
+      const digestShape = [
+        'sourceId', 'sourceArtifactSha256', 'evidenceSha256',
+      ]
+      const authenticodeShape = [
+        ...digestShape, 'policyId', 'signerCertificateSha256',
+        'timestampCertificateSha256',
+      ]
+      if (!hasExactKeys(value, value.policyId === undefined ? digestShape : authenticodeShape)) {
+        fail('database_rehearsal_toolchain_receipt_evidence_invalid')
+      }
+      const base = {
+        sourceId: value.sourceId,
+        sourceArtifactSha256: value.sourceArtifactSha256,
+        evidenceSha256: value.evidenceSha256,
+      }
+      if (value.policyId === undefined) return base
+      return {
+        ...base,
+        policyId: value.policyId,
+        signerCertificateSha256: value.signerCertificateSha256,
+        timestampCertificateSha256: value.timestampCertificateSha256,
+      }
+    })
+    .sort((left, right) => left.sourceId.localeCompare(right.sourceId))
+  if (typeof verified.profileId !== 'string' || verified.profileId.length === 0
+    || ![verified.manifestSha256, verified.policySha256, verified.sourceDigest,
+      verified.bindingDigest, verified.executionBundleSha256,
+      verified.loadClosureEvidenceSha256].every((value) => SHA256.test(value || ''))
+    || sourceAuthentication.length === 0
+    || sourceAuthentication.some((value) => typeof value.sourceId !== 'string'
+      || !SHA256.test(value.sourceArtifactSha256 || '')
+      || !SHA256.test(value.evidenceSha256 || ''))) {
+    fail('database_rehearsal_toolchain_receipt_evidence_invalid')
+  }
+  return {
+    contract: 'supermega.postgres17-toolchain-receipt-evidence.v1',
+    profileId: verified.profileId,
+    manifestSha256: verified.manifestSha256,
+    policySha256: verified.policySha256,
+    sourceDigest: verified.sourceDigest,
+    bindingDigest: verified.bindingDigest,
+    executionBundleSha256: verified.executionBundleSha256,
+    loadClosureEvidenceSha256: verified.loadClosureEvidenceSha256,
+    sourceAuthentication,
+  }
+}
+
+export async function sourceControlledToolchainReceiptEvidence({
+  manifestPath,
+  publisherPolicyPath = defaultPublisherPolicyPath,
+  allowSynthetic = false,
+}) {
+  const manifestBytes = await readFile(manifestPath)
+  const profile = parseJsonEvidence(manifestBytes, 'database_rehearsal_toolchain_profile_invalid')
+  const inspection = inspectPostgres17ToolchainProfile(profile)
+  const blockers = inspection.blockers.filter((blocker) =>
+    !blocker.startsWith('source_authentication_runtime_verification_required:')
+      && !(allowSynthetic && blocker === 'synthetic_profile'))
+  if (blockers.length > 0) fail('database_rehearsal_toolchain_provenance_unapproved')
+  const policyBytes = await readFile(publisherPolicyPath)
+  const policy = parseJsonEvidence(policyBytes, 'database_rehearsal_publisher_policy_invalid')
+  if (!inspectPostgres17PublisherPolicy(policy).ready) {
+    fail('database_rehearsal_publisher_policy_unapproved')
+  }
+  const sourceAuthentication = []
+  for (const source of profile.sources) {
+    const authentication = source.authentication
+    const evidencePath = resolve(dirname(manifestPath), authentication.evidencePath)
+    await verifyRegularFile(evidencePath, {
+      bytes: authentication.evidenceBytes,
+      sha256: authentication.evidenceSha256,
+    }, dirname(manifestPath))
+    const evidence = parseJsonEvidence(
+      await readFile(evidencePath),
+      'database_rehearsal_source_authentication_invalid',
+    )
+    if (authentication.method === WINDOWS_AUTHENTICODE_METHOD) {
+      sourceAuthentication.push({
+        ...verifyWindowsAuthenticodePublisherEvidence({
+          source, policy, evidence, observed: evidence,
+        }),
+        evidenceSha256: authentication.evidenceSha256,
+      })
+    } else {
+      if (authentication.method !== REVIEWED_SOURCE_DIGEST_METHOD
+        || !hasExactKeys(evidence, [
+          'contract', 'status', 'sourceId', 'artifactBytes', 'artifactSha256',
+        ])
+        || evidence.contract !== 'supermega.reviewed-source-digest.v1'
+        || evidence.status !== 'reviewed'
+        || evidence.sourceId !== source.sourceId
+        || evidence.artifactSha256 !== source.sha256
+        || evidence.artifactBytes !== source.bytes) {
+        fail('database_rehearsal_source_authentication_invalid')
+      }
+      sourceAuthentication.push({ sourceId: source.sourceId,
+        sourceArtifactSha256: source.sha256,
+        evidenceSha256: authentication.evidenceSha256 })
+    }
+  }
+  const closurePath = resolve(dirname(manifestPath), profile.loadClosure.evidencePath)
+  await verifyRegularFile(closurePath, {
+    bytes: profile.loadClosure.evidenceBytes,
+    sha256: profile.loadClosure.evidenceSha256,
+  }, dirname(manifestPath))
+  verifyWindowsLoadClosureEvidence(profile,
+    parseJsonEvidence(await readFile(closurePath), 'database_rehearsal_load_closure_invalid'))
+  return toolchainReceiptEvidence({
+    profileId: profile.profileId,
+    manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
+    policySha256: createHash('sha256').update(policyBytes).digest('hex'),
+    sourceDigest: createHash('sha256').update(JSON.stringify(profile.sources)).digest('hex'),
+    bindingDigest: createHash('sha256').update(JSON.stringify(profile.bindings)).digest('hex'),
+    executionBundleSha256: createHash('sha256').update(JSON.stringify(profile.bindings)).digest('hex'),
+    loadClosureEvidenceSha256: profile.loadClosure.evidenceSha256,
+    sourceAuthentication,
+  })
 }

@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { access, lstat, mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { access, lstat, mkdir, open, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { basename, dirname, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
@@ -12,7 +12,6 @@ const toolchainProfilePath = resolve(root, 'hq', 'research', 'postgres17-toolcha
 const rehearsalRunner = resolve(root, 'tools', 'rehearse_supermega_postgres17.py')
 
 import { verifyPostgres17ToolchainProfile } from './postgres17_toolchain_profile.mjs'
-import { buildPostgres17AuthorityRequest } from './postgres17_authority_session.mjs'
 
 import {
   DATABASE_REHEARSAL_EVIDENCE_SCHEMA, implementationPaths, fail, sha256, same,
@@ -60,68 +59,94 @@ async function archiveEvidence(path) {
 }
 
 export async function resolveToolchainArchivePath(profilePath = toolchainProfilePath) {
+  const sources = await resolveToolchainSourcePaths(profilePath)
   let profile
   try { profile = JSON.parse(await readFile(profilePath, 'utf8')) } catch { fail('database_rehearsal_toolchain_profile_invalid') }
-  const fileName = profile?.archive?.fileName
-  if (typeof fileName !== 'string' || fileName !== basename(fileName)) {
+  const primary = profile?.sources?.find((source) => source.component === 'postgresql')
+  if (!primary || typeof sources[primary.sourceId] !== 'string') {
     fail('database_rehearsal_toolchain_profile_archive_name_mismatch')
   }
-  return resolve(homedir(), '.cache', 'supermega-postgresql', fileName)
+  return sources[primary.sourceId]
 }
 
-export async function resolveSecondMaterializationRoot(
-  archivePath,
-  profilePath = toolchainProfilePath,
-) {
+export async function resolveToolchainSourcePaths(profilePath = toolchainProfilePath) {
   let profile
-  try { profile = JSON.parse(await readFile(profilePath, 'utf8')) } catch {
-    fail('database_rehearsal_toolchain_profile_invalid')
+  try { profile = JSON.parse(await readFile(profilePath, 'utf8')) } catch { fail('database_rehearsal_toolchain_profile_invalid') }
+  if (!Array.isArray(profile?.sources) || profile.sources.length === 0) {
+    fail('database_rehearsal_toolchain_profile_source_invalid')
   }
-  const rootName = profile?.extractedRootName
-  if (typeof rootName !== 'string' || rootName.length === 0
-    || rootName !== basename(rootName)) {
-    fail('database_rehearsal_toolchain_profile_root_mismatch')
+  const cacheRoot = resolve(homedir(), '.cache', 'supermega-postgresql')
+  const entries = profile.sources.map(({ sourceId, fileName }) => {
+    if (typeof sourceId !== 'string' || sourceId.length === 0
+      || typeof fileName !== 'string' || fileName !== basename(fileName)) {
+      fail('database_rehearsal_toolchain_profile_source_invalid')
+    }
+    return [sourceId, resolve(cacheRoot, fileName)]
+  })
+  if (new Set(entries.map(([sourceId]) => sourceId)).size !== entries.length) {
+    fail('database_rehearsal_toolchain_profile_source_invalid')
   }
-  return resolve(dirname(archivePath), `${rootName}.materialization-pass-2`)
+  return Object.fromEntries(entries)
 }
 
 export function toolchainAuthority(verified) {
-  const publisher = verified?.publisherAuthentication
+  const receiptEvidence = verified?.receiptEvidence
   const authority = {
-    profileId: verified?.profileId,
+    ...receiptEvidence,
     archiveFileName: verified?.archiveFileName,
-    manifestSha256: verified?.manifestSha256,
-    policyId: publisher?.policyId,
-    policySha256: publisher?.policySha256,
-    sourceArtifactSha256: publisher?.sourceArtifactSha256,
-    signerCertificateSha256: publisher?.signerCertificateSha256,
-    timestampCertificateSha256: publisher?.timestampCertificateSha256,
-    sourceAuthenticationEvidenceSha256: verified?.sourceAuthenticationEvidenceSha256,
-    loadClosureEvidenceSha256: verified?.loadClosureEvidenceSha256,
-    materializationEvidenceSha256: verified?.materializationEvidenceSha256,
-    materializationInventorySha256: verified?.materializationInventorySha256,
-    executionBundleSha256: verified?.executionBundleSha256,
+    archiveBytes: verified?.archiveBytes,
+    sourceArtifactSha256: verified?.archiveSha256,
+    trustedBoundary: 'isolated-single-purpose-windows-x64-v1',
   }
-  if (typeof authority.profileId !== 'string' || authority.profileId.length === 0
-    || typeof authority.policyId !== 'string' || authority.policyId.length === 0
+  if (authority.contract !== 'supermega.postgres17-toolchain-receipt-evidence.v1'
+    || typeof authority.profileId !== 'string' || authority.profileId.length === 0
     || typeof authority.archiveFileName !== 'string'
     || !authority.archiveFileName.toLowerCase().endsWith('.exe')
-    || Object.entries(authority).some(([key, value]) => !['profileId', 'policyId', 'archiveFileName'].includes(key)
-      && !/^[0-9a-f]{64}$/.test(value || ''))) {
+    || !Number.isSafeInteger(authority.archiveBytes) || authority.archiveBytes < 1
+    || authority.trustedBoundary !== 'isolated-single-purpose-windows-x64-v1'
+    || !Array.isArray(authority.sourceAuthentication)
+    || authority.sourceAuthentication.length === 0
+    || ![authority.manifestSha256, authority.policySha256, authority.sourceDigest,
+      authority.bindingDigest, authority.loadClosureEvidenceSha256,
+      authority.executionBundleSha256, authority.sourceArtifactSha256]
+      .every((value) => /^[0-9a-f]{64}$/.test(value || ''))) {
     fail('database_rehearsal_toolchain_authority_invalid')
   }
   return authority
 }
 
-function gitOutput(args) {
-  const result = spawnSync('git', ['--no-optional-locks', ...args], { cwd: root, encoding: 'utf8', timeout: 10_000, windowsHide: true })
+function gitOutput(gitExecutable, args) {
+  if (typeof gitExecutable !== 'string' || !isAbsolute(gitExecutable)) {
+    fail('database_rehearsal_verified_git_required')
+  }
+  const result = spawnSync(gitExecutable, ['--no-optional-locks', ...args], { cwd: root, encoding: 'utf8', timeout: 10_000, windowsHide: true })
   if (result.status !== 0) fail('database_rehearsal_git_unavailable')
   return result.stdout.trim()
 }
 
-function cleanSource() {
-  if (gitOutput(['status', '--porcelain', '--untracked-files=all'])) fail('database_rehearsal_record_requires_clean_worktree')
-  return { implementationCommit: gitOutput(['rev-parse', 'HEAD']), implementationTree: gitOutput(['rev-parse', 'HEAD^{tree}']) }
+function cleanSource(gitExecutable) {
+  if (gitOutput(gitExecutable, ['status', '--porcelain', '--untracked-files=all'])) fail('database_rehearsal_record_requires_clean_worktree')
+  return { implementationCommit: gitOutput(gitExecutable, ['rev-parse', 'HEAD']), implementationTree: gitOutput(gitExecutable, ['rev-parse', 'HEAD^{tree}']) }
+}
+
+export async function requireVerifiedRecorderRuntime(
+  verifiedToolchain,
+  currentNode = process.execPath,
+  realpathImplementation = realpath,
+) {
+  const verifiedNode = verifiedToolchain?.execution?.node
+  if (typeof verifiedNode !== 'string' || !verifiedNode || typeof currentNode !== 'string' || !currentNode) {
+    fail('database_rehearsal_recorder_node_unverified')
+  }
+  let expected, observed
+  try {
+    [expected, observed] = await Promise.all([
+      realpathImplementation(verifiedNode), realpathImplementation(currentNode),
+    ])
+  } catch { fail('database_rehearsal_recorder_node_unverified') }
+  const normalize = (value) => process.platform === 'win32' ? value.toLowerCase() : value
+  if (normalize(expected) !== normalize(observed)) fail('database_rehearsal_recorder_node_mismatch')
+  return expected
 }
 
 async function requireAbsent(path) {
@@ -131,19 +156,21 @@ async function requireAbsent(path) {
 
 export function recorderOutcomeReconciled(result, raw) {
   return !result?.error && !result?.signal && result?.status === 0
-    && raw?.contract === 'supermega_postgres17_rehearsal_v2' && raw.cleanup_complete === true
+    && raw?.contract === 'supermega_postgres17_rehearsal_v2'
+    && raw.authoritative === false && raw.cleanup_complete === true
     && raw.production_mutated === false && raw.supabase_mutated === false
     && raw.vercel_mutated === false && raw.secret_values_exposed === false
 }
 
 export function toolchainChildEnvironment(verifiedToolchain, baseEnvironment = {}) {
   const execution = verifiedToolchain?.execution
-  if (!execution?.postgresBin || !execution?.openssl || !execution?.python || !execution?.psycopg) {
+  if (!execution?.postgresBin || !execution?.openssl || !execution?.python
+    || !execution?.psycopg || !execution?.node || !execution?.git) {
     fail('database_rehearsal_toolchain_execution_binding_missing')
   }
-  // The inherited environment supplies operating-system plumbing only. Tool,
-  // Python, PostgreSQL and database selectors are deliberately absent; Python
-  // independently derives and verifies them from the canonical profile.
+  // The inherited environment supplies operating-system plumbing only. The
+  // recorder passes exact verified executable paths as arguments; Python and
+  // database selectors from the caller's environment are deliberately absent.
   const allowed = {}
   for (const key of [
     'SystemRoot', 'WINDIR', 'ComSpec', 'TEMP', 'TMP',
@@ -158,53 +185,6 @@ export function toolchainChildEnvironment(verifiedToolchain, baseEnvironment = {
     PYTHONDONTWRITEBYTECODE: '1',
     PYTHONNOUSERSITE: '1',
   }
-}
-
-export async function buildRecorderAuthorityRequest({
-  verifiedToolchain,
-  source,
-  implementation,
-  now = Date.now(),
-}) {
-  const publisher = verifiedToolchain?.publisherAuthentication
-  const roots = verifiedToolchain?.execution?.materializationRoots
-  if (!Array.isArray(roots) || roots.length !== 2 || !publisher) {
-    fail('database_rehearsal_authority_request_unavailable')
-  }
-  const parent = await archiveEvidence(process.execPath)
-  return buildPostgres17AuthorityRequest({
-    source: {
-      head: source.implementationCommit,
-      tree: source.implementationTree,
-      implementationDigest: implementation.digest,
-    },
-    toolchain: {
-      profileId: verifiedToolchain.profileId,
-      manifestSha256: verifiedToolchain.manifestSha256,
-      policyId: publisher.policyId,
-      policySha256: publisher.policySha256,
-      sourceArtifactSha256: publisher.sourceArtifactSha256,
-      materializationEvidenceSha256: verifiedToolchain.materializationEvidenceSha256,
-      materializationInventorySha256: verifiedToolchain.materializationInventorySha256,
-      loadClosureEvidenceSha256: verifiedToolchain.loadClosureEvidenceSha256,
-      executionBundleSha256: verifiedToolchain.executionBundleSha256,
-    },
-    materialization: { firstRoot: roots[0], secondRoot: roots[1] },
-    execution: {
-      archivePath: verifiedToolchain.archivePath,
-      root: verifiedToolchain.execution.root,
-      postgresBin: verifiedToolchain.execution.postgresBin,
-      openssl: verifiedToolchain.execution.openssl,
-      python: verifiedToolchain.execution.python,
-      psycopg: verifiedToolchain.execution.psycopg,
-    },
-    parent: {
-      pid: process.pid,
-      executablePath: process.execPath,
-      executableSha256: parent.sha256,
-    },
-    now,
-  })
 }
 
 export function recorderChildFailureCode(result) {
@@ -316,7 +296,7 @@ export async function record(destination, runtime = {}) {
     tmpdir,
     writeRecorderFailureDiagnostic,
     writeFile,
-    buildRecorderAuthorityRequest,
+    requireVerifiedRecorderRuntime,
     revalidateToolchain: async () => fail('database_rehearsal_toolchain_revalidation_missing'),
     ...runtime,
   }
@@ -324,11 +304,17 @@ export async function record(destination, runtime = {}) {
   await requireAbsent(destination)
   await requireAbsent(rawPath)
   await requireAbsent(`${destination}.diagnostic.json`)
-  const source = dependencies.cleanSource()
+  const initialToolchain = await dependencies.revalidateToolchain()
+  await dependencies.requireVerifiedRecorderRuntime(initialToolchain)
+  const initialAuthority = toolchainAuthority(initialToolchain)
+  const source = dependencies.cleanSource(initialToolchain.execution.git)
   const implementation = await dependencies.implementationEvidence()
   await mkdir(dirname(destination), { recursive: true })
   const lockPath = `${destination}.lock`
-  const commonDirectory = dependencies.gitOutput(['rev-parse', '--path-format=absolute', '--git-common-dir'])
+  const commonDirectory = dependencies.gitOutput(
+    initialToolchain.execution.git,
+    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+  )
   const commonKey = process.platform === 'win32' ? commonDirectory.toLowerCase() : commonDirectory
   const repositoryLock = resolve(dependencies.tmpdir(), `supermega-postgres17-${sha256(commonKey).slice(7)}.lock`)
   return withRecorderLease([repositoryLock, lockPath], async (lease) => {
@@ -337,19 +323,27 @@ export async function record(destination, runtime = {}) {
     // bounded, but allow enough time to avoid converting machine contention
     // into a false database failure.
     const verifiedToolchain = await dependencies.revalidateToolchain()
+    await dependencies.requireVerifiedRecorderRuntime(verifiedToolchain)
     const authorityBefore = toolchainAuthority(verifiedToolchain)
-    const authorityRequest = await dependencies.buildRecorderAuthorityRequest({
-      verifiedToolchain, source, implementation,
-    })
+    if (!same(authorityBefore, initialAuthority)
+      || !same(verifiedToolchain.execution, initialToolchain.execution)) {
+      fail('database_rehearsal_toolchain_changed')
+    }
     lease.markLaunched()
     const childEnvironment = toolchainChildEnvironment(verifiedToolchain, process.env)
     const result = dependencies.spawnSync(
       verifiedToolchain.execution.python,
-      ['-I', '-B', rehearsalRunner, '--expected-head', source.implementationCommit],
+      [
+        '-I', '-B', rehearsalRunner,
+        '--expected-head', source.implementationCommit,
+        '--postgres-bin', verifiedToolchain.execution.postgresBin,
+        '--openssl', verifiedToolchain.execution.openssl,
+        '--git', verifiedToolchain.execution.git,
+      ],
       {
         cwd: root,
         env: childEnvironment,
-        input: `${JSON.stringify(authorityRequest)}\n`,
+        input: '',
         encoding: 'utf8',
         timeout: 300_000,
         windowsHide: true,
@@ -376,9 +370,13 @@ export async function record(destination, runtime = {}) {
       { encoding: 'utf8', flag: 'wx' },
     )
     const verifiedAfter = await dependencies.revalidateToolchain()
+    await dependencies.requireVerifiedRecorderRuntime(verifiedAfter)
     const authorityAfter = toolchainAuthority(verifiedAfter)
-    if (!same(authorityAfter, authorityBefore)) fail('database_rehearsal_toolchain_changed')
-    if (!same(dependencies.cleanSource(), source)
+    if (!same(authorityAfter, authorityBefore)
+      || !same(verifiedAfter.execution, verifiedToolchain.execution)) {
+      fail('database_rehearsal_toolchain_changed')
+    }
+    if (!same(dependencies.cleanSource(verifiedAfter.execution.git), source)
       || !same(await dependencies.implementationEvidence(), implementation)) fail('database_rehearsal_source_changed')
     const proof = buildSanitizedProof(raw, {
       recordedAt: new Date().toISOString(),
@@ -388,16 +386,17 @@ export async function record(destination, runtime = {}) {
       toolchain: authorityAfter,
     })
     const summary = recordCompletionSummary(proof, await dependencies.implementationEvidence())
-    if (!same(dependencies.cleanSource(), source)) fail('database_rehearsal_source_changed')
+    if (!same(dependencies.cleanSource(verifiedAfter.execution.git), source)) fail('database_rehearsal_source_changed')
     await writeFile(destination, `${JSON.stringify(proof, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
     return summary
   })
 }
 
-async function verify(input, expectedHead) {
+async function verify(input, expectedHead, verifiedGit = null) {
   const proof = JSON.parse(await readFile(input, 'utf8'))
   if (expectedHead) {
-    const source = cleanSource()
+    if (typeof verifiedGit !== 'string') fail('database_rehearsal_verified_git_required')
+    const source = cleanSource(verifiedGit)
     if (source.implementationCommit !== expectedHead || proof.implementationCommit !== expectedHead
       || proof.implementationTree !== source.implementationTree) fail('database_rehearsal_source_mismatch')
   }
@@ -420,23 +419,30 @@ async function main() {
   const command = process.argv.slice(2)
   let result
   let revalidateToolchain
-  if (command.length === 0 || (command.length === 2 && command[0] === '--output' && command[1])) {
+  const records = command.length === 0
+    || (command.length === 2 && command[0] === '--output' && command[1])
+  const verifiesExpectedHead = command.length === 5 && command[0] === '--verify'
+    && command[1] === '--input' && command[2] && command[3] === '--expected-head'
+    && /^[0-9a-f]{40}$/.test(command[4])
+  let verifiedForSource = null
+  if (records || verifiesExpectedHead) {
+    const sourcePaths = await resolveToolchainSourcePaths()
     const archivePath = await resolveToolchainArchivePath()
-    const secondExtractedRoot = await resolveSecondMaterializationRoot(archivePath)
     revalidateToolchain = () => verifyPostgres17ToolchainProfile({
       manifestPath: toolchainProfilePath,
       archivePath,
-      secondExtractedRoot,
+      sourcePaths,
       requireHostPlatform: true,
     })
-    await revalidateToolchain()
+    verifiedForSource = await revalidateToolchain()
+    await requireVerifiedRecorderRuntime(verifiedForSource)
   }
   if (command.length === 2 && command[0] === '--output' && command[1]) result = await record(resolve(command[1]), { revalidateToolchain })
   else if (command.length === 0) result = await record(outputPath, { revalidateToolchain })
   else if (same(command, ['--verify'])) result = await verify(outputPath)
   else if ([3, 5].includes(command.length) && command[0] === '--verify' && command[1] === '--input'
     && command[2] && (command.length === 3 || (command[3] === '--expected-head' && /^[0-9a-f]{40}$/.test(command[4])))) {
-    result = await verify(resolve(command[2]), command[4])
+    result = await verify(resolve(command[2]), command[4], verifiedForSource?.execution?.git)
   } else fail('database_rehearsal_record_arguments_invalid')
   console.log(JSON.stringify(result, null, 2))
 }

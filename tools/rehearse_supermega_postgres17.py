@@ -29,22 +29,16 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
-# Resolve the verifier only from this tracked tools directory.  Isolated mode
-# ignores PYTHONPATH; imported contract tests otherwise do not include this
-# sibling directory on sys.path.
-_TRACKED_TOOLS_DIRECTORY = Path(__file__).resolve().parent
-if str(_TRACKED_TOOLS_DIRECTORY) not in sys.path:
-    sys.path.insert(0, str(_TRACKED_TOOLS_DIRECTORY))
-
-from postgres17_python_authority import (
-    AuthorityFailure,
-    AuthorityGrant,
-    read_inherited_request,
-    verify_inherited_authority,
-)
-
-
-ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = Path(__file__).resolve()
+TOOLS_ROOT = SCRIPT_PATH.parent
+ROOT = SCRIPT_PATH.parents[1]
+# Isolated Python deliberately ignores PYTHONPATH and user site-packages. Add
+# only the two roots derived from this exact tracked script so package imports
+# and the sibling role provisioner cannot be selected by caller environment.
+for _trusted_import_root in (ROOT, TOOLS_ROOT):
+    _trusted = str(_trusted_import_root)
+    if _trusted not in sys.path:
+        sys.path.insert(0, _trusted)
 MIGRATION_DIRECTORY = ROOT / "supabase" / "migrations"
 PUBLIC_BROWSER_QUARANTINE = (
     ROOT / "supabase" / "rehearsal" / "20260804_public_browser_quarantine.sql"
@@ -91,11 +85,6 @@ RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
-# No current source-controlled profile binds the reviewed Windows archive to
-# every executable/dependency that the rehearsal would load. Keep collection
-# disabled until that complete profile is reviewed; never infer approval from a
-# version string, a caller-provided path, or the mere presence of the old ZIP.
-TOOLCHAIN_PROVENANCE_APPROVED = False
 WINDOWS_DIRECT_START_MODE = "codex-sandbox-direct"
 REHEARSAL_TEMP_DIRECTORY_ENV = "SUPERMEGA_REHEARSAL_TEMP_DIR"
 PUBLIC_BROWSER_TABLES = (
@@ -175,26 +164,10 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "tools/record_postgres17_rehearsal.test.mjs",
     "tools/postgres17_toolchain_profile.mjs",
     "tools/postgres17_toolchain_profile.test.mjs",
-    "tools/postgres17_materialization.mjs",
-    "tools/postgres17_materialization.test.mjs",
-    "tools/postgres17_authority_session.mjs",
-    "tools/postgres17_authority_session.test.mjs",
-    "tools/postgres17_python_authority.py",
-    "tools/postgres17_windows_execution_lock.py",
-    "tools/windows/postgres17_execution_broker.cpp",
-    "tools/windows/postgres17_execution_broker_build.json",
-    "tools/windows/build_postgres17_execution_broker.ps1",
-    "tools/windows/postgres17_execution_broker_protocol.cpp",
-    "tools/windows/postgres17_execution_broker_protocol.hpp",
-    "tools/windows/postgres17_execution_broker_protocol_test.cpp",
     "tools/inspect_windows_authenticode.ps1",
     "hq/research/postgres17-toolchain-profile.json",
     "hq/research/postgres17-publisher-policy.json",
-    "hq/research/postgres17-windows-execution-lock-policy.json",
     "tests/test_postgres17_rehearsal_contract.py",
-    "tests/test_postgres17_python_authority.py",
-    "tests/test_postgres17_windows_execution_lock.py",
-    "tests/test_postgres17_windows_execution_broker.py",
 ))))
 CURRENT_ACCOUNT_CHECKS = (
     "self_serve_four_product_workspaces_created", "self_serve_product_entitlements_exact",
@@ -233,9 +206,6 @@ MANAGED_SECOND_ACTOR = "f3ea98a2-9954-413c-ad4d-c6dc7ce8a23c"
 MANAGED_SECOND_SESSION = "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3"
 MANAGED_APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
 DATABASE_REJECTION_SQLSTATES = frozenset({"23514", "40001", "42501", "55000"})
-_TOOLCHAIN_EXECUTION_GUARD: Callable[[], AuthorityGrant] | None = None
-
-
 class RehearsalFailure(RuntimeError):
     """A fail-closed error with a safe, credential-free code."""
 
@@ -250,12 +220,14 @@ def _implementation_digest() -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
-def _source_identity(expected_head: str | None) -> dict[str, str]:
+def _source_identity(expected_head: str | None, git_executable: Path) -> dict[str, str]:
     if not isinstance(expected_head, str) or not re.fullmatch(r"[0-9a-f]{40}", expected_head):
         raise RehearsalFailure("expected_head_required")
+    if not git_executable.is_absolute() or not git_executable.is_file():
+        raise RehearsalFailure("verified_git_required")
     def git(*args: str) -> str:
         try:
-            result = subprocess.run(["git", "--no-optional-locks", *args], cwd=ROOT,
+            result = subprocess.run([str(git_executable), "--no-optional-locks", *args], cwd=ROOT,
                 capture_output=True, text=True, timeout=10, check=False)
         except (OSError, subprocess.SubprocessError) as exc:
             raise RehearsalFailure("source_identity_unavailable") from exc
@@ -320,6 +292,7 @@ def _configured_path(environment_key: str, fallback: Callable[[], Path]) -> Path
 def _safe_report(error: str, *, cleanup_complete: bool) -> dict[str, Any]:
     return {
         "ok": False,
+        "authoritative": False,
         "ready": False,
         "status": "attention",
         "contract": CONTRACT,
@@ -391,8 +364,6 @@ def _run(
     environment: dict[str, str],
     timeout: int = 90,
 ) -> subprocess.CompletedProcess[str]:
-    if _TOOLCHAIN_EXECUTION_GUARD is not None:
-        _TOOLCHAIN_EXECUTION_GUARD()
     return subprocess.run(
         command,
         cwd=ROOT,
@@ -425,8 +396,6 @@ def _run_without_inheritable_pipes(
 ) -> subprocess.CompletedProcess[str]:
     """Run process managers without pipes their detached children can retain."""
 
-    if _TOOLCHAIN_EXECUTION_GUARD is not None:
-        _TOOLCHAIN_EXECUTION_GUARD()
     return subprocess.run(
         command,
         cwd=ROOT,
@@ -619,8 +588,6 @@ def _start_cluster(
     ):
         postgres = _binary(postgres_bin, "postgres")
         pg_isready = _binary(postgres_bin, "pg_isready")
-        if _TOOLCHAIN_EXECUTION_GUARD is not None:
-            _TOOLCHAIN_EXECUTION_GUARD()
         with log_file.open("ab", buffering=0) as output:
             process = subprocess.Popen(
                 [str(postgres), "-D", str(data_directory)],
@@ -3790,6 +3757,7 @@ def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
         return _safe_report(str(exc), cleanup_complete=True)
     return {
         "ok": True,
+        "authoritative": False,
         "ready": False,
         "status": "available",
         "contract": CONTRACT,
@@ -3805,43 +3773,53 @@ def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
 def _release_preflight(
     postgres_bin: Path,
     openssl: Path,
-    authority_grant: AuthorityGrant | None = None,
 ) -> dict[str, Any]:
-    """Gate receipt/rehearsal authority without disabling local contract tests."""
+    """Allow only the Windows rehearsal platform selected by the Node recorder.
+
+    This runner emits non-authoritative behavior evidence. The Node recorder is
+    solely responsible for verifying the reviewed toolchain profile before and
+    after execution and for minting the sanitized receipt.
+    """
     if os.name != "nt":
         return _safe_report("postgres17_platform_unapproved", cleanup_complete=True)
-    if authority_grant is None \
-            or authority_grant.authoritative is not True \
-            or authority_grant.independently_verified is not True \
-            or authority_grant.execution_locked is not True:
-        return _safe_report(
-            "postgres17_toolchain_provenance_unapproved",
-            cleanup_complete=True,
-        )
-    if (postgres_bin.resolve() != authority_grant.postgres_bin.resolve()
-            or openssl.resolve() != authority_grant.openssl.resolve()):
-        return _safe_report(
-            "postgres17_toolchain_authority_mismatch",
-            cleanup_complete=True,
-        )
     return _preflight(postgres_bin, openssl)
+
+
+def _isolated_import_preflight() -> dict[str, Any]:
+    """Prove isolated mode resolves only tracked repository import roots."""
+    from provision_supermega_runtime_role import apply_runtime_role
+    from tools import rehearse_self_serve_v13
+    from supermega_runtime.trial_store import PostgresTrialStore
+
+    if not callable(apply_runtime_role) or rehearse_self_serve_v13 is None \
+            or PostgresTrialStore is None:
+        raise RehearsalFailure("isolated_import_preflight_failed")
+    return {
+        "ok": True,
+        "authoritative": False,
+        "ready": False,
+        "status": "available",
+        "contract": CONTRACT,
+        "isolated_imports": True,
+        "cleanup_complete": True,
+        "secret_values_exposed": False,
+        "production_mutated": False,
+        "supabase_mutated": False,
+        "vercel_mutated": False,
+    }
 
 
 def _run_rehearsal(
     postgres_bin: Path,
     openssl: Path,
+    git_executable: Path,
     evidence_file: Path | None,
     *,
     source_identity: dict[str, str],
-    authority_grant: AuthorityGrant | None = None,
-    authority_revalidator: Callable[[], AuthorityGrant] | None = None,
 ) -> int:
-    global _TOOLCHAIN_EXECUTION_GUARD
-    _TOOLCHAIN_EXECUTION_GUARD = authority_revalidator
     environment = _clean_environment(postgres_bin)
-    preflight = _release_preflight(postgres_bin, openssl, authority_grant)
+    preflight = _release_preflight(postgres_bin, openssl)
     if preflight.get("ok") is not True:
-        _TOOLCHAIN_EXECUTION_GUARD = None
         _emit(preflight, evidence_file)
         return 2
 
@@ -4103,13 +4081,14 @@ def _run_rehearsal(
                 raise RehearsalFailure("restored_budget_bypassed")
             except TrialRateLimited:
                 pass
-            if _source_identity(source_identity["head"]) != source_identity:
+            if _source_identity(source_identity["head"], git_executable) != source_identity:
                 raise RehearsalFailure("source_changed_during_rehearsal")
 
             version = str(preflight["engine"]["version"])
             major = int(preflight["engine"]["major"])
             report = {
                 "ok": True,
+                "authoritative": False,
                 "ready": True,
                 "status": "rehearsed",
                 "contract": CONTRACT,
@@ -4117,16 +4096,6 @@ def _run_rehearsal(
                 "implementation": {
                     "paths": list(IMPLEMENTATION_PATHS),
                     "digest": _implementation_digest(),
-                },
-                "toolchain_authority": {
-                    "contract": "supermega.postgres17-python-authority.v1",
-                    "authoritative": authority_grant.authoritative,
-                    "independently_verified": authority_grant.independently_verified,
-                    "execution_locked": authority_grant.execution_locked,
-                    "session_id": authority_grant.session_id,
-                    "request_digest": authority_grant.request_digest,
-                    "source_artifact_sha256": authority_grant.source_artifact_sha256,
-                    "execution_bundle_sha256": authority_grant.execution_bundle_sha256,
                 },
                 "engine": {
                     "major": major,
@@ -4194,13 +4163,6 @@ def _run_rehearsal(
                 "supabase_mutated": False,
                 "vercel_mutated": False,
             }
-            report["toolchain_authority"]["verification_digest"] = sha256(
-                json.dumps(
-                    report["toolchain_authority"],
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ).encode("utf-8")
-            ).hexdigest()
         except RehearsalFailure as exc:
             report = _safe_report(str(exc), cleanup_complete=False)
         except Exception as exc:
@@ -4231,22 +4193,11 @@ def _run_rehearsal(
     assert report is not None
     if not cleanup_complete and report.get("ok") is True:
         report = _safe_report("cluster_cleanup_failed", cleanup_complete=False)
-    if cleanup_complete and report.get("ok") is True:
-        try:
-            if authority_revalidator is None:
-                raise AuthorityFailure("database_rehearsal_authority_revalidation_missing")
-            renewed = authority_revalidator()
-            if renewed != authority_grant:
-                raise AuthorityFailure("database_rehearsal_authority_revalidation_mismatch")
-        except AuthorityFailure as exc:
-            report = _safe_report(str(exc), cleanup_complete=True)
     evidence_persisted = _emit(report, evidence_file)
-    _TOOLCHAIN_EXECUTION_GUARD = None
     return 0 if evidence_persisted and report.get("ok") is True else 1
 
 
 def main(argv: list[str] | None = None) -> int:
-    global _TOOLCHAIN_EXECUTION_GUARD
     parser = argparse.ArgumentParser(
         description=(
             "Rehearse SuperMega migrations on a disposable, TLS-enabled "
@@ -4275,6 +4226,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Verify local PostgreSQL 17 tooling without starting a server.",
     )
+    parser.add_argument(
+        "--import-preflight",
+        action="store_true",
+        help="Verify deterministic isolated repository imports without starting PostgreSQL.",
+    )
+    parser.add_argument(
+        "--git",
+        type=Path,
+        help="Exact profile-verified Git executable required for source identity.",
+    )
     parser.add_argument("--expected-head", help="Exact clean local source commit required for a full rehearsal.")
     args = parser.parse_args(argv)
 
@@ -4284,54 +4245,31 @@ def main(argv: list[str] | None = None) -> int:
 
     postgres_bin = args.postgres_bin.expanduser().resolve()
     openssl = _resolve_executable(args.openssl)
+    if args.import_preflight:
+        try:
+            report = _isolated_import_preflight()
+        except Exception:
+            report = _safe_report("isolated_import_preflight_failed", cleanup_complete=True)
+        evidence_persisted = _emit(report, args.evidence_file)
+        return 0 if evidence_persisted and report.get("ok") is True else 1
     if args.preflight:
         report = _release_preflight(postgres_bin, openssl)
         evidence_persisted = _emit(report, args.evidence_file)
         return 0 if evidence_persisted and report.get("ok") is True else 1
     try:
-        source = _source_identity(args.expected_head)
+        if args.git is None:
+            raise RehearsalFailure("verified_git_required")
+        source = _source_identity(args.expected_head, args.git.expanduser().resolve())
     except RehearsalFailure as exc:
         _emit(_safe_report(str(exc), cleanup_complete=True), args.evidence_file)
         return 2
-    expected_source = {
-        "head": source["head"],
-        "tree": source["tree"],
-        "implementationDigest": source["implementation_digest"],
-    }
-    used_authority_sessions: set[tuple[str, str]] = set()
-    try:
-        authority_request = read_inherited_request(sys.stdin.buffer)
-        authority_accepted_at = datetime.now(timezone.utc)
-        authority_grant = verify_inherited_authority(
-            authority_request,
-            expected_source=expected_source,
-            repository_root=ROOT,
-            now=authority_accepted_at,
-            used_sessions=used_authority_sessions,
-        )
-    except AuthorityFailure as exc:
-        _emit(_safe_report(str(exc), cleanup_complete=True), args.evidence_file)
-        return 2
-    postgres_bin = authority_grant.postgres_bin
-    openssl = authority_grant.openssl
-
-    def revalidate_authority() -> AuthorityGrant:
-        return verify_inherited_authority(
-            authority_request,
-            expected_source=expected_source,
-            repository_root=ROOT,
-            # Freshness is consumed once. Rechecks validate the same
-            # process-held capability and current bytes, not a new request.
-            now=authority_accepted_at,
-        )
     try:
         return _run_rehearsal(
             postgres_bin,
             openssl,
+            args.git.expanduser().resolve(),
             args.evidence_file,
             source_identity=source,
-            authority_grant=authority_grant,
-            authority_revalidator=revalidate_authority,
         )
     except RehearsalFailure as exc:
         if str(exc) != "workspace_initialization_failed":
@@ -4341,8 +4279,6 @@ def main(argv: list[str] | None = None) -> int:
             args.evidence_file,
         )
         return 2
-    finally:
-        _TOOLCHAIN_EXECUTION_GUARD = None
 
 
 if __name__ == "__main__":

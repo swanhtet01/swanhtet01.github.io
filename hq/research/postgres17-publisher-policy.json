@@ -1,28 +1,27 @@
 {
   "contract": "supermega.postgres17-publisher-policy.v1",
-  "policyId": "edb-postgresql-windows-authenticode-v1-pending",
+  "policyId": "edb-postgresql-windows-authenticode-v1-pending-review",
   "status": "pending",
   "testOnly": false,
   "method": "windows-authenticode-v1",
-  "platform": {
-    "os": "windows",
-    "arch": "x64"
-  },
+  "platform": { "os": "windows", "arch": "x64" },
   "requiredSignatureType": "Authenticode",
   "timestampRequired": true,
-  "requiredEkuOids": [
-    "1.3.6.1.5.5.7.3.3"
+  "requiredEkuOids": ["1.3.6.1.5.5.7.3.3"],
+  "approvedSigners": [
+    {
+      "certificateSha256": "558b34d97944a53cefc13c031ea46845be00f0b9bb87f47dc3110eaee07f82d3",
+      "subject": "CN=EnterpriseDB Corporation, O=EnterpriseDB Corporation, L=Wilmington, S=Delaware, C=US",
+      "issuer": "DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1"
+    }
   ],
-  "approvedSigners": [],
-  "approval": {
-    "status": "pending",
-    "reviewedBy": null,
-    "reviewedAt": null
-  },
+  "approvedTimestampCertificateSha256": [
+    "2da09da7f4131f9fe72db6c5e6e9c9656755af043f1ea742cc0d2120e141ebfc"
+  ],
+  "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
   "blockers": [
-    "The exact official PostgreSQL 17 Windows installer has not been retained and inspected; it must be the profile archive and materialization root rather than a signed companion to an unsigned ZIP.",
-    "No independently reviewed signer certificate SHA-256, subject, or issuer is pinned.",
-    "No current Windows Authenticode observation is retained for the exact installer digest.",
-    "This pending policy cannot approve a production rehearsal profile."
+    "The exact EDB PostgreSQL 17.11-5 installer bytes and Authenticode identities were observed read-only on Windows, but the canonical observer record has not been retained and hashed.",
+    "The signer and timestamp raw-DER SHA-256 values remain pending independent policy review.",
+    "This pending policy cannot approve a rehearsal profile or authorize installer execution."
   ]
 }

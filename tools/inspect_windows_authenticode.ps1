@@ -1,4 +1,28 @@
 $ErrorActionPreference = 'Stop'
+
+function Get-Sha256Hex([string]$Path) {
+  # Avoid the PowerShell file-hash cmdlet's module dependency. This protects each
+  # hash read from ordinary concurrent writes, but does not make the separate
+  # path-based Authenticode inspection atomic against a hostile same-user
+  # process. Production evidence must run on the reviewed isolated Windows host.
+  $stream = [System.IO.File]::Open(
+    $Path,
+    [System.IO.FileMode]::Open,
+    [System.IO.FileAccess]::Read,
+    [System.IO.FileShare]::Read
+  )
+  try {
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      return -join ($hasher.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') })
+    } finally {
+      $hasher.Dispose()
+    }
+  } finally {
+    $stream.Dispose()
+  }
+}
+
 $TargetPath = [Environment]::GetEnvironmentVariable('SUPERMEGA_AUTHENTICODE_TARGET', 'Process')
 if ([string]::IsNullOrWhiteSpace($TargetPath)) {
   throw 'artifact_path_missing'
@@ -7,7 +31,7 @@ $itemBefore = Get-Item -LiteralPath $TargetPath -Force
 if ($itemBefore.PSIsContainer -or (($itemBefore.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
   throw 'artifact_not_regular_file'
 }
-$hashBefore = (Get-FileHash -LiteralPath $itemBefore.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+$hashBefore = Get-Sha256Hex -Path $itemBefore.FullName
 $bytesBefore = [int64]$itemBefore.Length
 
 $signature = Get-AuthenticodeSignature -LiteralPath $itemBefore.FullName
@@ -46,7 +70,7 @@ if ($null -ne $timestampCertificate) {
 }
 
 $itemAfter = Get-Item -LiteralPath $itemBefore.FullName -Force
-$hashAfter = (Get-FileHash -LiteralPath $itemAfter.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+$hashAfter = Get-Sha256Hex -Path $itemAfter.FullName
 if ($itemAfter.PSIsContainer
   -or (($itemAfter.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
   -or [int64]$itemAfter.Length -ne $bytesBefore

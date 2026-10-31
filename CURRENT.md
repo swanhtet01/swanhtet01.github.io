@@ -26,10 +26,10 @@ before acting; a newer fact never widens authority.
 | Item | Verified fact |
 |---|---|
 | Post-merge base | `codex/shop-main-integration-20261022` at PR #734 merge commit `4977d4caafa6921e83c97c950a154d3bd8aaf584`, tree `287f074dc7f7ef93052c3ca220fbb8a5c8912736`. GitHub still reports `main` at ancestor `5479c5d1ece3d697cf5c505e7feb431dc88baf75`; open draft PR #730 remains the integration path from that post-merge branch to `main` |
-| Replacement technical lane | Draft PR [#752](https://github.com/swanhtet01/swanhtet01.github.io/pull/752), branch `codex/postgres17-provenance-integration-20261031`. Remote head remains `9e8b0731152ef551a89742de92677b24aaad0d4e`, tree `8a26a25ff96887125418991f3d3bc6bedc033b8f`; local source-only Windows build successor is `4a4fc42031fffdc7d7693c6ccf64a77f31113d6f`, tree `b0dd72b6a22b6278ca5f17bd486edce5714e17ae`, and is not published or Windows-validated |
-| Conflict resolution | `CURRENT.md` was replaced by the newer canonical delivery ledger because the merged copy still described PR #734 as unmerged. PostgreSQL profile/verifier paths deleted on the merged side were restored from the reviewed fail-closed stack. Unrelated merged `package.json` scripts were retained; only `database:postgres17:record:self-test` was expanded to the exact authority/materialization/profile/recorder and Python broker/lock suites |
-| Exact local validation | On local successor `4a4fc420`: PostgreSQL integrated self-test **76/76 Node + 28/28 Python PASS**; broker source/static suite **5/5 PASS**; rehearsal contract **27/27 PASS**; claims guard **179/179 PASS**; exact full Kernel verifier **495/495**, brand, footprint, 69-connector/993-call resilience and 15-crew/214-check resilience **PASS**. Remote predecessor `9e8b0731` has terminal Kernel **PASS**, while App stops correctly at check 638/668 with `database_rehearsal_evidence_stale` and dependency audit remains **FAIL** at 10 app / 5 kernel moderate minimatch-chain records. The Local Windows compile of `9e8b0731` is **FAIL** with deterministic-flag, macro, `PeekNamedPipe` and process-image type errors; it is not evidence for the local successor |
-| Release gates | The local successor derives exact compiler/SDK include and library roots instead of trusting ambient VsDevCmd lists, rejects non-empty `CL`/`_CL_`/`LINK`, uses a dependency-free SHA-256 helper, makes the compiler probe StrictMode-safe, adds `/experimental:deterministic`, and fixes the four reported C++ compiler errors. Real Windows compile and hostile execution on this successor are **NOT RUN**. Receipt verification and `hq:verify` still correctly stop at `database_rehearsal_evidence_stale`; signing, real publisher/profile approval, fresh rehearsal and release readiness remain **BLOCKED** |
+| Replacement technical lane | Draft PR [#752](https://github.com/swanhtet01/swanhtet01.github.io/pull/752), branch `codex/postgres17-provenance-integration-20261031`. Published predecessor `e28acadf75b60f10c5e15763e4edb03ba509c0e0`, tree `0fcb92dbfb94e70f6d271077244874ddc880ebb4`, is being revised privately to the smaller authenticated multi-source toolchain design; no revised head is published yet |
+| Architecture revision | The base contract requires an exact-clean-head Windows rehearsal and complete independently reviewed toolchain provenance, not a custom native broker, two-pass materialization or a Python session-authority protocol. The revised path keeps Node as the sole receipt authority, binds every runtime file to its real authenticated source and trusts only a fresh isolated single-purpose Windows x64 runner with no concurrent/interactive same-user workload. Hostile same-host mutation is explicitly out of scope unless a separately approved execution lock is restored |
+| Exact local validation | On the private architecture-revision working tree based on `e28acadf`: PostgreSQL profile/recorder self-test **49/49 Node + 28/28 Python PASS**, isolated hostile-`PYTHONPATH` import preflight **PASS**, full Kernel **495/495 PASS**, tool syntax/preflight **PASS**, claims guard **179/179 PASS**, Python compile and diff checks **PASS**. Independent review found six authority/closure/execution findings; the revised profile slice is independently re-reviewed **PASS** and the confirmed recorder/verifier findings are covered by the exact tests above. The receipt verifier and `hq:verify` correctly stop at `database_rehearsal_evidence_stale`; the dependency audit remains blocked by the upstream minimatch range. A committed checkpoint is recorded below after the private revision is committed |
+| Release gates | PostgreSQL installer byte identity and publisher authentication are evidenced read-only, but the canonical retained observation file, runtime materialization, multi-source bindings/load closure, Windows rehearsal and fresh receipt remain **NOT RUN**. Receipt verification and `hq:verify` remain correctly blocked; no installer execution, database, merge, deployment or release readiness is established |
 
 ### Current private runtime candidate
 
@@ -42,7 +42,7 @@ before acting; a newer fact never widens authority.
 | Native local verification head | `f58be5f7bcdaf8b3f83ee5d7c89712fca282a4bd`, repository tree `919a1368d86f6c87d4e875b51adcf72d8587416b`; later evidence/docs/tooling changes leave native tree `f110be98` unchanged |
 | Reviewed implementation/provenance head | `0af2750165f7d3925d4b106e7e91e44bc069350b`, repository tree `eefc0089c8ed17dead51fe5718a63aee218d807d`; includes release-truth reconciliation and source-only iOS/Windows QA provenance hardening, with native tree still `f110be98` |
 | Latest private release-integrity checkpoint | `1213fa189de3912d95e0c3e18c6bb8913a257234`, repository tree `b5d182d1a748d176c4068da60dd6059dc28af5e9`; aligns the gallery verifier/refresher with the independently reviewed current native-CI workflow bytes, while leaving the native tree `f110be98` unchanged |
-| PostgreSQL provenance source successor | Local source-only checkpoint `4a4fc42031fffdc7d7693c6ccf64a77f31113d6f`, tree `b0dd72b6a22b6278ca5f17bd486edce5714e17ae`, layered on remote PR #752 head `9e8b0731`. It composes the Authenticode prerequisite, exact two-root materialization inventory, independent Python authority verifier, immutable Windows staging/lock contract, dependency-free native broker source and a deterministic direct-MSVC build handoff corrected against the predecessor's real Windows compiler diagnostics. It does not supply or approve a real installer/profile, validate the successor on Windows, sign a broker, run PostgreSQL, or refresh the rehearsal receipt |
+| PostgreSQL provenance source successor | Private architecture revision based on published `e28acadf` removes the non-required broker/session/two-pass path and retains the base's exact source, lock, Windows-only, TLS, dump/restore, receipt and cleanup gates. The revised canonical profile uses authenticated `sources[]` and `bindings[]`; no revised checkpoint exists until integration tests and independent review finish |
 | Latest private public-smoke checkpoint | `20aa48b28c3469244f87f7507e05477ecbdb0be2`, repository tree `b23c022aeea186c2e49450c5f279c6cc94387551`; aligns live smoke checks with the Shop-only EN/MY surface, retired namespace 404 precedence and exact no-redirect behavior |
 | Branch | `codex/postgres17-provenance-integration-20261031`, the single authorized replacement technical lane layered on the post-#734 merge branch |
 | Successor classification | Includes reviewed website telemetry privacy `897a207c` + `64d26887`, managed/local workspace-controls privacy `2a80479d` + `957fcd12` + `87651b97`, Settings/company-recovery privacy `40f47962`, managed-account support routing `f0030f28`, privacy-aligned app verifier `040ffbff`, managed access-entry clarity `9fa44b4a`, public signup transition guard `ec0919cd`, verifier/contact-contract repairs through `8cb51ee0`, PostgreSQL version-binding hardening `d7399679`, durable native cash-tender v22 runtime `35d5b1d2`, empty-v1 migration repair `1b2686bc`, and cafe product-name snapshot repair `cc0efa4f` |
@@ -107,41 +107,27 @@ Source-bound verification:
   correctly fail-closed at HQ check 1 with `database_rehearsal_evidence_stale`;
   independent checks 639--668 **PASS** and are not represented as one aggregate
   release pass;
-- PostgreSQL provenance hardening through implementation checkpoint `965292a5`:
-  all seven bound PostgreSQL
-  executables must report the exact declared upstream version, including when
-  internally consistent wrong-version evidence is rehashed. Provenance/recorder
-  predecessor version/profile/recorder tests **47/47 PASS**, application
-  security **107/107 PASS**, coordinated release-workflow contract **343/343
-  PASS**, and predecessor independent review **PASS**. The current successor's
-  focused count and review verdict are recorded below and must not be conflated
-  with that predecessor review.
-  The source-local publisher verifier now requires the profile archive itself
-  to be a timestamped, embedded-Authenticode-signed `.exe`, rejects a signed
-  sibling as authority for the historical ZIP, pins the SHA-256 leaf
-  certificate through an independently reviewed policy, rejects reparse/path,
-  byte/digest, signer, EKU and timestamp drift, and repeats the live
-  observation before and after the child. Receipt freshness binds the profile,
-  policy, signed source, signer, timestamp, authentication evidence, reviewed
-  load-closure evidence and execution bundle. Receipt validation derives that
-  tuple from current source-controlled evidence rather than trusting receipt
-  fields. The production verifier has no injectable
-  Authenticode seam and the Python release gate remains disabled. The claims
-  guard is **179/179 PASS**. The read-only receipt verifier remains correctly
-  **BLOCKED** at `database_rehearsal_evidence_stale`. The tracked production
-  profile/policy remain pending and unapproved: the official signed installer,
-  reviewed signer certificate, real Windows file/load-closure evidence and
-  independent profile approval are still absent. The production profile is
-  additionally blocked by `materialization_executor_unavailable`: the source
-  verifier now rejects incomplete, extra, traversal/ADS, case-colliding,
-  symlink/reparse-like, hard-linked, substituted and non-identical two-root
-  inventories, but no reviewed Windows executor or verified official-installer
-  argument contract has produced those roots. The one-time request contract
-  exact-binds source, profile/policy/materialization/load-closure hashes,
-  execution paths, nonce, session and freshness and atomically claims a stable
-  file, but remains deliberately `authoritative:false`. Python still performs
-  no independent publisher/tree/path revalidation, so the secure authority
-  handoff is **BLOCKED**, not inferred from environment variables or a receipt;
+- PostgreSQL provenance is being revised on the sole PR #752 lane to the base
+  contract's smaller trusted-runner design. Node remains the sole receipt
+  authority and must bind every executed, imported and non-system loaded file
+  through canonical authenticated `sources[]` and `bindings[]`; Python emits
+  only a raw non-authoritative behavior report. The exact EDB PostgreSQL
+  17.11-5 Windows x64 installer was downloaded twice without execution; both
+  copies are 413,001,200 bytes with SHA-256
+  `612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072`,
+  matching Winget's pinned manifest. Windows reports valid embedded
+  Authenticode, code-signing EKU `1.3.6.1.5.5.7.3.3`, signer raw-DER SHA-256
+  `558b34d97944a53cefc13c031ea46845be00f0b9bb87f47dc3110eaee07f82d3`
+  and timestamp-certificate raw-DER SHA-256
+  `2da09da7f4131f9fe72db6c5e6e9c9656755af043f1ea742cc0d2120e141ebfc`.
+  This establishes artifact identity and publisher authentication, not runtime
+  closure or rehearsal authority. The retained canonical observation digest,
+  materialized file inventory, authenticated Python/Psycopg/OpenSSL sources,
+  complete load closure, isolated Windows run, fresh receipt and independent
+  approval remain **NOT RUN/BLOCKED**. The trusted execution boundary excludes
+  hostile concurrent same-user mutation; any such threat requires a separately
+  approved execution lock. The read-only receipt verifier remains correctly
+  blocked at `database_rehearsal_evidence_stale`;
 - privacy-aligned app verifier at `040ffbff`, verified again at `9fa44b4a`: focused local-recovery contract
   **14/14 PASS**, independent review **PASS**, exact-source canonical website
   build **PASS** (301 modules; offline precache 42 files / 2,083,862 bytes),
@@ -529,7 +515,7 @@ that a downstream installed, hardware, merchant or production gate passed.
 | Current native CI | **PASS (source/build only)** | Run `41170560321`: all six configured Android, iOS/iPad, Windows and isolated QA jobs pass for public native tree `751cb7a1` | Cloud Tech Lead | Consume only as build evidence; obtain installed evidence separately |
 | Current App CI | **FAIL / BLOCKED** | Push run `41170556406`: checks 1--637/668 pass; check 638 fails at HQ 1/37 with `database_rehearsal_evidence_stale`; checks 639--668 and HQ 2--37 are not run. PR run `41170560286` is intentionally skipped. A private worktree re-run based on `1c337fda`, using exact command `npm run hq:verify`, reproduces the same fail-closed error at step 1/37 | Cloud Tech Lead | Close PostgreSQL provenance and refresh the exact-source rehearsal receipt before rerunning the unchanged gate; do not fabricate a receipt or aggregate separately run tail checks into this provider result |
 | Dependency security | **FAIL / BLOCKED** | Run `41170560278`: app 10 and kernel 5 moderate records for `GHSA-g3hv-75wg-m249`; affected minimatch `<11.0.1`. Current paths are dev lint chains. Fresh official registry metadata still reports latest `eslint@10.14.0` on minimatch `^10.2.6`, `@eslint/config-array@0.23.5` on `^10.2.4`, `@typescript-eslint/typescript-estree@8.72.1` on `^10.2.2`, and latest `eslint-plugin-jsx-a11y@6.10.2` on minimatch `^3.1.2` with ESLint peer support only through 9. Its transpiled utilities call minimatch as a callable default while minimatch 10/11 expose an object/named function, so a blanket `11.0.1` override is incompatible; `npm audit --force` proposes breaking downgrades | Cloud Tech Lead | Keep the audit red. Wait for a compatible reviewed upstream release or a separately provenance-reviewed patch/fork, then regenerate both lockfiles normally and prove clean installs, accessibility lint behavior, package verification and the audit. GitGuardian remains skipped/incomplete |
-| PostgreSQL rehearsal provenance | **BLOCKED; SOURCE-ONLY WINDOWS REPAIR PASS / WINDOWS SUCCESSOR NOT RUN** | Remote PR #752 head `9e8b0731` correctly retains the reviewed Authenticode, materialization, Python authority, immutable staging and native-broker contracts, but its Local Windows compile is **FAIL**: the build probe/environment handling and four C++ compile errors prevented a broker binary. Local successor `4a4fc420`, tree `b0dd72b`, derives exact MSVC/SDK roots, rejects ambient compiler/linker flags, hashes without PowerShell modules, makes `/Bv /?` probe handling explicit, adds `/experimental:deterministic`, and fixes the macro, pipe and process-image compiler errors. Integrated recorder **76/76 Node + 28/28 Python**, broker suite **5/5**, rehearsal contract **27/27**, claims **179/179**, and full Kernel **495/495** plus all broad guards pass locally. The manifest and any future receipt remain `productionAdapterEnabled:false`, `signed:false`, `windowsCompiled:false`, `windowsValidated:false`, `authoritative:false`, `executionLocked:false`, and `toolchainClosureComplete:false`. Receipt/HQ remains fail-closed at `database_rehearsal_evidence_stale`; no successor Windows compile, installer download, PostgreSQL process, SQL or database ran | Local Tech Lead | Compile exact successor `4a4fc420` on the authorized Windows host, retain the actual build receipt and full tool/header/default-library closure, and report PASS/FAIL before any hostile test, signing or disposable rehearsal |
+| PostgreSQL rehearsal provenance | **BLOCKED; PUBLISHER ARTIFACT PASS / RUNTIME NOT RUN** | PR #752 is being revised from the non-required broker/session/two-pass architecture to the base contract's smaller trusted-runner model. EDB 17.11-5 installer identity and Authenticode signer/EKU/timestamp identity are evidenced read-only, with no execution. Canonical retained observation bytes/digest, authenticated multi-source runtime bindings, complete executed/imported/load closure, exact isolated Windows materialization, rehearsal and fresh receipt remain absent. The authoritative recorder continues to fail closed at `database_rehearsal_evidence_stale` | Cloud Tech Lead source; Local Tech Lead Windows evidence | Finish and independently review the exact source revision. Then, only after separate execution approval, emit the canonical observation and materialize/verify the complete runtime on a fresh single-purpose isolated Windows x64 runner before any database process starts |
 | Exact-current gallery evidence | **BLOCKED** | Artifact `13031202317` is metadata-bound to run `41170560321` / native tree `751cb7a1`, but supported byte retrieval returned HTTP 403 and a second distinct capture does not exist | Cloud Tech Lead | Obtain two retained exact-current provider capture archives through a supported route; never relabel old pixels |
 | Website/account exact-source preview | **BLOCKED** | Private source checks, deterministic lint/typecheck and contact/privacy contracts pass; canonical public build still fails closed at `native_shop_gallery_schema_changed` | Cloud Tech Lead | Close gallery provenance, then produce and verify one protected exact-source preview without promotion |
 | Managed identity/shared operation | **BLOCKED** | Source seams fail closed; no production staff issuer, revocation, tenant audit or durable cross-device reconciliation is proven | Cloud Tech Lead | Finish source contracts only against an approved identity design; production authority remains with Swan |

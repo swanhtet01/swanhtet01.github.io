@@ -22,32 +22,44 @@ import {
   recordCompletionSummary,
   writeRecorderFailureDiagnostic,
   toolchainChildEnvironment,
+  requireVerifiedRecorderRuntime,
 } from './record_postgres17_rehearsal.mjs'
 
 const verifiedToolchainFixture = () => ({
   profileId: 'synthetic-profile',
   archiveFileName: 'synthetic-installer.exe',
+  archiveBytes: 1234,
+  archiveSha256: '5'.repeat(64),
   manifestSha256: '1'.repeat(64),
-  sourceAuthenticationEvidenceSha256: '2'.repeat(64),
+  policySha256: '4'.repeat(64),
+  sourceDigest: '2'.repeat(64),
+  bindingDigest: '3'.repeat(64),
   loadClosureEvidenceSha256: '8'.repeat(64),
-  materializationEvidenceSha256: '9'.repeat(64),
-  materializationInventorySha256: 'a'.repeat(64),
   executionBundleSha256: '3'.repeat(64),
+  receiptEvidence: {
+    contract: 'supermega.postgres17-toolchain-receipt-evidence.v1',
+    profileId: 'synthetic-profile',
+    manifestSha256: '1'.repeat(64),
+    policySha256: '4'.repeat(64),
+    sourceDigest: '2'.repeat(64),
+    bindingDigest: '3'.repeat(64),
+    executionBundleSha256: '3'.repeat(64),
+    loadClosureEvidenceSha256: '8'.repeat(64),
+    sourceAuthentication: [{
+      sourceId: 'synthetic-postgresql',
+      sourceArtifactSha256: '5'.repeat(64),
+      evidenceSha256: '9'.repeat(64),
+    }],
+  },
   archivePath: '/synthetic/archive.exe',
   execution: {
     root: '/synthetic/pgsql',
-    materializationRoots: ['/synthetic/pgsql', '/synthetic/pgsql.materialization-pass-2'],
     postgresBin: '/synthetic/pgsql/bin',
     openssl: '/synthetic/pgsql/bin/openssl.exe',
     python: '/synthetic/pgsql/python/python.exe',
     psycopg: '/synthetic/pgsql/python/psycopg/__init__.py',
-  },
-  publisherAuthentication: {
-    policyId: 'synthetic-policy',
-    policySha256: '4'.repeat(64),
-    sourceArtifactSha256: '5'.repeat(64),
-    signerCertificateSha256: '6'.repeat(64),
-    timestampCertificateSha256: '7'.repeat(64),
+    node: process.execPath,
+    git: '/synthetic/pgsql/git/bin/git.exe',
   },
 })
 
@@ -57,6 +69,8 @@ test('child environment omits every caller and verified tool selector', () => {
     openssl: 'C:\\verified\\openssl.exe',
     python: 'C:\\verified\\python.exe',
     psycopg: 'C:\\verified\\psycopg\\__init__.py',
+    node: process.execPath,
+    git: 'C:\\verified\\git.exe',
   } }, {
     SUPERMEGA_POSTGRES17_BIN: 'C:\\untrusted',
     SUPERMEGA_OPENSSL: 'C:\\untrusted.exe',
@@ -72,6 +86,55 @@ test('child environment omits every caller and verified tool selector', () => {
   assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST' in environment, false)
   assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_SESSION' in environment, false)
   assert.throws(() => toolchainChildEnvironment({ execution: {} }), /execution_binding_missing/)
+})
+
+test('recorder authority requires the current exact verified Node executable', async () => {
+  const verified = verifiedToolchainFixture()
+  assert.equal(
+    await requireVerifiedRecorderRuntime(verified, process.execPath, async value => value),
+    process.execPath,
+  )
+  await assert.rejects(
+    requireVerifiedRecorderRuntime(verified, '/substituted/node', async value => value),
+    /recorder_node_mismatch/,
+  )
+  await assert.rejects(
+    requireVerifiedRecorderRuntime({ execution: {} }, process.execPath, async value => value),
+    /recorder_node_unverified/,
+  )
+})
+
+test('recorder launches only the verified Python and explicit verified tool paths', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-launch-'))
+  const destination = join(folder, 'receipt.json')
+  let observed
+  const events = []
+  try {
+    await assert.rejects(record(destination, {
+      cleanSource: git => { events.push(`source:${git}`); return { implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) } },
+      gitOutput: git => { events.push(`git:${git}`); return join(folder, 'common-git-directory') },
+      implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+      revalidateToolchain: async () => { events.push('profile'); return verifiedToolchainFixture() },
+      spawnSync: (...args) => { observed = args; return { status: 1, stdout: '', stderr: '' } },
+      tmpdir: () => folder,
+    }), /database_rehearsal_termination_unreconciled/)
+    assert.equal(observed[0], '/synthetic/pgsql/python/python.exe')
+    assert.equal(events[0], 'profile')
+    assert.equal(events[1], 'source:/synthetic/pgsql/git/bin/git.exe')
+    assert.equal(events[2], 'git:/synthetic/pgsql/git/bin/git.exe')
+    assert.deepEqual(observed[1].slice(0, 3), ['-I', '-B', observed[1][2]])
+    assert.equal(observed[1][2].endsWith('tools/rehearse_supermega_postgres17.py'), true)
+    assert.deepEqual(observed[1].slice(3), [
+      '--expected-head', 'a'.repeat(40),
+      '--postgres-bin', '/synthetic/pgsql/bin',
+      '--openssl', '/synthetic/pgsql/bin/openssl.exe',
+      '--git', '/synthetic/pgsql/git/bin/git.exe',
+    ])
+    assert.equal(observed[2].input, '')
+    assert.equal(observed[2].env.PYTHONNOUSERSITE, '1')
+    assert.equal('PATH' in observed[2].env, false)
+    assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST' in observed[2].env, false)
+  } finally { await rm(folder, { recursive: true, force: true }) }
 })
 
 test('record refuses a stale diagnostic before launching a child', async () => {
@@ -399,19 +462,23 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.ok(runner.paths.includes('tests/test_shop_correction_postgres_v14_contract.py'))
 })
 const expectedToolchain = {
+  contract: 'supermega.postgres17-toolchain-receipt-evidence.v1',
   profileId: 'synthetic-profile',
   archiveFileName: 'synthetic-installer.exe',
-  manifestSha256: '1'.repeat(64),
-  policyId: 'synthetic-policy',
-  policySha256: '2'.repeat(64),
+  archiveBytes: 333_927_270,
   sourceArtifactSha256: 'c'.repeat(64),
-  signerCertificateSha256: '3'.repeat(64),
-  timestampCertificateSha256: '4'.repeat(64),
-  sourceAuthenticationEvidenceSha256: '5'.repeat(64),
+  manifestSha256: '1'.repeat(64),
+  policySha256: '2'.repeat(64),
+  sourceDigest: '3'.repeat(64),
+  bindingDigest: '4'.repeat(64),
   loadClosureEvidenceSha256: '7'.repeat(64),
-  materializationEvidenceSha256: '8'.repeat(64),
-  materializationInventorySha256: '9'.repeat(64),
-  executionBundleSha256: '6'.repeat(64),
+  executionBundleSha256: '4'.repeat(64),
+  sourceAuthentication: [{
+    sourceId: 'synthetic-postgresql',
+    sourceArtifactSha256: 'c'.repeat(64),
+    evidenceSha256: '5'.repeat(64),
+  }],
+  trustedBoundary: 'isolated-single-purpose-windows-x64-v1',
 }
 implementation.expectedToolchain = expectedToolchain
 const context = {
@@ -423,22 +490,12 @@ const context = {
   toolchain: expectedToolchain,
 }
 const raw = {
-  contract: 'supermega_postgres17_rehearsal_v2', ok: true, ready: true, status: 'rehearsed',
+  contract: 'supermega_postgres17_rehearsal_v2', ok: true, authoritative: false,
+  ready: true, status: 'rehearsed',
   engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true, start_mode: 'pg_ctl_restricted_token' },
   migrations: { count: migrationNames.length, schema_version: 14, names: migrationNames, schema_profile: 'v14-shop-correction',
     catalog_contract: 'supermega_private_trial_database_v14_shop_correction_v1', production_validator_ready: true },
   source: { head: context.implementationCommit, tree: context.implementationTree, implementation_digest: implementation.digest },
-  toolchain_authority: {
-    contract: 'supermega.postgres17-python-authority.v1',
-    authoritative: true,
-    independently_verified: true,
-    execution_locked: true,
-    session_id: 'd'.repeat(32),
-    request_digest: 'e'.repeat(64),
-    source_artifact_sha256: expectedToolchain.sourceArtifactSha256,
-    execution_bundle_sha256: expectedToolchain.executionBundleSha256,
-    verification_digest: '',
-  },
   authority: { actor_identity_source: 'trusted_backend_transaction_context', database_authenticates_individual_actors: false, runtime_credentials_must_remain_server_only: true },
   implementation: { digest: implementation.digest, paths: implementation.paths },
   checks: Object.fromEntries(checkNames.map((name) => [name, true])),
@@ -449,12 +506,6 @@ const raw = {
   storage: { catalog_mode: 'local_private_fixture', hosted_storage_privacy_proof_required: true, policy_count: 0, public_bucket_count: 0 },
   cleanup_complete: true, secret_values_exposed: false, production_mutated: false, supabase_mutated: false, vercel_mutated: false,
 }
-raw.toolchain_authority.verification_digest = createHash('sha256').update(JSON.stringify(
-  Object.fromEntries(Object.entries(raw.toolchain_authority)
-    .filter(([key]) => key !== 'verification_digest')
-    .sort(([left], [right]) => Buffer.compare(Buffer.from(left), Buffer.from(right)))),
-)).digest('hex')
-
 test('builds a sanitized digest-bound local PostgreSQL 17 proof without hosted claims', () => {
   const proof = buildSanitizedProof(raw, context)
   assert.equal(proof.schemaVersion, DATABASE_REHEARSAL_EVIDENCE_SCHEMA)
@@ -506,6 +557,7 @@ test('record completion is derived from validated shared proof before publishing
 test('requires exact current migration identity, source commit/tree and implementation paths', () => {
   const vectors = [
     [r => { r.contract = 'supermega_postgres17_rehearsal_v1' }, /not_ready/],
+    [r => { r.authoritative = true }, /not_ready/],
     [r => { r.migrations.schema_version = 11 }, /migrations_invalid/],
     [r => { r.migrations.names[14] = 'missing.sql' }, /migrations_invalid/],
     [r => { r.migrations.schema_profile = 'legacy-v11' }, /migrations_invalid/],
@@ -561,16 +613,32 @@ test('consumer rejects tampering and rehashed semantic overclaims', () => {
     [p => { p.migration.names.reverse() }, /migrations_invalid/],
     [p => { delete p.catalog.after.private_column_acl_exact }, /catalog_invalid/],
     [p => { p.safety.productionMutated = true }, /safety_invalid/],
-    [p => { p.engine.toolchain.signerCertificateSha256 = 'a'.repeat(64) }, /toolchain_stale/],
+    [p => { p.engine.toolchain.sourceDigest = 'a'.repeat(64) }, /toolchain_stale/],
     [p => { p.engine.toolchain.loadClosureEvidenceSha256 = 'b'.repeat(64) }, /toolchain_stale/],
-    [p => { p.engine.pythonAuthority.request_digest = '0'.repeat(64) }, /python_authority_invalid/],
-    [p => { p.engine.pythonAuthority.execution_locked = false }, /python_authority_invalid/],
   ]
   for (const [mutate, error] of mutations) {
     const invalid = buildSanitizedProof(raw, context)
     mutate(invalid)
     invalid.receiptDigest = proofDigest(invalid)
     assert.throws(() => validateSanitizedProof(invalid, implementation), error)
+  }
+})
+
+test('receipt verifier rejects non-canonical or incomplete toolchain evidence', () => {
+  const vectors = [
+    p => { p.engine.toolchain.executionBundleSha256 = 'f'.repeat(64) },
+    p => { p.engine.toolchain.archiveBytes += 1 },
+    p => { p.engine.toolchain.sourceAuthentication = [] },
+    p => { p.engine.toolchain.sourceAuthentication[0].unreviewed = true },
+    p => { p.engine.toolchain.sourceAuthentication.push({
+      sourceId: 'synthetic-a', sourceArtifactSha256: 'a'.repeat(64), evidenceSha256: 'b'.repeat(64),
+    }) },
+  ]
+  for (const mutate of vectors) {
+    const invalid = buildSanitizedProof(raw, context)
+    mutate(invalid)
+    invalid.receiptDigest = proofDigest(invalid)
+    assert.throws(() => validateSanitizedProof(invalid, implementation), /toolchain_invalid/)
   }
 })
 
