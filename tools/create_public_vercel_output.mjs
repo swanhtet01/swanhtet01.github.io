@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 import { verifyNativeShopGallery, NATIVE_SHOP_GALLERY_DIR } from './public_native_shop_gallery.mjs'
+import {
+  canonicalContactLanguageSearch,
+  isManagedAccountHelpQuery,
+  managedAccountHelpCopy,
+} from './public_contact_account_intent.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { brandFaviconSvg, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
@@ -1033,8 +1038,9 @@ const contactUiCopy = {
     proofNoteContext: 'Attached from this browser. The owner-approved context digest is included and raw records remain excluded; this does not verify a managed account.',
     proofNote: 'Attached from this browser. The outcome is a client-provided, digest-bound aggregate summary; it does not verify a managed account.',
     detached: 'Attached context removed because the product changed.',
-    headingShop: 'Contact us about Shop', headingServiceStart: 'Contact our ', headingServiceEnd: ' team.', headingDefault: 'Contact',
+    headingShop: 'Contact us about Shop', headingAccount: managedAccountHelpCopy.en.heading, headingServiceStart: 'Contact our ', headingServiceEnd: ' team.', headingDefault: 'Contact',
     ledeShop: 'Tell us what you sell and how you work today. We will reply by email.',
+    ledeAccount: managedAccountHelpCopy.en.lede,
     ledeDefault: 'Tell us about your business and the workflow you want to improve. We will reply by email.',
     contextAttached: 'Helpful context attached. Nothing has been sent.', contextInvalid: 'Attached context could not be verified and was left out.',
     messageSent: 'Message sent.', sendAnother: 'Send another message.', previous: 'Previous message — ', sendMessage: 'Send message', sending: 'Sending...',
@@ -1050,8 +1056,9 @@ const contactUiCopy = {
     proofNoteContext: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ပိုင်ရှင်အတည်ပြုထားသော အနှစ်ချုပ်၏ အမှတ်အသားသာ ပါဝင်ပြီး မူရင်းမှတ်တမ်းများ မပါဝင်ပါ။ စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     proofNote: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ရလဒ်သည် သုံးစွဲသူပေးပို့သော စုစည်းအနှစ်ချုပ်သာ ဖြစ်ပြီး စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     detached: 'ကုန်ပစ္စည်းရွေးချယ်မှု ပြောင်းလဲသဖြင့် ပူးတွဲအကြောင်းအရာကို ဖယ်ရှားလိုက်ပါသည်။',
-    headingShop: 'Shop အကြောင်း ဆက်သွယ်ရန်', headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
+    headingShop: 'Shop အကြောင်း ဆက်သွယ်ရန်', headingAccount: managedAccountHelpCopy.my.heading, headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
     ledeShop: 'သင်ရောင်းချသော ပစ္စည်းများနှင့် လက်ရှိအလုပ်လုပ်ပုံကို ပြောပြပါ။ အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
+    ledeAccount: managedAccountHelpCopy.my.lede,
     ledeDefault: 'သင့်လုပ်ငန်းလိုအပ်ချက်ကို ပြောပြပါ၊ SuperMega က အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
     contextAttached: 'အထောက်အကူဖြစ်စေမည့် အကြောင်းအရာကို ပူးတွဲထားပါသည်။ မပို့ရသေးပါ။', contextInvalid: 'ပူးတွဲအကြောင်းအရာကို အတည်မပြုနိုင်သဖြင့် မထည့်သွင်းခဲ့ပါ။',
     messageSent: 'စာပို့ပြီးပါပြီ။', sendAnother: 'နောက်ထပ်စာပို့ရန်', previous: 'ယခင်စာ — ', sendMessage: 'စာပို့ရန်', sending: 'ပို့နေပါသည်...',
@@ -1070,9 +1077,8 @@ const contactScript = `<script>(function(){
   var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),plan=form.querySelector('[name="plan"]'),template=form.querySelector('[name="template"]'),service=form.querySelector('[name="service"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
   var languageSwitch=document.querySelector('[data-language-switch]');
   if(languageSwitch){
-    var destination=new URL(languageSwitch.href,location.origin),allowedQuery=new URLSearchParams();
-    ['product','template','service','utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(name){var value=query.get(name);if(value&&value.length<=160)allowedQuery.set(name,value)});
-    destination.search=allowedQuery.toString();languageSwitch.href=destination.pathname+destination.search;
+    var destination=new URL(languageSwitch.href,location.origin);
+    destination.search=(${canonicalContactLanguageSearch.toString()})(query,['product','template','service','utm_source','utm_medium','utm_campaign','utm_content','utm_term']);languageSwitch.href=destination.pathname+destination.search;
   }
   if(document.documentElement&&document.documentElement.lang==='my'){
     form.addEventListener('invalid',function(event){var field=event.target;if(!field||!field.setCustomValidity)return;field.setCustomValidity(field.validity&&field.validity.typeMismatch?copy.invalidEmail:copy.requiredField)},true);
@@ -1091,12 +1097,14 @@ const contactScript = `<script>(function(){
     return {attempted:true,proof:valid?values:null};
   }
   var shopTemplates=${JSON.stringify(['mini-mart', 'tea-coffee', 'fashion', 'beauty-spa'])};
-  var requestedProduct=query.get('product');if(product&&${JSON.stringify(['guide', ...publicProducts.map(item => item.id)])}.includes(requestedProduct||''))product.value=requestedProduct;
+  var contactProducts=${JSON.stringify(['guide', ...publicProducts.map(item => item.id)])};
+  var requestedProduct=query.get('product'),accountHelpIntent=(${isManagedAccountHelpQuery.toString()})(query,contactProducts);
+  if(product&&accountHelpIntent)product.value='guide';else if(product&&contactProducts.includes(requestedProduct||''))product.value=requestedProduct;
   var requestedTemplate=query.get('template')||'';
-  if(template&&product&&product.value==='shop'&&requestedProduct==='shop'&&shopTemplates.includes(requestedTemplate))template.value=requestedTemplate;
-  if(plan)plan.value=product&&product.value==='shop'?'shop-pilot':'';
+  if(template&&!accountHelpIntent&&product&&product.value==='shop'&&requestedProduct==='shop'&&shopTemplates.includes(requestedTemplate))template.value=requestedTemplate;
+  if(plan)plan.value=!accountHelpIntent&&product&&product.value==='shop'?'shop-pilot':'';
   var requestedService=query.get('service')||'';
-  if(service&&product&&product.value==='shop'&&requestedService==='assisted-launch')service.value=requestedService;
+  if(service&&!accountHelpIntent&&product&&product.value==='shop'&&requestedService==='assisted-launch')service.value=requestedService;
   if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);
   if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);
   var claimInput=form.querySelector('[name="trial_claim_code"]'),claimValue=(handoff.get('claim')||'').toUpperCase();
@@ -1114,12 +1122,13 @@ const contactScript = `<script>(function(){
   }
   function updateServiceSummary(){
     if(!heading)return;
+    if(accountHelpIntent){heading.textContent=copy.headingAccount;if(lede)lede.textContent=copy.ledeAccount;return;}
     var serviceName=product&&({shop:'Shop'})[product.value];
     heading.textContent=serviceName?(serviceName==='Shop'?copy.headingShop:copy.headingServiceStart+serviceName+copy.headingServiceEnd):copy.headingDefault;
     if(lede)lede.textContent=serviceName==='Shop'?copy.ledeShop:copy.ledeDefault;
   }
   updateServiceSummary();
-  if(product)product.addEventListener('change',function(){if(plan)plan.value=product.value==='shop'?'shop-pilot':'';if(template)template.value='';if(service)service.value='';detachProofIfChanged();updateServiceSummary()});
+  if(product)product.addEventListener('change',function(){accountHelpIntent=false;if(plan)plan.value=product.value==='shop'?'shop-pilot':'';if(template)template.value='';if(service)service.value='';detachProofIfChanged();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
     if(proof)status.textContent=copy.contextAttached;
