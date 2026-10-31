@@ -4,10 +4,13 @@ import { createReadStream } from 'node:fs'
 import { lstat, readFile, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
+  AUTHENTICATED_BUNDLE_MEMBER_METHOD,
   combinedPolicySha256,
   OFFICIAL_REGISTRY_SOURCE_METHOD,
   readOfficialRegistryPolicy,
+  reconstructOfficialRegistryEvidence,
   verifyOfficialRegistryEvidence,
+  WINDOWS_AUTHENTICODE_ARTIFACT_METHOD,
 } from './postgres17_source_registry.mjs'
 
 export const POSTGRES17_TOOLCHAIN_PROFILE_CONTRACT =
@@ -52,6 +55,7 @@ const REQUIRED_ROLES = new Set([
   'openssl',
   'python',
   'psycopg',
+  'psycopg_binary',
   'node',
   'git',
 ])
@@ -59,18 +63,22 @@ const POSTGRES_EXECUTABLE_ROLES = new Set([
   'postgres', 'initdb', 'pg_ctl', 'pg_isready', 'pg_dump', 'pg_restore', 'psql',
 ])
 const SINGLETON_ROLES = new Set(REQUIRED_ROLES)
-const REQUIRED_COMPONENTS = new Set(['postgresql', 'python', 'psycopg', 'openssl', 'node', 'git'])
+const REQUIRED_COMPONENTS = new Set([
+  'postgresql', 'python', 'psycopg', 'psycopg_binary', 'openssl', 'node', 'git',
+])
 const ROLE_COMPONENT = new Map([
   ['postgres', 'postgresql'], ['initdb', 'postgresql'], ['pg_ctl', 'postgresql'],
   ['pg_isready', 'postgresql'], ['pg_dump', 'postgresql'], ['pg_restore', 'postgresql'],
   ['psql', 'postgresql'], ['libpq', 'postgresql'], ['python', 'python'],
-  ['psycopg', 'psycopg'], ['openssl', 'openssl'], ['node', 'node'], ['git', 'git'],
+  ['psycopg', 'psycopg'], ['psycopg_binary', 'psycopg_binary'],
+  ['openssl', 'openssl'], ['node', 'node'], ['git', 'git'],
 ])
 const ROLE_REQUIRED_USE = new Map([
   ['postgres', 'executed'], ['initdb', 'executed'], ['pg_ctl', 'executed'],
   ['pg_isready', 'executed'], ['pg_dump', 'executed'], ['pg_restore', 'executed'],
   ['psql', 'executed'], ['libpq', 'loaded'], ['python', 'executed'],
-  ['psycopg', 'imported'], ['openssl', 'executed'], ['node', 'executed'], ['git', 'executed'],
+  ['psycopg', 'imported'], ['psycopg_binary', 'loaded'], ['openssl', 'executed'],
+  ['node', 'executed'], ['git', 'executed'],
 ])
 const USE_KINDS = new Set(['executed', 'imported', 'loaded'])
 function fail(code) {
@@ -605,6 +613,7 @@ async function verifySourceAuthentication({
   sourcePath,
   publisherPolicyPath,
   registryPolicy,
+  verifiedSourceAuthentication,
 }) {
   const policyBytes = await readFile(publisherPolicyPath)
   const policy = parseJsonEvidence(policyBytes, 'database_rehearsal_publisher_policy_invalid')
@@ -622,8 +631,22 @@ async function verifySourceAuthentication({
     }
   }
   if (authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD) {
+    const allowed = registryPolicy.artifacts.find(({ sourceId }) =>
+      sourceId === source.sourceId)
+    const observedAuthentication = allowed?.authenticationMethod
+      === WINDOWS_AUTHENTICODE_ARTIFACT_METHOD
+      ? await inspectWindowsAuthenticode(sourcePath)
+      : null
     return {
-      ...verifyOfficialRegistryEvidence({ source, authentication, policy: registryPolicy, evidence }),
+      ...verifyOfficialRegistryEvidence({
+        source, authentication, policy: registryPolicy, evidence, observedAuthentication,
+        verifiedParentAuthentication: allowed?.authenticationMethod
+          === AUTHENTICATED_BUNDLE_MEMBER_METHOD
+          ? verifiedSourceAuthentication.get(
+            allowed.authenticationRequirements.parentSourceId,
+          )
+          : null,
+      }),
       evidenceSha256: authentication.evidenceSha256,
     }
   }
@@ -678,8 +701,11 @@ export async function verifyPostgres17ToolchainProfile({
   if (!primary) fail('database_rehearsal_toolchain_source_missing')
   if (archivePath !== null) sourcePaths = { ...sourcePaths, [primary.sourceId]: archivePath }
   const sourceAuthentication = []
+  const verifiedSourceAuthentication = new Map()
   const registryPolicy = await readOfficialRegistryPolicy(registryPolicyPath)
-  for (const source of profile.sources) {
+  const orderedSources = [primary, ...profile.sources.filter(({ sourceId }) =>
+    sourceId !== primary.sourceId)]
+  for (const source of orderedSources) {
     const sourcePath = sourcePaths[source.sourceId]
     if (typeof sourcePath !== 'string' || basename(sourcePath) !== source.fileName) {
       fail('database_rehearsal_toolchain_source_path_missing')
@@ -690,9 +716,12 @@ export async function verifyPostgres17ToolchainProfile({
       { bytes: source.authentication.evidenceBytes, sha256: source.authentication.evidenceSha256 },
       dirname(manifestPath),
     )
-    sourceAuthentication.push(await verifySourceAuthentication({
+    const verifiedAuthentication = await verifySourceAuthentication({
       source, manifestPath, sourcePath, publisherPolicyPath, registryPolicy,
-    }))
+      verifiedSourceAuthentication,
+    })
+    sourceAuthentication.push(verifiedAuthentication)
+    verifiedSourceAuthentication.set(source.sourceId, verifiedAuthentication)
   }
   extractedRoot ??= resolve(dirname(sourcePaths[primary.sourceId]), profile.runtimeRootName)
   const expectedRoot = resolve(extractedRoot)
@@ -851,7 +880,12 @@ export async function sourceControlledToolchainReceiptEvidence({
   const registryPolicyBytes = await readFile(registryPolicyPath)
   const registryPolicy = await readOfficialRegistryPolicy(registryPolicyPath)
   const sourceAuthentication = []
-  for (const source of profile.sources) {
+  const verifiedSourceAuthentication = new Map()
+  const primary = profile.sources.find(({ component }) => component === 'postgresql')
+  if (!primary) fail('database_rehearsal_toolchain_source_missing')
+  const orderedSources = [primary, ...profile.sources.filter(({ sourceId }) =>
+    sourceId !== primary.sourceId)]
+  for (const source of orderedSources) {
     const authentication = source.authentication
     const evidencePath = resolve(dirname(manifestPath), authentication.evidencePath)
     await verifyRegularFile(evidencePath, {
@@ -870,8 +904,18 @@ export async function sourceControlledToolchainReceiptEvidence({
         evidenceSha256: authentication.evidenceSha256,
       })
     } else if (authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD) {
+      const allowed = registryPolicy.artifacts.find(({ sourceId }) =>
+        sourceId === source.sourceId)
       sourceAuthentication.push({
-        ...verifyOfficialRegistryEvidence({ source, authentication, policy: registryPolicy, evidence }),
+        ...reconstructOfficialRegistryEvidence({
+          source, authentication, policy: registryPolicy, evidence,
+          verifiedParentAuthentication: allowed?.authenticationMethod
+            === AUTHENTICATED_BUNDLE_MEMBER_METHOD
+            ? verifiedSourceAuthentication.get(
+              allowed.authenticationRequirements.parentSourceId,
+            )
+            : null,
+        }),
         evidenceSha256: authentication.evidenceSha256,
       })
     } else {
@@ -890,6 +934,8 @@ export async function sourceControlledToolchainReceiptEvidence({
         sourceArtifactSha256: source.sha256,
         evidenceSha256: authentication.evidenceSha256 })
     }
+    verifiedSourceAuthentication.set(source.sourceId,
+      sourceAuthentication[sourceAuthentication.length - 1])
   }
   const closurePath = resolve(dirname(manifestPath), profile.loadClosure.evidencePath)
   await verifyRegularFile(closurePath, {

@@ -21,11 +21,13 @@ const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const roles = [
   'postgres', 'initdb', 'pg_ctl', 'pg_isready', 'pg_dump', 'pg_restore', 'psql',
   'libpq', 'openssl', 'python', 'psycopg',
+  'psycopg_binary',
   'node', 'git',
 ]
 const sourceByRole = (role) => {
   if (role === 'python') return 'python-source'
   if (role === 'psycopg') return 'psycopg-source'
+  if (role === 'psycopg_binary') return 'psycopg-binary-source'
   if (role === 'openssl') return 'openssl-source'
   if (role === 'node') return 'node-source'
   if (role === 'git') return 'git-source'
@@ -41,7 +43,8 @@ async function fixture() {
   const sourcePaths = {}
   for (const [sourceId, component] of [
     ['postgresql-source', 'postgresql'], ['python-source', 'python'],
-    ['psycopg-source', 'psycopg'], ['openssl-source', 'openssl'],
+    ['psycopg-source', 'psycopg'], ['psycopg-binary-source', 'psycopg_binary'],
+    ['openssl-source', 'openssl'],
     ['node-source', 'node'], ['git-source', 'git'],
   ]) {
     const fileName = `${sourceId}.bin`
@@ -81,7 +84,8 @@ async function fixture() {
       bytes: bytes.length, sha256: sha256(bytes), observedVersion,
       versionEvidencePath, versionEvidenceBytes: Buffer.byteLength(observedVersion),
       versionOutputSha256: sha256(observedVersion),
-      uses: role === 'psycopg' ? ['imported'] : role === 'libpq' ? ['loaded'] : ['executed'],
+      uses: role === 'psycopg' ? ['imported']
+        : ['psycopg_binary', 'libpq'].includes(role) ? ['loaded'] : ['executed'],
     })
   }
   const closure = {
@@ -221,8 +225,8 @@ test('multi-source synthetic profile verifies complete bindings and closure', as
     })
     assert.equal(verified.ready, true)
     assert.equal(verified.execution.postgresBin.endsWith('bin'), true)
-    assert.equal(verified.sourceAuthentication.length, 6)
-    assert.equal(verified.receiptEvidence.sourceAuthentication.length, 6)
+    assert.equal(verified.sourceAuthentication.length, 7)
+    assert.equal(verified.receiptEvidence.sourceAuthentication.length, 7)
     assert.equal(verified.execution.node.endsWith('node'), true)
     assert.equal(verified.execution.git.endsWith('git'), true)
     assert.equal(verified.executionBindings.node.sourceId, 'node-source')
@@ -424,10 +428,10 @@ test('every required role binds only to its exact source component and unused so
   } finally { await rm(input.root, { recursive: true, force: true }) }
 })
 
-test('missing Python, Psycopg, OpenSSL, Node, or Git source components remain explicit blockers', async () => {
+test('missing Python, Psycopg, Psycopg binary, OpenSSL, Node, or Git sources remain blockers', async () => {
   const input = await fixture()
   try {
-    for (const component of ['python', 'psycopg', 'openssl', 'node', 'git']) {
+    for (const component of ['python', 'psycopg', 'psycopg_binary', 'openssl', 'node', 'git']) {
       const profile = structuredClone(input.profile)
       profile.sources = profile.sources.filter((source) => source.component !== component)
       const result = inspectPostgres17ToolchainProfile(profile)

@@ -12,7 +12,7 @@ import {
   combinedPolicySha256,
   inspectOfficialRegistryPolicy,
   OFFICIAL_REGISTRY_SOURCE_METHOD,
-  verifyOfficialRegistryEvidence,
+  reconstructOfficialRegistryEvidence,
 } from '../tools/postgres17_source_registry.mjs'
 
 export const DATABASE_REHEARSAL_EVIDENCE_SCHEMA = 'supermega.hq.database-rehearsal.v3'
@@ -264,7 +264,10 @@ function sourceControlledToolchainAuthority() {
   }
   const primary = profile.sources.find(({ component }) => component === 'postgresql')
   if (!primary) fail('database_rehearsal_evidence_toolchain_invalid')
-  const sourceAuthentication = profile.sources.map((source) => {
+  const verifiedSourceAuthentication = new Map()
+  const orderedSources = [primary, ...profile.sources.filter(({ sourceId }) =>
+    sourceId !== primary.sourceId)]
+  const sourceAuthentication = orderedSources.map((source) => {
     const authentication = source.authentication
     let evidenceBytes, evidence
     try {
@@ -286,22 +289,34 @@ function sourceControlledToolchainAuthority() {
     }
     if (authentication.method === 'windows-authenticode-v1') {
       try {
-        return {
+        const verified = {
           ...verifyWindowsAuthenticodePublisherEvidence({
             source, policy, evidence, observed: evidence,
           }),
           evidenceSha256: authentication.evidenceSha256,
         }
+        verifiedSourceAuthentication.set(source.sourceId, verified)
+        return verified
       } catch { fail('database_rehearsal_evidence_toolchain_invalid') }
     }
     if (authentication.method === OFFICIAL_REGISTRY_SOURCE_METHOD) {
       try {
-        return {
-          ...verifyOfficialRegistryEvidence({
+        const allowed = registryPolicy.artifacts.find(({ sourceId }) =>
+          sourceId === source.sourceId)
+        const verified = {
+          ...reconstructOfficialRegistryEvidence({
             source, authentication, policy: registryPolicy, evidence,
+            verifiedParentAuthentication: allowed?.authenticationMethod
+              === 'authenticated-bundle-member-v1'
+              ? verifiedSourceAuthentication.get(
+                allowed.authenticationRequirements.parentSourceId,
+              )
+              : null,
           }),
           evidenceSha256: authentication.evidenceSha256,
         }
+        verifiedSourceAuthentication.set(source.sourceId, verified)
+        return verified
       } catch { fail('database_rehearsal_evidence_toolchain_invalid') }
     }
     if (authentication.method !== 'reviewed-source-digest-v1'
@@ -312,6 +327,7 @@ function sourceControlledToolchainAuthority() {
       || evidence.artifactBytes !== source.bytes) {
       fail('database_rehearsal_evidence_toolchain_invalid')
     }
+    verifiedSourceAuthentication.set(source.sourceId, common)
     return common
   }).sort((left, right) => compareUtf8(left.sourceId, right.sourceId))
   const bindingDigest = createHash('sha256').update(JSON.stringify(profile.bindings)).digest('hex')

@@ -3,12 +3,14 @@
   "policyId": "postgres17-official-runtime-sources-v1-pending-review",
   "status": "pending",
   "testOnly": false,
+  "requiredComponents": ["python", "psycopg", "psycopg_binary", "openssl", "node", "git"],
   "artifacts": [],
   "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
   "blockers": [
-    "Official Python, Psycopg/native-extension, OpenSSL, Node and Git artifact locations, package versions, platform tags, byte sizes and digests are not yet retained.",
-    "Official registry metadata bytes and independent approvals are not yet retained and hashed.",
-    "Python, OpenSSL and Git source-authentication schemes are deliberately unsupported until component-specific official metadata or signature verification is implemented and reviewed.",
+    "Exact Python, pure psycopg, psycopg_binary, Node and Git artifact locations, versions, platform tags, byte sizes and digests are not yet retained; no value may be invented from a URL or version string.",
+    "Python, Node, Git and the PostgreSQL parent bundle are limited to exact official Windows artifacts whose retained and freshly reproduced Authenticode observations match signer, timestamp and EKU pins owned by this independently reviewed registry policy; Psycopg is limited to parsed non-yanked PyPI release JSON with exact wheel tags.",
+    "OpenSSL must be an exact member of the one freshly authenticated primary EDB PostgreSQL bundle, with a complete traversal-safe entry manifest and exact member digest; an unused alternate bundle or unofficial standalone Windows binary is forbidden.",
+    "Retained metadata, signature/verification observations and two distinct independent approvals are not yet committed and hashed.",
     "A URL or digest by itself is intentionally insufficient for production source authentication."
   ]
 }

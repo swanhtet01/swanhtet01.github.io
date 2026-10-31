@@ -170,7 +170,7 @@ try {
       -or $policy.closureObserver.sha256 -notmatch '^[0-9a-f]{64}$') {
       Fail 'bootstrap_closure_observer_unapproved'
     }
-    foreach ($component in @('python', 'psycopg', 'openssl', 'node', 'git')) {
+    foreach ($component in @('python', 'psycopg', 'psycopg_binary', 'openssl', 'node', 'git')) {
       if (@($registryPolicy.artifacts | Where-Object { $_.component -eq $component }).Count -lt 1) {
         Fail "bootstrap_registry_component_missing_$component"
       }
@@ -181,9 +181,13 @@ try {
         -or $artifact.fileName -ne [System.IO.Path]::GetFileName($artifact.fileName)) {
         Fail 'bootstrap_registry_source_invalid'
       }
-      Download-Exact $artifactUri (Join-Path $workRoot $artifact.fileName) ([int64]$artifact.bytes) $artifact.sha256
-      Download-Exact $metadataUri (Join-Path $workRoot ($artifact.sourceId + '.metadata')) `
-        ([int64]$artifact.metadataBytes) $artifact.metadataSha256
+      if ($artifact.authenticationMethod -ne 'authenticated-bundle-member-v1') {
+        Download-Exact $artifactUri (Join-Path $workRoot $artifact.fileName) `
+          ([int64]$artifact.bytes) $artifact.sha256
+      }
+      # Retained registry/authentication evidence is source-controlled and is
+      # revalidated by the Node profile verifier. It is not replaced by a fresh
+      # network fetch during the authority-bearing rehearsal.
     }
     $observer = [System.IO.Path]::GetFullPath((Join-Path $root $policy.closureObserver.command))
     if (-not $observer.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar,

@@ -148,17 +148,32 @@ The bootstrap has two deliberately separate stages:
    enforce the 24 migrations, both 33-check catalogs, all 79 behavior/recovery
    checks, loopback TLS, reconstruction and cleanup.
 
-Official archives and wheels other than PostgreSQL use the
+Official archives and wheels other than PostgreSQL use a discriminated
 `official-registry-artifact-v1` contract. It binds the official HTTPS host and
 exact artifact/metadata URLs, package, version, platform, filename, size, artifact
 digest, retained official metadata digest, source-controlled allowlist and two
-distinct policy/evidence reviewers. PyPI wheel evidence must parse the official
-JSON release record and match the exact wheel filename, size and digest; Node.js
-archives must parse the exact version's official `SHASUMS256.txt` line. Other
-component schemes remain unsupported rather than falling back to opaque metadata
-or a generic digest. A URL, caller assertion or artifact digest alone cannot
-authenticate production input. The currently committed registry policy is pending
-and empty, so it authorizes nothing.
+distinct normalized policy/evidence reviewers. The component methods are closed:
+
+- Python accepts only a retained and freshly reproduced Authenticode observation
+  for an exact official Windows installer. The independently reviewed registry
+  policy owns the signer, timestamp and code-signing EKU pins; no decorative
+  secondary policy identifier is accepted. No exact Python artifact is pinned yet.
+- Psycopg must parse the non-yanked official PyPI JSON record and bind both the
+  imported pure `psycopg` package and actual `psycopg_binary` wheel/ABI closure.
+- Node, Git and the PostgreSQL parent bundle must use reviewed exact official
+  Windows Authenticode artifacts.
+  Retained evidence is compared to a fresh dependency-free Windows observation;
+  registry JSON, a URL or a digest alone is insufficient.
+- OpenSSL must be an exact traversal-safe member of the one already authenticated
+  primary EDB PostgreSQL bundle with a complete entry manifest. Its parent source
+  ID, artifact digest, signer and timestamp must match the exact primary PostgreSQL
+  source verified for the profile; an unused alternate bundle or unofficial
+  standalone Windows OpenSSL binary is not accepted.
+
+Unsupported methods fail policy validation rather than falling back to opaque
+metadata or a generic digest. The currently committed registry policy records these
+requirements but contains no artifact identities, retained metadata or independent
+approvals, so it authorizes nothing.
 
 The workflow uploads only explicitly named sanitized JSON outputs, including the
 raw receipt required for reconstruction only after it passes the same size and
@@ -168,6 +183,16 @@ seven-day retention. It never uploads installers,
 extracted binaries, credentials, passwords or row contents. Successful cleanup must show
 the service inventory unchanged, the selected port closed and the temporary
 runtime/data root removed; runner destruction is not cleanup evidence.
+
+Official package-manager metadata can bind downloaded bytes but cannot prove which
+short-lived processes, Python extensions or native modules executed. Polling
+`Process.Modules`, WMI or `tasklist` can miss transient loads and does not expose
+loss accounting. A future observer therefore needs an operating-system event
+source with explicit process/image loss counters, descendant correlation and a
+quiet drain, plus a separately bound Python import manifest. No source-local
+observer currently satisfies that contract; adding an unvalidated custom ETW
+binary would not improve the release evidence. This entire runtime-closure gate
+remains BLOCKED/NOT RUN pending a separately reviewed minimal Windows design.
 
 The reviewed trust boundary is a fresh, single-purpose isolated Windows x64
 runner with no concurrent or interactive same-user workload and no
