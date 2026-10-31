@@ -605,9 +605,13 @@ disabled; the checkpoint provides no LAN, cloud, issuer, key-store, installed
 device or merchant proof.
 
 Exact local evidence: focused analyzer **PASS** with no issues; native CI
-contract **17/17 PASS**; connected/cafe/cash regression set **133/133 PASS**
-under the 300-second outer ceiling; `git diff --check` **PASS**; independent
-security re-review **PASS for default-off Phase 2 only**. Tests cover explicit
+contract **17/17 PASS**; isolated suite totals **724 PASS with 33 intentional
+visual skips**: persistence A 168, persistence B 100 plus 33 skips, connected
+94, and behavior 362. The first four-way run timed out the behavior shard at
+300 seconds under contention and is retained as a failure; its exact unchanged
+standalone retry passed 362/362 in 4:03 under the same ceiling. `git diff
+--check` **PASS**; independent security re-review **PASS for default-off Phase
+2 only**. Tests cover explicit
 scope-before-write, final-unit competition, cash/wallet cancel and exact retry,
 cafe adoption, commit/expiry replication and response-loss replay, v22/v23
 migration, encrypted fresh-target restore, and coherent event-byte substitution.
