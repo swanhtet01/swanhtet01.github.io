@@ -72,7 +72,30 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
         )
         self.assertIs(manifest["hostInventory"]["cmakeRequired"], False)
         self.assertIs(manifest["hostInventory"]["ninjaRequired"], False)
+        self.assertEqual(
+            manifest["hostShell"],
+            {
+                "family": "powershell",
+                "minimumMajorVersion": 5,
+                "dependencyFreeSha256": True,
+            },
+        )
         self.assertEqual(manifest["windowsSdkVersion"], "10.0.26100.0")
+        self.assertEqual(
+            manifest["toolchainPaths"],
+            {
+                "compilerIncludeDirectories": ["include"],
+                "windowsSdkIncludeDirectories": [
+                    "ucrt",
+                    "shared",
+                    "um",
+                    "winrt",
+                    "cppwinrt",
+                ],
+                "compilerLibraryDirectories": ["lib\\x64"],
+                "windowsSdkLibraryDirectories": ["ucrt\\x64", "um\\x64"],
+            },
+        )
         for field in (
             "productionAdapterEnabled",
             "signed",
@@ -84,6 +107,10 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
         self.assertIn("/W4", manifest["compileFlags"])
         self.assertIn("/WX", manifest["compileFlags"])
         self.assertIn("/guard:cf", manifest["compileFlags"])
+        self.assertLess(
+            manifest["compileFlags"].index("/experimental:deterministic"),
+            manifest["compileFlags"].index("/Brepro"),
+        )
         self.assertIn("/DYNAMICBASE", manifest["linkFlags"])
         self.assertIn("/NXCOMPAT", manifest["linkFlags"])
         self.assertIn("windows-hostile-runtime-tests-not-run", manifest["blockers"])
@@ -101,7 +128,8 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
             "objectDirectoryArgument",
             "@($manifest.compileFlags)",
             "@($manifest.linkFlags)",
-            "Get-FileHash",
+            "Get-Sha256Hex",
+            "System.Security.Cryptography.SHA256",
             "compilerSha256",
             "linkerSha256",
             "postBuildInputs",
@@ -110,6 +138,14 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
             "toolchainClosureComplete = $false",
             "sdkIncludeRoot",
             "sdkLibraryRoot",
+            "Resolve-PinnedToolchainDirectories",
+            "$env:INCLUDE = $includePaths -join ';'",
+            "$env:LIB = $libraryPaths -join ';'",
+            "$ambientCompilerFlags = @($env:CL, $env:_CL_, $env:LINK)",
+            "postgres17_broker_ambient_compiler_flags_rejected",
+            "$compilerBanner = ''",
+            "$compilerProbeExitCode = $null",
+            "& $compilerPath /Bv /?",
             "Assert-NonReparsePath",
             "authoritative = $false",
             "executionLocked = $false",
@@ -119,6 +155,9 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
             self.assertIn(token, source)
         for forbidden in ("cmake", "ninja", "signtool", "Invoke-WebRequest", "Start-BitsTransfer"):
             self.assertNotIn(forbidden, source.lower())
+        self.assertNotIn("get-filehash", source.lower())
+        self.assertNotIn("import-module", source.lower())
+        self.assertNotIn("auxiliary\\vs\\include", source.lower())
 
     def test_source_preserves_required_fail_closed_order_and_controls(self) -> None:
         source = BROKER.read_text(encoding="utf-8")
@@ -154,6 +193,9 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
             "JobObjectAssociateCompletionPortInformation",
             "CreateProcessW",
             "QueryFullProcessImageNameW",
+            "&peeked, nullptr, nullptr",
+            "const std::wstring child_image_path",
+            "OpenFileRead(child_image_path)",
             "ReadFrameBounded",
             "TerminateJobObject",
             "MarkDelete",
@@ -165,6 +207,7 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
         )
         for token in required:
             self.assertIn(token, source)
+        self.assertIn("#ifndef WIN32_LEAN_AND_MEAN", source)
         self.assertNotIn("CREATE_BREAKAWAY_FROM_JOB", source)
         self.assertNotIn("ShellExecute", source)
         self.assertNotIn("system(", source)

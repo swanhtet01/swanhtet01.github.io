@@ -13,7 +13,9 @@ int main() {
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00
 #endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #define NOMINMAX
 #include <windows.h>
 #include <aclapi.h>
@@ -291,7 +293,7 @@ bool ReadFrameBounded(HANDLE handle, DWORD timeout_ms,
       std::array<std::uint8_t, 4> header{};
       DWORD peeked = 0;
       if (!PeekNamedPipe(handle, header.data(), static_cast<DWORD>(header.size()),
-                         &peeked, nullptr) || peeked != header.size()) {
+                         &peeked, nullptr, nullptr) || peeked != header.size()) {
         return false;
       }
       const std::uint32_t size = static_cast<std::uint32_t>(header[0]) |
@@ -1138,7 +1140,9 @@ int RunBroker(const sm::BrokerConfig& config,
     return 43;
   }
   child_path.resize(child_path_size);
-  if (CompareStringOrdinal(child_path.c_str(), static_cast<int>(child_path.size()),
+  const std::wstring child_image_path(child_path.data(), child_path.size());
+  if (CompareStringOrdinal(child_image_path.c_str(),
+                           static_cast<int>(child_image_path.size()),
                            python->absolute_path.c_str(),
                            static_cast<int>(python->absolute_path.size()), TRUE) !=
       CSTR_EQUAL) {
@@ -1146,7 +1150,7 @@ int RunBroker(const sm::BrokerConfig& config,
     EmitFailure(evidence.get(), "broker_child_image_substituted", config.session_id);
     return 44;
   }
-  UniqueHandle child_image = OpenFileRead(child_path);
+  UniqueHandle child_image = OpenFileRead(child_image_path);
   Identity child_identity;
   if (!child_image.valid() || !QueryIdentity(child_image.get(), &child_identity) ||
       child_identity.volume != python->identity.volume ||

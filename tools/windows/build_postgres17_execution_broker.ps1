@@ -4,6 +4,29 @@ param()
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+if ($PSVersionTable.PSVersion.Major -lt 5) {
+    throw 'postgres17_broker_requires_powershell5'
+}
+
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $full = Assert-NonReparsePath $Path
+    $stream = [System.IO.File]::Open(
+        $full,
+        [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read,
+        [System.IO.FileShare]::Read
+    )
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hex = [System.BitConverter]::ToString($hasher.ComputeHash($stream))
+        return $hex.Replace('-', '').ToLowerInvariant()
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Assert-NonReparsePath {
     param([Parameter(Mandatory = $true)][string]$Path)
     $full = [System.IO.Path]::GetFullPath($Path)
@@ -35,24 +58,31 @@ function Get-InputHashes {
             throw 'postgres17_broker_source_path_invalid'
         }
         [void](Assert-NonReparsePath $sourcePath)
-        $result[$relative] = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $result[$relative] = Get-Sha256Hex $sourcePath
     }
     return $result
 }
 
-function Resolve-ToolchainPathList {
-    param([Parameter(Mandatory = $true)][string]$Value)
-    if ([string]::IsNullOrWhiteSpace($Value)) {
-        throw 'postgres17_broker_toolchain_path_list_missing'
-    }
-    return @($Value.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries) |
-        ForEach-Object {
-            $resolved = Assert-NonReparsePath $_
-            if (-not (Test-Path -LiteralPath $resolved -PathType Container)) {
-                throw 'postgres17_broker_toolchain_directory_missing'
-            }
-            $resolved
-        })
+function Resolve-PinnedToolchainDirectories {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][object[]]$RelativePaths
+    )
+    $resolvedRoot = Assert-NonReparsePath $Root
+    return @($RelativePaths | ForEach-Object {
+        if ($_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) -or
+            [System.IO.Path]::IsPathRooted($_) -or $_.Contains('..')) {
+            throw 'postgres17_broker_toolchain_relative_path_invalid'
+        }
+        $resolved = Assert-NonReparsePath (Join-Path $resolvedRoot $_)
+        if (-not $resolved.StartsWith(
+                $resolvedRoot + [System.IO.Path]::DirectorySeparatorChar,
+                [System.StringComparison]::OrdinalIgnoreCase) -or
+            -not (Test-Path -LiteralPath $resolved -PathType Container)) {
+            throw 'postgres17_broker_toolchain_directory_missing'
+        }
+        $resolved
+    })
 }
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -86,7 +116,25 @@ $linkerPath = Assert-NonReparsePath $linker.Source
 if ((Split-Path -Parent $compilerPath) -ne (Split-Path -Parent $linkerPath)) {
     throw 'postgres17_broker_compiler_linker_root_mismatch'
 }
-$compilerBanner = (& $compilerPath /Bv 2>&1 | Out-String)
+$ambientCompilerFlags = @($env:CL, $env:_CL_, $env:LINK)
+if (@($ambientCompilerFlags | Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_)
+        }).Count -ne 0) {
+    throw 'postgres17_broker_ambient_compiler_flags_rejected'
+}
+$compilerBanner = ''
+$compilerProbeExitCode = $null
+$priorErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    $compilerBanner = (& $compilerPath /Bv /? 2>&1 | Out-String)
+    $compilerProbeExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $priorErrorActionPreference
+}
+if ($null -eq $compilerProbeExitCode -or $compilerProbeExitCode -ne 0) {
+    throw 'postgres17_broker_compiler_version_probe_failed'
+}
 $versionMatch = [regex]::Match($compilerBanner, 'Compiler Version ([0-9.]+) for x64')
 if (-not $versionMatch.Success -or
     $versionMatch.Groups[1].Value -ne $manifest.compiler.expectedVersion) {
@@ -108,30 +156,16 @@ foreach ($requiredRoot in @($compilerRoot, $sdkIncludeRoot, $sdkLibraryRoot)) {
         throw 'postgres17_broker_toolchain_root_missing'
     }
 }
-$includePaths = Resolve-ToolchainPathList $env:INCLUDE
-$libraryPaths = Resolve-ToolchainPathList $env:LIB
-foreach ($path in $includePaths) {
-    $allowed = $path.StartsWith(
-        $compilerRoot + [System.IO.Path]::DirectorySeparatorChar,
-        [System.StringComparison]::OrdinalIgnoreCase) -or
-        $path.StartsWith(
-            $sdkIncludeRoot + [System.IO.Path]::DirectorySeparatorChar,
-            [System.StringComparison]::OrdinalIgnoreCase)
-    if (-not $allowed) {
-        throw 'postgres17_broker_include_path_outside_pinned_roots'
-    }
-}
-foreach ($path in $libraryPaths) {
-    $allowed = $path.StartsWith(
-        $compilerRoot + [System.IO.Path]::DirectorySeparatorChar,
-        [System.StringComparison]::OrdinalIgnoreCase) -or
-        $path.StartsWith(
-            $sdkLibraryRoot + [System.IO.Path]::DirectorySeparatorChar,
-            [System.StringComparison]::OrdinalIgnoreCase)
-    if (-not $allowed) {
-        throw 'postgres17_broker_library_path_outside_pinned_roots'
-    }
-}
+$includePaths = @(
+    Resolve-PinnedToolchainDirectories $compilerRoot @($manifest.toolchainPaths.compilerIncludeDirectories)
+    Resolve-PinnedToolchainDirectories $sdkIncludeRoot @($manifest.toolchainPaths.windowsSdkIncludeDirectories)
+)
+$libraryPaths = @(
+    Resolve-PinnedToolchainDirectories $compilerRoot @($manifest.toolchainPaths.compilerLibraryDirectories)
+    Resolve-PinnedToolchainDirectories $sdkLibraryRoot @($manifest.toolchainPaths.windowsSdkLibraryDirectories)
+)
+$env:INCLUDE = $includePaths -join ';'
+$env:LIB = $libraryPaths -join ';'
 
 $resolvedLibraries = [ordered]@{}
 foreach ($libraryName in $manifest.systemLibraries) {
@@ -146,7 +180,7 @@ foreach ($libraryName in $manifest.systemLibraries) {
     }
     $resolvedLibraries[$libraryName] = [ordered]@{
         path = $matches[0]
-        sha256 = (Get-FileHash -LiteralPath $matches[0] -Algorithm SHA256).Hash.ToLowerInvariant()
+        sha256 = Get-Sha256Hex $matches[0]
     }
 }
 
@@ -169,8 +203,8 @@ if (Test-Path -LiteralPath $resolvedOutput) {
 }
 
 $trackedInputs = Get-InputHashes @($manifest.buildInputs)
-$compilerSha256 = (Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant()
-$linkerSha256 = (Get-FileHash -LiteralPath $linkerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$compilerSha256 = Get-Sha256Hex $compilerPath
+$linkerSha256 = Get-Sha256Hex $linkerPath
 $translationUnits = @($manifest.translationUnits | ForEach-Object {
     [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $_))
 })
@@ -199,14 +233,14 @@ foreach ($relative in $manifest.buildInputs) {
     }
 }
 if ($compilerSha256 -ne
-        (Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant() -or
+        (Get-Sha256Hex $compilerPath) -or
     $linkerSha256 -ne
-        (Get-FileHash -LiteralPath $linkerPath -Algorithm SHA256).Hash.ToLowerInvariant()) {
+        (Get-Sha256Hex $linkerPath)) {
     throw 'postgres17_broker_tool_changed_during_build'
 }
 foreach ($libraryName in $manifest.systemLibraries) {
     $library = $resolvedLibraries[$libraryName]
-    $postHash = (Get-FileHash -LiteralPath $library.path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $postHash = Get-Sha256Hex $library.path
     if ($library.sha256 -ne $postHash) {
         throw 'postgres17_broker_system_library_changed_during_build'
     }
@@ -233,7 +267,7 @@ $receipt = [ordered]@{
     trackedInputs = $trackedInputs
     outputFile = $manifest.output
     outputBytes = (Get-Item -LiteralPath $outputPath).Length
-    outputSha256 = (Get-FileHash -LiteralPath $outputPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    outputSha256 = Get-Sha256Hex $outputPath
 }
 $receiptPath = Join-Path $resolvedOutput 'build-receipt.json'
 $receiptJson = $receipt | ConvertTo-Json -Depth 8

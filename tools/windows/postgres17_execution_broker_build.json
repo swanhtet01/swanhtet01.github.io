@@ -34,7 +34,31 @@
     "cmakeRequired": false,
     "ninjaRequired": false
   },
+  "hostShell": {
+    "family": "powershell",
+    "minimumMajorVersion": 5,
+    "dependencyFreeSha256": true
+  },
   "windowsSdkVersion": "10.0.26100.0",
+  "toolchainPaths": {
+    "compilerIncludeDirectories": [
+      "include"
+    ],
+    "windowsSdkIncludeDirectories": [
+      "ucrt",
+      "shared",
+      "um",
+      "winrt",
+      "cppwinrt"
+    ],
+    "compilerLibraryDirectories": [
+      "lib\\x64"
+    ],
+    "windowsSdkLibraryDirectories": [
+      "ucrt\\x64",
+      "um\\x64"
+    ]
+  },
   "compileFlags": [
     "/nologo",
     "/std:c++17",
@@ -44,6 +68,7 @@
     "/sdl",
     "/guard:cf",
     "/Qspectre",
+    "/experimental:deterministic",
     "/Brepro",
     "/DUNICODE",
     "/D_UNICODE",
@@ -85,7 +110,7 @@
     "exact-cl-path-and-binary-digest-not-yet-retained",
     "compiler-and-sdk-header-closure-not-yet-retained",
     "implicit-default-library-and-tool-dll-closure-not-yet-retained",
-    "windows-build-not-run",
+    "windows-build-not-run-on-current-source",
     "windows-hostile-runtime-tests-not-run",
     "broker-binary-unsigned",
     "production-adapter-disabled"
