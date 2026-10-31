@@ -87,6 +87,43 @@ PostgreSQL/OpenSSL/Python dependency. The commands below are the intended flow
 only after that source-controlled profile is complete and independently reviewed;
 Linux and caller-supplied tool paths are not approved substitutes.
 
+The pending profile is recorded at
+`hq/research/postgres17-toolchain-profile.json`. It truthfully binds only the
+historically observed archive size and digest and remains `pending`; it does not
+claim publisher authenticity. `tools/postgres17_toolchain_profile.mjs` can
+offline-verify a future reviewed profile's archive, extracted executables,
+loaded dependency closure, captured version evidence and authentication-evidence
+bytes. Synthetic fixtures prove tamper rejection but can never authorize a real
+recording. Until publisher-authenticated evidence, complete Windows file hashes
+and independent approval are present, the recorder fails before starting
+PostgreSQL.
+
+The production verifier now has a fail-closed Windows Authenticode mechanism,
+but the source-controlled publisher policy remains pending with no independently
+reviewed signer certificate pinned. The signed `.exe` must itself be the profile
+archive and materialization root; a signed sibling installer cannot authenticate
+the historical unsigned ZIP. On Windows, the tracked inspector rejects reparse
+points, hashes the artifact before and after inspection, requires an embedded
+`Authenticode` signature with `Valid` status, a pinned SHA-256 signer certificate,
+the code-signing EKU and a timestamp certificate, and compares a fresh observation
+with retained digest-bound evidence. A URL, filename or page checksum is never
+an authority.
+
+The recorder revalidates the profile immediately before and after its child,
+forces the verified PostgreSQL, OpenSSL, Python and psycopg paths into that child,
+and binds the profile, publisher policy, signed source artifact, signer,
+timestamp, authentication evidence, reviewed load-closure evidence and execution
+bundle into receipt freshness. The Python runner's independent release gate
+remains disabled; it must not be flipped merely because the JavaScript verifier
+exists. Production profiles also remain blocked at
+`materialization_verifier_unavailable`: hashing a sibling execution tree or a
+self-authored extraction manifest does not prove that the signed installer
+materialized those files. A reviewed deterministic read-only extractor and a
+secure recorder-to-Python authority handoff are required before the commands
+below become an executable path. These controls do not replace the still-missing
+official signed artifact, reviewed signer policy, complete Windows load closure
+or independent approval.
+
 Then run once from an exact clean committed checkout, using the approved tools:
 
 ```

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 export const DATABASE_REHEARSAL_EVIDENCE_SCHEMA = 'supermega.hq.database-rehearsal.v3'
 const schemaProfile = 'v14-shop-correction'
@@ -77,6 +79,11 @@ const implementationPaths = [...new Set([
   'tools/run_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.test.mjs',
+  'tools/postgres17_toolchain_profile.mjs',
+  'tools/postgres17_toolchain_profile.test.mjs',
+  'tools/inspect_windows_authenticode.ps1',
+  'hq/research/postgres17-toolchain-profile.json',
+  'hq/research/postgres17-publisher-policy.json',
   'tests/test_postgres17_rehearsal_contract.py',
 ])].sort()
 
@@ -183,6 +190,61 @@ const sha256 = (value) => `sha256:${createHash('sha256').update(value).digest('h
 const validDigest = (value) => /^sha256:[0-9a-f]{64}$/.test(value || '')
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 
+function sourceControlledToolchainAuthority() {
+  const repositoryRoot = resolve(import.meta.dirname, '..')
+  const researchRoot = resolve(repositoryRoot, 'hq', 'research')
+  const readBound = (path) => {
+    const absolute = resolve(researchRoot, path)
+    const child = relative(researchRoot, absolute)
+    if (!child || child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child)) {
+      fail('database_rehearsal_evidence_toolchain_invalid')
+    }
+    return readFileSync(absolute)
+  }
+  let profile, policy, observation, observationBytes, closureBytes
+  const profileBytes = readFileSync(resolve(researchRoot, 'postgres17-toolchain-profile.json'))
+  const policyBytes = readFileSync(resolve(researchRoot, 'postgres17-publisher-policy.json'))
+  try {
+    profile = JSON.parse(profileBytes.toString('utf8'))
+    policy = JSON.parse(policyBytes.toString('utf8'))
+    observationBytes = readBound(profile.sourceAuthentication.evidencePath)
+    closureBytes = readBound(profile.loadClosure.evidencePath)
+    observation = JSON.parse(observationBytes.toString('utf8'))
+  } catch {
+    fail('database_rehearsal_evidence_toolchain_invalid')
+  }
+  if (createHash('sha256').update(observationBytes).digest('hex')
+      !== profile.sourceAuthentication?.evidenceSha256
+    || createHash('sha256').update(closureBytes).digest('hex')
+      !== profile.loadClosure?.evidenceSha256) {
+    fail('database_rehearsal_evidence_toolchain_invalid')
+  }
+  const executionBundleSha256 = createHash('sha256').update(JSON.stringify(
+    [...(profile.artifacts || []), ...(profile.dependencies || [])].map((binding) => ({
+      role: binding.role,
+      relativePath: binding.relativePath,
+      bytes: binding.bytes,
+      sha256: binding.sha256,
+      sourceArtifactSha256: binding.sourceArtifactSha256,
+      observedVersion: binding.observedVersion,
+      versionOutputSha256: binding.versionOutputSha256,
+    })),
+  )).digest('hex')
+  return {
+    profileId: profile.profileId,
+    archiveFileName: profile.archive?.fileName,
+    manifestSha256: createHash('sha256').update(profileBytes).digest('hex'),
+    policyId: policy.policyId,
+    policySha256: createHash('sha256').update(policyBytes).digest('hex'),
+    sourceArtifactSha256: profile.archive?.sha256,
+    signerCertificateSha256: observation.signerCertificateSha256,
+    timestampCertificateSha256: observation.timestampCertificateSha256,
+    sourceAuthenticationEvidenceSha256: profile.sourceAuthentication?.evidenceSha256,
+    loadClosureEvidenceSha256: profile.loadClosure?.evidenceSha256,
+    executionBundleSha256,
+  }
+}
+
 function requireExactChecks(checks, names, code) {
   if (!same(Object.keys(checks || {}).sort(), [...names].sort())
     || names.some((name) => checks[name] !== true)) fail(code)
@@ -239,6 +301,19 @@ export function buildSanitizedProof(raw, context) {
     || raw.source?.head !== context.implementationCommit || raw.source?.tree !== context.implementationTree
     || raw.source?.implementation_digest !== context.implementation.digest) fail('database_rehearsal_source_mismatch')
   if (!/^[0-9a-f]{64}$/.test(context.archive.sha256 || '') || !Number.isSafeInteger(context.archive.bytes) || context.archive.bytes < 1) fail('database_rehearsal_archive_invalid')
+  const toolchain = context.toolchain
+  if (typeof toolchain?.profileId !== 'string' || toolchain.profileId.length === 0
+    || typeof toolchain?.policyId !== 'string' || toolchain.policyId.length === 0
+    || typeof toolchain?.archiveFileName !== 'string'
+    || !toolchain.archiveFileName.toLowerCase().endsWith('.exe')
+    || ![toolchain.manifestSha256, toolchain.policySha256, toolchain.sourceArtifactSha256,
+      toolchain.signerCertificateSha256, toolchain.timestampCertificateSha256,
+      toolchain.sourceAuthenticationEvidenceSha256, toolchain.loadClosureEvidenceSha256,
+      toolchain.executionBundleSha256]
+      .every((digest) => /^[0-9a-f]{64}$/.test(digest || ''))
+    || toolchain.sourceArtifactSha256 !== context.archive.sha256) {
+    fail('database_rehearsal_toolchain_authority_invalid')
+  }
 
   const proof = {
     schemaVersion: DATABASE_REHEARSAL_EVIDENCE_SCHEMA,
@@ -267,16 +342,17 @@ export function buildSanitizedProof(raw, context) {
       coversImplementationCommit: false,
     },
     engine: {
-      distribution: 'EDB PostgreSQL Windows x86-64 binaries',
+      distribution: 'publisher-authenticated PostgreSQL Windows x86-64 installer materialization',
       version: raw.engine.version,
       major: raw.engine.major,
       sourcePage: 'https://www.postgresql.org/download/windows/',
-      archive: 'https://get.enterprisedb.com/postgresql/postgresql-17.10-2-windows-x64-binaries.zip',
+      archive: toolchain.archiveFileName,
       archiveBytes: context.archive.bytes,
       observedArchiveSha256: context.archive.sha256,
       tlsActive: raw.engine.tls_active,
       loopbackOnly: raw.engine.loopback_only,
       startMode: raw.engine.start_mode,
+      toolchain: structuredClone(toolchain),
     },
     migration: {
       count: raw.migrations.count,
@@ -344,6 +420,22 @@ export function validateSanitizedProof(proof, currentImplementation) {
     || proof.engine?.loopbackOnly !== true
     || !['pg_ctl_restricted_token', 'windows_direct_sandbox'].includes(proof.engine?.startMode)
     || !/^[0-9a-f]{64}$/.test(proof.engine?.observedArchiveSha256 || '')) fail('database_rehearsal_evidence_engine_invalid')
+  const toolchain = proof.engine?.toolchain
+  if (typeof toolchain?.profileId !== 'string' || toolchain.profileId.length === 0
+    || typeof toolchain?.policyId !== 'string' || toolchain.policyId.length === 0
+    || typeof toolchain?.archiveFileName !== 'string'
+    || !toolchain.archiveFileName.toLowerCase().endsWith('.exe')
+    || ![toolchain.manifestSha256, toolchain.policySha256, toolchain.sourceArtifactSha256,
+      toolchain.signerCertificateSha256, toolchain.timestampCertificateSha256,
+      toolchain.sourceAuthenticationEvidenceSha256, toolchain.loadClosureEvidenceSha256,
+      toolchain.executionBundleSha256]
+      .every((digest) => /^[0-9a-f]{64}$/.test(digest || ''))
+    || toolchain.sourceArtifactSha256 !== proof.engine.observedArchiveSha256) {
+    fail('database_rehearsal_evidence_toolchain_invalid')
+  }
+  const expectedToolchain = currentImplementation.expectedToolchain
+    ?? sourceControlledToolchainAuthority()
+  if (!same(toolchain, expectedToolchain)) fail('database_rehearsal_evidence_toolchain_stale')
   if (proof.migration?.count !== migrations.length || proof.migration?.schemaVersion !== 14
     || !same(proof.migration?.names, migrations) || proof.migration?.schemaProfile !== schemaProfile
     || proof.migration?.catalogContract !== catalogContract

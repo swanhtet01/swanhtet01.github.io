@@ -1,0 +1,28 @@
+{
+  "contract": "supermega.postgres17-publisher-policy.v1",
+  "policyId": "edb-postgresql-windows-authenticode-v1-pending",
+  "status": "pending",
+  "testOnly": false,
+  "method": "windows-authenticode-v1",
+  "platform": {
+    "os": "windows",
+    "arch": "x64"
+  },
+  "requiredSignatureType": "Authenticode",
+  "timestampRequired": true,
+  "requiredEkuOids": [
+    "1.3.6.1.5.5.7.3.3"
+  ],
+  "approvedSigners": [],
+  "approval": {
+    "status": "pending",
+    "reviewedBy": null,
+    "reviewedAt": null
+  },
+  "blockers": [
+    "The exact official PostgreSQL 17 Windows installer has not been retained and inspected; it must be the profile archive and materialization root rather than a signed companion to an unsigned ZIP.",
+    "No independently reviewed signer certificate SHA-256, subject, or issuer is pinned.",
+    "No current Windows Authenticode observation is retained for the exact installer digest.",
+    "This pending policy cannot approve a production rehearsal profile."
+  ]
+}

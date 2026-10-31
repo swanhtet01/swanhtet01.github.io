@@ -2,18 +2,16 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { access, lstat, mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
 const root = resolve(import.meta.dirname, '..')
 const outputPath = resolve(root, 'hq', 'research', 'postgres17-rehearsal.json')
+const toolchainProfilePath = resolve(root, 'hq', 'research', 'postgres17-toolchain-profile.json')
 const rehearsalRunner = resolve(root, 'tools', 'run_postgres17_rehearsal.mjs')
-const archivePath = resolve(homedir(), '.cache', 'supermega-postgresql', 'postgresql-17.10-2-windows-x64-binaries.zip')
-// The historical archive is not yet cryptographically bound to every loaded
-// PostgreSQL/OpenSSL/Python dependency. Verification may read old receipts, but
-// the release CLI must not mint a new one until a complete reviewed profile exists.
-const toolchainProvenanceApproved = false
+
+import { verifyPostgres17ToolchainProfile } from './postgres17_toolchain_profile.mjs'
 
 import {
   DATABASE_REHEARSAL_EVIDENCE_SCHEMA, implementationPaths, fail, sha256, same,
@@ -46,7 +44,8 @@ export function recordCompletionSummary(proof, implementation) {
     receiptDigest: proof.receiptDigest }
 }
 
-async function archiveEvidence(path = archivePath) {
+async function archiveEvidence(path) {
+  if (typeof path !== 'string' || path.length === 0) fail('database_rehearsal_archive_invalid')
   await access(path)
   const metadata = await stat(path)
   const digest = createHash('sha256')
@@ -57,6 +56,42 @@ async function archiveEvidence(path = archivePath) {
     stream.on('end', resolveStream)
   })
   return { bytes: metadata.size, sha256: digest.digest('hex') }
+}
+
+export async function resolveToolchainArchivePath(profilePath = toolchainProfilePath) {
+  let profile
+  try { profile = JSON.parse(await readFile(profilePath, 'utf8')) } catch { fail('database_rehearsal_toolchain_profile_invalid') }
+  const fileName = profile?.archive?.fileName
+  if (typeof fileName !== 'string' || fileName !== basename(fileName)) {
+    fail('database_rehearsal_toolchain_profile_archive_name_mismatch')
+  }
+  return resolve(homedir(), '.cache', 'supermega-postgresql', fileName)
+}
+
+export function toolchainAuthority(verified) {
+  const publisher = verified?.publisherAuthentication
+  const authority = {
+    profileId: verified?.profileId,
+    archiveFileName: verified?.archiveFileName,
+    manifestSha256: verified?.manifestSha256,
+    policyId: publisher?.policyId,
+    policySha256: publisher?.policySha256,
+    sourceArtifactSha256: publisher?.sourceArtifactSha256,
+    signerCertificateSha256: publisher?.signerCertificateSha256,
+    timestampCertificateSha256: publisher?.timestampCertificateSha256,
+    sourceAuthenticationEvidenceSha256: verified?.sourceAuthenticationEvidenceSha256,
+    loadClosureEvidenceSha256: verified?.loadClosureEvidenceSha256,
+    executionBundleSha256: verified?.executionBundleSha256,
+  }
+  if (typeof authority.profileId !== 'string' || authority.profileId.length === 0
+    || typeof authority.policyId !== 'string' || authority.policyId.length === 0
+    || typeof authority.archiveFileName !== 'string'
+    || !authority.archiveFileName.toLowerCase().endsWith('.exe')
+    || Object.entries(authority).some(([key, value]) => !['profileId', 'policyId', 'archiveFileName'].includes(key)
+      && !/^[0-9a-f]{64}$/.test(value || ''))) {
+    fail('database_rehearsal_toolchain_authority_invalid')
+  }
+  return authority
 }
 
 function gitOutput(args) {
@@ -80,6 +115,20 @@ export function recorderOutcomeReconciled(result, raw) {
     && raw?.contract === 'supermega_postgres17_rehearsal_v2' && raw.cleanup_complete === true
     && raw.production_mutated === false && raw.supabase_mutated === false
     && raw.vercel_mutated === false && raw.secret_values_exposed === false
+}
+
+export function toolchainChildEnvironment(verifiedToolchain, baseEnvironment = {}) {
+  const execution = verifiedToolchain?.execution
+  if (!execution?.postgresBin || !execution?.openssl || !execution?.python || !execution?.psycopg) {
+    fail('database_rehearsal_toolchain_execution_binding_missing')
+  }
+  return {
+    ...baseEnvironment,
+    SUPERMEGA_POSTGRES17_BIN: execution.postgresBin,
+    SUPERMEGA_OPENSSL: execution.openssl,
+    SUPERMEGA_PYTHON: execution.python,
+    SUPERMEGA_PSYCOPG_FILE: execution.psycopg,
+  }
 }
 
 export function recorderChildFailureCode(result) {
@@ -190,6 +239,7 @@ export async function record(destination, runtime = {}) {
     spawnSync,
     tmpdir,
     writeRecorderFailureDiagnostic,
+    revalidateToolchain: async () => fail('database_rehearsal_toolchain_revalidation_missing'),
     ...runtime,
   }
   const rawPath = `${destination}.raw.json`
@@ -208,8 +258,13 @@ export async function record(destination, runtime = {}) {
     // two minutes on the ROG Ally under normal foreground load. Keep the run
     // bounded, but allow enough time to avoid converting machine contention
     // into a false database failure.
+    const verifiedToolchain = await dependencies.revalidateToolchain()
+    const authorityBefore = toolchainAuthority(verifiedToolchain)
     lease.markLaunched()
-    const result = dependencies.spawnSync(process.execPath, [rehearsalRunner, '--expected-head', source.implementationCommit, '--evidence-file', rawPath], { cwd: root, encoding: 'utf8', timeout: 300_000, windowsHide: true })
+    const childEnvironment = verifiedToolchain?.execution
+      ? toolchainChildEnvironment(verifiedToolchain, process.env)
+      : process.env
+    const result = dependencies.spawnSync(process.execPath, [rehearsalRunner, '--expected-head', source.implementationCommit, '--evidence-file', rawPath], { cwd: root, env: childEnvironment, encoding: 'utf8', timeout: 300_000, windowsHide: true })
     let raw, rawParsed = false, rawStatus = 'missing'
     try {
       const rawText = await dependencies.readFile(rawPath, 'utf8')
@@ -224,13 +279,17 @@ export async function record(destination, runtime = {}) {
       fail(recorderChildFailureCode(result) || 'database_rehearsal_termination_unreconciled')
     }
     if (result.status !== 0) fail('database_rehearsal_execution_failed')
+    const verifiedAfter = await dependencies.revalidateToolchain()
+    const authorityAfter = toolchainAuthority(verifiedAfter)
+    if (!same(authorityAfter, authorityBefore)) fail('database_rehearsal_toolchain_changed')
     if (!same(dependencies.cleanSource(), source)
       || !same(await dependencies.implementationEvidence(), implementation)) fail('database_rehearsal_source_changed')
     const proof = buildSanitizedProof(raw, {
       recordedAt: new Date().toISOString(),
       ...source,
       implementation,
-      archive: await archiveEvidence(),
+      archive: await archiveEvidence(verifiedAfter.archivePath),
+      toolchain: authorityAfter,
     })
     const summary = recordCompletionSummary(proof, await dependencies.implementationEvidence())
     if (!same(dependencies.cleanSource(), source)) fail('database_rehearsal_source_changed')
@@ -255,6 +314,7 @@ async function verify(input, expectedHead) {
     recordedAt: proof.recordedAt, implementationCommit: proof.implementationCommit,
     implementationTree: proof.implementationTree, implementation,
     archive: { bytes: proof.engine.archiveBytes, sha256: proof.engine.observedArchiveSha256 },
+    toolchain: proof.engine.toolchain,
   })
   if (!same(rebuilt, proof)) fail('database_rehearsal_raw_receipt_mismatch')
   return validateSanitizedProof(proof, implementation)
@@ -263,10 +323,18 @@ async function verify(input, expectedHead) {
 async function main() {
   const command = process.argv.slice(2)
   let result
-  if ((command.length === 0 || (command.length === 2 && command[0] === '--output' && command[1]))
-    && !toolchainProvenanceApproved) fail('database_rehearsal_toolchain_provenance_unapproved')
-  if (command.length === 2 && command[0] === '--output' && command[1]) result = await record(resolve(command[1]))
-  else if (command.length === 0) result = await record(outputPath)
+  let revalidateToolchain
+  if (command.length === 0 || (command.length === 2 && command[0] === '--output' && command[1])) {
+    const archivePath = await resolveToolchainArchivePath()
+    revalidateToolchain = () => verifyPostgres17ToolchainProfile({
+      manifestPath: toolchainProfilePath,
+      archivePath,
+      requireHostPlatform: true,
+    })
+    await revalidateToolchain()
+  }
+  if (command.length === 2 && command[0] === '--output' && command[1]) result = await record(resolve(command[1]), { revalidateToolchain })
+  else if (command.length === 0) result = await record(outputPath, { revalidateToolchain })
   else if (same(command, ['--verify'])) result = await verify(outputPath)
   else if ([3, 5].includes(command.length) && command[0] === '--verify' && command[1] === '--input'
     && command[2] && (command.length === 3 || (command[3] === '--expected-head' && /^[0-9a-f]{40}$/.test(command[4])))) {
