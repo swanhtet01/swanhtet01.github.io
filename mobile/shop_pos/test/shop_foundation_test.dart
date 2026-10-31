@@ -51,6 +51,30 @@ void main() {
     );
   });
 
+  test('pending cash return shift-close guidance is bilingual', () {
+    final error = StateError(
+      'Finish the pending cash return before closing this shift.',
+    );
+    expect(
+      shopCashShiftErrorMessage(
+        myanmar: false,
+        error: error,
+        englishFallback: 'fallback',
+        burmeseFallback: 'fallback',
+      ),
+      'Finish the pending cash return before closing this shift.',
+    );
+    expect(
+      shopCashShiftErrorMessage(
+        myanmar: true,
+        error: error,
+        englishFallback: 'fallback',
+        burmeseFallback: 'fallback',
+      ),
+      'ဆိုင်းငံ့ထားသော ငွေသားပြန်အမ်းမှုကို အရင်ပြီးစီးစေပြီးမှ ဤတာဝန်ချိန်ကို ပိတ်ပါ။',
+    );
+  });
+
   group('menu candidate contract', () {
     test('accepts a nullable price and preserves Burmese text', () {
       final item = MenuCandidate.fromJson({

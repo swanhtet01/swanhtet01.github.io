@@ -8284,6 +8284,29 @@ class ShopDatabase extends _$ShopDatabase {
       if (pendingWallet != null) {
         throw StateError('Finish or cancel the pending wallet checkout first.');
       }
+      final pendingCashReversal = await customSelect(
+        'SELECT intent.consumption_request_id '
+        'FROM shop_correction_consumption_intents AS intent '
+        'LEFT JOIN shop_correction_consumptions AS consumption '
+        'ON consumption.consumption_request_id = intent.consumption_request_id '
+        'WHERE consumption.consumption_request_id IS NULL '
+        "AND intent.capability = 'shop.sale.reverse' "
+        'AND json_valid(intent.recovery_envelope_json) '
+        'AND json_extract(intent.recovery_envelope_json, ?1) = ?2 '
+        "AND json_extract(intent.recovery_envelope_json, '\$.command.originalPaymentMethod') = 'cash' "
+        "AND json_extract(intent.recovery_envelope_json, '\$.command.expectedCashShiftId') = ?3 "
+        'LIMIT 1',
+        variables: [
+          const Variable<String>(r'$.contract'),
+          const Variable<String>(_shopFullSaleCorrectionRecoveryContract),
+          Variable<String>(shiftId),
+        ],
+      ).getSingleOrNull();
+      if (pendingCashReversal != null) {
+        throw StateError(
+          'Finish the pending cash return before closing this shift.',
+        );
+      }
       final review = await readCashShiftReview(shiftId);
       if (review.saleCount != seenSaleCount ||
           review.cashSalesTotalMmk != seenCashTotalMmk ||
