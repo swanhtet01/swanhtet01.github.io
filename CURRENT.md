@@ -52,6 +52,16 @@ before acting; a newer fact never widens authority.
 | Publication | Draft integration only; not merged, deployed, signed, or release-ready. Automatic CI on the replacement lane remains evidence, not production approval |
 | Worktree note | Exact-current gallery captures are absent. Accepted private QA APK for native `cc0efa4f` remains at SHA-256 `ca5c7fa4...bf11`; installation is absent and it is stale for private runtime `11b52a59`. The source-matched debug APK at SHA-256 `cc9ad247...9be3` is private QA only and remains on build-control **HOLD** because Flutter wrote outside the preflight-bound output root. A bounded handoff from Local Tech Lead task `01a0d249-2b5d-7d83-a769-79336eeb777c` appoints this task as the single Cloud Tech Lead coordinator and reserves machine-specific evidence plus independent final review to Local. Do not claim full synchronization, recreate the Local task or duplicate its branch |
 
+### Connected-pilot private checkpoint
+
+| Item | Verified fact |
+|---|---|
+| Frozen local source | `251b6d30fa6095fc5aa5d02062f25e67e1010c21`, repository tree `82d2e5a8e821785dc8ff8e840e88255b1d282662`, native tree `d2051185bee888a7eba857410bda23ab57b16901`, runtime `lib/` tree `b15e233cd3db55cdad980f35107f98d8b5d492fd`; database schema **v25**, connected protocol **v1** |
+| Implemented, default-off | Strict connected-site contracts, atomic SQLite command/event/stock/audit/ack persistence, offline-lease verification seam, coordinator dispatcher and real-database adapter, durable owner enrollment/revocation evidence, QR-pinned HTTPS client, exact command retry binding, stock-reservation lifecycle, source-only reconciliation engine and guided onboarding scaffold. Runtime defaults remain disabled and unavailable dependencies fail closed |
+| Exact validation | Complete isolated connected-site shard **105/105 PASS** in **44 seconds** under the normal 300-second budget; focused client/enrollment tests **10/10 PASS**; analyzer **PASS**; native CI contract **17/17 PASS**. Independent security re-review **PASS** after post-transmission POST failures, malformed acknowledgements, scope substitution and lost pairing acknowledgement behavior were made fail-closed/retry-safe |
+| Evidence classification | All earlier APKs, public CI artifacts and gallery captures are **STALE/HELD** for this source. No source-matched Android or Windows artifact, installation, physical hardware, real LAN, cloud/RLS, real issuer, platform key custody, merchant acceptance or production signing evidence exists |
+| Release state | **NOT READY / default-off.** Next source gate is durable SQLite cloud-reconciliation state and command-attempt storage. Release still requires real TLS transport evidence, Android Keystore/Windows DPAPI adapters, cloud issuer/revocation/RLS, exact-current builds, installed recovery, named scanner/printer and EN/MY paper evidence, two-merchant acceptance, 14 stable trading days and explicit joint go/no-go |
+
 The runtime successor composes the reviewed retail foundation, durable
 cash-movement records, device-local cafe orders, modifiers and remarks,
 area/table identity, local whole-unit bill splitting and constrained undo,
