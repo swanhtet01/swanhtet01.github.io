@@ -3781,11 +3781,12 @@ def _release_preflight(
     postgres_bin: Path,
     openssl: Path,
 ) -> dict[str, Any]:
-    """Allow only the Windows rehearsal platform selected by the Node recorder.
+    """Check selected tooling only inside the recorder-authenticated full run.
 
-    This runner emits non-authoritative behavior evidence. The Node recorder is
-    solely responsible for verifying the reviewed toolchain profile before and
-    after execution and for minting the sanitized receipt.
+    This runner emits non-authoritative behavior evidence. This helper is
+    private to ``_run_rehearsal``. The direct CLI ``--preflight``
+    branch below fails closed before calling it; the canonical Node recorder is
+    the only supported release path that can reach selected PostgreSQL tooling.
     """
     if os.name != "nt":
         return _safe_report("postgres17_platform_unapproved", cleanup_complete=True)
@@ -4246,6 +4247,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expected-head", help="Exact clean local source commit required for a full rehearsal.")
     args = parser.parse_args(argv)
 
+    if args.preflight and args.import_preflight:
+        _emit(
+            _safe_report(
+                "postgres17_verified_toolchain_required",
+                cleanup_complete=True,
+            ),
+            None,
+        )
+        return 2
     if args.evidence_file is not None and args.evidence_file.exists():
         _emit(_safe_report("evidence_output_exists", cleanup_complete=True), None)
         return 2
@@ -4260,7 +4270,10 @@ def main(argv: list[str] | None = None) -> int:
         evidence_persisted = _emit(report, args.evidence_file)
         return 0 if evidence_persisted and report.get("ok") is True else 1
     if args.preflight:
-        report = _release_preflight(postgres_bin, openssl)
+        report = _safe_report(
+            "postgres17_verified_toolchain_required",
+            cleanup_complete=True,
+        )
         evidence_persisted = _emit(report, args.evidence_file)
         return 0 if evidence_persisted and report.get("ok") is True else 1
     try:

@@ -115,6 +115,30 @@ export function toolchainAuthority(verified) {
   return authority
 }
 
+export function toolchainPreflightSummary(verified) {
+  const authority = toolchainAuthority(verified)
+  return {
+    ok: true,
+    contract: 'supermega.postgres17-toolchain-preflight.v1',
+    authoritative: false,
+    ready: false,
+    status: 'verified',
+    profileId: authority.profileId,
+    manifestSha256: authority.manifestSha256,
+    policySha256: authority.policySha256,
+    sourceDigest: authority.sourceDigest,
+    bindingDigest: authority.bindingDigest,
+    loadClosureEvidenceSha256: authority.loadClosureEvidenceSha256,
+    loopback_only: true,
+    cleanup_complete: true,
+    database_started: false,
+    secret_values_exposed: false,
+    production_mutated: false,
+    supabase_mutated: false,
+    vercel_mutated: false,
+  }
+}
+
 function gitOutput(gitExecutable, args) {
   if (typeof gitExecutable !== 'string' || !isAbsolute(gitExecutable)) {
     fail('database_rehearsal_verified_git_required')
@@ -421,11 +445,12 @@ async function main() {
   let revalidateToolchain
   const records = command.length === 0
     || (command.length === 2 && command[0] === '--output' && command[1])
+  const preflights = same(command, ['--preflight'])
   const verifiesExpectedHead = command.length === 5 && command[0] === '--verify'
     && command[1] === '--input' && command[2] && command[3] === '--expected-head'
     && /^[0-9a-f]{40}$/.test(command[4])
   let verifiedForSource = null
-  if (records || verifiesExpectedHead) {
+  if (records || preflights || verifiesExpectedHead) {
     const sourcePaths = await resolveToolchainSourcePaths()
     const archivePath = await resolveToolchainArchivePath()
     revalidateToolchain = () => verifyPostgres17ToolchainProfile({
@@ -437,7 +462,8 @@ async function main() {
     verifiedForSource = await revalidateToolchain()
     await requireVerifiedRecorderRuntime(verifiedForSource)
   }
-  if (command.length === 2 && command[0] === '--output' && command[1]) result = await record(resolve(command[1]), { revalidateToolchain })
+  if (preflights) result = toolchainPreflightSummary(verifiedForSource)
+  else if (command.length === 2 && command[0] === '--output' && command[1]) result = await record(resolve(command[1]), { revalidateToolchain })
   else if (command.length === 0) result = await record(outputPath, { revalidateToolchain })
   else if (same(command, ['--verify'])) result = await verify(outputPath)
   else if ([3, 5].includes(command.length) && command[0] === '--verify' && command[1] === '--input'

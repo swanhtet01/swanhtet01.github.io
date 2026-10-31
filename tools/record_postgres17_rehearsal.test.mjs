@@ -22,6 +22,7 @@ import {
   recordCompletionSummary,
   writeRecorderFailureDiagnostic,
   toolchainChildEnvironment,
+  toolchainPreflightSummary,
   requireVerifiedRecorderRuntime,
 } from './record_postgres17_rehearsal.mjs'
 
@@ -86,6 +87,29 @@ test('child environment omits every caller and verified tool selector', () => {
   assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST' in environment, false)
   assert.equal('SUPERMEGA_POSTGRES17_AUTHORITY_SESSION' in environment, false)
   assert.throws(() => toolchainChildEnvironment({ execution: {} }), /execution_binding_missing/)
+})
+
+test('toolchain preflight is path-free and requires canonical verified authority', () => {
+  const summary = toolchainPreflightSummary(verifiedToolchainFixture())
+  assert.deepEqual(Object.keys(summary), [
+    'ok', 'contract', 'authoritative', 'ready', 'status', 'profileId',
+    'manifestSha256', 'policySha256', 'sourceDigest', 'bindingDigest',
+    'loadClosureEvidenceSha256', 'loopback_only', 'cleanup_complete',
+    'database_started', 'secret_values_exposed', 'production_mutated',
+    'supabase_mutated', 'vercel_mutated',
+  ])
+  assert.equal(summary.ok, true)
+  assert.equal(summary.authoritative, false)
+  assert.equal(summary.ready, false)
+  assert.equal(summary.status, 'verified')
+  assert.equal(summary.cleanup_complete, true)
+  assert.equal(summary.database_started, false)
+  assert.equal(summary.secret_values_exposed, false)
+  assert.equal(summary.production_mutated, false)
+  assert.equal(summary.supabase_mutated, false)
+  assert.equal(summary.vercel_mutated, false)
+  assert.equal(JSON.stringify(summary).includes('/synthetic/'), false)
+  assert.throws(() => toolchainPreflightSummary({}), /toolchain_authority_invalid/)
 })
 
 test('recorder authority requires the current exact verified Node executable', async () => {
@@ -521,6 +545,31 @@ const raw = {
   storage: { catalog_mode: 'local_private_fixture', hosted_storage_privacy_proof_required: true, policy_count: 0, public_bucket_count: 0 },
   cleanup_complete: true, secret_values_exposed: false, production_mutated: false, supabase_mutated: false, vercel_mutated: false,
 }
+test('receipt reconstruction consumers pass the already-validated toolchain authority', async () => {
+  const proof = buildSanitizedProof(raw, context)
+  const rebuilt = buildSanitizedProof(raw, {
+    recordedAt: proof.recordedAt,
+    implementationCommit: proof.implementationCommit,
+    implementationTree: proof.implementationTree,
+    implementation: context.implementation,
+    archive: { bytes: proof.engine.archiveBytes, sha256: proof.engine.observedArchiveSha256 },
+    toolchain: proof.engine.toolchain,
+  })
+  assert.deepEqual(rebuilt, proof)
+  assert.throws(() => buildSanitizedProof(raw, {
+    recordedAt: proof.recordedAt,
+    implementationCommit: proof.implementationCommit,
+    implementationTree: proof.implementationTree,
+    implementation: context.implementation,
+    archive: { bytes: proof.engine.archiveBytes, sha256: proof.engine.observedArchiveSha256 },
+  }), /toolchain_authority_invalid/)
+
+  const managed = await readFile('tools/manage_managed_pilot_readiness.mjs', 'utf8')
+  const hq = await readFile('tools/verify_hq_contract.mjs', 'utf8')
+  assert.match(managed, /toolchain: databaseEvidence\.engine\.toolchain/)
+  assert.match(hq, /toolchain: databaseRehearsal\.engine\.toolchain/)
+})
+
 test('builds a sanitized digest-bound local PostgreSQL 17 proof without hosted claims', () => {
   const proof = buildSanitizedProof(raw, context)
   assert.equal(proof.schemaVersion, DATABASE_REHEARSAL_EVIDENCE_SCHEMA)
@@ -781,13 +830,17 @@ test('release CLI rejects every new receipt while toolchain provenance is unappr
   }
 })
 
-test('launcher preflight reaches the sanitized platform gate without requiring psycopg', () => {
+test('legacy launcher delegates preflight to the canonical provenance gate', async () => {
+  const launcher = await readFile('tools/run_postgres17_rehearsal.mjs', 'utf8')
+  assert.equal(launcher.includes('SUPERMEGA_PYTHON'), false)
+  assert.equal(launcher.includes('rehearse_supermega_postgres17.py'), false)
+  assert.match(launcher, /record_postgres17_rehearsal\.mjs/)
   const result = spawnSync(process.execPath,
     ['tools/run_postgres17_rehearsal.mjs', '--preflight'],
-    { encoding: 'utf8', windowsHide: true })
+    { encoding: 'utf8', windowsHide: true,
+      env: { ...process.env, SUPERMEGA_PYTHON: 'C:\\untrusted\\python.exe' } })
   assert.equal(result.status, 1)
-  const report = JSON.parse(result.stdout)
-  assert.equal(report.error, 'postgres17_platform_unapproved')
-  assert.equal(report.cleanup_complete, true)
-  assert.equal(report.production_mutated, false)
+  const report = JSON.parse(result.stderr)
+  assert.equal(report.error, 'database_rehearsal_toolchain_provenance_unapproved')
+  assert.equal(report.secretValuesExposed, false)
 })

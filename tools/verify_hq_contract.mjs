@@ -92,6 +92,7 @@ const rebuiltDatabase = buildSanitizedProof(databaseRaw, {
   recordedAt: databaseRehearsal.recordedAt, implementationCommit: databaseRehearsal.implementationCommit,
   implementationTree: databaseRehearsal.implementationTree, implementation: databaseImplementation,
   archive: { bytes: databaseRehearsal.engine.archiveBytes, sha256: databaseRehearsal.engine.observedArchiveSha256 },
+  toolchain: databaseRehearsal.engine.toolchain,
 })
 if (JSON.stringify(rebuiltDatabase) !== JSON.stringify(databaseRehearsal)) throw new Error('hq_database_raw_receipt_mismatch')
 const normalizedAgentGovernanceText = agentGovernanceText.replace(/\r\n?/g, '\n')

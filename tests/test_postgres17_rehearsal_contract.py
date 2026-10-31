@@ -48,7 +48,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertFalse(report["authoritative"])
         self.assertTrue(report["cleanup_complete"])
 
-    def test_release_preflight_is_windows_only_and_delegates_tool_checks(self) -> None:
+    def test_release_preflight_supports_canonical_windows_full_run(self) -> None:
         module = _load_rehearsal()
         adversarial_roots = (
             Path("/arbitrary/windows-zip"),
@@ -67,13 +67,45 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 version_probe.assert_not_called()
                 binary_probe.assert_not_called()
 
-        postgres_bin = Path(r"C:\verified\pgsql\bin")
-        openssl = Path(r"C:\verified\openssl.exe")
         expected = {"ok": True, "ready": False, "status": "available"}
         with patch.object(module.os, "name", "nt"), \
                 patch.object(module, "_preflight", return_value=expected) as binary_preflight:
-            self.assertEqual(module._release_preflight(postgres_bin, openssl), expected)
-        binary_preflight.assert_called_once_with(postgres_bin, openssl)
+            self.assertEqual(module._release_preflight(
+                Path(r"C:\verified\pgsql\bin"), Path(r"C:\verified\openssl.exe")
+            ), expected)
+        binary_preflight.assert_called_once()
+
+    def test_direct_python_preflight_never_reaches_selected_tooling(self) -> None:
+        module = _load_rehearsal()
+        with patch.object(module, "_release_preflight") as release_preflight, \
+                patch.object(module, "_preflight") as binary_preflight, \
+                contextlib.redirect_stdout(io.StringIO()) as stdout:
+            code = module.main([
+                "--preflight",
+                "--postgres-bin", r"C:\untrusted\pgsql\bin",
+                "--openssl", r"C:\untrusted\openssl.exe",
+            ])
+        report = json.loads(stdout.getvalue())
+        self.assertEqual(code, 1)
+        self.assertEqual(report["error"], "postgres17_verified_toolchain_required")
+        self.assertTrue(report["cleanup_complete"])
+        release_preflight.assert_not_called()
+        binary_preflight.assert_not_called()
+
+    def test_direct_python_preflight_cannot_hide_behind_import_preflight(self) -> None:
+        module = _load_rehearsal()
+        with patch.object(module, "_isolated_import_preflight") as import_preflight, \
+                patch.object(module, "_release_preflight") as release_preflight, \
+                patch.object(module, "_preflight") as binary_preflight, \
+                contextlib.redirect_stdout(io.StringIO()) as stdout:
+            code = module.main(["--preflight", "--import-preflight"])
+        report = json.loads(stdout.getvalue())
+        self.assertEqual(code, 2)
+        self.assertEqual(report["error"], "postgres17_verified_toolchain_required")
+        self.assertTrue(report["cleanup_complete"])
+        import_preflight.assert_not_called()
+        release_preflight.assert_not_called()
+        binary_preflight.assert_not_called()
 
     def test_raw_python_report_is_explicitly_non_authoritative(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")
@@ -281,7 +313,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertNotIn("fastapi.testclient", source.casefold())
         self.assertNotIn("httpx", source.casefold())
 
-    def test_unapproved_platform_returns_only_sanitized_evidence(self) -> None:
+    def test_direct_preflight_returns_only_sanitized_toolchain_rejection(self) -> None:
         module = _load_rehearsal()
         with tempfile.TemporaryDirectory() as temporary:
             missing_bin = Path(temporary) / "missing-bin"
@@ -299,7 +331,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 )
         self.assertEqual(return_code, 1)
         payload = json.loads(output.getvalue())
-        self.assertEqual(payload["error"], "postgres17_platform_unapproved")
+        self.assertEqual(payload["error"], "postgres17_verified_toolchain_required")
         self.assertFalse(payload["ok"])
         self.assertTrue(payload["cleanup_complete"])
         self.assertFalse(payload["secret_values_exposed"])
