@@ -89,6 +89,7 @@ const implementationPaths = [...new Set([
   'tools/postgres17_windows_execution_lock.py',
   'tools/windows/postgres17_execution_broker.cpp',
   'tools/windows/postgres17_execution_broker_build.json',
+  'tools/windows/build_postgres17_execution_broker.ps1',
   'tools/windows/postgres17_execution_broker_protocol.cpp',
   'tools/windows/postgres17_execution_broker_protocol.hpp',
   'tools/windows/postgres17_execution_broker_protocol_test.cpp',

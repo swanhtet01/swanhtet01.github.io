@@ -15,12 +15,26 @@
   "headers": [
     "tools/windows/postgres17_execution_broker_protocol.hpp"
   ],
+  "buildInputs": [
+    "tools/windows/postgres17_execution_broker.cpp",
+    "tools/windows/postgres17_execution_broker_protocol.cpp",
+    "tools/windows/postgres17_execution_broker_protocol.hpp",
+    "tools/windows/postgres17_execution_broker_build.json",
+    "tools/windows/build_postgres17_execution_broker.ps1"
+  ],
   "compiler": {
     "family": "msvc",
     "path": null,
-    "version": null
+    "expectedVersion": "19.44.35228",
+    "resolvedFromDeveloperCommandPrompt": true
   },
-  "windowsSdkVersion": null,
+  "hostInventory": {
+    "msbuildVersionAvailableButUnused": "17.14.51.32402",
+    "signToolVersionAvailableButUnused": "10.0.26100.0",
+    "cmakeRequired": false,
+    "ninjaRequired": false
+  },
+  "windowsSdkVersion": "10.0.26100.0",
   "compileFlags": [
     "/nologo",
     "/std:c++17",
@@ -30,6 +44,7 @@
     "/sdl",
     "/guard:cf",
     "/Qspectre",
+    "/Brepro",
     "/DUNICODE",
     "/D_UNICODE",
     "/DWIN32_LEAN_AND_MEAN",
@@ -41,7 +56,9 @@
     "/DYNAMICBASE",
     "/NXCOMPAT",
     "/HIGHENTROPYVA",
-    "/CETCOMPAT"
+    "/CETCOMPAT",
+    "/INCREMENTAL:NO",
+    "/Brepro"
   ],
   "systemLibraries": [
     "advapi32.lib",
@@ -51,7 +68,9 @@
   "invocationOrder": [
     "compiler.path",
     "compileFlags",
+    "/pathmap:repository=.",
     "translationUnits",
+    "/Fo:output-directory",
     "/Fe:output",
     "/link",
     "linkFlags",
@@ -61,9 +80,11 @@
   "signed": false,
   "windowsCompiled": false,
   "windowsValidated": false,
+  "toolchainClosureComplete": false,
   "blockers": [
-    "exact-msvc-version-not-pinned",
-    "exact-windows-sdk-version-not-pinned",
+    "exact-cl-path-and-binary-digest-not-yet-retained",
+    "compiler-and-sdk-header-closure-not-yet-retained",
+    "implicit-default-library-and-tool-dll-closure-not-yet-retained",
     "windows-build-not-run",
     "windows-hostile-runtime-tests-not-run",
     "broker-binary-unsigned",

@@ -15,6 +15,7 @@ PROTOCOL = WINDOWS / "postgres17_execution_broker_protocol.cpp"
 PROTOCOL_HEADER = WINDOWS / "postgres17_execution_broker_protocol.hpp"
 PROTOCOL_TEST = WINDOWS / "postgres17_execution_broker_protocol_test.cpp"
 MANIFEST = WINDOWS / "postgres17_execution_broker_build.json"
+BUILD_SCRIPT = WINDOWS / "build_postgres17_execution_broker.ps1"
 
 
 class WindowsExecutionBrokerSourceTests(unittest.TestCase):
@@ -37,11 +38,21 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
         self.assertEqual(manifest["translationUnits"], manifest["sources"][:2])
         self.assertEqual(manifest["headers"], manifest["sources"][2:])
         self.assertEqual(
+            manifest["buildInputs"],
+            [
+                *manifest["sources"],
+                "tools/windows/postgres17_execution_broker_build.json",
+                "tools/windows/build_postgres17_execution_broker.ps1",
+            ],
+        )
+        self.assertEqual(
             manifest["invocationOrder"],
             [
                 "compiler.path",
                 "compileFlags",
+                "/pathmap:repository=.",
                 "translationUnits",
+                "/Fo:output-directory",
                 "/Fe:output",
                 "/link",
                 "linkFlags",
@@ -49,13 +60,25 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
             ],
         )
         self.assertIsNone(manifest["compiler"]["path"])
-        self.assertIsNone(manifest["compiler"]["version"])
-        self.assertIsNone(manifest["windowsSdkVersion"])
+        self.assertEqual(manifest["compiler"]["expectedVersion"], "19.44.35228")
+        self.assertIs(manifest["compiler"]["resolvedFromDeveloperCommandPrompt"], True)
+        self.assertEqual(
+            manifest["hostInventory"]["msbuildVersionAvailableButUnused"],
+            "17.14.51.32402",
+        )
+        self.assertEqual(
+            manifest["hostInventory"]["signToolVersionAvailableButUnused"],
+            "10.0.26100.0",
+        )
+        self.assertIs(manifest["hostInventory"]["cmakeRequired"], False)
+        self.assertIs(manifest["hostInventory"]["ninjaRequired"], False)
+        self.assertEqual(manifest["windowsSdkVersion"], "10.0.26100.0")
         for field in (
             "productionAdapterEnabled",
             "signed",
             "windowsCompiled",
             "windowsValidated",
+            "toolchainClosureComplete",
         ):
             self.assertIs(manifest[field], False)
         self.assertIn("/W4", manifest["compileFlags"])
@@ -64,6 +87,38 @@ class WindowsExecutionBrokerSourceTests(unittest.TestCase):
         self.assertIn("/DYNAMICBASE", manifest["linkFlags"])
         self.assertIn("/NXCOMPAT", manifest["linkFlags"])
         self.assertIn("windows-hostile-runtime-tests-not-run", manifest["blockers"])
+
+    def test_msvc_x64_build_script_is_exact_and_does_not_sign_or_use_generators(self) -> None:
+        source = BUILD_SCRIPT.read_text(encoding="utf-8")
+        for token in (
+            "$env:VSCMD_ARG_TGT_ARCH -ne 'x64'",
+            "$env:WindowsSDKVersion.TrimEnd('\\')",
+            "Get-Command cl.exe -CommandType Application",
+            "Get-Command link.exe -CommandType Application",
+            "Compiler Version ([0-9.]+) for x64",
+            "postgres17_broker_output_directory_not_empty",
+            '"/pathmap:$repositoryRoot=."',
+            "objectDirectoryArgument",
+            "@($manifest.compileFlags)",
+            "@($manifest.linkFlags)",
+            "Get-FileHash",
+            "compilerSha256",
+            "linkerSha256",
+            "postBuildInputs",
+            "postgres17_broker_input_changed_during_build",
+            "postgres17_broker_system_library_changed_during_build",
+            "toolchainClosureComplete = $false",
+            "sdkIncludeRoot",
+            "sdkLibraryRoot",
+            "Assert-NonReparsePath",
+            "authoritative = $false",
+            "executionLocked = $false",
+            "windowsValidated = $false",
+            "signed = $false",
+        ):
+            self.assertIn(token, source)
+        for forbidden in ("cmake", "ninja", "signtool", "Invoke-WebRequest", "Start-BitsTransfer"):
+            self.assertNotIn(forbidden, source.lower())
 
     def test_source_preserves_required_fail_closed_order_and_controls(self) -> None:
         source = BROKER.read_text(encoding="utf-8")
