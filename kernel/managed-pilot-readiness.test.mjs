@@ -50,8 +50,8 @@ const input = {
   portfolio: { schemaVersion: 'supermega.hq.portfolio.v3', products },
   databaseEvidence: databaseFixture,
   // Explicit unit fixture binding; production callers hash current implementation bytes.
-  databaseImplementation: { digest: databaseFixture.implementationDigest,
-    fileCount: databaseFixture.implementationFileCount, paths: databaseFixture.implementation.paths },
+  databaseImplementation: { ...databaseFixture.implementation,
+    fileCount: databaseFixture.implementationFileCount },
   storageAudit: 'Status: local verifier ready; hosted proof blocked',
   securityAudit: {
     contract: 'supermega.supabase-security-advisor-audit.v2',
