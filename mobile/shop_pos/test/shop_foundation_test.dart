@@ -4807,7 +4807,7 @@ void main() {
 
 Future<void> _dropV16MemberSchema(ShopDatabase database) async {
   for (final definition
-      in shopConnectedSiteSchemaDefinitionsV24().entries.toList().reversed) {
+      in shopConnectedSiteSchemaDefinitionsV25().entries.toList().reversed) {
     final type = shopSchemaObjectTypeForDefinition(definition.value);
     await database.customStatement(
       'DROP ${type == 'table'

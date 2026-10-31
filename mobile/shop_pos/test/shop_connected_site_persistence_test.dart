@@ -23,10 +23,10 @@ const _device = 'device-1';
 final _leaseDigest = _digest('lease:$_tenant:$_site:$_device');
 
 void main() {
-  test('connected-site persistence is default-off and schema is v24', () async {
+  test('connected-site persistence is default-off and schema is v25', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 24);
+      expect(database.schemaVersion, 25);
       final tables =
           (await database
                   .customSelect(
@@ -1391,13 +1391,26 @@ void main() {
   });
 
   test(
-    'v22 migrates to v24 and encrypted-backup snapshot remains valid',
+    'v22 migrates to v25 and encrypted-backup snapshot remains valid',
     () async {
       final root = await Directory.systemTemp.createTemp('shop-site-v23-');
       final file = File('${root.path}/shop.sqlite');
       var database = ShopDatabase(NativeDatabase(file));
       try {
         await database.verifyReadyForUse();
+        for (final entry
+            in shopConnectedEnrollmentSchemaDefinitionsV25().entries
+                .toList()
+                .reversed) {
+          final type = shopSchemaObjectTypeForDefinition(entry.value);
+          await database.customStatement(
+            'DROP ${type == 'table'
+                ? 'TABLE'
+                : type == 'index'
+                ? 'INDEX'
+                : 'TRIGGER'} IF EXISTS ${entry.key}',
+          );
+        }
         for (final entry
             in shopConnectedStockReservationSchemaDefinitionsV24().entries
                 .toList()
@@ -1429,7 +1442,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 24);
+        expect(database.schemaVersion, 25);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(
@@ -1742,12 +1755,21 @@ void main() {
         ],
       );
       for (final entry
+          in shopConnectedEnrollmentSchemaDefinitionsV25().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(entry.value);
+        await database.customStatement(
+          'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
+        );
+      }
+      for (final entry
           in shopConnectedStockReservationSchemaDefinitionsV24().entries
               .toList()
               .reversed) {
         final type = shopSchemaObjectTypeForDefinition(entry.value);
         await database.customStatement(
-          'DROP ${type == 'table' ? 'TABLE' : 'TRIGGER'} IF EXISTS ${entry.key}',
+          'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
         );
       }
       await database.customStatement('PRAGMA user_version = 23');

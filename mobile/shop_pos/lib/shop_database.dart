@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -2003,6 +2004,316 @@ Map<String, String> shopConnectedSiteSchemaDefinitionsV24() => {
   ...shopConnectedStockReservationSchemaDefinitionsV24(),
 };
 
+const shopSitePairingNoncesV25Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_pairing_nonces (
+    nonce TEXT PRIMARY KEY NOT NULL CHECK (length(nonce) BETWEEN 22 AND 128),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > issued_at_millis),
+    consumed_at_millis INTEGER,
+    CHECK (consumed_at_millis IS NULL OR
+      (consumed_at_millis >= issued_at_millis AND consumed_at_millis < expires_at_millis))
+  )
+''';
+
+const shopSitePairingNoncesUpdateGuardV25Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_pairing_nonces_update_guard
+  BEFORE UPDATE ON shop_site_pairing_nonces
+  WHEN NEW.nonce != OLD.nonce OR NEW.tenant_id != OLD.tenant_id OR
+    NEW.site_id != OLD.site_id OR
+    NEW.coordinator_device_id != OLD.coordinator_device_id OR
+    NEW.issued_at_millis != OLD.issued_at_millis OR
+    NEW.expires_at_millis != OLD.expires_at_millis OR
+    OLD.consumed_at_millis IS NOT NULL OR NEW.consumed_at_millis IS NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'connected_pairing_nonce_immutable');
+  END
+''';
+
+const shopSitePendingEnrollmentsV25Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_pending_enrollments (
+    client_fingerprint TEXT PRIMARY KEY NOT NULL CHECK (length(client_fingerprint) = 64),
+    nonce TEXT NOT NULL UNIQUE REFERENCES shop_site_pairing_nonces(nonce),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    public_key BLOB NOT NULL CHECK (length(public_key) = 32),
+    key_algorithm TEXT NOT NULL CHECK (key_algorithm = 'ed25519'),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+const shopSiteEnrollmentEvidenceV25Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_enrollment_evidence (
+    evidence_digest TEXT PRIMARY KEY NOT NULL CHECK (length(evidence_digest) = 64),
+    action TEXT NOT NULL CHECK (action IN ('approve', 'revoke')),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    authority_key_id TEXT NOT NULL CHECK (length(authority_key_id) BETWEEN 1 AND 128),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json))
+  )
+''';
+
+const shopSiteRequestNoncesV25Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_request_nonces (
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    nonce TEXT NOT NULL CHECK (length(nonce) BETWEEN 22 AND 128),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > 0),
+    consumed_at_millis INTEGER NOT NULL CHECK (consumed_at_millis > 0),
+    PRIMARY KEY (client_fingerprint, nonce)
+  )
+''';
+
+const shopSiteDevicesFingerprintUniqueV25Sql = '''
+  CREATE UNIQUE INDEX IF NOT EXISTS shop_site_devices_fingerprint_unique
+  ON shop_site_devices(public_key_fingerprint)
+''';
+
+Map<String, String> shopConnectedEnrollmentSchemaDefinitionsV25() => {
+  'shop_site_devices_fingerprint_unique':
+      shopSiteDevicesFingerprintUniqueV25Sql,
+  'shop_site_pairing_nonces': shopSitePairingNoncesV25Sql,
+  'shop_site_pairing_nonces_update_guard':
+      shopSitePairingNoncesUpdateGuardV25Sql,
+  'shop_site_pairing_nonces_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_pairing_nonces',
+    operation: 'delete',
+    message: 'Connected pairing nonce history is immutable',
+  ),
+  'shop_site_pending_enrollments': shopSitePendingEnrollmentsV25Sql,
+  'shop_site_enrollment_evidence': shopSiteEnrollmentEvidenceV25Sql,
+  'shop_site_request_nonces': shopSiteRequestNoncesV25Sql,
+  for (final table in const [
+    'shop_site_pending_enrollments',
+    'shop_site_enrollment_evidence',
+    'shop_site_request_nonces',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected authority evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected authority evidence is immutable',
+    ),
+  },
+};
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV25() => {
+  ...shopConnectedSiteSchemaDefinitionsV24(),
+  ...shopConnectedEnrollmentSchemaDefinitionsV25(),
+};
+
+/// Reconstructs the complete v25 pairing -> approval -> revocation chain.
+///
+/// This is shared by live-open and backup verification so a snapshot cannot
+/// gain authority merely by satisfying SQLite's structural constraints.
+bool shopConnectedEnrollmentRowsValidV25({
+  required Iterable<Map<String, Object?>> pairingNonces,
+  required Iterable<Map<String, Object?>> pendingEnrollments,
+  required Iterable<Map<String, Object?>> enrollmentEvidence,
+  required Iterable<Map<String, Object?>> devices,
+  required Iterable<Map<String, Object?>> requestNonces,
+}) {
+  try {
+    Map<String, Map<String, Object?>> uniqueBy(
+      Iterable<Map<String, Object?>> rows,
+      String key,
+    ) {
+      final result = <String, Map<String, Object?>>{};
+      for (final row in rows) {
+        final value = row[key];
+        if (value is! String || result.containsKey(value)) {
+          throw const FormatException('connected_enrollment_duplicate');
+        }
+        result[value] = row;
+      }
+      return result;
+    }
+
+    final nonces = uniqueBy(pairingNonces, 'nonce');
+    final pending = uniqueBy(pendingEnrollments, 'client_fingerprint');
+    final evidence = enrollmentEvidence.toList(growable: false);
+    final deviceRows = devices.toList(growable: false);
+    final deviceIds = <String>{};
+    final deviceByFingerprint = <String, Map<String, Object?>>{};
+    for (final device in deviceRows) {
+      final deviceId = device['device_id'];
+      final fingerprint = device['public_key_fingerprint'];
+      if (deviceId is! String ||
+          !deviceIds.add(deviceId) ||
+          fingerprint is! String ||
+          deviceByFingerprint.containsKey(fingerprint)) {
+        return false;
+      }
+      deviceByFingerprint[fingerprint] = device;
+    }
+
+    for (final entry in pending.entries) {
+      final row = entry.value;
+      final nonce = nonces[row['nonce']];
+      final key = row['public_key'];
+      if (nonce == null || key is! List<int>) return false;
+      if (nonce['consumed_at_millis'] != row['observed_at_millis'] ||
+          nonce['tenant_id'] != row['tenant_id'] ||
+          nonce['site_id'] != row['site_id'] ||
+          nonce['coordinator_device_id'] != row['coordinator_device_id'] ||
+          row['key_algorithm'] != 'ed25519' ||
+          crypto.sha256.convert(key).toString() != entry.key) {
+        return false;
+      }
+    }
+
+    final approvals = <String, Map<String, Object?>>{};
+    final revocations = <String, Map<String, Object?>>{};
+    for (final row in evidence) {
+      final raw = row['evidence_json'];
+      if (raw is! String) return false;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic> ||
+          canonicalConnectedSiteJson(decoded) != raw) {
+        return false;
+      }
+      const columns = <String, String>{
+        'action': 'action',
+        'tenantId': 'tenant_id',
+        'siteId': 'site_id',
+        'coordinatorDeviceId': 'coordinator_device_id',
+        'deviceId': 'device_id',
+        'clientFingerprint': 'client_fingerprint',
+        'sessionGeneration': 'session_generation',
+        'observedAtMillis': 'observed_at_millis',
+        'authorityKeyId': 'authority_key_id',
+        'evidenceDigest': 'evidence_digest',
+      };
+      if (decoded.keys.toSet().difference({
+            'schema',
+            'action',
+            'tenantId',
+            'siteId',
+            'coordinatorDeviceId',
+            'deviceId',
+            'clientFingerprint',
+            'sessionGeneration',
+            'observedAtMillis',
+            'authorityKeyId',
+            'signature',
+            'evidenceDigest',
+          }).isNotEmpty ||
+          decoded.length != 12 ||
+          decoded['schema'] != 'supermega.shop.owner-enrollment-evidence.v1' ||
+          decoded['signature'] is! String) {
+        return false;
+      }
+      for (final entry in columns.entries) {
+        if (decoded[entry.key] != row[entry.value]) return false;
+      }
+      final signingPayload = Map<String, Object?>.from(decoded)
+        ..remove('signature')
+        ..remove('evidenceDigest');
+      if (connectedSiteSha256(signingPayload) != row['evidence_digest']) {
+        return false;
+      }
+      final fingerprint = row['client_fingerprint'];
+      if (fingerprint is! String) return false;
+      final paired = pending[fingerprint];
+      if (paired == null ||
+          paired['tenant_id'] != row['tenant_id'] ||
+          paired['site_id'] != row['site_id'] ||
+          paired['coordinator_device_id'] != row['coordinator_device_id'] ||
+          (row['observed_at_millis'] as int) <
+              (paired['observed_at_millis'] as int)) {
+        return false;
+      }
+      final target = row['action'] == 'approve'
+          ? approvals
+          : row['action'] == 'revoke'
+          ? revocations
+          : null;
+      if (target == null || target.containsKey(fingerprint)) return false;
+      target[fingerprint] = row;
+    }
+
+    final managedDeviceEntries = deviceByFingerprint.entries.where(
+      (entry) =>
+          pending.containsKey(entry.key) ||
+          approvals.containsKey(entry.key) ||
+          revocations.containsKey(entry.key),
+    );
+    var managedDeviceCount = 0;
+    for (final entry in managedDeviceEntries) {
+      managedDeviceCount += 1;
+      final device = entry.value;
+      final approval = approvals[entry.key];
+      final revocation = revocations[entry.key];
+      if (approval == null ||
+          approval['device_id'] != device['device_id'] ||
+          approval['tenant_id'] != device['tenant_id'] ||
+          approval['site_id'] != device['site_id'] ||
+          approval['observed_at_millis'] != device['enrolled_at_millis']) {
+        return false;
+      }
+      if (device['state'] == 'active') {
+        if (revocation != null ||
+            approval['session_generation'] != device['session_generation'] ||
+            device['revoked_at_millis'] != null) {
+          return false;
+        }
+      } else if (device['state'] == 'revoked') {
+        if (revocation == null ||
+            revocation['device_id'] != device['device_id'] ||
+            revocation['tenant_id'] != device['tenant_id'] ||
+            revocation['site_id'] != device['site_id'] ||
+            revocation['observed_at_millis'] != device['revoked_at_millis'] ||
+            revocation['session_generation'] != device['session_generation'] ||
+            (revocation['session_generation'] as int) <=
+                (approval['session_generation'] as int) ||
+            (revocation['observed_at_millis'] as int) <
+                (approval['observed_at_millis'] as int)) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
+    if (approvals.length != managedDeviceCount ||
+        revocations.keys.any(
+          (fingerprint) => !approvals.containsKey(fingerprint),
+        )) {
+      return false;
+    }
+
+    final seenRequests = <String>{};
+    for (final row in requestNonces) {
+      final fingerprint = row['client_fingerprint'];
+      final nonce = row['nonce'];
+      final consumed = row['consumed_at_millis'];
+      final expires = row['expires_at_millis'];
+      if (fingerprint is! String ||
+          nonce is! String ||
+          consumed is! int ||
+          expires is! int ||
+          consumed >= expires ||
+          !deviceByFingerprint.containsKey(fingerprint) ||
+          !seenRequests.add('$fingerprint\u0000$nonce')) {
+        return false;
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
 bool shopConnectedStockReservationRowsValidV24({
   required Iterable<Map<String, Object?>> commands,
   required Iterable<Map<String, Object?>> events,
@@ -2456,7 +2767,7 @@ final shopKnownBaseObjectNames = <String>{
   'shop_pending_cash_checkouts_counter_delete_freeze',
   'shop_pending_cash_checkouts_cafe_freeze',
   'shop_pending_cash_checkouts_shift_freeze',
-  ...{for (final name in shopConnectedSiteSchemaDefinitionsV24().keys) name},
+  ...{for (final name in shopConnectedSiteSchemaDefinitionsV25().keys) name},
 };
 
 const shopBaseTableColumnsV6 = <String, Set<String>>{
@@ -2580,7 +2891,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 24) return const {};
+  if (schemaVersion < 5 || schemaVersion > 25) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -3349,6 +3660,7 @@ enum _ShopUpgradeOrigin {
   unifiedV21,
   unifiedV22,
   unifiedV23,
+  unifiedV24,
 }
 
 enum ShopConnectedSiteCommandStatus { accepted, replayed, conflict }
@@ -3563,7 +3875,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v24.');
+        throw StateError('The staged Shop restore did not reach schema v25.');
       }
     } finally {
       await database.close();
@@ -3630,7 +3942,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3658,6 +3970,8 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV23Schema();
       await _createConnectedStockReservationSchemaV24();
       await _requireUnifiedV24Schema();
+      await _createConnectedEnrollmentSchemaV25();
+      await _requireUnifiedV25Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
@@ -3810,6 +4124,7 @@ class ShopDatabase extends _$ShopDatabase {
         allowCashCheckoutV21: from >= 21,
         allowCashTenderV22: from >= 22,
         allowConnectedV23: from >= 23,
+        allowReservationV24: from >= 24,
       );
       if (from < 20) {
         await _createCafeCancellationSchemaV20();
@@ -3818,6 +4133,7 @@ class ShopDatabase extends _$ShopDatabase {
         allowCashCheckoutV21: from >= 21,
         allowCashTenderV22: from >= 22,
         allowConnectedV23: from >= 23,
+        allowReservationV24: from >= 24,
       );
       if (from < 21) {
         await _createPendingCashCheckoutSchemaV21();
@@ -3825,27 +4141,35 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV21Schema(
         allowCashTenderV22: from >= 22,
         allowConnectedV23: from >= 23,
+        allowReservationV24: from >= 24,
       );
       if (from < 22) {
         await _createCashTenderSchemaV22();
       }
-      await _requireUnifiedV22Schema(allowConnectedV23: from >= 23);
+      await _requireUnifiedV22Schema(
+        allowConnectedV23: from >= 23,
+        allowReservationV24: from >= 24,
+      );
       if (from < 23) {
         await _createConnectedSiteSchemaV23();
       }
-      await _requireUnifiedV23Schema();
+      await _requireUnifiedV23Schema(allowReservationV24: from >= 24);
       if (from < 24) {
         await _migrateConnectedStockReservationSchemaV24();
       }
       await _requireUnifiedV24Schema();
+      if (from < 25) {
+        await _createConnectedEnrollmentSchemaV25();
+      }
+      await _requireUnifiedV25Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV24Schema();
+      await _requireUnifiedV25Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV24Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV25Schema();
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
     final qrSnapshotColumns = includeQrSnapshot
@@ -3974,6 +4298,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedStockReservationSchemaV24() async {
     for (final definition
         in shopConnectedStockReservationSchemaDefinitionsV24().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedEnrollmentSchemaV25() async {
+    for (final definition
+        in shopConnectedEnrollmentSchemaDefinitionsV25().values) {
       await customStatement(definition);
     }
   }
@@ -4934,8 +5265,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 23) {
-      throw StateError('This Shop database version cannot migrate to v24.');
+    if (from < 1 || from > 24) {
+      throw StateError('This Shop database version cannot migrate to v25.');
+    }
+    if (from == 24) {
+      await _requireUnifiedV24Schema();
+      return _ShopUpgradeOrigin.unifiedV24;
     }
     if (from == 23) {
       await _requireUnifiedV23Schema();
@@ -5458,6 +5793,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCashTenderV22 = false,
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
   }) async {
     await _requireDatabaseIntegrity();
     final objects = await _readSchemaObjects();
@@ -5489,7 +5825,9 @@ class ShopDatabase extends _$ShopDatabase {
             entry.key,
       if (allowConnectedV23)
         for (final entry
-            in (allowReservationV24
+            in (allowEnrollmentV25
+                    ? shopConnectedSiteSchemaDefinitionsV25()
+                    : allowReservationV24
                     ? shopConnectedSiteSchemaDefinitionsV24()
                     : shopConnectedSiteSchemaDefinitionsV23())
                 .entries)
@@ -5510,7 +5848,9 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
       if (allowConnectedV23)
-        ...(allowReservationV24
+        ...(allowEnrollmentV25
+            ? shopConnectedSiteSchemaDefinitionsV25().keys
+            : allowReservationV24
             ? shopConnectedSiteSchemaDefinitionsV24().keys
             : shopConnectedSiteSchemaDefinitionsV23().keys),
     };
@@ -5669,6 +6009,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCashTenderV22 = false,
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
   }) async {
     await _requireUnifiedV18Schema(
       allowCafeV19: true,
@@ -5677,6 +6018,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowCashTenderV22: allowCashTenderV22,
       allowConnectedV23: allowConnectedV23,
       allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeOrderSchemaDefinitionsV19();
@@ -5698,7 +6040,9 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
       if (allowConnectedV23)
-        ...(allowReservationV24
+        ...(allowEnrollmentV25
+            ? shopConnectedSiteSchemaDefinitionsV25().keys
+            : allowReservationV24
             ? shopConnectedSiteSchemaDefinitionsV24().keys
             : shopConnectedSiteSchemaDefinitionsV23().keys),
     };
@@ -5716,6 +6060,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCashTenderV22 = false,
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
   }) async {
     await _requireUnifiedV19Schema(
       allowCafeV20: true,
@@ -5723,6 +6068,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowCashTenderV22: allowCashTenderV22,
       allowConnectedV23: allowConnectedV23,
       allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeCancellationSchemaDefinitionsV20();
@@ -5738,12 +6084,14 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCashTenderV22 = false,
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
   }) async {
     await _requireUnifiedV20Schema(
       allowCashCheckoutV21: true,
       allowCashTenderV22: allowCashTenderV22,
       allowConnectedV23: allowConnectedV23,
       allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopPendingCashCheckoutSchemaDefinitionsV21();
@@ -5841,11 +6189,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _requireUnifiedV22Schema({
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
   }) async {
     await _requireUnifiedV21Schema(
       allowCashTenderV22: true,
       allowConnectedV23: allowConnectedV23,
       allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
     );
     final columns = await customSelect('PRAGMA table_info(shop_sales)').get();
     if (!columns.any(
@@ -5900,10 +6250,12 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _requireUnifiedV23Schema({
     bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
   }) async {
     await _requireUnifiedV22Schema(
       allowConnectedV23: true,
       allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedSiteSchemaDefinitionsV23();
@@ -5997,8 +6349,13 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<void> _requireUnifiedV24Schema() async {
-    await _requireUnifiedV23Schema(allowReservationV24: true);
+  Future<void> _requireUnifiedV24Schema({
+    bool allowEnrollmentV25 = false,
+  }) async {
+    await _requireUnifiedV23Schema(
+      allowReservationV24: true,
+      allowEnrollmentV25: allowEnrollmentV25,
+    );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedStockReservationSchemaDefinitionsV24();
     if (!_definitionGroupExact(
@@ -6010,6 +6367,40 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v24 connected-stock schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV25Schema() async {
+    await _requireUnifiedV24Schema(allowEnrollmentV25: true);
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedEnrollmentSchemaDefinitionsV25();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v25ConnectedEnrollmentRowsValid()) {
+      throw StateError(
+        'The unified Shop v25 connected-enrollment schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v25ConnectedEnrollmentRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedEnrollmentRowsValidV25(
+        pairingNonces: await rows('shop_site_pairing_nonces'),
+        pendingEnrollments: await rows('shop_site_pending_enrollments'),
+        enrollmentEvidence: await rows('shop_site_enrollment_evidence'),
+        devices: await rows('shop_site_devices'),
+        requestNonces: await rows('shop_site_request_nonces'),
+      );
+    } on Object {
+      return false;
     }
   }
 

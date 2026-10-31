@@ -334,7 +334,7 @@ void main() {
       final upgraded = ShopDatabase(NativeDatabase(snapshot));
       try {
         await upgraded.verifyReadyForUse();
-        expect(upgraded.schemaVersion, 24);
+        expect(upgraded.schemaVersion, 25);
         expect(await upgraded.countSales(), salesBefore);
         expect(await upgraded.countStockMovements(), stockBefore);
         expect(await upgraded.countOutboxOperations(), outboxBefore);
@@ -5053,7 +5053,7 @@ void _removeV14AuthorizationProofsForLegacyFixture(Database connection) {
 
 void _removeV17CorrectionConsumptionObjects(Database connection) {
   for (final definition
-      in shopConnectedSiteSchemaDefinitionsV24().entries.toList().reversed) {
+      in shopConnectedSiteSchemaDefinitionsV25().entries.toList().reversed) {
     final type = shopSchemaObjectTypeForDefinition(definition.value);
     connection.execute(
       'DROP ${type == 'table'
