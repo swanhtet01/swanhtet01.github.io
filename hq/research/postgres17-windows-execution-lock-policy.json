@@ -1,0 +1,56 @@
+{
+  "contract": "supermega.postgres17-windows-execution-lock-policy.v1",
+  "policyId": "postgres17-windows-immutable-staging-v1-pending",
+  "status": "pending",
+  "testOnly": false,
+  "method": "signed-broker-held-handles-v1",
+  "platform": {
+    "os": "windows",
+    "arch": "x64"
+  },
+  "broker": {
+    "fileName": null,
+    "sha256": null,
+    "signerCertificateSha256": null,
+    "protocolVersion": 1
+  },
+  "staging": {
+    "sameVolumeRequired": true,
+    "protectedDaclRequired": true,
+    "ownerSid": null,
+    "daclSha256": null,
+    "denyCurrentTokenMutation": true,
+    "singleDataStreamOnly": true
+  },
+  "handles": {
+    "shareMode": "FILE_SHARE_READ",
+    "openFlags": [
+      "FILE_FLAG_OPEN_REPARSE_POINT",
+      "FILE_FLAG_BACKUP_SEMANTICS"
+    ],
+    "nonInheritableByDefault": true,
+    "explicitChildHandleListOnly": true,
+    "temporaryInheritabilityUnderSpawnLock": true,
+    "clearAndCloseBeforeVerification": true
+  },
+  "job": {
+    "killOnClose": true,
+    "breakawayAllowed": false,
+    "silentBreakawayAllowed": false,
+    "createSuspended": true,
+    "assignBeforeResume": true,
+    "completionPortRequired": true
+  },
+  "approval": {
+    "status": "pending",
+    "reviewedBy": null,
+    "reviewedAt": null
+  },
+  "blockers": [
+    "No signed native broker binary, digest, signer certificate, or independently reviewed protocol implementation is retained.",
+    "No independently authenticated launcher supplies the expected requestor SID and running broker image path, volume, file ID, digest, and signer identity.",
+    "No protected staging-owner SID or exact DACL has been selected and independently reviewed on Windows.",
+    "No authorized Windows-x64 run proves retained reparse-safe handles, file IDs, volume identity, explicit handle inheritance, non-breakaway job containment, post-run reconciliation, cleanup, or crash recovery.",
+    "The PostgreSQL rehearsal remains blocked until this policy and the publisher/toolchain profiles are independently approved from real retained evidence."
+  ]
+}
