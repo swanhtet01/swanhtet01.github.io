@@ -6,6 +6,7 @@ import test from 'node:test'
 
 import {
   POSTGRES17_AUTHORITY_REQUEST_CONTRACT,
+  buildPostgres17AuthorityRequest,
   claimPostgres17AuthorityRequest,
   validatePostgres17AuthorityRequest,
   writePostgres17AuthorityRequest,
@@ -33,15 +34,26 @@ function fixture(root = '/verified/pgsql') {
       policySha256: '7'.repeat(64),
       sourceArtifactSha256: '8'.repeat(64),
       materializationEvidenceSha256: '9'.repeat(64),
+      materializationInventorySha256: 'd'.repeat(64),
       loadClosureEvidenceSha256: 'a'.repeat(64),
       executionBundleSha256: 'b'.repeat(64),
     },
     execution: {
+      archivePath: '/verified/postgresql-installer.exe',
       root,
       postgresBin: `${root}/bin`,
       openssl: `${root}/bin/openssl.exe`,
       python: `${root}/python/python.exe`,
       psycopg: `${root}/python/Lib/site-packages/psycopg/__init__.py`,
+    },
+    materialization: {
+      firstRoot: root,
+      secondRoot: `${root}-second`,
+    },
+    parent: {
+      pid: 1234,
+      executablePath: '/verified/node',
+      executableSha256: 'c'.repeat(64),
     },
   }
   return { request, expected: structuredClone(request) }
@@ -54,6 +66,22 @@ test('fresh request is a correlation record and never declares itself authoritat
   assert.match(result.digest, /^[0-9a-f]{64}$/)
 })
 
+test('builder emits a bounded non-authoritative request', () => {
+  const { request } = fixture()
+  const built = buildPostgres17AuthorityRequest({
+    source: request.source,
+    toolchain: request.toolchain,
+    execution: request.execution,
+    materialization: request.materialization,
+    parent: request.parent,
+    now: issued,
+    lifetimeMs: 60_000,
+    sessionId: request.sessionId,
+    nonce: request.nonce,
+  })
+  assert.deepEqual(built, request)
+})
+
 test('mismatched source, policy, profile, execution path, nonce, or session fails closed', () => {
   for (const mutate of [
     (value) => { value.source.tree = 'c'.repeat(40) },
@@ -64,6 +92,8 @@ test('mismatched source, policy, profile, execution path, nonce, or session fail
     (value) => { value.execution.python = '/substituted/python.exe' },
     (value) => { value.nonce = 'c'.repeat(64) },
     (value) => { value.sessionId = 'c'.repeat(32) },
+    (value) => { value.parent.pid += 1 },
+    (value) => { value.materialization.secondRoot = '/substituted/second' },
   ]) {
     const { request, expected } = fixture()
     mutate(request)
@@ -119,6 +149,7 @@ test('exclusive request is atomically claimed once and replay is rejected', asyn
     const path = join(directory, 'request.json')
     const { request, expected } = fixture(directory)
     request.execution = {
+      archivePath: join(directory, 'postgresql-installer.exe'),
       root: directory,
       postgresBin: join(directory, 'bin'),
       openssl: join(directory, 'bin', 'openssl.exe'),
@@ -126,6 +157,11 @@ test('exclusive request is atomically claimed once and replay is rejected', asyn
       psycopg: join(directory, 'python', 'psycopg.py'),
     }
     expected.execution = structuredClone(request.execution)
+    request.materialization = {
+      firstRoot: directory,
+      secondRoot: `${directory}-second`,
+    }
+    expected.materialization = structuredClone(request.materialization)
     await mkdir(join(directory, 'bin'))
     await mkdir(join(directory, 'python'))
     await writePostgres17AuthorityRequest(path, request)
@@ -165,6 +201,7 @@ test('a symlink cannot substitute for the exclusive request file', async () => {
     const link = join(directory, 'request.json')
     const { request, expected } = fixture(directory)
     request.execution = {
+      archivePath: join(directory, 'postgresql-installer.exe'),
       root: directory,
       postgresBin: join(directory, 'bin'),
       openssl: join(directory, 'bin', 'openssl.exe'),
@@ -172,6 +209,11 @@ test('a symlink cannot substitute for the exclusive request file', async () => {
       psycopg: join(directory, 'python', 'psycopg.py'),
     }
     expected.execution = structuredClone(request.execution)
+    request.materialization = {
+      firstRoot: directory,
+      secondRoot: `${directory}-second`,
+    }
+    expected.materialization = structuredClone(request.materialization)
     await writeFile(real, `${JSON.stringify(request)}\n`, { mode: 0o600 })
     await symlink(real, link)
     await assert.rejects(

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { lstat, open, readFile, realpath, rename, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 
@@ -50,7 +50,8 @@ function exactToolchain(toolchain) {
   return exactKeys(toolchain, [
     'profileId', 'manifestSha256', 'policyId', 'policySha256',
     'sourceArtifactSha256', 'materializationEvidenceSha256',
-    'loadClosureEvidenceSha256', 'executionBundleSha256',
+    'materializationInventorySha256', 'loadClosureEvidenceSha256',
+    'executionBundleSha256',
   ])
     && typeof toolchain.profileId === 'string' && toolchain.profileId.length > 0
     && typeof toolchain.policyId === 'string' && toolchain.policyId.length > 0
@@ -59,10 +60,26 @@ function exactToolchain(toolchain) {
 }
 
 function exactExecution(execution) {
-  if (!exactKeys(execution, ['root', 'postgresBin', 'openssl', 'python', 'psycopg'])
+  if (!exactKeys(execution, [
+    'archivePath', 'root', 'postgresBin', 'openssl', 'python', 'psycopg',
+  ]) || !canonicalAbsolutePath(execution.archivePath)
     || !canonicalAbsolutePath(execution.root)) return false
   return ['postgresBin', 'openssl', 'python', 'psycopg']
     .every((key) => childPath(execution.root, execution[key]))
+}
+
+function exactMaterialization(materialization) {
+  return exactKeys(materialization, ['firstRoot', 'secondRoot'])
+    && canonicalAbsolutePath(materialization.firstRoot)
+    && canonicalAbsolutePath(materialization.secondRoot)
+    && materialization.firstRoot !== materialization.secondRoot
+}
+
+function exactParent(parent) {
+  return exactKeys(parent, ['pid', 'executablePath', 'executableSha256'])
+    && Number.isSafeInteger(parent.pid) && parent.pid > 0
+    && canonicalAbsolutePath(parent.executablePath)
+    && SHA256.test(parent.executableSha256 || '')
 }
 
 function canonical(value) {
@@ -75,10 +92,44 @@ export function authorityRequestDigest(request) {
   return createHash('sha256').update(JSON.stringify(canonical(request))).digest('hex')
 }
 
+export function buildPostgres17AuthorityRequest({
+  source,
+  toolchain,
+  execution,
+  materialization,
+  parent,
+  now = Date.now(),
+  lifetimeMs = 60_000,
+  sessionId = randomBytes(16).toString('hex'),
+  nonce = randomBytes(32).toString('hex'),
+}) {
+  const request = {
+    contract: POSTGRES17_AUTHORITY_REQUEST_CONTRACT,
+    authoritative: false,
+    sessionId,
+    nonce,
+    issuedAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + lifetimeMs).toISOString(),
+    source,
+    toolchain,
+    materialization,
+    execution,
+    parent,
+  }
+  validatePostgres17AuthorityRequest(request, request, { now })
+  if (execution.root !== materialization.firstRoot) {
+    fail('database_rehearsal_authority_request_mismatch')
+  }
+  if (Buffer.byteLength(JSON.stringify(request), 'utf8') > MAX_REQUEST_BYTES) {
+    fail('database_rehearsal_authority_request_invalid')
+  }
+  return request
+}
+
 export function validatePostgres17AuthorityRequest(request, expected, options = {}) {
   if (!exactKeys(request, [
     'contract', 'authoritative', 'sessionId', 'nonce', 'issuedAt', 'expiresAt',
-    'source', 'toolchain', 'execution',
+    'source', 'toolchain', 'materialization', 'execution', 'parent',
   ])
     || request.contract !== POSTGRES17_AUTHORITY_REQUEST_CONTRACT
     || request.authoritative !== false
@@ -86,7 +137,10 @@ export function validatePostgres17AuthorityRequest(request, expected, options = 
     || !NONCE.test(request.nonce || '')
     || !exactSource(request.source)
     || !exactToolchain(request.toolchain)
-    || !exactExecution(request.execution)) {
+    || !exactMaterialization(request.materialization)
+    || !exactExecution(request.execution)
+    || !exactParent(request.parent)
+    || request.execution.root !== request.materialization.firstRoot) {
     fail('database_rehearsal_authority_request_invalid')
   }
   const issuedAt = Date.parse(request.issuedAt)
@@ -104,7 +158,10 @@ export function validatePostgres17AuthorityRequest(request, expected, options = 
     || request.expiresAt !== expected.expiresAt
     || JSON.stringify(canonical(request.source)) !== JSON.stringify(canonical(expected.source))
     || JSON.stringify(canonical(request.toolchain)) !== JSON.stringify(canonical(expected.toolchain))
-    || JSON.stringify(canonical(request.execution)) !== JSON.stringify(canonical(expected.execution))) {
+    || JSON.stringify(canonical(request.materialization))
+      !== JSON.stringify(canonical(expected.materialization))
+    || JSON.stringify(canonical(request.execution)) !== JSON.stringify(canonical(expected.execution))
+    || JSON.stringify(canonical(request.parent)) !== JSON.stringify(canonical(expected.parent))) {
     fail('database_rehearsal_authority_request_mismatch')
   }
   return {

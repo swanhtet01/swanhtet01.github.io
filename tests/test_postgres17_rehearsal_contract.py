@@ -53,6 +53,28 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             version_probe.assert_not_called()
             binary_probe.assert_not_called()
 
+        unlocked = module.AuthorityGrant(
+            authoritative=False,
+            independently_verified=True,
+            execution_locked=False,
+            session_id="d" * 32,
+            nonce="e" * 64,
+            postgres_bin=Path("/verified/pgsql/bin"),
+            openssl=Path("/verified/pgsql/bin/openssl.exe"),
+            python=Path("/verified/python.exe"),
+            psycopg=Path("/verified/psycopg/__init__.py"),
+            source_artifact_sha256="f" * 64,
+            execution_bundle_sha256="1" * 64,
+            request_digest="2" * 64,
+        )
+        with patch.object(module.os, "name", "nt"), \
+                patch.object(module, "_preflight") as binary_preflight:
+            report = module._release_preflight(
+                unlocked.postgres_bin, unlocked.openssl, unlocked,
+            )
+            self.assertEqual(report["error"], "postgres17_toolchain_provenance_unapproved")
+            binary_preflight.assert_not_called()
+
     def test_self_authored_authority_environment_cannot_enable_release(self) -> None:
         module = _load_rehearsal()
         with patch.dict(module.os.environ, {
@@ -501,7 +523,25 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as parent:
             evidence = Path(parent) / "rehearsal.json"
+            postgres_bin = Path(parent) / "pgsql" / "bin"
+            openssl = postgres_bin / "openssl.exe"
+            authority = module.AuthorityGrant(
+                authoritative=True,
+                independently_verified=True,
+                execution_locked=True,
+                session_id="d" * 32,
+                nonce="e" * 64,
+                postgres_bin=postgres_bin,
+                openssl=openssl,
+                python=Path(module.sys.executable),
+                psycopg=Path(parent) / "psycopg" / "__init__.py",
+                source_artifact_sha256="f" * 64,
+                execution_bundle_sha256="1" * 64,
+                request_digest="2" * 64,
+            )
             with patch.object(module, "_source_identity", return_value=source), \
+                    patch.object(module, "read_inherited_request", return_value={}), \
+                    patch.object(module, "verify_inherited_authority", return_value=authority), \
                     patch.object(module, "_release_preflight", return_value={"ok": True}), \
                     patch.object(
                         module.tempfile,

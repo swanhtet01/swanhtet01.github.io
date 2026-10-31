@@ -85,10 +85,12 @@ const implementationPaths = [...new Set([
   'tools/postgres17_materialization.test.mjs',
   'tools/postgres17_authority_session.mjs',
   'tools/postgres17_authority_session.test.mjs',
+  'tools/postgres17_python_authority.py',
   'tools/inspect_windows_authenticode.ps1',
   'hq/research/postgres17-toolchain-profile.json',
   'hq/research/postgres17-publisher-policy.json',
   'tests/test_postgres17_rehearsal_contract.py',
+  'tests/test_postgres17_python_authority.py',
 ])].sort()
 
 export const catalogCheckNames = [
@@ -193,6 +195,7 @@ function fail(code) {
 const sha256 = (value) => `sha256:${createHash('sha256').update(value).digest('hex')}`
 const validDigest = (value) => /^sha256:[0-9a-f]{64}$/.test(value || '')
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right)
+const compareUtf8 = (left, right) => Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
 
 function sourceControlledToolchainAuthority() {
   const repositoryRoot = resolve(import.meta.dirname, '..')
@@ -205,7 +208,8 @@ function sourceControlledToolchainAuthority() {
     }
     return readFileSync(absolute)
   }
-  let profile, policy, observation, observationBytes, closureBytes
+  let profile, policy, observation, observationBytes, closureBytes, materializationBytes,
+    materialization
   const profileBytes = readFileSync(resolve(researchRoot, 'postgres17-toolchain-profile.json'))
   const policyBytes = readFileSync(resolve(researchRoot, 'postgres17-publisher-policy.json'))
   try {
@@ -213,14 +217,18 @@ function sourceControlledToolchainAuthority() {
     policy = JSON.parse(policyBytes.toString('utf8'))
     observationBytes = readBound(profile.sourceAuthentication.evidencePath)
     closureBytes = readBound(profile.loadClosure.evidencePath)
+    materializationBytes = readBound(profile.materialization.evidencePath)
     observation = JSON.parse(observationBytes.toString('utf8'))
+    materialization = JSON.parse(materializationBytes.toString('utf8'))
   } catch {
     fail('database_rehearsal_evidence_toolchain_invalid')
   }
   if (createHash('sha256').update(observationBytes).digest('hex')
       !== profile.sourceAuthentication?.evidenceSha256
     || createHash('sha256').update(closureBytes).digest('hex')
-      !== profile.loadClosure?.evidenceSha256) {
+      !== profile.loadClosure?.evidenceSha256
+    || createHash('sha256').update(materializationBytes).digest('hex')
+      !== profile.materialization?.evidenceSha256) {
     fail('database_rehearsal_evidence_toolchain_invalid')
   }
   const executionBundleSha256 = createHash('sha256').update(JSON.stringify(
@@ -245,6 +253,13 @@ function sourceControlledToolchainAuthority() {
     timestampCertificateSha256: observation.timestampCertificateSha256,
     sourceAuthenticationEvidenceSha256: profile.sourceAuthentication?.evidenceSha256,
     loadClosureEvidenceSha256: profile.loadClosure?.evidenceSha256,
+    materializationEvidenceSha256: profile.materialization?.evidenceSha256,
+    materializationInventorySha256: createHash('sha256').update(JSON.stringify({
+      files: [...(materialization.files || [])]
+        .map(({ relativePath, bytes, sha256 }) => ({ relativePath, bytes, sha256 }))
+        .sort((left, right) => compareUtf8(left.relativePath, right.relativePath)),
+      directories: [...(materialization.directories || [])].sort(compareUtf8),
+    })).digest('hex'),
     executionBundleSha256,
   }
 }
@@ -275,6 +290,29 @@ function mappedChecks(rawChecks) {
   if (JSON.stringify(names) !== JSON.stringify([...rawCheckNames].sort())) fail('database_rehearsal_check_set_drifted')
   if (rawCheckNames.some((name) => rawChecks[name] !== true)) fail('database_rehearsal_check_failed')
   return Object.fromEntries(rawCheckNames.map((name) => [camelCheckName(name), true]))
+}
+
+function requirePythonAuthority(authority, toolchain, code) {
+  const keys = [
+    'contract', 'authoritative', 'independently_verified', 'execution_locked',
+    'session_id', 'request_digest', 'source_artifact_sha256',
+    'execution_bundle_sha256', 'verification_digest',
+  ]
+  if (!authority || !same(Object.keys(authority).sort(), keys.sort())
+    || authority.contract !== 'supermega.postgres17-python-authority.v1'
+    || authority.authoritative !== true
+    || authority.independently_verified !== true
+    || authority.execution_locked !== true
+    || !/^[0-9a-f]{32}$/.test(authority.session_id || '')
+    || !/^[0-9a-f]{64}$/.test(authority.request_digest || '')
+    || !/^[0-9a-f]{64}$/.test(authority.verification_digest || '')
+    || authority.source_artifact_sha256 !== toolchain.sourceArtifactSha256
+    || authority.execution_bundle_sha256 !== toolchain.executionBundleSha256) fail(code)
+  const { verification_digest: _ignored, ...body } = authority
+  if (createHash('sha256').update(JSON.stringify(Object.fromEntries(
+    Object.entries(body).sort(([left], [right]) => compareUtf8(left, right)),
+  ))).digest('hex') !== authority.verification_digest) fail(code)
+  return structuredClone(authority)
 }
 
 export function buildSanitizedProof(raw, context) {
@@ -313,11 +351,17 @@ export function buildSanitizedProof(raw, context) {
     || ![toolchain.manifestSha256, toolchain.policySha256, toolchain.sourceArtifactSha256,
       toolchain.signerCertificateSha256, toolchain.timestampCertificateSha256,
       toolchain.sourceAuthenticationEvidenceSha256, toolchain.loadClosureEvidenceSha256,
+      toolchain.materializationEvidenceSha256, toolchain.materializationInventorySha256,
       toolchain.executionBundleSha256]
       .every((digest) => /^[0-9a-f]{64}$/.test(digest || ''))
     || toolchain.sourceArtifactSha256 !== context.archive.sha256) {
     fail('database_rehearsal_toolchain_authority_invalid')
   }
+  const pythonAuthority = requirePythonAuthority(
+    raw.toolchain_authority,
+    toolchain,
+    'database_rehearsal_python_authority_invalid',
+  )
 
   const proof = {
     schemaVersion: DATABASE_REHEARSAL_EVIDENCE_SCHEMA,
@@ -357,6 +401,7 @@ export function buildSanitizedProof(raw, context) {
       loopbackOnly: raw.engine.loopback_only,
       startMode: raw.engine.start_mode,
       toolchain: structuredClone(toolchain),
+      pythonAuthority,
     },
     migration: {
       count: raw.migrations.count,
@@ -432,11 +477,17 @@ export function validateSanitizedProof(proof, currentImplementation) {
     || ![toolchain.manifestSha256, toolchain.policySha256, toolchain.sourceArtifactSha256,
       toolchain.signerCertificateSha256, toolchain.timestampCertificateSha256,
       toolchain.sourceAuthenticationEvidenceSha256, toolchain.loadClosureEvidenceSha256,
+      toolchain.materializationEvidenceSha256, toolchain.materializationInventorySha256,
       toolchain.executionBundleSha256]
       .every((digest) => /^[0-9a-f]{64}$/.test(digest || ''))
     || toolchain.sourceArtifactSha256 !== proof.engine.observedArchiveSha256) {
     fail('database_rehearsal_evidence_toolchain_invalid')
   }
+  requirePythonAuthority(
+    proof.engine?.pythonAuthority,
+    toolchain,
+    'database_rehearsal_evidence_python_authority_invalid',
+  )
   const expectedToolchain = currentImplementation.expectedToolchain
     ?? sourceControlledToolchainAuthority()
   if (!same(toolchain, expectedToolchain)) fail('database_rehearsal_evidence_toolchain_stale')

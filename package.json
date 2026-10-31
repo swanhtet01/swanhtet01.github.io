@@ -707,7 +707,7 @@
     "database:postgres17:rehearse": "node tools/run_postgres17_rehearsal.mjs",
     "database:postgres17:record": "node tools/record_postgres17_rehearsal.mjs",
     "database:postgres17:record:verify": "node tools/record_postgres17_rehearsal.mjs --verify",
-    "database:postgres17:record:self-test": "node --test tools/postgres17_authority_session.test.mjs tools/postgres17_materialization.test.mjs tools/postgres17_toolchain_profile.test.mjs tools/record_postgres17_rehearsal.test.mjs",
+    "database:postgres17:record:self-test": "node --test tools/postgres17_authority_session.test.mjs tools/postgres17_materialization.test.mjs tools/postgres17_toolchain_profile.test.mjs tools/record_postgres17_rehearsal.test.mjs && python -m unittest tests.test_postgres17_python_authority",
     "estate:technical:write": "node tools/manage_technical_estate.mjs",
     "estate:technical:verify": "node tools/manage_technical_estate.mjs --verify",
     "readiness:managed:write": "node tools/manage_managed_pilot_readiness.mjs",

@@ -32,6 +32,10 @@ function exactFile(file) {
     && SHA256.test(file.sha256 || '')
 }
 
+function compareUtf8(left, right) {
+  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
+}
+
 function exactInventory(files, directories) {
   if (!Array.isArray(files) || !files.every(exactFile)
     || !Array.isArray(directories) || !directories.every(canonicalRelativePath)) {
@@ -44,8 +48,8 @@ function exactInventory(files, directories) {
   }
   return {
     files: files.map(({ relativePath, bytes, sha256 }) => ({ relativePath, bytes, sha256 }))
-      .sort((left, right) => left.relativePath.localeCompare(right.relativePath)),
-    directories: [...directories].sort(),
+      .sort((left, right) => compareUtf8(left.relativePath, right.relativePath)),
+    directories: [...directories].sort(compareUtf8),
   }
 }
 

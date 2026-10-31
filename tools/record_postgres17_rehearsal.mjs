@@ -9,9 +9,10 @@ import { pathToFileURL } from 'node:url'
 const root = resolve(import.meta.dirname, '..')
 const outputPath = resolve(root, 'hq', 'research', 'postgres17-rehearsal.json')
 const toolchainProfilePath = resolve(root, 'hq', 'research', 'postgres17-toolchain-profile.json')
-const rehearsalRunner = resolve(root, 'tools', 'run_postgres17_rehearsal.mjs')
+const rehearsalRunner = resolve(root, 'tools', 'rehearse_supermega_postgres17.py')
 
 import { verifyPostgres17ToolchainProfile } from './postgres17_toolchain_profile.mjs'
+import { buildPostgres17AuthorityRequest } from './postgres17_authority_session.mjs'
 
 import {
   DATABASE_REHEARSAL_EVIDENCE_SCHEMA, implementationPaths, fail, sha256, same,
@@ -68,6 +69,22 @@ export async function resolveToolchainArchivePath(profilePath = toolchainProfile
   return resolve(homedir(), '.cache', 'supermega-postgresql', fileName)
 }
 
+export async function resolveSecondMaterializationRoot(
+  archivePath,
+  profilePath = toolchainProfilePath,
+) {
+  let profile
+  try { profile = JSON.parse(await readFile(profilePath, 'utf8')) } catch {
+    fail('database_rehearsal_toolchain_profile_invalid')
+  }
+  const rootName = profile?.extractedRootName
+  if (typeof rootName !== 'string' || rootName.length === 0
+    || rootName !== basename(rootName)) {
+    fail('database_rehearsal_toolchain_profile_root_mismatch')
+  }
+  return resolve(dirname(archivePath), `${rootName}.materialization-pass-2`)
+}
+
 export function toolchainAuthority(verified) {
   const publisher = verified?.publisherAuthentication
   const authority = {
@@ -81,6 +98,8 @@ export function toolchainAuthority(verified) {
     timestampCertificateSha256: publisher?.timestampCertificateSha256,
     sourceAuthenticationEvidenceSha256: verified?.sourceAuthenticationEvidenceSha256,
     loadClosureEvidenceSha256: verified?.loadClosureEvidenceSha256,
+    materializationEvidenceSha256: verified?.materializationEvidenceSha256,
+    materializationInventorySha256: verified?.materializationInventorySha256,
     executionBundleSha256: verified?.executionBundleSha256,
   }
   if (typeof authority.profileId !== 'string' || authority.profileId.length === 0
@@ -111,7 +130,7 @@ async function requireAbsent(path) {
 }
 
 export function recorderOutcomeReconciled(result, raw) {
-  return !result?.error && !result?.signal && Number.isInteger(result?.status) && result.status >= 0
+  return !result?.error && !result?.signal && result?.status === 0
     && raw?.contract === 'supermega_postgres17_rehearsal_v2' && raw.cleanup_complete === true
     && raw.production_mutated === false && raw.supabase_mutated === false
     && raw.vercel_mutated === false && raw.secret_values_exposed === false
@@ -122,20 +141,70 @@ export function toolchainChildEnvironment(verifiedToolchain, baseEnvironment = {
   if (!execution?.postgresBin || !execution?.openssl || !execution?.python || !execution?.psycopg) {
     fail('database_rehearsal_toolchain_execution_binding_missing')
   }
-  const environment = { ...baseEnvironment }
-  // Environment is transport, never authority. Strip caller-authored request
-  // selectors before inserting only paths returned by the toolchain verifier.
-  // The Python release gate remains disabled until it can independently
-  // revalidate a one-time request and the complete materialized tree.
-  delete environment.SUPERMEGA_POSTGRES17_AUTHORITY_REQUEST
-  delete environment.SUPERMEGA_POSTGRES17_AUTHORITY_SESSION
-  return {
-    ...environment,
-    SUPERMEGA_POSTGRES17_BIN: execution.postgresBin,
-    SUPERMEGA_OPENSSL: execution.openssl,
-    SUPERMEGA_PYTHON: execution.python,
-    SUPERMEGA_PSYCOPG_FILE: execution.psycopg,
+  // The inherited environment supplies operating-system plumbing only. Tool,
+  // Python, PostgreSQL and database selectors are deliberately absent; Python
+  // independently derives and verifies them from the canonical profile.
+  const allowed = {}
+  for (const key of [
+    'SystemRoot', 'WINDIR', 'ComSpec', 'TEMP', 'TMP',
+    'PROCESSOR_ARCHITECTURE', 'NUMBER_OF_PROCESSORS',
+  ]) {
+    if (typeof baseEnvironment[key] === 'string' && baseEnvironment[key]) {
+      allowed[key] = baseEnvironment[key]
+    }
   }
+  return {
+    ...allowed,
+    PYTHONDONTWRITEBYTECODE: '1',
+    PYTHONNOUSERSITE: '1',
+  }
+}
+
+export async function buildRecorderAuthorityRequest({
+  verifiedToolchain,
+  source,
+  implementation,
+  now = Date.now(),
+}) {
+  const publisher = verifiedToolchain?.publisherAuthentication
+  const roots = verifiedToolchain?.execution?.materializationRoots
+  if (!Array.isArray(roots) || roots.length !== 2 || !publisher) {
+    fail('database_rehearsal_authority_request_unavailable')
+  }
+  const parent = await archiveEvidence(process.execPath)
+  return buildPostgres17AuthorityRequest({
+    source: {
+      head: source.implementationCommit,
+      tree: source.implementationTree,
+      implementationDigest: implementation.digest,
+    },
+    toolchain: {
+      profileId: verifiedToolchain.profileId,
+      manifestSha256: verifiedToolchain.manifestSha256,
+      policyId: publisher.policyId,
+      policySha256: publisher.policySha256,
+      sourceArtifactSha256: publisher.sourceArtifactSha256,
+      materializationEvidenceSha256: verifiedToolchain.materializationEvidenceSha256,
+      materializationInventorySha256: verifiedToolchain.materializationInventorySha256,
+      loadClosureEvidenceSha256: verifiedToolchain.loadClosureEvidenceSha256,
+      executionBundleSha256: verifiedToolchain.executionBundleSha256,
+    },
+    materialization: { firstRoot: roots[0], secondRoot: roots[1] },
+    execution: {
+      archivePath: verifiedToolchain.archivePath,
+      root: verifiedToolchain.execution.root,
+      postgresBin: verifiedToolchain.execution.postgresBin,
+      openssl: verifiedToolchain.execution.openssl,
+      python: verifiedToolchain.execution.python,
+      psycopg: verifiedToolchain.execution.psycopg,
+    },
+    parent: {
+      pid: process.pid,
+      executablePath: process.execPath,
+      executableSha256: parent.sha256,
+    },
+    now,
+  })
 }
 
 export function recorderChildFailureCode(result) {
@@ -246,6 +315,8 @@ export async function record(destination, runtime = {}) {
     spawnSync,
     tmpdir,
     writeRecorderFailureDiagnostic,
+    writeFile,
+    buildRecorderAuthorityRequest,
     revalidateToolchain: async () => fail('database_rehearsal_toolchain_revalidation_missing'),
     ...runtime,
   }
@@ -267,17 +338,28 @@ export async function record(destination, runtime = {}) {
     // into a false database failure.
     const verifiedToolchain = await dependencies.revalidateToolchain()
     const authorityBefore = toolchainAuthority(verifiedToolchain)
+    const authorityRequest = await dependencies.buildRecorderAuthorityRequest({
+      verifiedToolchain, source, implementation,
+    })
     lease.markLaunched()
-    const childEnvironment = verifiedToolchain?.execution
-      ? toolchainChildEnvironment(verifiedToolchain, process.env)
-      : process.env
-    const result = dependencies.spawnSync(process.execPath, [rehearsalRunner, '--expected-head', source.implementationCommit, '--evidence-file', rawPath], { cwd: root, env: childEnvironment, encoding: 'utf8', timeout: 300_000, windowsHide: true })
+    const childEnvironment = toolchainChildEnvironment(verifiedToolchain, process.env)
+    const result = dependencies.spawnSync(
+      verifiedToolchain.execution.python,
+      ['-I', '-B', rehearsalRunner, '--expected-head', source.implementationCommit],
+      {
+        cwd: root,
+        env: childEnvironment,
+        input: `${JSON.stringify(authorityRequest)}\n`,
+        encoding: 'utf8',
+        timeout: 300_000,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+      },
+    )
     let raw, rawParsed = false, rawStatus = 'missing'
-    try {
-      const rawText = await dependencies.readFile(rawPath, 'utf8')
-      try { raw = JSON.parse(rawText); rawParsed = true } catch { rawStatus = 'malformed' }
-    } catch (error) {
-      rawStatus = error?.code === 'ENOENT' ? 'missing' : 'unreadable'
+    if (typeof result?.stdout === 'string' && result.stdout.trim()) {
+      try { raw = JSON.parse(result.stdout.trim()); rawParsed = true }
+      catch { rawStatus = 'malformed' }
     }
     if (rawParsed && !recorderOutcomeReconciled(result, raw)) rawStatus = 'parsed_unreconciled'
     if (!rawParsed || !lease.reconcile(result, raw)) {
@@ -285,7 +367,14 @@ export async function record(destination, runtime = {}) {
       catch (error) { fail(recorderDiagnosticPersistenceCode(error)) }
       fail(recorderChildFailureCode(result) || 'database_rehearsal_termination_unreconciled')
     }
-    if (result.status !== 0) fail('database_rehearsal_execution_failed')
+    if (result.status !== 0) {
+      fail(recorderChildFailureCode(result) || 'database_rehearsal_execution_failed')
+    }
+    await dependencies.writeFile(
+      rawPath,
+      `${JSON.stringify(raw, null, 2)}\n`,
+      { encoding: 'utf8', flag: 'wx' },
+    )
     const verifiedAfter = await dependencies.revalidateToolchain()
     const authorityAfter = toolchainAuthority(verifiedAfter)
     if (!same(authorityAfter, authorityBefore)) fail('database_rehearsal_toolchain_changed')
@@ -333,9 +422,11 @@ async function main() {
   let revalidateToolchain
   if (command.length === 0 || (command.length === 2 && command[0] === '--output' && command[1])) {
     const archivePath = await resolveToolchainArchivePath()
+    const secondExtractedRoot = await resolveSecondMaterializationRoot(archivePath)
     revalidateToolchain = () => verifyPostgres17ToolchainProfile({
       manifestPath: toolchainProfilePath,
       archivePath,
+      secondExtractedRoot,
       requireHostPlatform: true,
     })
     await revalidateToolchain()

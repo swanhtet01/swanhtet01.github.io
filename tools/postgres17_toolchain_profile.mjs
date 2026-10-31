@@ -505,6 +505,7 @@ export async function verifyPostgres17ToolchainProfile({
     },
     dirname(manifestPath),
   )
+  let materializationInventory = null
   if (profile.testOnly === false) {
     const closurePath = resolve(dirname(manifestPath), profile.loadClosure.evidencePath)
     await verifyRegularFile(
@@ -536,7 +537,7 @@ export async function verifyPostgres17ToolchainProfile({
     if (typeof secondExtractedRoot !== 'string') {
       fail('database_rehearsal_materialization_second_pass_missing')
     }
-    await verifyTwoPassMaterializationRoots({
+    materializationInventory = await verifyTwoPassMaterializationRoots({
       profile,
       evidence: materializationEvidence,
       firstRoot: extractedRoot,
@@ -597,6 +598,9 @@ export async function verifyPostgres17ToolchainProfile({
     materializationEvidenceSha256: profile.testOnly === false
       ? profile.materialization.evidenceSha256
       : profile.sourceAuthentication.evidenceSha256,
+    materializationInventorySha256: materializationInventory === null
+      ? createHash('sha256').update('synthetic-materialization-not-authoritative').digest('hex')
+      : createHash('sha256').update(JSON.stringify(materializationInventory)).digest('hex'),
     executionBundleSha256: createHash('sha256').update(JSON.stringify(
       [...profile.artifacts, ...profile.dependencies].map((binding) => ({
         role: binding.role,
@@ -611,6 +615,9 @@ export async function verifyPostgres17ToolchainProfile({
     publisherAuthentication,
     execution: {
       root: expectedRoot,
+      materializationRoots: profile.testOnly === false
+        ? [expectedRoot, resolve(secondExtractedRoot)]
+        : [expectedRoot],
       postgresBin,
       openssl: execution.openssl,
       python: execution.python,
