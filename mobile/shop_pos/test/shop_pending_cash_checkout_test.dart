@@ -12,7 +12,7 @@ import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 
 void main() {
-  test('empty v1 store migrates through strict schemas to v25', () async {
+  test('empty v1 store migrates through strict schemas to v26', () async {
     final root = await Directory.systemTemp.createTemp('shop-cash-v1-');
     final file = File('${root.path}/shop.sqlite');
     final raw = sqlite3.open(file.path);
@@ -56,7 +56,7 @@ void main() {
     }
   });
 
-  test('v21 cash sale migrates to v25 with unknown legacy tender', () async {
+  test('v21 cash sale migrates to v26 with unknown legacy tender', () async {
     final root = await Directory.systemTemp.createTemp('shop-cash-v21-');
     final file = File('${root.path}/shop.sqlite');
     var database = ShopDatabase(NativeDatabase(file));
@@ -89,7 +89,7 @@ void main() {
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
       final receipt = (await database.readRecentSales()).single;
-      expect(database.schemaVersion, 25);
+      expect(database.schemaVersion, 26);
       expect(receipt.cashTenderedMmk, isNull);
       expect(receipt.cashChangeMmk, isNull);
       expect((await database.readActiveProducts()).single.onHand, 1);
@@ -1242,7 +1242,7 @@ void main() {
 
 Future<void> _dropConnectedSiteSchema(ShopDatabase database) async {
   for (final entry
-      in shopConnectedSiteSchemaDefinitionsV25().entries.toList().reversed) {
+      in shopConnectedSiteSchemaDefinitionsV26().entries.toList().reversed) {
     final type = shopSchemaObjectTypeForDefinition(entry.value);
     await database.customStatement(
       'DROP ${type == 'table'

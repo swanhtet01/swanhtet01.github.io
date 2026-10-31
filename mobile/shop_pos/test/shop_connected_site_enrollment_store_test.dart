@@ -92,12 +92,21 @@ void main() {
     },
   );
 
-  test('v24 migrates to empty fail-closed v25 authority tables', () async {
+  test('v24 migrates through v25 authority into fail-closed v26', () async {
     final root = await Directory.systemTemp.createTemp('shop-enrollment-v24-');
     final file = File('${root.path}/shop.sqlite');
     var database = ShopDatabase(NativeDatabase(file));
     try {
       await database.verifyReadyForUse();
+      for (final entry
+          in shopConnectedCloudDispositionSchemaDefinitionsV26().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(entry.value);
+        await database.customStatement(
+          'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
+        );
+      }
       for (final entry
           in shopConnectedEnrollmentSchemaDefinitionsV25().entries
               .toList()
@@ -112,7 +121,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 25);
+      expect(database.schemaVersion, 26);
       for (final table in const [
         'shop_site_pairing_nonces',
         'shop_site_pending_enrollments',
@@ -124,6 +133,95 @@ void main() {
             .getSingle();
         expect(row.read<int>('total'), 0, reason: table);
       }
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('materialized v25 authority survives direct v26 migration', () async {
+    final root = await Directory.systemTemp.createTemp('shop-enrollment-v25-');
+    final file = File('${root.path}/shop.sqlite');
+    final keyPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.generate(32, (index) => 200 - index),
+    );
+    final publicKey = await keyPair.extractPublicKey();
+    final publicKeyEncoded = base64Url
+        .encode(publicKey.bytes)
+        .replaceAll('=', '');
+    final fingerprint = sha256.convert(publicKey.bytes).toString();
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      final store = ShopConnectedSiteEnrollmentStore(
+        database: database,
+        nowMillis: () => _now,
+      );
+      await store.registerPairingNonce(
+        tenantId: _tenant,
+        siteId: _site,
+        coordinatorDeviceId: _coordinator,
+        nonce: _nonce,
+        issuedAtMillis: _now - 1000,
+        expiresAtMillis: _now + 60000,
+      );
+      final claim = PairingNonceClaim(
+        workspaceId: _tenant,
+        siteId: _site,
+        coordinatorDeviceId: _coordinator,
+        nonce: _nonce,
+        clientFingerprint: fingerprint,
+        clientPublicKey: publicKeyEncoded,
+        keyAlgorithm: 'ed25519',
+        observedAt: DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+        expiresAt: DateTime.fromMillisecondsSinceEpoch(
+          _now + 60000,
+          isUtc: true,
+        ),
+      );
+      expect(await store.consumeAndCreatePending(claim), isTrue);
+      await store.importOwnerEvidence(
+        _evidence(
+          action: ShopOwnerEnrollmentAction.approve,
+          fingerprint: fingerprint,
+          observedAtMillis: _now + 100,
+          sessionGeneration: 1,
+        ),
+        verifier: const _EvidenceVerifier(true),
+      );
+      for (final entry
+          in shopConnectedCloudDispositionSchemaDefinitionsV26().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(entry.value);
+        await database.customStatement(
+          'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
+        );
+      }
+      await database.customStatement('PRAGMA user_version = 25');
+      await database.close();
+
+      database = ShopDatabase(NativeDatabase(file));
+      await database.verifyReadyForUse();
+      final migrated = ShopConnectedSiteEnrollmentStore(
+        database: database,
+        nowMillis: () => _now + 200,
+      );
+      expect(
+        await migrated.stateFor(
+          workspaceId: _tenant,
+          siteId: _site,
+          coordinatorDeviceId: _coordinator,
+          deviceId: _device,
+          clientFingerprint: fingerprint,
+        ),
+        CoordinatorDeviceEnrollmentState.approved,
+      );
+      final dispositions = await database
+          .customSelect(
+            'SELECT COUNT(*) AS total FROM shop_site_cloud_dispositions',
+          )
+          .getSingle();
+      expect(dispositions.read<int>('total'), 0);
     } finally {
       await database.close();
       await root.delete(recursive: true);

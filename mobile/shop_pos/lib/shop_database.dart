@@ -2113,6 +2113,156 @@ Map<String, String> shopConnectedSiteSchemaDefinitionsV25() => {
   ...shopConnectedEnrollmentSchemaDefinitionsV25(),
 };
 
+const shopSiteCloudDispositionsV26Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_dispositions (
+    event_row_id INTEGER PRIMARY KEY NOT NULL REFERENCES shop_site_events(event_row_id),
+    disposition_kind TEXT NOT NULL CHECK (disposition_kind IN ('ack', 'conflict')),
+    disposition_json TEXT NOT NULL CHECK (json_valid(disposition_json)),
+    disposition_digest TEXT NOT NULL CHECK (length(disposition_digest) = 64),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+Map<String, String> shopConnectedCloudDispositionSchemaDefinitionsV26() => {
+  'shop_site_cloud_dispositions': shopSiteCloudDispositionsV26Sql,
+  'shop_site_cloud_dispositions_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_cloud_dispositions',
+    operation: 'update',
+    message: 'Connected cloud disposition evidence is immutable',
+  ),
+  'shop_site_cloud_dispositions_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_cloud_dispositions',
+    operation: 'delete',
+    message: 'Connected cloud disposition evidence is immutable',
+  ),
+  'shop_site_conflicts_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_conflicts',
+    operation: 'update',
+    message: 'Connected conflict evidence is immutable',
+  ),
+  'shop_site_conflicts_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_conflicts',
+    operation: 'delete',
+    message: 'Connected conflict evidence is immutable',
+  ),
+};
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV26() => {
+  ...shopConnectedSiteSchemaDefinitionsV25(),
+  ...shopConnectedCloudDispositionSchemaDefinitionsV26(),
+};
+
+/// Reconstructs every retained cloud disposition from canonical bytes and
+/// binds it to the immutable local command/event plus its legacy ack/conflict
+/// index rows. Shared by live-open and encrypted-backup verification.
+bool shopConnectedCloudDispositionRowsValidV26({
+  required Iterable<Map<String, Object?>> commands,
+  required Iterable<Map<String, Object?>> events,
+  required Iterable<Map<String, Object?>> cloudAcks,
+  required Iterable<Map<String, Object?>> conflicts,
+  required Iterable<Map<String, Object?>> dispositions,
+}) {
+  try {
+    final commandById = <String, Map<String, Object?>>{
+      for (final row in commands) row['command_id']! as String: row,
+    };
+    final eventByRowId = <int, Map<String, Object?>>{
+      for (final row in events) row['event_row_id']! as int: row,
+    };
+    final cloudAckByRowId = <int, Map<String, Object?>>{
+      for (final row in cloudAcks) row['event_row_id']! as int: row,
+    };
+    final conflictByCommand = <String, Map<String, Object?>>{
+      for (final row in conflicts) row['command_id']! as String: row,
+    };
+    final seenRows = <int>{};
+    for (final row in dispositions) {
+      final eventRowId = row['event_row_id'];
+      final kind = row['disposition_kind'];
+      final encoded = row['disposition_json'];
+      final digest = row['disposition_digest'];
+      final observedAt = row['observed_at_millis'];
+      if (eventRowId is! int ||
+          !seenRows.add(eventRowId) ||
+          (kind != 'ack' && kind != 'conflict') ||
+          encoded is! String ||
+          digest is! String ||
+          observedAt is! int ||
+          observedAt <= 0) {
+        return false;
+      }
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map ||
+          canonicalConnectedSiteJson(decoded) != encoded ||
+          connectedSiteSha256(decoded) != digest) {
+        return false;
+      }
+      final event = eventByRowId[eventRowId];
+      final cloudAck = cloudAckByRowId[eventRowId];
+      if (event == null ||
+          cloudAck == null ||
+          cloudAck['cloud_event_id'] != '$kind:$digest' ||
+          cloudAck['acknowledgement_digest'] != digest ||
+          cloudAck['acknowledged_at_millis'] != observedAt) {
+        return false;
+      }
+      final commandId = event['command_id'];
+      final command = commandId is String ? commandById[commandId] : null;
+      if (command == null) return false;
+      if (kind == 'ack') {
+        final ack = SiteCommandAckV1.fromJson(decoded);
+        if ((ack.state != SiteCommandAckState.accepted &&
+                ack.state != SiteCommandAckState.replayed) ||
+            ack.commandId != commandId ||
+            ack.commandDigest != command['command_digest'] ||
+            ack.eventDigest != event['event_digest'] ||
+            ack.canonicalVersion != event['aggregate_version']) {
+          return false;
+        }
+      } else {
+        final conflict = SiteConflictV1.fromJson(decoded);
+        final retained = conflictByCommand[commandId];
+        final createdAt = DateTime.parse(conflict.createdAt)
+            .toUtc()
+            .millisecondsSinceEpoch;
+        if (conflict.state != SiteConflictState.quarantined ||
+            conflict.commandId != commandId ||
+            conflict.commandDigest != command['command_digest'] ||
+            conflict.workspaceId != event['tenant_id'] ||
+            conflict.siteId != event['site_id'] ||
+            conflict.aggregateType != event['aggregate_type'] ||
+            conflict.aggregateId != event['aggregate_id'] ||
+            conflict.expectedVersion !=
+                (event['aggregate_version'] as int) - 1 ||
+            retained == null ||
+            retained['conflict_id'] != conflict.conflictId ||
+            retained['reason_code'] != conflict.reason ||
+            retained['detail_digest'] != digest ||
+            retained['state'] != 'quarantined' ||
+            retained['created_at_millis'] != createdAt ||
+            retained['resolved_at_millis'] != createdAt) {
+          return false;
+        }
+      }
+    }
+    if (seenRows.length != cloudAckByRowId.length) return false;
+    for (final conflict in conflicts) {
+      final command = commandById[conflict['command_id']];
+      if (command?['state'] == 'accepted') {
+        final event = events
+            .where((row) => row['command_id'] == conflict['command_id'])
+            .firstOrNull;
+        if (event == null || !seenRows.contains(event['event_row_id'])) {
+          return false;
+        }
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
 /// Reconstructs the complete v25 pairing -> approval -> revocation chain.
 ///
 /// This is shared by live-open and backup verification so a snapshot cannot
@@ -2767,7 +2917,7 @@ final shopKnownBaseObjectNames = <String>{
   'shop_pending_cash_checkouts_counter_delete_freeze',
   'shop_pending_cash_checkouts_cafe_freeze',
   'shop_pending_cash_checkouts_shift_freeze',
-  ...{for (final name in shopConnectedSiteSchemaDefinitionsV25().keys) name},
+  ...{for (final name in shopConnectedSiteSchemaDefinitionsV26().keys) name},
 };
 
 const shopBaseTableColumnsV6 = <String, Set<String>>{
@@ -2891,7 +3041,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 25) return const {};
+  if (schemaVersion < 5 || schemaVersion > 26) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -3661,6 +3811,7 @@ enum _ShopUpgradeOrigin {
   unifiedV22,
   unifiedV23,
   unifiedV24,
+  unifiedV25,
 }
 
 enum ShopConnectedSiteCommandStatus { accepted, replayed, conflict }
@@ -3875,7 +4026,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v25.');
+        throw StateError('The staged Shop restore did not reach schema v26.');
       }
     } finally {
       await database.close();
@@ -3942,7 +4093,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3972,6 +4123,8 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV24Schema();
       await _createConnectedEnrollmentSchemaV25();
       await _requireUnifiedV25Schema();
+      await _createConnectedCloudDispositionSchemaV26();
+      await _requireUnifiedV26Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
@@ -4125,6 +4278,7 @@ class ShopDatabase extends _$ShopDatabase {
         allowCashTenderV22: from >= 22,
         allowConnectedV23: from >= 23,
         allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
       );
       if (from < 20) {
         await _createCafeCancellationSchemaV20();
@@ -4134,6 +4288,7 @@ class ShopDatabase extends _$ShopDatabase {
         allowCashTenderV22: from >= 22,
         allowConnectedV23: from >= 23,
         allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
       );
       if (from < 21) {
         await _createPendingCashCheckoutSchemaV21();
@@ -4142,6 +4297,7 @@ class ShopDatabase extends _$ShopDatabase {
         allowCashTenderV22: from >= 22,
         allowConnectedV23: from >= 23,
         allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
       );
       if (from < 22) {
         await _createCashTenderSchemaV22();
@@ -4149,27 +4305,43 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV22Schema(
         allowConnectedV23: from >= 23,
         allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
       );
       if (from < 23) {
         await _createConnectedSiteSchemaV23();
       }
-      await _requireUnifiedV23Schema(allowReservationV24: from >= 24);
+      await _requireUnifiedV23Schema(
+        allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
+      );
       if (from < 24) {
         await _migrateConnectedStockReservationSchemaV24();
       }
-      await _requireUnifiedV24Schema();
+      await _requireUnifiedV24Schema(allowEnrollmentV25: from >= 25);
       if (from < 25) {
         await _createConnectedEnrollmentSchemaV25();
       }
       await _requireUnifiedV25Schema();
+      if (from < 26) {
+        await _createConnectedCloudDispositionSchemaV26();
+      }
+      await _requireUnifiedV26Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV25Schema();
+      await _requireUnifiedV26Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV25Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV26Schema();
+
+  /// Revalidates the complete immutable cloud-disposition chain before a
+  /// reconstructed upload cursor is trusted in the current process.
+  Future<void> verifyConnectedCloudDispositionEvidence() async {
+    if (!await _v26ConnectedCloudDispositionRowsValid()) {
+      throw StateError('Connected cloud disposition evidence is invalid.');
+    }
+  }
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
     final qrSnapshotColumns = includeQrSnapshot
@@ -4305,6 +4477,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedEnrollmentSchemaV25() async {
     for (final definition
         in shopConnectedEnrollmentSchemaDefinitionsV25().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedCloudDispositionSchemaV26() async {
+    for (final definition
+        in shopConnectedCloudDispositionSchemaDefinitionsV26().values) {
       await customStatement(definition);
     }
   }
@@ -5265,8 +5444,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 24) {
-      throw StateError('This Shop database version cannot migrate to v25.');
+    if (from < 1 || from > 25) {
+      throw StateError('This Shop database version cannot migrate to v26.');
+    }
+    if (from == 25) {
+      await _requireUnifiedV25Schema();
+      return _ShopUpgradeOrigin.unifiedV25;
     }
     if (from == 24) {
       await _requireUnifiedV24Schema();
@@ -5794,6 +5977,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
     bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
   }) async {
     await _requireDatabaseIntegrity();
     final objects = await _readSchemaObjects();
@@ -5825,7 +6009,9 @@ class ShopDatabase extends _$ShopDatabase {
             entry.key,
       if (allowConnectedV23)
         for (final entry
-            in (allowEnrollmentV25
+            in (allowCloudV26
+                    ? shopConnectedSiteSchemaDefinitionsV26()
+                    : allowEnrollmentV25
                     ? shopConnectedSiteSchemaDefinitionsV25()
                     : allowReservationV24
                     ? shopConnectedSiteSchemaDefinitionsV24()
@@ -5848,7 +6034,9 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
       if (allowConnectedV23)
-        ...(allowEnrollmentV25
+        ...(allowCloudV26
+            ? shopConnectedSiteSchemaDefinitionsV26().keys
+            : allowEnrollmentV25
             ? shopConnectedSiteSchemaDefinitionsV25().keys
             : allowReservationV24
             ? shopConnectedSiteSchemaDefinitionsV24().keys
@@ -6010,6 +6198,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
     bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
   }) async {
     await _requireUnifiedV18Schema(
       allowCafeV19: true,
@@ -6019,6 +6208,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowConnectedV23: allowConnectedV23,
       allowReservationV24: allowReservationV24,
       allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeOrderSchemaDefinitionsV19();
@@ -6040,7 +6230,9 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
       if (allowConnectedV23)
-        ...(allowEnrollmentV25
+        ...(allowCloudV26
+            ? shopConnectedSiteSchemaDefinitionsV26().keys
+            : allowEnrollmentV25
             ? shopConnectedSiteSchemaDefinitionsV25().keys
             : allowReservationV24
             ? shopConnectedSiteSchemaDefinitionsV24().keys
@@ -6061,6 +6253,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
     bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
   }) async {
     await _requireUnifiedV19Schema(
       allowCafeV20: true,
@@ -6069,6 +6262,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowConnectedV23: allowConnectedV23,
       allowReservationV24: allowReservationV24,
       allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeCancellationSchemaDefinitionsV20();
@@ -6085,6 +6279,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
     bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
   }) async {
     await _requireUnifiedV20Schema(
       allowCashCheckoutV21: true,
@@ -6092,6 +6287,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowConnectedV23: allowConnectedV23,
       allowReservationV24: allowReservationV24,
       allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopPendingCashCheckoutSchemaDefinitionsV21();
@@ -6190,12 +6386,14 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowConnectedV23 = false,
     bool allowReservationV24 = false,
     bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
   }) async {
     await _requireUnifiedV21Schema(
       allowCashTenderV22: true,
       allowConnectedV23: allowConnectedV23,
       allowReservationV24: allowReservationV24,
       allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
     );
     final columns = await customSelect('PRAGMA table_info(shop_sales)').get();
     if (!columns.any(
@@ -6251,11 +6449,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _requireUnifiedV23Schema({
     bool allowReservationV24 = false,
     bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
   }) async {
     await _requireUnifiedV22Schema(
       allowConnectedV23: true,
       allowReservationV24: allowReservationV24,
       allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedSiteSchemaDefinitionsV23();
@@ -6351,10 +6551,12 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _requireUnifiedV24Schema({
     bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
   }) async {
     await _requireUnifiedV23Schema(
       allowReservationV24: true,
       allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedStockReservationSchemaDefinitionsV24();
@@ -6370,8 +6572,11 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<void> _requireUnifiedV25Schema() async {
-    await _requireUnifiedV24Schema(allowEnrollmentV25: true);
+  Future<void> _requireUnifiedV25Schema({bool allowCloudV26 = false}) async {
+    await _requireUnifiedV24Schema(
+      allowEnrollmentV25: true,
+      allowCloudV26: allowCloudV26,
+    );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedEnrollmentSchemaDefinitionsV25();
     if (!_definitionGroupExact(
@@ -6383,6 +6588,40 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v25 connected-enrollment schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV26Schema() async {
+    await _requireUnifiedV25Schema(allowCloudV26: true);
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedCloudDispositionSchemaDefinitionsV26();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v26ConnectedCloudDispositionRowsValid()) {
+      throw StateError(
+        'The unified Shop v26 cloud-disposition schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v26ConnectedCloudDispositionRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedCloudDispositionRowsValidV26(
+        commands: await rows('shop_site_commands'),
+        events: await rows('shop_site_events'),
+        cloudAcks: await rows('shop_site_cloud_acks'),
+        conflicts: await rows('shop_site_conflicts'),
+        dispositions: await rows('shop_site_cloud_dispositions'),
+      );
+    } on Object {
+      return false;
     }
   }
 

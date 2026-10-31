@@ -16,7 +16,7 @@ void main() {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 25);
+        expect(database.schemaVersion, 26);
         final storeRef = await database.readStoreRef();
         expect(storeRef, matches(RegExp(r'^[0-9a-f]{64}$')));
         await expectLater(
@@ -544,7 +544,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 25);
+            expect(upgraded.schemaVersion, 26);
             expect(await upgraded.countSales(), 1);
             expect(await upgraded.countStockMovements(), 2);
             expect(await upgraded.countOutboxOperations(), 2);
@@ -620,7 +620,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 25);
+            expect(upgraded.schemaVersion, 26);
             final product = (await upgraded.readActiveProducts()).single;
             expect(product.sku, 'smc1.legacy-merchant-code');
             expect(product.onHand, 1);
@@ -717,7 +717,7 @@ void main() {
         final upgraded = ShopDatabase(NativeDatabase(snapshot));
         try {
           await upgraded.verifyReadyForUse();
-          expect(upgraded.schemaVersion, 25);
+          expect(upgraded.schemaVersion, 26);
           expect(await upgraded.memberCardIdentificationAvailable(), isFalse);
           await _seedMember(
             upgraded,
@@ -1484,7 +1484,7 @@ String _syntheticStaticMmqr() {
 
 void _removeV17CorrectionConsumptionObjects(Database connection) {
   for (final definition
-      in shopConnectedSiteSchemaDefinitionsV25().entries.toList().reversed) {
+      in shopConnectedSiteSchemaDefinitionsV26().entries.toList().reversed) {
     final type = shopSchemaObjectTypeForDefinition(definition.value);
     connection.execute(
       'DROP ${type == 'table'
