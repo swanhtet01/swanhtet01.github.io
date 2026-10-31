@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,7 @@ import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_database_adapter.dart';
 import 'package:supermega_shop/shop_connected_stock_reservation.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_site_coordinator.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
 
 const _now = 2000000000000;
@@ -211,9 +214,223 @@ void main() {
       }
     },
   );
+
+  test(
+    'real signed coordinator requests authorize before database mutation',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        final keyPair = await Ed25519().newKeyPairFromSeed(
+          List<int>.generate(32, (index) => index + 1),
+        );
+        final publicKey = await keyPair.extractPublicKey();
+        final clientFingerprint = sha256.convert(publicKey.bytes).toString();
+        await _seed(database, clientFingerprint: clientFingerprint);
+        final clientKeys = _AdapterClientKeyStore(
+          publicKey: publicKey,
+          fingerprint: clientFingerprint,
+        );
+        final enrollment = _AdapterEnrollmentAuthorizer();
+        final authorization = _AdapterSiteAuthorizer();
+        final coordinator = SiteCoordinatorServer(
+          runtimeEnabled: true,
+          pairing: const _AdapterPairingNonceStore(),
+          requestAuthenticator: Ed25519CoordinatorRequestAuthenticator(
+            clients: clientKeys,
+            nonces: _AdapterRequestNonceStore(),
+            now: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+          ),
+          commands: ShopConnectedSiteDatabaseCommandHandler(
+            database: database,
+            timeAuthority: const _FixedTime(_now),
+            connectedSiteEnabled: true,
+          ),
+          commandSignatureVerifier: Ed25519SiteCommandSignatureVerifier(
+            clients: clientKeys,
+            coordinatorDeviceId: 'adapter-counter',
+          ),
+          deviceEnrollment: enrollment,
+          siteAuthorization: authorization,
+          commandCapabilities:
+              const ShopConnectedSiteDatabaseCapabilityResolver(),
+          replication: ShopConnectedSiteDatabaseReplicationReader(
+            database: database,
+            workspaceId: _workspace,
+            siteId: _site,
+          ),
+          health: const _AdapterHealthProvider(),
+          pairingResponse: _adapterPairing(),
+          now: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+        );
+        final reserve = await _signCommand(
+          _reserveCommand('coordinator-reserve'),
+          keyPair,
+        );
+
+        enrollment.state = CoordinatorDeviceEnrollmentState.pending;
+        final pending = await coordinator.dispatch(
+          await _signedAdapterJsonRequest(
+            'POST',
+            connectedSiteCommandsPath,
+            reserve.toJson(),
+            nonce: 'request_nonce_adapter_pending_01',
+            fingerprint: clientFingerprint,
+            keyPair: keyPair,
+          ),
+        );
+        expect(pending.statusCode, HttpStatus.forbidden);
+        expect(pending.body['error'], 'client_not_authorized');
+        await _expectNoConnectedMutation(database);
+        expect(authorization.calls, 0);
+
+        enrollment.state = CoordinatorDeviceEnrollmentState.revoked;
+        final revoked = await coordinator.dispatch(
+          await _signedAdapterJsonRequest(
+            'POST',
+            connectedSiteCommandsPath,
+            reserve.toJson(),
+            nonce: 'request_nonce_adapter_revoked_01',
+            fingerprint: clientFingerprint,
+            keyPair: keyPair,
+          ),
+        );
+        expect(revoked.statusCode, HttpStatus.forbidden);
+        expect(revoked.body['error'], 'client_not_authorized');
+        await _expectNoConnectedMutation(database);
+        expect(authorization.calls, 0);
+
+        enrollment.state = CoordinatorDeviceEnrollmentState.approved;
+        authorization.allowed = false;
+        final unauthorized = await coordinator.dispatch(
+          await _signedAdapterJsonRequest(
+            'POST',
+            connectedSiteCommandsPath,
+            reserve.toJson(),
+            nonce: 'request_nonce_adapter_denied_01',
+            fingerprint: clientFingerprint,
+            keyPair: keyPair,
+          ),
+        );
+        expect(unauthorized.statusCode, HttpStatus.forbidden);
+        expect(unauthorized.body['error'], 'site_authorization_denied');
+        await _expectNoConnectedMutation(database);
+        expect(authorization.calls, 1);
+
+        authorization.allowed = true;
+        final acceptedRequest = await _signedAdapterJsonRequest(
+          'POST',
+          connectedSiteCommandsPath,
+          reserve.toJson(),
+          nonce: 'request_nonce_adapter_accepted_01',
+          fingerprint: clientFingerprint,
+          keyPair: keyPair,
+        );
+        final accepted = await coordinator.dispatch(acceptedRequest);
+        expect(accepted.statusCode, HttpStatus.ok);
+        expect(accepted.body['state'], SiteCommandAckState.accepted.name);
+        expect(await _siteCommandCount(database), 1);
+        expect(await database.readReservedStockQuantity('adapter-item'), 1);
+
+        final requestReplay = await coordinator.dispatch(acceptedRequest);
+        expect(requestReplay.statusCode, HttpStatus.forbidden);
+        expect(requestReplay.body['error'], 'client_not_authorized');
+        expect(await _siteCommandCount(database), 1);
+
+        final replayed = await coordinator.dispatch(
+          await _signedAdapterJsonRequest(
+            'POST',
+            connectedSiteCommandsPath,
+            reserve.toJson(),
+            nonce: 'request_nonce_adapter_replay_01',
+            fingerprint: clientFingerprint,
+            keyPair: keyPair,
+          ),
+        );
+        expect(replayed.statusCode, HttpStatus.ok);
+        expect(replayed.body['state'], SiteCommandAckState.replayed.name);
+        expect(await _siteCommandCount(database), 1);
+
+        final altered = await _signCommand(
+          _reserveCommand('coordinator-reserve', quantity: 2),
+          keyPair,
+        );
+        final alteredReplay = await coordinator.dispatch(
+          await _signedAdapterJsonRequest(
+            'POST',
+            connectedSiteCommandsPath,
+            altered.toJson(),
+            nonce: 'request_nonce_adapter_altered_01',
+            fingerprint: clientFingerprint,
+            keyPair: keyPair,
+          ),
+        );
+        expect(alteredReplay.statusCode, HttpStatus.internalServerError);
+        expect(alteredReplay.body['error'], 'coordinator_failure');
+        expect(await _siteCommandCount(database), 1);
+        expect(await database.readReservedStockQuantity('adapter-item'), 1);
+
+        final delta = await coordinator.dispatch(
+          await _signedAdapterRequest(
+            'GET',
+            '$connectedSiteDeltaPath?after=0',
+            nonce: 'request_nonce_adapter_delta_01',
+            fingerprint: clientFingerprint,
+            keyPair: keyPair,
+          ),
+        );
+        expect(delta.statusCode, HttpStatus.ok);
+        expect(delta.body['siteId'], _site);
+        expect(delta.body['nextCursor'], 1);
+        expect(delta.body['events'], hasLength(1));
+
+        final snapshot = await coordinator.dispatch(
+          await _signedAdapterRequest(
+            'GET',
+            connectedSiteSnapshotPath,
+            nonce: 'request_nonce_adapter_snapshot_01',
+            fingerprint: clientFingerprint,
+            keyPair: keyPair,
+          ),
+        );
+        expect(snapshot.statusCode, HttpStatus.ok);
+        expect(snapshot.body['siteId'], _site);
+        expect(snapshot.body['continuationCursor'], 1);
+      } finally {
+        await database.close();
+      }
+    },
+  );
 }
 
-Future<void> _seed(ShopDatabase database) async {
+Future<int> _siteCommandCount(ShopDatabase database) async =>
+    (await database
+            .customSelect('SELECT COUNT(*) AS total FROM shop_site_commands')
+            .getSingle())
+        .read<int>('total');
+
+Future<void> _expectNoConnectedMutation(ShopDatabase database) async {
+  for (final table in const [
+    'shop_site_commands',
+    'shop_site_events',
+    'shop_site_command_acks',
+    'shop_site_audit',
+    'shop_site_aggregate_versions',
+    'shop_connected_stock_reservation_headers',
+    'shop_connected_stock_reservation_lines',
+    'shop_connected_stock_reservation_transitions',
+    'shop_connected_trusted_time',
+  ]) {
+    final count =
+        (await database
+                .customSelect('SELECT COUNT(*) AS total FROM $table')
+                .getSingle())
+            .read<int>('total');
+    expect(count, 0, reason: table);
+  }
+  expect(await database.readReservedStockQuantity('adapter-item'), 0);
+}
+
+Future<void> _seed(ShopDatabase database, {String? clientFingerprint}) async {
   await database.addProduct(
     id: 'adapter-item',
     name: 'Adapter item',
@@ -229,7 +446,7 @@ Future<void> _seed(ShopDatabase database) async {
       const Variable<String>(_device),
       const Variable<String>(_workspace),
       const Variable<String>(_site),
-      Variable<String>(_fingerprint),
+      Variable<String>(clientFingerprint ?? _fingerprint),
       const Variable<int>(_now - 1000),
     ],
   );
@@ -374,6 +591,201 @@ class _FixedTime implements ShopConnectedSiteCoordinatorTimeAuthority {
     required String tenantId,
     required String siteId,
   }) async => nowMillis;
+}
+
+CoordinatorPairingV1 _adapterPairing() => CoordinatorPairingV1(
+  workspaceId: _workspace,
+  siteId: _site,
+  coordinatorDeviceId: 'adapter-counter',
+  certificateSha256: _digest('adapter-certificate'),
+  address: '192.168.50.10',
+  port: 9443,
+  nonce: 'pairing_nonce_adapter_000001',
+  issuedAt: '2033-05-18T03:32:20.000Z',
+  expiresAt: '2033-05-18T03:34:20.000Z',
+);
+
+Future<SiteCommandV1> _signCommand(
+  SiteCommandV1 command,
+  SimpleKeyPair keyPair,
+) async {
+  final signed = await Ed25519().sign(
+    utf8.encode(canonicalConnectedSiteJson(command.signingPayload)),
+    keyPair: keyPair,
+  );
+  return SiteCommandV1(
+    commandId: command.commandId,
+    workspaceId: command.workspaceId,
+    siteId: command.siteId,
+    actorId: command.actorId,
+    deviceId: command.deviceId,
+    aggregateType: command.aggregateType,
+    aggregateId: command.aggregateId,
+    expectedVersion: command.expectedVersion,
+    commandType: command.commandType,
+    payload: command.payload,
+    payloadDigest: command.payloadDigest,
+    leaseDigest: command.leaseDigest,
+    issuedAt: command.issuedAt,
+    signingKeyId: command.signingKeyId,
+    signatureAlgorithm: command.signatureAlgorithm,
+    signature: base64Url.encode(signed.bytes).replaceAll('=', ''),
+  );
+}
+
+Future<SiteCoordinatorRequest> _signedAdapterJsonRequest(
+  String method,
+  String path,
+  Map<String, Object?> body, {
+  required String nonce,
+  required String fingerprint,
+  required SimpleKeyPair keyPair,
+}) => _signedAdapterRequest(
+  method,
+  path,
+  nonce: nonce,
+  fingerprint: fingerprint,
+  keyPair: keyPair,
+  body: utf8.encode(jsonEncode(body)),
+  contentType: true,
+);
+
+Future<SiteCoordinatorRequest> _signedAdapterRequest(
+  String method,
+  String path, {
+  required String nonce,
+  required String fingerprint,
+  required SimpleKeyPair keyPair,
+  List<int> body = const [],
+  bool contentType = false,
+}) async {
+  final issuedAt = DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true);
+  final proof = CoordinatorRequestProof(
+    workspaceId: _workspace,
+    siteId: _site,
+    coordinatorDeviceId: 'adapter-counter',
+    clientFingerprint: fingerprint,
+    claimedDeviceId: _device,
+    issuedAt: issuedAt,
+    nonce: nonce,
+    method: method,
+    canonicalTarget: path,
+    bodySha256: sha256.convert(body).toString(),
+    signature: '',
+  );
+  final signature = await Ed25519().sign(proof.signingBytes, keyPair: keyPair);
+  return SiteCoordinatorRequest(
+    method: method,
+    path: path,
+    headers: {
+      if (contentType) 'content-type': 'application/json; charset=utf-8',
+      'x-supermega-client-fingerprint': fingerprint,
+      'x-supermega-device-id': _device,
+      'x-supermega-issued-at': issuedAt.toIso8601String(),
+      'x-supermega-request-nonce': nonce,
+      'x-supermega-request-signature': base64Url
+          .encode(signature.bytes)
+          .replaceAll('=', ''),
+    },
+    body: Uint8List.fromList(body),
+  );
+}
+
+class _AdapterEnrollmentAuthorizer
+    implements CoordinatorDeviceEnrollmentAuthorizer {
+  CoordinatorDeviceEnrollmentState state =
+      CoordinatorDeviceEnrollmentState.approved;
+
+  @override
+  Future<CoordinatorDeviceEnrollmentState> stateFor({
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required String deviceId,
+    required String clientFingerprint,
+  }) async => state;
+}
+
+class _AdapterSiteAuthorizer implements CoordinatorSiteAuthorizer {
+  bool allowed = true;
+  int calls = 0;
+
+  @override
+  Future<bool> authorize(CoordinatorSiteAuthorizationRequest request) async {
+    calls += 1;
+    return allowed &&
+        request.workspaceId == _workspace &&
+        request.siteId == _site &&
+        request.deviceId == _device &&
+        (request.operation != CoordinatorSiteOperation.command ||
+            (request.actorId == _actor && request.leaseDigest == _leaseDigest));
+  }
+}
+
+class _AdapterClientKeyStore implements CoordinatorClientKeyStore {
+  const _AdapterClientKeyStore({
+    required this.publicKey,
+    required this.fingerprint,
+  });
+
+  final SimplePublicKey publicKey;
+  final String fingerprint;
+
+  @override
+  Future<EnrolledCoordinatorClientV1?> find({
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required String deviceId,
+    required String fingerprint,
+  }) async =>
+      workspaceId == _workspace &&
+          siteId == _site &&
+          coordinatorDeviceId == 'adapter-counter' &&
+          deviceId == _device &&
+          fingerprint == this.fingerprint
+      ? EnrolledCoordinatorClientV1(
+          workspaceId: workspaceId,
+          siteId: siteId,
+          coordinatorDeviceId: coordinatorDeviceId,
+          deviceId: deviceId,
+          fingerprint: fingerprint,
+          signingKeyId: 'test-key',
+          publicKey: publicKey,
+          active: true,
+        )
+      : null;
+}
+
+class _AdapterRequestNonceStore implements CoordinatorRequestNonceStore {
+  final Set<String> _consumed = {};
+
+  @override
+  Future<bool> consume({
+    required String clientFingerprint,
+    required String nonce,
+    required DateTime expiresAt,
+  }) async => _consumed.add('$clientFingerprint:$nonce');
+}
+
+class _AdapterPairingNonceStore implements PairingNonceStore {
+  const _AdapterPairingNonceStore();
+
+  @override
+  Future<bool> consumeAndCreatePending(PairingNonceClaim claim) async => false;
+}
+
+class _AdapterHealthProvider implements CoordinatorHealthProvider {
+  const _AdapterHealthProvider();
+
+  @override
+  Future<CoordinatorHealthV1> readHealth() async => CoordinatorHealthV1(
+    sharedWritesAvailable: true,
+    internetAvailable: false,
+    cloudSyncHealthy: false,
+    backupCurrent: true,
+    pendingConflictCount: 0,
+  );
 }
 
 String _digest(String value) => sha256.convert(utf8.encode(value)).toString();
