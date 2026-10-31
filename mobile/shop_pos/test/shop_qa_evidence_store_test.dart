@@ -147,6 +147,10 @@ void main() {
     addTearDown(restored.close);
     await restored.verifyReadyForUse();
     expect(await _databaseState(restored), sourceStateBefore);
+    await expectLater(
+      restored.verifyManagedWorkspaceUnavailableWithoutSession(),
+      throwsA(isA<StateError>()),
+    );
 
     final sourceTreeBefore = await _treeSnapshot(scope.documentsRoot);
     final targetTreeBefore = await _treeSnapshot(scopeB.documentsRoot);

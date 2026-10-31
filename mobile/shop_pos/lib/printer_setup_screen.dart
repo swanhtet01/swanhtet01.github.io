@@ -8,14 +8,26 @@ class PrinterSetupScreen extends StatefulWidget {
   PrinterSetupScreen({
     required this.myanmar,
     ShopRuntimeScope? runtimeScope,
+    PrinterDiscoveryService? testOnlyDiscoveryService,
+    ReceiptPrinterSettings? testOnlyPrinterSettings,
     this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
-  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+  }) : testOnlyDiscoveryService = _requirePrinterSetupTestDependency(
+         testOnlyDiscoveryService,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ),
+       testOnlyPrinterSettings = _requirePrinterSetupTestDependency(
+         testOnlyPrinterSettings,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ),
+       runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
          testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
        );
   final bool myanmar;
   final ShopRuntimeScope? runtimeScope;
+  final PrinterDiscoveryService? testOnlyDiscoveryService;
+  final ReceiptPrinterSettings? testOnlyPrinterSettings;
   final bool testOnlyAllowMissingRuntimeScope;
 
   @override
@@ -23,12 +35,16 @@ class PrinterSetupScreen extends StatefulWidget {
 }
 
 class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
-  late final PrinterDiscoveryService? _service = widget.runtimeScope == null
-      ? null
-      : _openPrinterDiscovery(widget.runtimeScope!);
-  late final ReceiptPrinterSettings? _settings = widget.runtimeScope == null
-      ? null
-      : ReceiptPrinterSettings(runtimeScope: widget.runtimeScope);
+  late final PrinterDiscoveryService? _service =
+      widget.testOnlyDiscoveryService ??
+      (widget.runtimeScope == null
+          ? null
+          : _openPrinterDiscovery(widget.runtimeScope!));
+  late final ReceiptPrinterSettings? _settings =
+      widget.testOnlyPrinterSettings ??
+      (widget.runtimeScope == null
+          ? null
+          : ReceiptPrinterSettings(runtimeScope: widget.runtimeScope));
   bool _loadingSettings = true;
   bool _busy = false;
   bool _cancelled = false;
@@ -227,24 +243,32 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         });
       }
     } on PrinterNetworkChanged {
+      settings.requireRetest();
       if (mounted) {
-        setState(
-          () => _message = shopCopy(
+        setState(() {
+          _testedHost = null;
+          _testedWidth = null;
+          _savedHost = null;
+          _message = shopCopy(
             widget.myanmar,
             'Wi-Fi changed after the test. Find and test the printer again.',
             'စမ်းသပ်ပြီးနောက် Wi-Fi ပြောင်းသွားသည်။ ပရင်တာကို ထပ်ရှာပြီး စမ်းသပ်ပါ။',
-          ),
-        );
+          );
+        });
       }
     } catch (_) {
+      settings.requireRetest();
       if (mounted) {
-        setState(
-          () => _message = shopCopy(
+        setState(() {
+          _testedHost = null;
+          _testedWidth = null;
+          _savedHost = null;
+          _message = shopCopy(
             widget.myanmar,
             'Printer setup could not be saved. Test the printer again.',
             'ပရင်တာဆက်တင်ကို သိမ်းမရပါ။ ပရင်တာကို ထပ်စမ်းပါ။',
-          ),
-        );
+          );
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -448,6 +472,16 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       ),
     );
   }
+}
+
+T? _requirePrinterSetupTestDependency<T>(
+  T? dependency, {
+  required bool testOnlyAllowMissingRuntimeScope,
+}) {
+  if (dependency != null && !testOnlyAllowMissingRuntimeScope) {
+    throw StateError('printer_setup_test_dependency_requires_test_seam');
+  }
+  return dependency;
 }
 
 PrinterDiscoveryService _openPrinterDiscovery(ShopRuntimeScope runtimeScope) {

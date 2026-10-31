@@ -14,9 +14,9 @@ void main() {
     expect(first.bytes, second.bytes);
     expect(
       sha256.convert(first.bytes).toString(),
-      'ac6b761b6401cbc004293012d8f8452d2e30f055bb19325f240982284f0cd778',
+      '1e77c94a809a466455a2b58f844506d9368d4cc09b496e8dbb0124a6f08d2b0a',
     );
-    expect(first.bytes.length, 6129);
+    expect(first.bytes.length, 6312);
     expect(first.rows.length, 13);
     expect(first.rows.map((row) => row['row_type']), [
       'shift_summary',
@@ -413,7 +413,7 @@ void main() {
         shopOperationalExportDataScope,
         'device_local_closed_shift_event_window',
       );
-      expect(shopOperationalExportHeaders, hasLength(40));
+      expect(shopOperationalExportHeaders, hasLength(43));
     },
   );
 }

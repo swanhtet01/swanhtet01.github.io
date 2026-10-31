@@ -6,11 +6,23 @@ import { assessShopQaIsolationContract } from './verify_shop_qa_isolation_contra
 
 function workflowFixture() {
   const qa = '--dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1'
-  const artifactSteps = (artifact, checksum = `sha256sum ${artifact} > ${artifact}.sha256`) => `
-      - name: Verify QA artifact
-        run: |
-          ${checksum}
-          echo "source-sha=\${{ github.sha }} sha-256=$(cat ${artifact}.sha256) promotion-ineligible" > ${artifact}.manifest
+  const artifactSteps = (platform, artifact, checksum = `sha256sum ${artifact} > ${artifact}.sha256`) => {
+    const toolchainStep = platform === 'android' ? '' : `      - name: Record observed QA toolchain
+        run: ${platform === 'ios'
+          ? `flutter --version --machine > ${artifact}.toolchain.json`
+          : `flutter --version --machine | Set-Content -LiteralPath '${artifact}.toolchain.json' -Encoding utf8NoBOM`}
+`
+    const receiptPaths = platform === 'android' ? '' : `            ${artifact}.toolchain.json
+            ${artifact}.signing.json
+`
+    return `
+      - name: Hash QA artifact
+        run: ${checksum}
+${toolchainStep}
+      - name: Bind QA artifact
+        run: ${platform === 'android'
+          ? `echo "source-sha=\${{ github.sha }} sha-256=$(cat ${artifact}.sha256) promotion-ineligible" > ${artifact}.manifest`
+          : `node tools/write_shop_qa_artifact_manifest.mjs --platform ${platform} --artifact ${artifact} --checksum ${artifact}.sha256 --toolchain ${artifact}.toolchain.json --signing ${artifact}.signing.json --output ${artifact}.manifest`}
       - name: Upload synthetic QA evidence
         uses: actions/upload-artifact@v4
         with:
@@ -18,7 +30,8 @@ function workflowFixture() {
           path: |
             ${artifact}
             ${artifact}.sha256
-            ${artifact}.manifest`
+${receiptPaths}            ${artifact}.manifest`
+  }
   const inspections = Object.freeze({
     android: `
       - name: Inspect Android QA identity
@@ -44,12 +57,24 @@ function workflowFixture() {
           info='build/ios/iphoneos/Runner.app/Info.plist'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")" = 'dev.supermega.supermegaShop.qa'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$info")" = 'Shop QA'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$info")" = 'Shop QA'`,
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$info")" = 'Shop QA'
+      - name: Prove iOS QA app is not code signed
+        run: |
+          if codesign -dv --verbose=4 build/ios/iphoneos/Runner.app 2>signature.log; then echo shop_ios_qa_unexpected_signature; exit 1; fi
+          grep -Fq 'code object is not signed at all' signature.log
+          echo receipt > Runner.app.zip.signing.json
+      - name: Stage iOS QA artifact
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "\${{ github.workspace }}/Runner.app.zip"`,
     windows: `
       - name: Inspect Windows QA identity
         run: |
           $identity = (Get-Item supermega_shop_qa.exe).VersionInfo
           if ($identity.ProductName -cne 'Shop QA' -or $identity.FileDescription -cne 'Shop QA' -or $identity.InternalName -cne 'supermega_shop_qa' -or $identity.OriginalFilename -cne 'supermega_shop_qa.exe') { throw 'mismatch' }
+      - name: Prove Windows QA executable is unsigned
+        run: |
+          $signature = Get-AuthenticodeSignature -LiteralPath $executable
+          if ($signature.Status -cne 'NotSigned' -or $null -ne $signature.SignerCertificate) { throw 'mismatch' }
+          echo receipt > supermega-shop-windows-qa.zip.signing.json
       - name: Package full Windows QA runtime
         run: Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath`,
   })
@@ -67,7 +92,7 @@ function workflowFixture() {
       - name: Build Android QA
         run: flutter build apk --debug --no-pub --flavor qa ${qa}
 ${inspections.android}
-${artifactSteps('app-qa-debug.apk')}
+${artifactSteps('android', 'app-qa-debug.apk')}
   ios-production:
     steps:
       - name: Generate iOS production identity
@@ -81,7 +106,7 @@ ${artifactSteps('app-qa-debug.apk')}
       - name: Build iOS QA
         run: flutter build ios --debug --no-codesign --no-pub --flavor qa ${qa}
 ${inspections.ios}
-${artifactSteps('Runner.app.zip')}
+${artifactSteps('ios', 'Runner.app.zip')}
   windows-production:
     steps:
       - name: Generate Windows production identity
@@ -97,7 +122,7 @@ ${artifactSteps('Runner.app.zip')}
       - name: Build Windows QA
         run: flutter build windows --release --no-pub ${qa}
 ${inspections.windows}
-${artifactSteps('supermega-shop-windows-qa.zip', `$artifact = 'supermega-shop-windows-qa.zip'; $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant(); "$digest  $artifact" | Set-Content supermega-shop-windows-qa.zip.sha256; if ($recorded -cne $expected) { throw "mismatch" }`)}
+${artifactSteps('windows', 'supermega-shop-windows-qa.zip', `$artifact = 'supermega-shop-windows-qa.zip'; $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant(); "$digest  $artifact" | Set-Content supermega-shop-windows-qa.zip.sha256; if ($recorded -cne $expected) { throw "mismatch" }`)}
 `
 }
 
@@ -125,6 +150,7 @@ function fixture() {
     'mobile/shop_pos/lib/shop_runtime_scope.dart': "ShopRuntimeConfiguration.fromEnvironment(); Future<ShopRuntimeScope> resolveShopRuntimeScopeForStartup() async { return ShopRuntimeScope.resolve(ShopRuntimeProfile.production); } ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(ShopRuntimeScope? scope) { if (scope == null) throw StateError('shop_runtime_scope_required'); return scope; } class ShopRuntimeScope { static Future<ShopRuntimeScope> resolve(p) async { SharedPreferences.getInstance(); getApplicationSupportDirectory(); getTemporaryDirectory(); return ShopRuntimeScope(); } } synthetic-evidence sentinel shop_locale_myanmar shop_pending_picker_intent shop_receipt_printer_host_v1 shop_receipt_paper_width_v1",
     'mobile/shop_pos/lib/shop_build_identity.g.dart': 'synthetic_qa_v1 platform',
     'tools/generate_shop_build_identity.mjs': 'production synthetic_qa_v1 windows',
+    'tools/write_shop_qa_artifact_manifest.mjs': 'supermega.shop.synthetic-qa-artifact.v1 HEAD:mobile/shop_pos shop_qa_manifest_checksum_invalid shop_qa_manifest_github_sha_mismatch ios_no_codesign windows_unsigned signingEvidence.productionSigned !== false promotionEligible: false',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1': 'supermega_shop_qa.exe Shop QA',
     'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme': '<TestAction buildConfiguration="Debug-qa"/><LaunchAction buildConfiguration="Debug-qa"/><ProfileAction buildConfiguration="Debug-qa"/><AnalyzeAction buildConfiguration="Debug-qa"/><ArchiveAction buildConfiguration="Debug-qa"/>',
     'mobile/shop_pos/ios/Runner/Info.plist': '<string>$(SHOP_DISPLAY_NAME)</string><string>$(SHOP_BUNDLE_NAME)</string>',
@@ -332,6 +358,7 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
     'mobile/shop_pos/ios/Flutter/QA.xcconfig',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1',
     'tools/generate_shop_build_identity.mjs',
+    'tools/write_shop_qa_artifact_manifest.mjs',
   ]) {
     const sources = fixture(); sources[path] = 'unrelated text'
     assert.equal(assessShopQaIsolationContract({ sources }).strictReady, false, path)
@@ -467,6 +494,31 @@ test('wrong workflow job, command order, flavor, or QA define fails closed', () 
     workflow => workflow.replace(/^  android-production:/m, '  android:').replace(/^  android-qa:\n    steps:\n/m, ''),
   ]) {
     const sources = fixture(); sources['.github/workflows/shop-native-ci.yml'] = mutate(workflowFixture())
+    const result = assessShopQaIsolationContract({ sources })
+    assert.equal(result.strictReady, false, JSON.stringify(result))
+    assert.ok(result.blockers.some(item => item.code === 'qa_build_contract_missing'))
+  }
+})
+
+test('iOS and Windows manifest writers are exact, ordered and uploaded with their artifact', () => {
+  const iosWriter = 'node tools/write_shop_qa_artifact_manifest.mjs --platform ios --artifact Runner.app.zip --checksum Runner.app.zip.sha256 --toolchain Runner.app.zip.toolchain.json --signing Runner.app.zip.signing.json --output Runner.app.zip.manifest'
+  const windowsWriter = 'node tools/write_shop_qa_artifact_manifest.mjs --platform windows --artifact supermega-shop-windows-qa.zip --checksum supermega-shop-windows-qa.zip.sha256 --toolchain supermega-shop-windows-qa.zip.toolchain.json --signing supermega-shop-windows-qa.zip.signing.json --output supermega-shop-windows-qa.zip.manifest'
+  for (const mutate of [
+    workflow => workflow.replace(iosWriter, 'echo loose-ios-manifest'),
+    workflow => workflow.replace(windowsWriter, 'echo loose-windows-manifest'),
+    workflow => workflow.replace(
+      `      - name: Hash QA artifact\n        run: sha256sum Runner.app.zip > Runner.app.zip.sha256\n      - name: Record observed QA toolchain\n        run: flutter --version --machine > Runner.app.zip.toolchain.json\n\n      - name: Bind QA artifact\n        run: ${iosWriter}`,
+      `      - name: Bind QA artifact\n        run: ${iosWriter}\n      - name: Hash QA artifact\n        run: sha256sum Runner.app.zip > Runner.app.zip.sha256\n      - name: Record observed QA toolchain\n        run: flutter --version --machine > Runner.app.zip.toolchain.json`,
+    ),
+    workflow => workflow.replace(
+      `      - name: Bind QA artifact\n        run: ${windowsWriter}`,
+      `      - name: Bind QA artifact\n        if: \${{ false }}\n        run: ${windowsWriter}`,
+    ),
+    workflow => workflow.replace('            Runner.app.zip.manifest', '            foreign-Runner.app.zip.manifest'),
+    workflow => workflow.replace('            supermega-shop-windows-qa.zip.manifest', '            foreign-windows.manifest'),
+  ]) {
+    const sources = fixture()
+    sources['.github/workflows/shop-native-ci.yml'] = mutate(workflowFixture())
     const result = assessShopQaIsolationContract({ sources })
     assert.equal(result.strictReady, false, JSON.stringify(result))
     assert.ok(result.blockers.some(item => item.code === 'qa_build_contract_missing'))

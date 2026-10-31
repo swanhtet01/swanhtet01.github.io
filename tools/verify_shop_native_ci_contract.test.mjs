@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -11,6 +11,9 @@ import { verifyShopNativeCiContract } from './verify_shop_native_ci_contract.mjs
 const workflow = await readFile('.github/workflows/shop-native-ci.yml', 'utf8')
 const gradleWrapper = await readFile('mobile/shop_pos/android/gradle/wrapper/gradle-wrapper.properties', 'utf8')
 const qaManifest = await readFile('mobile/shop_pos/android/app/src/qa/AndroidManifest.xml', 'utf8')
+const actualTestPaths = (await readdir('mobile/shop_pos/test', { withFileTypes: true }))
+  .filter(entry => entry.isFile() && entry.name.endsWith('_test.dart'))
+  .map(entry => `test/${entry.name}`)
 
 test('Android QA source declares the exact fail-closed recovery capability tuple', () => {
   for (const token of [
@@ -29,7 +32,7 @@ test('Android QA source declares the exact fail-closed recovery capability tuple
 })
 
 test('native CI retains checksums for the actual Android and Windows QA files', () => {
-  const result = verifyShopNativeCiContract(workflow, gradleWrapper)
+  const result = verifyShopNativeCiContract(workflow, gradleWrapper, actualTestPaths)
   assert.deepEqual(result.failures, [])
   assert.equal(result.ok, true)
   assert.equal(result.androidArtifactKind, 'debug')
@@ -40,6 +43,79 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.flutterVersion, '3.47.8')
   assert.equal(result.gradleDistribution, 'gradle-9.3.1-bin.zip')
   assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
+})
+
+test('iOS and Windows QA artifacts inspect signing and use canonical source binding', () => {
+  for (const [command, failure] of [
+    ['codesign -dv --verbose=4', 'ios_qa_signature_not_inspected'],
+    ['code object is not signed at all', 'ios_qa_unsigned_result_not_verified'],
+    ['flutter --version --machine > Runner.app.zip.toolchain.json', 'ios_qa_observed_toolchain_missing'],
+    [
+      'node tools/write_shop_qa_artifact_manifest.mjs --platform ios --artifact Runner.app.zip --checksum Runner.app.zip.sha256 --toolchain Runner.app.zip.toolchain.json --signing Runner.app.zip.signing.json --output Runner.app.zip.manifest',
+      'ios_qa_canonical_manifest_missing',
+    ],
+    ['Get-AuthenticodeSignature -LiteralPath $executable', 'windows_qa_signature_not_inspected'],
+    ["$signature.Status -cne 'NotSigned'", 'windows_qa_unsigned_result_not_verified'],
+    ["flutter --version --machine | Set-Content -LiteralPath 'supermega-shop-windows-qa.zip.toolchain.json' -Encoding utf8NoBOM", 'windows_qa_observed_toolchain_missing'],
+    [
+      'node tools/write_shop_qa_artifact_manifest.mjs --platform windows --artifact supermega-shop-windows-qa.zip --checksum supermega-shop-windows-qa.zip.sha256 --toolchain supermega-shop-windows-qa.zip.toolchain.json --signing supermega-shop-windows-qa.zip.signing.json --output supermega-shop-windows-qa.zip.manifest',
+      'windows_qa_canonical_manifest_missing',
+    ],
+  ]) {
+    const result = verifyShopNativeCiContract(
+      workflow.replace(command, 'echo loose-source-binding'),
+      gradleWrapper,
+      actualTestPaths,
+    )
+    assert.ok(result.failures.includes(failure), failure)
+  }
+})
+
+test('native CI retains exactly the contracted 18-file public gallery artifact', () => {
+  const lastGalleryPath = 'mobile/shop_pos/test/goldens/shop_today_820_my.png'
+  for (const changed of [
+    workflow.replace('mobile/shop_pos/test/goldens/shop_checkout_1200_en.png\n', ''),
+    workflow.replace(
+      'mobile/shop_pos/test/goldens/shop_checkout_1200_en.png',
+      'mobile/shop_pos/test/goldens/shop_checkout_1200_en.png\n            mobile/shop_pos/test/goldens/shop_checkout_1200_en.png',
+    ),
+    workflow.replace(
+      'mobile/shop_pos/test/goldens/shop_checkout_1200_en.png',
+      'mobile/shop_pos/test/goldens/shop_unreviewed_extra.png',
+    ),
+    workflow.replace(
+      'mobile/shop_pos/test/goldens/shop_checkout_1200_en.png',
+      'mobile/shop_pos/test/goldens/shop_*.png',
+    ),
+    workflow.replace('if-no-files-found: error', 'if-no-files-found: warn'),
+    workflow.replace(
+      lastGalleryPath,
+      `${lastGalleryPath}\n            mobile/shop_pos/test/goldens/*.png`,
+    ),
+    workflow.replace(
+      lastGalleryPath,
+      `${lastGalleryPath}\n            mobile/shop_pos/test/goldens/unreviewed.png`,
+    ),
+    workflow.replace(
+      '          if-no-files-found: error',
+      '          path: |\n            mobile/shop_pos/test/goldens/*.png\n          if-no-files-found: error',
+    ),
+    workflow.replace(
+      '          if-no-files-found: error',
+      '          if-no-files-found: error\n          if-no-files-found: warn',
+    ),
+    workflow.replace(
+      '          if-no-files-found: error',
+      '          path: mobile/shop_pos/test/goldens/*.png\n          if-no-files-found: error',
+    ),
+    workflow.replace(
+      '          if-no-files-found: error',
+      '          if-no-files-found: error\n          if-no-files-found: warn # duplicate override',
+    ),
+  ]) {
+    const result = verifyShopNativeCiContract(changed, gradleWrapper, actualTestPaths)
+    assert.ok(result.failures.includes('native_public_gallery_artifact_contract_drift'))
+  }
 })
 
 test('Android QA label is parsed structurally from the built manifest', () => {
@@ -228,6 +304,32 @@ test('production identity is generated only after every default-profile test sha
   )
   assert.ok(omittedMmkShard.failures.includes('native_test_shard_missing:test/shop_mmk_input_test.dart'))
 
+  const omittedPendingCashShard = verifyShopNativeCiContract(
+    workflow.replaceAll(
+      'test/shop_pending_cash_checkout_test.dart',
+      'test/omitted_pending_cash_checkout_test.dart',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    omittedPendingCashShard.failures.includes(
+      'native_test_shard_missing:test/shop_pending_cash_checkout_test.dart',
+    ),
+  )
+
+  const omittedSqliteFullShard = verifyShopNativeCiContract(
+    workflow.replaceAll(
+      'test/shop_sqlite_full_recovery_test.dart',
+      'test/omitted_sqlite_full_recovery_test.dart',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    omittedSqliteFullShard.failures.includes(
+      'native_test_shard_missing:test/shop_sqlite_full_recovery_test.dart',
+    ),
+  )
+
   const duplicatedMmkShard = verifyShopNativeCiContract(
     workflow.replace(
       '            test/shop_mmk_input_test.dart \\',
@@ -251,6 +353,26 @@ test('production identity is generated only after every default-profile test sha
     gradleWrapper,
   )
   assert.ok(missingInventoryGate.failures.includes('native_test_inventory_equality_gate_missing'))
+
+  const missingWorkerInventory = verifyShopNativeCiContract(
+    workflow.replace('          test/shop_process_interrupt_worker_test.dart\n', ''),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(
+    missingWorkerInventory.failures.includes('native_test_inventory_does_not_match_filesystem'),
+  )
+
+  const missingProcessHarness = verifyShopNativeCiContract(
+    workflow.replace(
+      'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 180s python3 scripts/test_shop_process_interruption.py',
+      'true',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingProcessHarness.failures.includes('native_process_interruption_harness_not_bounded_or_missing'),
+  )
 })
 
 test('default-profile test shards share one evidence-backed aggregate budget', () => {
@@ -269,7 +391,7 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
 
   const missingStart = verifyShopNativeCiContract(
     workflow.replace(
-      'date +%s > /tmp/shop-flutter-tests.started-at',
+      'started_at="$(date +%s)"',
       'true',
     ),
     gradleWrapper,
@@ -279,13 +401,53 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
   )
 
   const unboundedPersistence = verifyShopNativeCiContract(
-    workflow.replace('"${remaining}s" flutter test', '300s flutter test'),
+    workflow.replace(
+      'TMPDIR="$persistence_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+      'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
+    ),
     gradleWrapper,
   )
   assert.ok(
     unboundedPersistence.failures.includes(
-      'native_test_persistence_shard_not_using_aggregate_remaining_budget',
+      'native_persistence_shard_not_bounded_or_sequential',
     ),
+  )
+
+  const unboundedBehavior = verifyShopNativeCiContract(
+    workflow.replace(
+      'TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+      'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    unboundedBehavior.failures.includes(
+      'native_behavior_shard_not_bounded_or_sequential',
+    ),
+  )
+
+  const missingElapsedGuard = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$elapsed" -gt "$SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS" ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingElapsedGuard.failures.includes(
+      'native_test_aggregate_budget_elapsed_guard_missing',
+    ),
+  )
+
+  const sharedTemp = verifyShopNativeCiContract(
+    workflow.replace(
+      'persistence_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence.XXXXXX")"',
+      'persistence_tmp="$behavior_tmp"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    sharedTemp.failures.includes('native_persistence_shard_temp_isolation_missing'),
   )
 })
 

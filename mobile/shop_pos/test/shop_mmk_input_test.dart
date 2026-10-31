@@ -8,6 +8,7 @@ void main() {
     expect(parseShopMmkInput('0'), 0);
     expect(parseShopMmkInput('၀'), 0);
     expect(parseShopMmkInput(' ၁၃၅၀၀ '), 13500);
+    expect(parseShopMmkInput('၁3၅0၀'), 13500);
     expect(parseShopMmkInput('$shopMaximumMmk'), shopMaximumMmk);
     expect(
       parseShopMmkInput(_myanmarDigits('$shopMaximumMmk')),

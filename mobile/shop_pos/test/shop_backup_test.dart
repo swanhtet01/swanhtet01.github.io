@@ -15,11 +15,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_backup_export_screen.dart';
+import 'package:supermega_shop/shop_cafe_order_contract.dart';
+import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/shop_runtime_profile.dart';
 import 'package:supermega_shop/shop_runtime_scope.dart';
 import 'package:supermega_shop/shop_startup.dart';
+
+import 'managed_staff_test_support.dart';
 
 const _password = 'correct horse battery staple';
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
@@ -330,7 +334,7 @@ void main() {
       final upgraded = ShopDatabase(NativeDatabase(snapshot));
       try {
         await upgraded.verifyReadyForUse();
-        expect(upgraded.schemaVersion, 17);
+        expect(upgraded.schemaVersion, 22);
         expect(await upgraded.countSales(), salesBefore);
         expect(await upgraded.countStockMovements(), stockBefore);
         expect(await upgraded.countOutboxOperations(), outboxBefore);
@@ -350,16 +354,96 @@ void main() {
       } finally {
         await upgraded.close();
       }
-      ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        snapshot,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
     },
   );
+
+  test('encrypted backup preserves cafe product name snapshots after catalog changes', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'shop-cafe-name-backup-',
+    );
+    final source = File('${root.path}/source.sqlite');
+    final restored = File('${root.path}/restored.sqlite');
+    final cafeArchive = File('${root.path}/cafe.smbak');
+    var cafeDatabase = ShopDatabase(NativeDatabase(source));
+    try {
+      await cafeDatabase.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 4,
+      );
+      await ShopCafeOrderStore(cafeDatabase).applyCommand(
+        CafeOrderCommand(
+          id: 'tea-create',
+          ticketId: 'tea-order',
+          expectedVersion: 0,
+          lines: [
+            CafeOrderLine.local(
+              id: 'tea-line',
+              productId: 'tea',
+              productName: 'Tea',
+              quantity: 1,
+              baseUnitPriceMmk: 2500,
+              remark: '',
+              modifiers: const [],
+            ),
+          ],
+        ),
+        const {},
+      );
+      await cafeDatabase.updateProductDetails(
+        operationId: 'rename-tea',
+        productId: 'tea',
+        expectedName: 'Tea',
+        expectedCategory: '',
+        expectedPriceMmk: 2500,
+        expectedBarcode: null,
+        name: 'Coffee',
+        category: '',
+        priceMmk: 2500,
+        barcode: null,
+      );
+      await ShopBackup.exportEncrypted(
+        database: cafeDatabase,
+        archive: cafeArchive,
+        password: _password,
+        scratchRoot: root,
+      );
+      await cafeDatabase.close();
+
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: cafeArchive,
+        target: restored,
+        password: _password,
+      );
+      ShopBackup.verifySnapshot(restored);
+      cafeDatabase = ShopDatabase(NativeDatabase(restored));
+      final order = await ShopCafeOrderStore(cafeDatabase).read('tea-order');
+      expect(order?.ticket.lines.single.productName, 'Tea');
+      final receipt = await ShopCafeOrderStore(cafeDatabase).completeCash(
+        orderId: 'tea-order',
+        operationId: 'tea-sale',
+        expectedTicketVersion: 1,
+        expectedStateRevision: 0,
+      );
+      expect(receipt.lines.single.productName, 'Tea');
+      expect((await cafeDatabase.readActiveProducts()).single.name, 'Coffee');
+    } finally {
+      await cafeDatabase.close();
+      await root.delete(recursive: true);
+    }
+  });
 
   test(
     'archive is encrypted and restores all local state into a new target',
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
-      expect(bytes[5], 17);
+      expect(bytes[5], ShopBackup.supportedSchemaVersion);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -398,6 +482,136 @@ void main() {
       }
     },
   );
+
+  test('encrypted backup preserves stock receive and count audit with exact replay', () async {
+    final source = ShopDatabase(NativeDatabase.memory());
+    try {
+      await source.addProduct(
+        id: 'stock-backup-rice',
+        name: 'Stock backup rice',
+        priceMmk: 12000,
+        openingStock: 5,
+      );
+      expect(
+        await source.changeStock(
+          operationId: 'stock-backup-receive',
+          productId: 'stock-backup-rice',
+          kind: 'receive',
+          quantity: 3,
+          expectedOnHand: 5,
+        ),
+        8,
+      );
+      expect(
+        await source.changeStock(
+          operationId: 'stock-backup-count',
+          productId: 'stock-backup-rice',
+          kind: 'count',
+          quantity: 6,
+          expectedOnHand: 8,
+        ),
+        6,
+      );
+
+      final stockArchive = File('${directory.path}/stock-audit.smbak');
+      await ShopBackup.exportEncrypted(
+        database: source,
+        archive: stockArchive,
+        password: _password,
+        scratchRoot: directory,
+      );
+      final target = File('${directory.path}/stock-audit.sqlite');
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: stockArchive,
+        target: target,
+        password: _password,
+      );
+      ShopBackup.verifySnapshot(target);
+      final restored = ShopDatabase(NativeDatabase(target));
+      try {
+        expect((await restored.readActiveProducts()).single.onHand, 6);
+        final movements = await restored
+            .customSelect(
+              'SELECT quantity_delta, reason FROM shop_stock_movements '
+              'WHERE product_id = ?',
+              variables: const [Variable<String>('stock-backup-rice')],
+            )
+            .get();
+        expect(
+          movements
+              .map(
+                (row) => (
+                  delta: row.read<int>('quantity_delta'),
+                  reason: row.read<String>('reason'),
+                ),
+              )
+              .toSet(),
+          {
+            (delta: 5, reason: 'opening_stock'),
+            (delta: 3, reason: 'stock_received'),
+            (delta: -2, reason: 'stock_counted'),
+          },
+        );
+        final stockOutbox = await restored
+            .customSelect(
+              "SELECT operation_id, payload_json FROM shop_sync_outbox "
+              "WHERE event_type = 'shop.stock_changed.v1' "
+              'ORDER BY operation_id',
+            )
+            .get();
+        expect(
+          stockOutbox.map((row) => row.read<String>('operation_id')).toList(),
+          ['stock-backup-count', 'stock-backup-receive'],
+        );
+        final payloads = {
+          for (final row in stockOutbox)
+            row.read<String>('operation_id'): jsonDecode(
+              row.read<String>('payload_json'),
+            ) as Map<String, dynamic>,
+        };
+        expect(payloads['stock-backup-receive'], containsPair('delta', 3));
+        expect(
+          payloads['stock-backup-receive'],
+          containsPair('resultingOnHand', 8),
+        );
+        expect(payloads['stock-backup-count'], containsPair('delta', -2));
+        expect(
+          payloads['stock-backup-count'],
+          containsPair('resultingOnHand', 6),
+        );
+
+        final movementsBefore = await restored.countStockMovements();
+        final outboxBefore = await restored.countOutboxOperations();
+        expect(
+          await restored.changeStock(
+            operationId: 'stock-backup-receive',
+            productId: 'stock-backup-rice',
+            kind: 'receive',
+            quantity: 3,
+            expectedOnHand: 5,
+          ),
+          8,
+        );
+        expect(
+          await restored.changeStock(
+            operationId: 'stock-backup-count',
+            productId: 'stock-backup-rice',
+            kind: 'count',
+            quantity: 6,
+            expectedOnHand: 8,
+          ),
+          6,
+        );
+        expect((await restored.readActiveProducts()).single.onHand, 6);
+        expect(await restored.countStockMovements(), movementsBefore);
+        expect(await restored.countOutboxOperations(), outboxBefore);
+      } finally {
+        await restored.close();
+      }
+    } finally {
+      await source.close();
+    }
+  });
 
   test('encrypted backup preserves a pending wallet reversal and exact retry state', () async {
     final source = ShopDatabase.withCorrectionReceiptVerifier(
@@ -562,7 +776,10 @@ void main() {
   test('v14 direct open and restore reject workspace binding and trigger tampering', () async {
     final base = File('${directory.path}/workspace-binding-base.sqlite');
     await _writeWalletReversalSnapshot(base);
-    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 17);
+    ShopBackup.verifySnapshot(
+      base,
+      expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+    );
     final cases = <({String name, void Function(Database) mutate})>[
       (
         name: 'binding-deleted',
@@ -663,7 +880,7 @@ void main() {
       expect(
         () => ShopBackup.verifySnapshot(
           corrupt,
-          expectedSchemaVersion: 17,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
           allowRuntimeUnboundCorrectionHistory: true,
         ),
         throwsFormatException,
@@ -685,7 +902,7 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'binding-${testCase.name}',
-        schemaVersion: 17,
+        schemaVersion: ShopBackup.supportedSchemaVersion,
       );
     }
   });
@@ -695,7 +912,10 @@ void main() {
     () async {
       final base = File('${directory.path}/base-schema-contract.sqlite');
       await database.exportVerifiedLocalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        base,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
       final cases = <({String name, void Function(Database) mutate})>[
         (
           name: 'missing-critical-index',
@@ -741,7 +961,10 @@ void main() {
           raw.close();
         }
         expect(
-          () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 17),
+          () => ShopBackup.verifySnapshot(
+            corrupt,
+            expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+          ),
           throwsFormatException,
         );
         final opened = ShopDatabase(NativeDatabase(corrupt));
@@ -759,7 +982,10 @@ void main() {
     () async {
       final base = File('${directory.path}/proof-ledger-base.sqlite');
       await _writeWalletReversalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        base,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
       final cases = <({String name, void Function(Database) mutate})>[
         (
           name: 'signature',
@@ -856,7 +1082,10 @@ void main() {
     () async {
       final base = File('${directory.path}/verifier-wallet-base.sqlite');
       await _writeWalletReversalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        base,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
       final cases = <({String name, void Function(Database) mutate})>[
         (
           name: 'sale-snapshot-digest',
@@ -978,7 +1207,7 @@ void main() {
           directory: directory,
           snapshot: corrupt,
           stem: 'verifier-${testCase.name}',
-          schemaVersion: 17,
+          schemaVersion: ShopBackup.supportedSchemaVersion,
         );
       }
     },
@@ -987,7 +1216,10 @@ void main() {
   test('authenticated v14 restore rejects reconciliation command and event corruption', () async {
     final base = File('${directory.path}/verifier-reconciled-base.sqlite');
     await _writeWalletReversalSnapshot(base, reconciled: true);
-    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 17);
+    ShopBackup.verifySnapshot(
+      base,
+      expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+    );
     final cases = <({String name, void Function(Database) mutate})>[
       (
         name: 'reconciliation-request',
@@ -1101,7 +1333,7 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'verifier-${testCase.name}',
-        schemaVersion: 17,
+        schemaVersion: ShopBackup.supportedSchemaVersion,
       );
     }
   });
@@ -1114,7 +1346,10 @@ void main() {
     } finally {
       await source.close();
     }
-    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 17);
+    ShopBackup.verifySnapshot(
+      base,
+      expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+    );
     final cases = <({String name, void Function(Database) mutate})>[
       (
         name: 'cash-close-reversal-total',
@@ -1165,7 +1400,7 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'verifier-${testCase.name}',
-        schemaVersion: 17,
+        schemaVersion: ShopBackup.supportedSchemaVersion,
       );
     }
   });
@@ -1679,7 +1914,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        17,
+        ShopBackup.supportedSchemaVersion,
       );
       final columns = await migrated
           .customSelect(
@@ -1711,10 +1946,14 @@ void main() {
       expect(proof.readNullable<String>('finalization_request_id'), isNull);
       expect(proof.readNullable<int>('finalized_at_millis'), isNull);
 
+      final managedOwner = await managedOwnerTestAuthorizer(migrated);
       await migrated.openCashShift(
         operationId: 'v2-history-shift-open',
         operatorLabel: 'Owner',
         openingFloatMmk: 10000,
+        staffActorId:
+            (await migrated.readManagedWorkspaceBinding())!.attachedActorId,
+        staffAuthorizer: managedOwner,
       );
       await migrated.addProduct(
         id: 'v2-history-new-product',
@@ -1727,6 +1966,9 @@ void main() {
         lines: const [
           ShopSaleLineInput(productId: 'v2-history-new-product', quantity: 1),
         ],
+        staffActorId:
+            (await migrated.readManagedWorkspaceBinding())!.attachedActorId,
+        staffAuthorizer: managedOwner,
       );
       final command = await migrated.previewFullSaleReversal(
         operationId: 'v2-history-new-reversal',
@@ -1796,7 +2038,10 @@ void main() {
       target: target,
       password: _password,
     );
-    ShopBackup.verifySnapshot(target, expectedSchemaVersion: 17);
+    ShopBackup.verifySnapshot(
+      target,
+      expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+    );
     final migrated = ShopDatabase(NativeDatabase(target));
     try {
       expect(
@@ -1808,7 +2053,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        17,
+        ShopBackup.supportedSchemaVersion,
       );
     } finally {
       await migrated.close();
@@ -1835,7 +2080,7 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        17,
+        ShopBackup.supportedSchemaVersion,
       );
     } finally {
       await upgraded.close();
@@ -1875,12 +2120,15 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        17,
+        ShopBackup.supportedSchemaVersion,
       );
     } finally {
       await upgraded.close();
     }
-    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 17);
+    ShopBackup.verifySnapshot(
+      old,
+      expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+    );
   });
 
   test(
@@ -1915,7 +2163,10 @@ void main() {
       );
       final raw = sqlite3.open(target.path, mode: OpenMode.readOnly);
       try {
-        expect(raw.select('PRAGMA user_version').single['user_version'], 17);
+        expect(
+          raw.select('PRAGMA user_version').single['user_version'],
+          ShopBackup.supportedSchemaVersion,
+        );
       } finally {
         raw.close();
       }
@@ -1930,7 +2181,7 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          17,
+          ShopBackup.supportedSchemaVersion,
         );
         final recent = (await migrated.readRecentSales()).single;
         expect(recent.reversal?.id, 'verifier-wallet-reversal');
@@ -1953,13 +2204,13 @@ void main() {
         expect(
           () => ShopBackup.verifySnapshot(
             unboundSnapshot,
-            expectedSchemaVersion: 17,
+            expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
           ),
           throwsFormatException,
         );
         ShopBackup.verifySnapshot(
           unboundSnapshot,
-          expectedSchemaVersion: 17,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
           allowRuntimeUnboundCorrectionHistory: true,
         );
         final outboxBefore = await migrated.countOutboxOperations();
@@ -1991,7 +2242,10 @@ void main() {
           '${directory.path}/legacy-v11-migrated-attached.sqlite',
         );
         await migrated.exportVerifiedLocalSnapshot(attachedSnapshot);
-        ShopBackup.verifySnapshot(attachedSnapshot, expectedSchemaVersion: 17);
+        ShopBackup.verifySnapshot(
+          attachedSnapshot,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+        );
       } finally {
         await migrated.close();
       }
@@ -2137,7 +2391,10 @@ void main() {
     }
 
     expect(
-      () => ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 17),
+      () => ShopBackup.verifySnapshot(
+        snapshot,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      ),
       throwsFormatException,
     );
   });
@@ -2186,7 +2443,7 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          17,
+          ShopBackup.supportedSchemaVersion,
         );
         final profile = await migrated
             .customSelect(
@@ -2212,7 +2469,10 @@ void main() {
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(target, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        target,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
     },
   );
 
@@ -2236,7 +2496,7 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          17,
+          ShopBackup.supportedSchemaVersion,
         );
         final proofs = await migrated
             .customSelect(
@@ -2273,7 +2533,10 @@ void main() {
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        legacy,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
     },
   );
 
@@ -2408,7 +2671,7 @@ void main() {
       }
       ShopBackup.verifySnapshot(
         legacy,
-        expectedSchemaVersion: 17,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
         allowRuntimeUnboundCorrectionHistory: true,
       );
 
@@ -2421,7 +2684,7 @@ void main() {
       expect(
         () => ShopBackup.verifySnapshot(
           legacy,
-          expectedSchemaVersion: 17,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
           allowRuntimeUnboundCorrectionHistory: true,
         ),
         throwsFormatException,
@@ -2476,7 +2739,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        17,
+        ShopBackup.supportedSchemaVersion,
       );
       expect(
         (await migrated
@@ -2493,7 +2756,10 @@ void main() {
     } finally {
       await migrated.close();
     }
-    ShopBackup.verifySnapshot(target, expectedSchemaVersion: 17);
+    ShopBackup.verifySnapshot(
+      target,
+      expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+    );
   });
 
   test(
@@ -2516,7 +2782,7 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          17,
+          ShopBackup.supportedSchemaVersion,
         );
         expect(
           (await migrated.readManagedWorkspaceBinding())?.workspaceId,
@@ -2534,7 +2800,10 @@ void main() {
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        legacy,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
     },
   );
 
@@ -2775,12 +3044,15 @@ void main() {
         expect(
           (await upgraded.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          17,
+          ShopBackup.supportedSchemaVersion,
         );
       } finally {
         await upgraded.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        old,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
     },
   );
 
@@ -2809,12 +3081,15 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          17,
+          ShopBackup.supportedSchemaVersion,
         );
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        old,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
     },
   );
 
@@ -2856,7 +3131,10 @@ void main() {
         target: restored,
         password: _password,
       );
-      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 17);
+      ShopBackup.verifySnapshot(
+        restored,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      );
       final reopened = ShopDatabase(NativeDatabase(restored));
       try {
         final products = {
@@ -2888,7 +3166,10 @@ void main() {
       connection.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 17),
+      () => ShopBackup.verifySnapshot(
+        corrupt,
+        expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+      ),
       throwsFormatException,
     );
   });
@@ -2911,7 +3192,7 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'extra-audit-trigger',
-        schemaVersion: 17,
+        schemaVersion: ShopBackup.supportedSchemaVersion,
       );
     },
   );
@@ -2946,7 +3227,7 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'changed-check-literal',
-        schemaVersion: 17,
+        schemaVersion: ShopBackup.supportedSchemaVersion,
       );
     },
   );
@@ -2972,7 +3253,7 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'changed-audit-column',
-        schemaVersion: 17,
+        schemaVersion: ShopBackup.supportedSchemaVersion,
       );
     },
   );
@@ -3002,6 +3283,88 @@ void main() {
     }
     expect(() => ShopBackup.verifySnapshot(invalid), throwsFormatException);
   });
+
+  test(
+    'v22 snapshot rejects invalid or mismatched cash tender evidence',
+    () async {
+      final root = await Directory.systemTemp.createTemp('shop-v22-tender-');
+      final sourceFile = File('${root.path}/source.sqlite');
+      final base = File('${root.path}/base.sqlite');
+      final source = ShopDatabase(NativeDatabase(sourceFile));
+      try {
+        await source.addProduct(
+          id: 'tender-product',
+          name: 'Tender product',
+          priceMmk: 4000,
+          openingStock: 3,
+        );
+        await source.recordCashSale(
+          operationId: 'tender-sale',
+          lines: const [
+            ShopSaleLineInput(productId: 'tender-product', quantity: 1),
+          ],
+          cashTenderedMmk: 5000,
+        );
+        await source.exportVerifiedLocalSnapshot(base);
+        ShopBackup.verifySnapshot(base);
+
+        for (final mutation in [
+          'below-total',
+          'wallet-tender',
+          'outbox-mismatch',
+        ]) {
+          final corrupt = await base.copy('${root.path}/$mutation.sqlite');
+          final connection = sqlite3.open(corrupt.path);
+          try {
+            connection.execute('PRAGMA ignore_check_constraints = ON');
+            connection.execute('DROP TRIGGER shop_sales_no_update');
+            if (mutation == 'below-total') {
+              connection.execute(
+                'UPDATE shop_sales SET cash_tendered_mmk = total_mmk - 1',
+              );
+            } else if (mutation == 'wallet-tender') {
+              connection.execute(
+                "UPDATE shop_sales SET payment_method = 'kbzpay'",
+              );
+            } else {
+              final row = connection
+                  .select(
+                    "SELECT payload_json FROM shop_sync_outbox WHERE operation_id = 'tender-sale'",
+                  )
+                  .single;
+              final payload = jsonDecode(
+                row['payload_json'] as String,
+              ) as Map<String, dynamic>;
+              payload['cashTenderedMmk'] = 6000;
+              payload['cashChangeMmk'] = 2000;
+              connection.execute(
+                "UPDATE shop_sync_outbox SET payload_json = ? WHERE operation_id = 'tender-sale'",
+                [jsonEncode(payload)],
+              );
+            }
+            connection.execute(
+              shopImmutableTriggerV11Sql(
+                table: 'shop_sales',
+                operation: 'update',
+                message: 'Completed Shop sales are immutable',
+              ),
+            );
+            connection.execute('PRAGMA ignore_check_constraints = OFF');
+          } finally {
+            connection.close();
+          }
+          expect(
+            () => ShopBackup.verifySnapshot(corrupt),
+            throwsFormatException,
+            reason: mutation,
+          );
+        }
+      } finally {
+        await source.close();
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
   test('v8 snapshot rejects a malformed image blob', () async {
     final corrupt = File('${directory.path}/malformed-photo.sqlite');
@@ -3714,6 +4077,92 @@ void main() {
     }
   });
 
+  testWidgets(
+    'managed existing Shop stays blocked before the application is built',
+    (tester) async {
+      final documents = Directory.systemTemp.createTempSync(
+        'shop-managed-existing-',
+      );
+      final closeRecorder = _DatabaseCloseRecorder();
+      final databaseVerifier = _OpenedDatabaseVerifier();
+      var buildCalls = 0;
+      try {
+        await tester.runAsync(() async {
+          final target = ShopDatabase.privateDatabaseFile(documents);
+          await ShopBackup.restoreIntoEmptyDatabase(
+            archive: archive,
+            target: target,
+            password: _password,
+          );
+          final managed = ShopDatabase.inPrivateDocuments(documents);
+          try {
+            await managed.attachAuthenticatedManagedWorkspace(
+              const ShopAuthenticatedWorkspaceSelection(
+                workspaceId: 'workspace-managed-startup',
+                actorId: 'owner-managed-startup',
+              ),
+            );
+          } finally {
+            await managed.close();
+          }
+        });
+
+        await tester.pumpWidget(
+          ShopStartup(
+            documents: documents,
+            importScratchRoot: documents,
+            initialMyanmar: false,
+            buildShop: (_, _) {
+              buildCalls++;
+              return const MaterialApp(
+                home: Scaffold(body: Text('Opened managed Shop')),
+              );
+            },
+            closeDatabase: closeRecorder.call,
+            verifyDatabaseFile: _verifyStartupDatabase,
+            databaseFactory: _openStartupDatabase,
+            verifyOpenedDatabase: databaseVerifier.call,
+          ),
+        );
+        await _pumpUntil(
+          tester,
+          find.textContaining('cannot safely open'),
+          databaseVerifier: databaseVerifier,
+        );
+        await closeRecorder.service(tester);
+        await tester.pumpAndSettle();
+
+        expect(buildCalls, 0);
+        expect(find.text('Opened managed Shop'), findsNothing);
+        expect(find.textContaining('cannot safely open'), findsOneWidget);
+
+        final preserved = sqlite3.open(
+          ShopDatabase.privateDatabaseFile(documents).path,
+          mode: OpenMode.readOnly,
+        );
+        try {
+          final binding = preserved
+              .select(
+                'SELECT workspace_id, attached_actor_id '
+                'FROM shop_managed_workspace_binding WHERE singleton = 1',
+              )
+              .single;
+          expect(binding['workspace_id'], 'workspace-managed-startup');
+          expect(binding['attached_actor_id'], 'owner-managed-startup');
+        } finally {
+          preserved.close();
+        }
+      } finally {
+        await _disposeOpenedStartup(
+          tester,
+          closeRecorder,
+          closeExpected: databaseVerifier.wasServiced,
+        );
+        documents.deleteSync(recursive: true);
+      }
+    },
+  );
+
   test(
     'existing v5 store passes runtime preflight and migrates before opening',
     () async {
@@ -3890,95 +4339,144 @@ void main() {
     },
   );
 
-  test(
-    'runtime preparation accepts an abrupt-exit cold rollback journal',
-    () async {
-      final documents = await Directory.systemTemp.createTemp(
-        'shop-existing-cold-journal-',
+  test('runtime preparation accepts an abrupt-exit cold rollback journal', () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'shop-existing-cold-journal-',
+    );
+    try {
+      final target = ShopDatabase.privateDatabaseFile(documents);
+      final fixture = ShopDatabase(NativeDatabase(target));
+      await fixture.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 4,
       );
-      try {
-        final target = ShopDatabase.privateDatabaseFile(documents);
-        final fixture = ShopDatabase(NativeDatabase(target));
-        await fixture.addProduct(
-          id: 'tea',
-          name: 'Tea',
-          priceMmk: 2500,
-          openingStock: 4,
-        );
-        await fixture.close();
-        final committedBytes = await target.readAsBytes();
+      await fixture.close();
+      final committedBytes = await target.readAsBytes();
 
-        final abruptExit = await Process.run('dart', [
-          'run',
-          'test/fixtures/leave_cold_rollback_journal.dart',
-          target.path,
-        ], workingDirectory: Directory.current.path);
-        expect(abruptExit.exitCode, 19);
-        final journal = File('${target.path}-journal');
-        expect(await journal.exists(), isTrue);
-        final journalBytes = await journal.readAsBytes();
-        expect(journalBytes.length, greaterThan(512));
-        expect(journalBytes.take(8), everyElement(0));
-        expect(await target.readAsBytes(), committedBytes);
-
-        expect(
-          await ShopBackup.prepareRuntimeStore(target),
-          ShopStorePresence.existing,
+      // Invoke the fixture directly with the package configuration that the
+      // Flutter test runner has already prepared. `dart run` executes native
+      // asset hooks in the package-wide `.dart_tool/hooks_runner` directory;
+      // parallel Flutter workers use that same mutable directory and can
+      // make this child fail before it reaches the intentional exit(19).
+      final childEnvironment = <String, String>{};
+      var dartSdkDirectory = File(Platform.resolvedExecutable).parent;
+      File? dartExecutable;
+      while (dartSdkDirectory.parent.path != dartSdkDirectory.path) {
+        final candidate = File(
+          '${dartSdkDirectory.path}${Platform.pathSeparator}dart-sdk'
+          '${Platform.pathSeparator}bin${Platform.pathSeparator}'
+          '${Platform.isWindows ? 'dart.exe' : 'dart'}',
         );
-        expect(await journal.exists(), isTrue);
-        ShopBackup.verifyRuntimeStore(target);
-        final reopened = sqlite3.open(target.path, mode: OpenMode.readOnly);
-        try {
-          expect(
-            reopened.select('SELECT on_hand FROM shop_products WHERE id = ?', [
-              'tea',
-            ]).single['on_hand'],
-            4,
-          );
-          expect(
-            reopened.select('PRAGMA integrity_check').single.values.single,
-            'ok',
-          );
-        } finally {
-          reopened.close();
+        if (await candidate.exists()) {
+          dartExecutable = candidate;
+          break;
         }
-
-        final forgedJournal = Uint8List.fromList(journalBytes);
-        final forgedData = ByteData.sublistView(forgedJournal);
-        final nonce = forgedData.getUint32(12, Endian.big);
-        final sectorSize = forgedData.getUint32(20, Endian.big);
-        final pageSize = forgedData.getUint32(24, Endian.big);
-        final pageOffset = sectorSize + 4;
-        forgedJournal[pageOffset + pageSize - 200] ^= 1;
-        var forgedChecksum = nonce;
-        for (var index = pageSize - 200; index > 0; index -= 200) {
-          forgedChecksum =
-              (forgedChecksum + forgedJournal[pageOffset + index]) & 0xffffffff;
-        }
-        forgedData.setUint32(pageOffset + pageSize, forgedChecksum, Endian.big);
-        await journal.writeAsBytes(forgedJournal, flush: true);
-        final committedAfterVerification = await target.readAsBytes();
-        expect(
-          await ShopBackup.prepareRuntimeStore(target),
-          ShopStorePresence.unsafe,
-        );
-        expect(await target.readAsBytes(), committedAfterVerification);
-        expect(await journal.readAsBytes(), forgedJournal);
-
-        final corruptJournal = Uint8List.fromList(journalBytes);
-        corruptJournal[corruptJournal.length - 1] ^= 1;
-        await journal.writeAsBytes(corruptJournal, flush: true);
-        expect(
-          await ShopBackup.prepareRuntimeStore(target),
-          ShopStorePresence.unsafe,
-        );
-        expect(await target.readAsBytes(), committedAfterVerification);
-        expect(await journal.readAsBytes(), corruptJournal);
-      } finally {
-        await documents.delete(recursive: true);
+        dartSdkDirectory = dartSdkDirectory.parent;
       }
-    },
-  );
+      expect(
+        dartExecutable,
+        isNotNull,
+        reason: 'Flutter test did not expose its pinned Dart SDK executable.',
+      );
+      if (Platform.isLinux) {
+        final sqliteAsset = File('build/native_assets/linux/libsqlite3.so')
+            .absolute;
+        expect(
+          await sqliteAsset.exists(),
+          isTrue,
+          reason: 'Flutter did not prepare the SQLite native test asset.',
+        );
+        final inheritedPreload = Platform.environment['LD_PRELOAD'];
+        childEnvironment['LD_PRELOAD'] = [
+          sqliteAsset.path,
+          if (inheritedPreload != null && inheritedPreload.isNotEmpty)
+            inheritedPreload,
+        ].join(':');
+      }
+      final abruptExit = await Process.run(
+        dartExecutable!.path,
+        [
+          '--packages=${File('.dart_tool/package_config.json').absolute.path}',
+          File('test/fixtures/leave_cold_rollback_journal.dart').absolute.path,
+          target.path,
+        ],
+        workingDirectory: documents.path,
+        environment: childEnvironment,
+      );
+      expect(
+        abruptExit.exitCode,
+        19,
+        reason:
+            'Cold-journal fixture failed before its intentional exit.\n'
+            'stdout: ${abruptExit.stdout}\n'
+            'stderr: ${abruptExit.stderr}',
+      );
+      final journal = File('${target.path}-journal');
+      expect(await journal.exists(), isTrue);
+      final journalBytes = await journal.readAsBytes();
+      expect(journalBytes.length, greaterThan(512));
+      expect(journalBytes.take(8), everyElement(0));
+      expect(await target.readAsBytes(), committedBytes);
+
+      expect(
+        await ShopBackup.prepareRuntimeStore(target),
+        ShopStorePresence.existing,
+      );
+      expect(await journal.exists(), isTrue);
+      ShopBackup.verifyRuntimeStore(target);
+      final reopened = sqlite3.open(target.path, mode: OpenMode.readOnly);
+      try {
+        expect(
+          reopened.select('SELECT on_hand FROM shop_products WHERE id = ?', [
+            'tea',
+          ]).single['on_hand'],
+          4,
+        );
+        expect(
+          reopened.select('PRAGMA integrity_check').single.values.single,
+          'ok',
+        );
+      } finally {
+        reopened.close();
+      }
+
+      final forgedJournal = Uint8List.fromList(journalBytes);
+      final forgedData = ByteData.sublistView(forgedJournal);
+      final nonce = forgedData.getUint32(12, Endian.big);
+      final sectorSize = forgedData.getUint32(20, Endian.big);
+      final pageSize = forgedData.getUint32(24, Endian.big);
+      final pageOffset = sectorSize + 4;
+      forgedJournal[pageOffset + pageSize - 200] ^= 1;
+      var forgedChecksum = nonce;
+      for (var index = pageSize - 200; index > 0; index -= 200) {
+        forgedChecksum =
+            (forgedChecksum + forgedJournal[pageOffset + index]) & 0xffffffff;
+      }
+      forgedData.setUint32(pageOffset + pageSize, forgedChecksum, Endian.big);
+      await journal.writeAsBytes(forgedJournal, flush: true);
+      final committedAfterVerification = await target.readAsBytes();
+      expect(
+        await ShopBackup.prepareRuntimeStore(target),
+        ShopStorePresence.unsafe,
+      );
+      expect(await target.readAsBytes(), committedAfterVerification);
+      expect(await journal.readAsBytes(), forgedJournal);
+
+      final corruptJournal = Uint8List.fromList(journalBytes);
+      corruptJournal[corruptJournal.length - 1] ^= 1;
+      await journal.writeAsBytes(corruptJournal, flush: true);
+      expect(
+        await ShopBackup.prepareRuntimeStore(target),
+        ShopStorePresence.unsafe,
+      );
+      expect(await target.readAsBytes(), committedAfterVerification);
+      expect(await journal.readAsBytes(), corruptJournal);
+    } finally {
+      await documents.delete(recursive: true);
+    }
+  });
 
   test(
     'runtime preparation preserves unknown journal and WAL states',
@@ -4533,6 +5031,8 @@ void _removeV14AuthorizationProofsForLegacyFixture(Database connection) {
 }
 
 void _removeV17CorrectionConsumptionObjects(Database connection) {
+  connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
+  _removeV18CashMovementObjects(connection);
   for (final trigger in const [
     'shop_sale_reversals_require_consumption',
     'shop_wallet_reconciliations_require_consumption',
@@ -4551,6 +5051,67 @@ void _removeV17CorrectionConsumptionObjects(Database connection) {
     'shop_correction_lineage_state',
   ]) {
     connection.execute('DROP TABLE IF EXISTS $table');
+  }
+}
+
+void _removeV18CashMovementObjects(Database connection) {
+  _removeV19CafeOrderObjects(connection);
+  for (final trigger in const [
+    'shop_cash_movements_require_open_shift',
+    'shop_cash_movements_no_update',
+    'shop_cash_movements_no_delete',
+  ]) {
+    connection.execute('DROP TRIGGER IF EXISTS $trigger');
+  }
+  connection.execute('DROP INDEX IF EXISTS shop_cash_movements_shift_id');
+  connection.execute('DROP TABLE IF EXISTS shop_cash_movements');
+  for (final column in const [
+    'review_cash_out_total_mmk',
+    'review_cash_in_total_mmk',
+    'review_cash_movement_count',
+    'cash_out_total_mmk',
+    'cash_in_total_mmk',
+    'cash_movement_count',
+  ]) {
+    connection.execute('ALTER TABLE shop_cash_shifts DROP COLUMN $column');
+  }
+}
+
+void _removeV19CafeOrderObjects(Database connection) {
+  for (final definition
+      in shopPendingCashCheckoutSchemaDefinitionsV21().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCafeCancellationSchemaDefinitionsV20().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCafeOrderSchemaDefinitionsV19().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
   }
 }
 
@@ -4932,7 +5493,8 @@ Future<ShopDatabase> _closedCashReversalDatabase() async {
       reason: 'Verifier full cash return',
       confirmCashReturned: true,
     );
-    await _attachBackupWorkspace(source);
+    final binding = await _attachBackupWorkspace(source);
+    final managedOwner = await managedOwnerTestAuthorizer(source);
     await source.recordAuthorizedFullSaleReversal(
       command: reversal,
       authorization: await _backupAuthorization(
@@ -4950,6 +5512,8 @@ Future<ShopDatabase> _closedCashReversalDatabase() async {
       seenCashReversalCount: review.cashReversalCount,
       seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
       countedCashMmk: review.expectedCashMmk,
+      staffActorId: binding.attachedActorId,
+      staffAuthorizer: managedOwner,
     );
     return source;
   } catch (_) {
@@ -5064,7 +5628,7 @@ Future<void> _expectV14ProofRestoreRejected({
   await _writeAuthenticatedArchive(
     archive,
     await snapshot.readAsBytes(),
-    schemaVersion: 17,
+    schemaVersion: ShopBackup.supportedSchemaVersion,
   );
   final target = File('${directory.path}/$stem-restored.sqlite');
   await expectLater(

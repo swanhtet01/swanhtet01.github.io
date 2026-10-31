@@ -79,6 +79,7 @@ class ShopStartup extends StatefulWidget {
   final ShopRuntimeScope? runtimeScope;
   final ShopQaEvidenceStore? qaEvidenceStore;
   final ShopScopedPreferences? scopedPreferences;
+
   final bool allowTestFileAccessWithoutScope;
 
   @override
@@ -198,6 +199,7 @@ class _ShopStartupState extends State<ShopStartup> {
       } else {
         await openedVerifier(pendingDatabase);
       }
+      await pendingDatabase.verifyManagedWorkspaceUnavailableWithoutSession();
       if (!mounted) return;
 
       final openedShop = widget.buildShop(pendingDatabase, _myanmar);

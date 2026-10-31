@@ -39,12 +39,14 @@ void main() {
         final receipt = await database.recordCashSale(
           operationId: 'acceptance-cash-sale',
           lines: lines,
+          cashTenderedMmk: 20000,
         );
         expect(receipt.paymentMethod, 'cash');
         expect(receipt.totalMmk, 13500);
         expect(receipt.lines.single.productName, 'Premium Rice');
         expect(receipt.lines.single.quantity, 2);
-        expect(20000 - receipt.totalMmk, 6500);
+        expect(receipt.cashTenderedMmk, 20000);
+        expect(receipt.cashChangeMmk, 6500);
 
         final receiptText = shopReceiptTextLines(
           receipt,
@@ -53,6 +55,8 @@ void main() {
         expect(receiptText, contains('Premium Rice x2'));
         expect(receiptText, contains('TOTAL: 13,500 MMK'));
         expect(receiptText, contains('Payment: Cash'));
+        expect(receiptText, contains('Cash received: 20,000 MMK'));
+        expect(receiptText, contains('Change: 6,500 MMK'));
 
         final countsAfterSale = (
           sales: await database.countSales(),
@@ -62,6 +66,7 @@ void main() {
         final retry = await database.recordCashSale(
           operationId: 'acceptance-cash-sale',
           lines: lines,
+          cashTenderedMmk: 20000,
         );
         expect(retry.id, receipt.id);
         expect(await database.countSales(), countsAfterSale.sales);
@@ -70,6 +75,14 @@ void main() {
           countsAfterSale.stockMovements,
         );
         expect(await database.countOutboxOperations(), countsAfterSale.outbox);
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'acceptance-cash-sale',
+            lines: lines,
+            cashTenderedMmk: 21000,
+          ),
+          throwsStateError,
+        );
 
         final review = await database.readCashShiftReview(shift.id);
         expect(review.saleCount, 1);
@@ -101,6 +114,8 @@ void main() {
         expect(reopenedProduct.onHand, 3);
         expect(reopenedReceipt.id, receipt.id);
         expect(reopenedReceipt.operationId, 'acceptance-cash-sale');
+        expect(reopenedReceipt.cashTenderedMmk, 20000);
+        expect(reopenedReceipt.cashChangeMmk, 6500);
         expect(reopenedShift?.state, 'closed');
         expect(await database.countSales(), countsAfterClose.sales);
         expect(
@@ -150,6 +165,8 @@ void main() {
         expect(restoredProduct.onHand, 3);
         expect(restoredReceipt.id, receipt.id);
         expect(restoredReceipt.lines.single.productName, 'Premium Rice');
+        expect(restoredReceipt.cashTenderedMmk, 20000);
+        expect(restoredReceipt.cashChangeMmk, 6500);
         expect(restoredShift?.state, 'closed');
         expect(await database.countSales(), countsAfterClose.sales);
         expect(
@@ -166,6 +183,7 @@ void main() {
         final restoredRetry = await database.recordCashSale(
           operationId: 'acceptance-cash-sale',
           lines: lines,
+          cashTenderedMmk: 20000,
         );
         expect(restoredRetry.id, receipt.id);
         expect(await database.countSales(), restoredCounts.sales);

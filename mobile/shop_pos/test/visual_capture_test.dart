@@ -27,6 +27,17 @@ const _captureKey = ValueKey('native-shop-visual-capture');
 const _photoFixtureDir = 'test/assets/grocery_photos';
 const _visualMemberId = 'mem_56565656565656565656565656565656';
 const _visualMemberDisplayCode = '00005656';
+final _visualCaptureDay = DateTime.now();
+
+DateTime _visualClock() {
+  return DateTime(
+    _visualCaptureDay.year,
+    _visualCaptureDay.month,
+    _visualCaptureDay.day,
+    7,
+    2,
+  );
+}
 
 String _visualMemberToken() {
   final bytes = List<int>.generate(32, (index) => (56 + index) & 0xff);
@@ -107,7 +118,10 @@ List<Map<String, dynamic>> _groceryFixture() {
 }
 
 Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
-  final database = ShopDatabase(NativeDatabase.memory());
+  final database = ShopDatabase.testOnlyWithSaleAndCashShiftClock(
+    executor: NativeDatabase.memory(),
+    clock: _visualClock,
+  );
   await _seedVisualMember(database);
   // Fixture-only names, prices, stock, and rights-checked photos. The ledger
   // explicitly marks price and stock as illustrative, not live market data.
@@ -331,20 +345,25 @@ void main() {
   );
 
   setUpAll(() async {
-    if (!_capture) return;
-    await Directory('test/goldens').create(recursive: true);
-    // Widget tests otherwise paint Material icons with the Ahem test font,
-    // making valid app icons look like missing-glyph boxes in review images.
-    final materialIconsPath = Platform.environment['SHOP_MATERIAL_ICONS_FONT'];
-    if (materialIconsPath == null || !File(materialIconsPath).existsSync()) {
-      throw StateError(
-        'SHOP_MATERIAL_ICONS_FONT must name the Flutter SDK icon font.',
-      );
+    FontLoader? materialIcons;
+    if (_capture) {
+      await Directory('test/goldens').create(recursive: true);
+      // Widget tests otherwise paint Material icons with the Ahem test font,
+      // making valid app icons look like missing-glyph boxes in review images.
+      final materialIconsPath =
+          Platform.environment['SHOP_MATERIAL_ICONS_FONT'];
+      if (materialIconsPath == null || !File(materialIconsPath).existsSync()) {
+        throw StateError(
+          'SHOP_MATERIAL_ICONS_FONT must name the Flutter SDK icon font.',
+        );
+      }
+      materialIcons = FontLoader('MaterialIcons')
+        ..addFont(
+          File(materialIconsPath).readAsBytes().then(ByteData.sublistView),
+        );
     }
-    final materialIcons = FontLoader('MaterialIcons')
-      ..addFont(
-        File(materialIconsPath).readAsBytes().then(ByteData.sublistView),
-      );
+    // Structural layout checks need the real bundled text metrics too. Ahem's
+    // placeholder glyphs overstate long Myanmar labels at tablet widths.
     final inter = FontLoader('Inter')
       ..addFont(rootBundle.load('assets/fonts/Inter/Inter-Variable.ttf'));
     final myanmar = FontLoader('NotoSansMyanmar')
@@ -370,12 +389,14 @@ void main() {
         ),
       );
     await Future.wait([
-      materialIcons.load(),
+      if (materialIcons != null) materialIcons.load(),
       inter.load(),
       myanmar.load(),
       myanmarUi.load(),
     ]);
   });
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets(
     'decode actual EN and MY ESC POS receipt bytes for 384 420 and 576 dots',
@@ -658,18 +679,21 @@ void main() {
     tester.platformDispatcher.clearTextScaleFactorTestValue();
   });
 
-  for (final (language, textScale) in [
-    ('en', 1.0),
-    ('my', 1.0),
-    ('en', 1.3),
-    ('my', 1.3),
+  for (final (width, language, textScale) in [
+    (768.0, 'en', 1.0),
+    (768.0, 'my', 1.0),
+    (768.0, 'en', 1.3),
+    (768.0, 'my', 1.3),
+    (1024.0, 'en', 1.0),
+    (1024.0, 'my', 1.0),
+    (1024.0, 'en', 1.3),
+    (1024.0, 'my', 1.3),
   ]) {
     testWidgets(
-      '768px portrait tablet keeps catalog and basket at $language ${textScale}x',
+      '${width.toInt()}px tablet keeps catalog and basket at $language ${textScale}x',
       (tester) async {
-        const width = 768.0;
-        const height = 1024.0;
-        tester.view.physicalSize = const Size(width, height);
+        final height = width == 768 ? 1024.0 : 768.0;
+        tester.view.physicalSize = Size(width, height);
         tester.view.devicePixelRatio = 1;
         tester.platformDispatcher.textScaleFactorTestValue = textScale;
         addTearDown(tester.view.resetPhysicalSize);
@@ -700,7 +724,8 @@ void main() {
           final catalogBounds = tester.getRect(catalog);
           final basketBounds = tester.getRect(basket);
           expect(catalogBounds.width, greaterThanOrEqualTo(390));
-          expect(basketBounds.width, 300);
+          expect(basketBounds.width, greaterThanOrEqualTo(300));
+          expect(basketBounds.width, lessThanOrEqualTo(500));
           expect(catalogBounds.right, lessThan(basketBounds.left));
           expect(basketBounds.right, lessThanOrEqualTo(width));
           final newProduct = find.byKey(
@@ -710,33 +735,45 @@ void main() {
           final productActions = find.byKey(
             const ValueKey('shop-product-actions'),
           );
-          expect(newProduct, findsOneWidget);
-          expect(find.text(language == 'my' ? 'အသစ်' : 'New'), findsOneWidget);
           expect(camera, findsOneWidget);
           expect(productActions, findsOneWidget);
-          expect(tester.getSize(newProduct).height, greaterThanOrEqualTo(48));
           expect(tester.getSize(camera).height, greaterThanOrEqualTo(48));
-          expect(
-            tester.getRect(newProduct).left,
-            greaterThanOrEqualTo(tester.getRect(camera).right),
-          );
-          expect(
-            tester.getRect(newProduct).right,
-            lessThanOrEqualTo(tester.getRect(productActions).left),
-          );
-          expect(
-            (tester.getRect(newProduct).center.dy -
-                    tester.getRect(camera).center.dy)
-                .abs(),
-            lessThan(2),
-          );
+          if (width == 768) {
+            expect(newProduct, findsOneWidget);
+            expect(
+              find.text(language == 'my' ? 'အသစ်' : 'New'),
+              findsOneWidget,
+            );
+            expect(tester.getSize(newProduct).height, greaterThanOrEqualTo(48));
+            expect(
+              tester.getRect(newProduct).left,
+              greaterThanOrEqualTo(tester.getRect(camera).right),
+            );
+            expect(
+              tester.getRect(newProduct).right,
+              lessThanOrEqualTo(tester.getRect(productActions).left),
+            );
+            expect(
+              (tester.getRect(newProduct).center.dy -
+                      tester.getRect(camera).center.dy)
+                  .abs(),
+              lessThan(2),
+            );
+          } else {
+            final fullAdd = find.widgetWithText(
+              OutlinedButton,
+              language == 'my' ? 'ကုန်ပစ္စည်းအသစ်' : 'New product',
+            );
+            expect(fullAdd, findsOneWidget);
+            expect(tester.getSize(fullAdd).height, greaterThanOrEqualTo(48));
+          }
           expect(tester.takeException(), isNull);
           if (_capture) {
             await _resolveVisibleProductPhotos(tester);
             await expectLater(
               find.byKey(_captureKey),
               matchesGoldenFile(
-                'goldens/shop_tablet_sell_768_${language}_${textScale == 1.0 ? 'normal' : 'large'}.png',
+                'goldens/shop_tablet_sell_${width.toInt()}_${language}_${textScale == 1.0 ? 'normal' : 'large'}.png',
               ),
             );
           }
@@ -766,7 +803,7 @@ void main() {
             await expectLater(
               find.byKey(_captureKey),
               matchesGoldenFile(
-                'goldens/shop_tablet_checkout_768_${language}_${textScale == 1.0 ? 'normal' : 'large'}.png',
+                'goldens/shop_tablet_checkout_${width.toInt()}_${language}_${textScale == 1.0 ? 'normal' : 'large'}.png',
               ),
             );
           }
@@ -1435,7 +1472,10 @@ void main() {
 Future<ShopDatabase> _closedShiftCaptureDatabase({
   required bool myanmar,
 }) async {
-  final database = ShopDatabase(NativeDatabase.memory());
+  final database = ShopDatabase.testOnlyWithSaleAndCashShiftClock(
+    executor: NativeDatabase.memory(),
+    clock: _visualClock,
+  );
   await database.addProduct(
     id: 'tea-export-visual',
     name: myanmar ? 'လက်ဖက်ရည်' : 'Tea',

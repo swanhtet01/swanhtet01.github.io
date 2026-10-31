@@ -502,11 +502,23 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                     Wrap(spacing: 12, runSpacing: 12, children: metricCards),
                 ],
                 if (phoneLayout) ..._attentionItems(snapshot, compact: true),
+                if (phoneLayout &&
+                    (snapshot.salesSummary.grossSaleCount > 0 ||
+                        snapshot.salesSummary.reversalCount > 0)) ...[
+                  const SizedBox(height: 16),
+                  _paymentBreakdown(snapshot.salesSummary),
+                ],
                 if (phoneLayout && snapshot.recentSales.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _salesPreview(snapshot),
                 ],
                 if (!phoneLayout) ..._attentionItems(snapshot),
+                if (!phoneLayout &&
+                    (snapshot.salesSummary.grossSaleCount > 0 ||
+                        snapshot.salesSummary.reversalCount > 0)) ...[
+                  const SizedBox(height: 24),
+                  _paymentBreakdown(snapshot.salesSummary),
+                ],
                 if (!phoneLayout && snapshot.recentSales.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   _salesPreview(snapshot),
@@ -876,6 +888,91 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           ),
         ],
       ),
+    ),
+  );
+
+  Widget _paymentBreakdown(ShopSalesSummary summary) => Card(
+    key: const ValueKey('shop-tender-breakdown'),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _copy('Payment breakdown', 'ငွေပေးချေမှု အမျိုးအစား'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _copy('Net after reversals', 'ပြန်လှန်မှုများ နုတ်ပြီး'),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 600
+                  ? 3
+                  : constraints.maxWidth >= 360
+                  ? 2
+                  : 1;
+              final spacing = 12.0 * (columns - 1);
+              final itemWidth = (constraints.maxWidth - spacing) / columns;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _tenderTotal(
+                    width: itemWidth,
+                    keyName: 'cash',
+                    label: _copy('Cash', 'ငွေသား'),
+                    amountMmk: summary.netCashSalesMmk,
+                  ),
+                  _tenderTotal(
+                    width: itemWidth,
+                    keyName: 'kbzpay',
+                    label: 'KBZPay',
+                    amountMmk: summary.netKbzpaySalesMmk,
+                  ),
+                  _tenderTotal(
+                    width: itemWidth,
+                    keyName: 'wavepay',
+                    label: 'WavePay',
+                    amountMmk: summary.netWavepaySalesMmk,
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _tenderTotal({
+    required double width,
+    required String keyName,
+    required String label,
+    required int amountMmk,
+  }) => SizedBox(
+    width: width,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          _money(amountMmk),
+          key: ValueKey('shop-tender-net:$keyName'),
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+        ),
+      ],
     ),
   );
 

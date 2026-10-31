@@ -61,6 +61,7 @@ class ShopPreferenceKeys {
 
   String get localeMyanmar => _key('shop_locale_myanmar');
   String get pendingPickerIntent => _key('shop_pending_picker_intent');
+  String get favoriteProductIds => _key('shop_favorite_product_ids');
   String get receiptPrinterHost => _key(shopReceiptPrinterHostKey);
   String get receiptPaperWidth => _key(shopReceiptPaperWidthKey);
 
@@ -69,10 +70,18 @@ class ShopPreferenceKeys {
 }
 
 class ShopScopedPreferences {
-  const ShopScopedPreferences(this.instance, this.keys);
+  const ShopScopedPreferences(
+    this.instance,
+    this.keys, {
+    this.stringListWriter,
+  });
 
   final SharedPreferences instance;
   final ShopPreferenceKeys keys;
+  final Future<bool> Function(String key, List<String> value)? stringListWriter;
+
+  Future<bool> setStringList(String key, List<String> value) =>
+      stringListWriter?.call(key, value) ?? instance.setStringList(key, value);
 }
 
 Future<ShopScopedPreferences> openProductionShopPreferences() async =>

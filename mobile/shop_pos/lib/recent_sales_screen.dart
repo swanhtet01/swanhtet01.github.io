@@ -48,6 +48,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   Timer? _searchDebounce;
   int _page = 0;
   String _query = '';
+  ShopSaleHistoryFilter _filter = ShopSaleHistoryFilter.all;
   late Future<List<ShopSaleReceipt>> _sales = _readPage();
   late final ReceiptReprintService _reprinter =
       widget.reprintService ??
@@ -76,6 +77,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     limit: _pageSize + 1,
     offset: _page * _pageSize,
     query: _query,
+    filter: _filter,
   );
 
   void _reload() {
@@ -99,6 +101,15 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
         _page = 0;
         _sales = _readPage();
       });
+    });
+  }
+
+  void _setFilter(ShopSaleHistoryFilter filter) {
+    if (filter == _filter) return;
+    setState(() {
+      _filter = filter;
+      _page = 0;
+      _sales = _readPage();
     });
   }
 
@@ -195,6 +206,32 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
               ),
             ),
           ),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: SingleChildScrollView(
+                key: const ValueKey('shop-sale-history-filters'),
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Row(
+                  children: [
+                    for (final filter in ShopSaleHistoryFilter.values) ...[
+                      FilterChip(
+                        key: ValueKey(
+                          'shop-sale-history-filter:${filter.name}',
+                        ),
+                        label: Text(_filterName(filter)),
+                        selected: _filter == filter,
+                        onSelected: (_) => _setFilter(filter),
+                      ),
+                      if (filter != ShopSaleHistoryFilter.values.last)
+                        const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: FutureBuilder<List<ShopSaleReceipt>>(
               future: _sales,
@@ -236,10 +273,10 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                     child: Text(
                       shopCopy(
                         widget.myanmar,
-                        _query.isEmpty
+                        _query.isEmpty && _filter == ShopSaleHistoryFilter.all
                             ? 'Completed sales will appear here.'
                             : 'No matching sales.',
-                        _query.isEmpty
+                        _query.isEmpty && _filter == ShopSaleHistoryFilter.all
                             ? 'ပြီးဆုံးသော အရောင်းများကို ဤနေရာတွင် ပြပါမည်။'
                             : 'ကိုက်ညီသော အရောင်းမရှိပါ။',
                       ),
@@ -534,6 +571,18 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     _ => method,
   };
 
+  String _filterName(ShopSaleHistoryFilter filter) => switch (filter) {
+    ShopSaleHistoryFilter.all => shopCopy(widget.myanmar, 'All', 'အားလုံး'),
+    ShopSaleHistoryFilter.cash => shopCopy(widget.myanmar, 'Cash', 'ငွေသား'),
+    ShopSaleHistoryFilter.kbzpay => 'KBZPay',
+    ShopSaleHistoryFilter.wavepay => 'WavePay',
+    ShopSaleHistoryFilter.reversed => shopCopy(
+      widget.myanmar,
+      'Reversed',
+      'ပြန်လှန်ပြီး',
+    ),
+  };
+
   Future<void> _showSale(ShopSaleReceipt sale) async {
     final correctionBinding = sale.reversal == null
         ? await _correctionBinding()
@@ -611,6 +660,17 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                   '${shopCopy(widget.myanmar, 'Payment', 'ငွေပေးချေမှု')}: '
                   '${_paymentName(sale.paymentMethod)}',
                 ),
+                if (sale.cashTenderedMmk != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${shopCopy(widget.myanmar, 'Cash received', 'ပေးငွေ')}: '
+                    '${shopMmk(sale.cashTenderedMmk!, myanmar: widget.myanmar)}',
+                  ),
+                  Text(
+                    '${shopCopy(widget.myanmar, 'Change', 'ပြန်အမ်းငွေ')}: '
+                    '${shopMmk(sale.cashChangeMmk!, myanmar: widget.myanmar)}',
+                  ),
+                ],
                 if (sale.reversal case final ShopSaleReversal reversal) ...[
                   const SizedBox(height: 16),
                   Container(

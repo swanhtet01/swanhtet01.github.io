@@ -12,6 +12,7 @@ const shopCorrectionAuthorizationPath =
     '/api/trial/v1/shop/correction-authorizations';
 const shopFullSaleReversalCapability = 'shop.sale.reverse';
 const shopWalletReconciliationCapability = 'shop.sale.reconcile_wallet';
+const shopCashMovementCapability = 'shop.cash_shift.move';
 
 const _maximumResponseBytes = 16 * 1024;
 const _authorizationTtlMillis = 5 * 60 * 1000;
@@ -29,6 +30,7 @@ final _controlCharacters = RegExp(r'[\x00-\x1f\x7f]');
 const _confirmationByCapability = <String, String>{
   shopFullSaleReversalCapability: 'AUTHORIZE FULL SALE REVERSAL',
   shopWalletReconciliationCapability: 'AUTHORIZE WALLET RECONCILIATION',
+  shopCashMovementCapability: 'AUTHORIZE CASH DRAWER MOVEMENT',
 };
 
 const _envelopeKeys = <String>{

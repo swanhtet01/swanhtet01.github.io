@@ -12,6 +12,7 @@ class ShopRuntimeCapabilities {
   const ShopRuntimeCapabilities({
     required this.managedAuth,
     required this.correctionAuthorization,
+    required this.cashMovementAuthorization,
     required this.connectedOrders,
     required this.networkPrinter,
     required this.camera,
@@ -24,6 +25,7 @@ class ShopRuntimeCapabilities {
 
   final bool managedAuth;
   final bool correctionAuthorization;
+  final bool cashMovementAuthorization;
   final bool connectedOrders;
   final bool networkPrinter;
   final bool camera;
@@ -36,6 +38,7 @@ class ShopRuntimeCapabilities {
   static const production = ShopRuntimeCapabilities(
     managedAuth: true,
     correctionAuthorization: true,
+    cashMovementAuthorization: false,
     connectedOrders: true,
     networkPrinter: true,
     camera: true,
@@ -49,6 +52,7 @@ class ShopRuntimeCapabilities {
   static const syntheticQa = ShopRuntimeCapabilities(
     managedAuth: false,
     correctionAuthorization: false,
+    cashMovementAuthorization: false,
     connectedOrders: false,
     networkPrinter: false,
     camera: false,
@@ -64,6 +68,7 @@ class ShopRuntimeCapabilities {
   static const failClosed = ShopRuntimeCapabilities(
     managedAuth: false,
     correctionAuthorization: false,
+    cashMovementAuthorization: false,
     connectedOrders: false,
     networkPrinter: false,
     camera: false,

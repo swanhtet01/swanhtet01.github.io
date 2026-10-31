@@ -10,6 +10,7 @@ import 'package:ffi/ffi.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'shop_database.dart';
+import 'shop_cafe_order_contract.dart';
 
 enum ShopStorePresence { empty, existing, interrupted, unsafe }
 
@@ -24,6 +25,11 @@ enum _ShopSnapshotSchemaKind {
   unifiedV15,
   unifiedV16,
   unifiedV17,
+  unifiedV18,
+  unifiedV19,
+  unifiedV20,
+  unifiedV21,
+  unifiedV22,
 }
 
 enum _SnapshotColumnGroupState { none, partial, exact }
@@ -48,7 +54,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 17;
+  static const supportedSchemaVersion = 22;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -128,6 +134,14 @@ abstract final class ShopBackup {
     'cash_drawer_outflow_mmk',
     'review_cash_reversal_count',
     'review_cash_drawer_outflow_mmk',
+  };
+  static const _v18CashShiftColumns = {
+    'cash_movement_count',
+    'cash_in_total_mmk',
+    'cash_out_total_mmk',
+    'review_cash_movement_count',
+    'review_cash_in_total_mmk',
+    'review_cash_out_total_mmk',
   };
   static const _v12RequiredColumns = <String, Set<String>>{
     'shop_managed_workspace_binding': {
@@ -896,7 +910,12 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
       final hasWorkspaceSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
@@ -904,7 +923,12 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
       final hasProfileSchema =
           schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
@@ -912,17 +936,55 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
       final hasAuthorizationProofSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
       final hasMemberSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
       final hasConsumptionSchema =
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+      final hasCashMovementSchema =
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+      final hasCafeOrderSchema =
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+      final hasCafeCancellationSchema =
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+      final hasPendingCashCheckoutSchema =
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
       final objects = _readSnapshotSchemaObjects(connection);
       final baseSchemaValid =
           objects != null &&
@@ -989,7 +1051,14 @@ abstract final class ShopBackup {
                         : _v14AuthorizationProofColumns,
                   ))) &&
           (!hasMemberSchema || _v16MemberRowsValid(connection)) &&
-          (!hasConsumptionSchema || _v17CorrectionRowsValid(connection));
+          (!hasConsumptionSchema || _v17CorrectionRowsValid(connection)) &&
+          (!hasCashMovementSchema || _v18CashMovementRowsValid(connection)) &&
+          (!hasCafeOrderSchema || _v19CafeOrderRowsValid(connection)) &&
+          (!hasCafeCancellationSchema ||
+              _v20CafeCancellationRowsValid(connection)) &&
+          (!hasPendingCashCheckoutSchema ||
+              _v21PendingCashCheckoutRowsValid(connection)) &&
+          (schemaVersion < 22 || _v22CashTenderRowsValid(connection));
       final walletIntents = schemaValid
           ? connection.select(
               'SELECT operation_id, payment_method, request_fingerprint, '
@@ -1180,6 +1249,7 @@ abstract final class ShopBackup {
         .toSet();
     if (table == 'shop_cash_shifts') {
       columns.removeAll(_v11CashShiftColumns);
+      columns.removeAll(_v18CashShiftColumns);
     }
     return columns.length == expected.length && columns.containsAll(expected);
   }
@@ -1219,6 +1289,18 @@ abstract final class ShopBackup {
   static Map<String, String> get _v17CorrectionDefinitions =>
       shopCorrectionConsumptionSchemaDefinitionsV17();
 
+  static Map<String, String> get _v18CashMovementDefinitions =>
+      shopCashMovementSchemaDefinitionsV18();
+
+  static Map<String, String> get _v19CafeOrderDefinitions =>
+      shopCafeOrderSchemaDefinitionsV19();
+
+  static Map<String, String> get _v20CafeCancellationDefinitions =>
+      shopCafeCancellationSchemaDefinitionsV20();
+
+  static Map<String, String> get _v21PendingCashCheckoutDefinitions =>
+      shopPendingCashCheckoutSchemaDefinitionsV21();
+
   static _ShopSnapshotSchemaKind? _classifySnapshotSchema(
     Database connection,
     int schemaVersion, {
@@ -1244,12 +1326,21 @@ abstract final class ShopBackup {
         : _v14AuthorizationProofDefinitions;
     final memberDefinitions = _v16MemberDefinitions;
     final consumptionDefinitions = _v17CorrectionDefinitions;
+    final cashMovementDefinitions = _v18CashMovementDefinitions;
+    final cafeOrderDefinitions = _v19CafeOrderDefinitions;
+    final cafeCancellationDefinitions = _v20CafeCancellationDefinitions;
+    final pendingCashCheckoutDefinitions = _v21PendingCashCheckoutDefinitions;
     final collisionDefinitions = shopWorkspaceCollisionPrefixDefinitionsV12();
     final auditNames = auditDefinitions.keys.toSet();
     final workspaceNames = workspaceDefinitions.keys.toSet();
     final proofNames = proofDefinitions.keys.toSet();
     final memberNames = memberDefinitions.keys.toSet();
     final consumptionNames = consumptionDefinitions.keys.toSet();
+    final cashMovementNames = cashMovementDefinitions.keys.toSet();
+    final cafeOrderNames = cafeOrderDefinitions.keys.toSet();
+    final cafeCancellationNames = cafeCancellationDefinitions.keys.toSet();
+    final pendingCashCheckoutNames = pendingCashCheckoutDefinitions.keys
+        .toSet();
     const profileNames = {'shop_business_profile'};
     final presentNames = objects.keys.toSet();
     final cashState = _reversalCashColumnState(connection);
@@ -1289,6 +1380,26 @@ abstract final class ShopBackup {
       consumptionDefinitions,
       consumptionNames,
     );
+    final cashMovementExact = _snapshotDefinitionGroupExact(
+      objects,
+      cashMovementDefinitions,
+      cashMovementNames,
+    );
+    final cafeOrderExact = _snapshotDefinitionGroupExact(
+      objects,
+      cafeOrderDefinitions,
+      cafeOrderNames,
+    );
+    final cafeCancellationExact = _snapshotDefinitionGroupExact(
+      objects,
+      cafeCancellationDefinitions,
+      cafeCancellationNames,
+    );
+    final pendingCashCheckoutExact = _snapshotDefinitionGroupExact(
+      objects,
+      pendingCashCheckoutDefinitions,
+      pendingCashCheckoutNames,
+    );
     final profileExact =
         _snapshotDefinitionGroupExact(objects, const {
           'shop_business_profile': shopBusinessProfileV11Sql,
@@ -1299,7 +1410,7 @@ abstract final class ShopBackup {
       final expected = <String>{
         for (final group in groups)
           for (final entry in group.entries)
-            if (!canonicalShopSchemaSql(entry.value).startsWith('create table'))
+            if (shopSchemaObjectTypeForDefinition(entry.value) == 'trigger')
               entry.key,
       };
       final actual = objects.entries
@@ -1544,6 +1655,221 @@ abstract final class ShopBackup {
         })) {
       return _ShopSnapshotSchemaKind.unifiedV17;
     }
+    if (schemaVersion == 18 &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        proofExact &&
+        memberExact &&
+        consumptionExact &&
+        cashMovementExact &&
+        _cashMovementColumnState(connection) ==
+            _SnapshotColumnGroupState.exact &&
+        _v16MemberRowsValid(connection) &&
+        _v17CorrectionRowsValid(connection) &&
+        _v18CashMovementRowsValid(connection) &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: true,
+        ) &&
+        triggersMatch([
+          auditDefinitions,
+          workspaceDefinitions,
+          proofDefinitions,
+          memberDefinitions,
+          consumptionDefinitions,
+          cashMovementDefinitions,
+        ]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          ...proofDefinitions.keys,
+          ...memberDefinitions.keys,
+          ...consumptionDefinitions.keys,
+          ...cashMovementDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return _ShopSnapshotSchemaKind.unifiedV18;
+    }
+    if (schemaVersion == 19 &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        proofExact &&
+        memberExact &&
+        consumptionExact &&
+        cashMovementExact &&
+        cafeOrderExact &&
+        _cashMovementColumnState(connection) ==
+            _SnapshotColumnGroupState.exact &&
+        _v16MemberRowsValid(connection) &&
+        _v17CorrectionRowsValid(connection) &&
+        _v18CashMovementRowsValid(connection) &&
+        _v19CafeOrderRowsValid(connection) &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: true,
+        ) &&
+        triggersMatch([
+          auditDefinitions,
+          workspaceDefinitions,
+          proofDefinitions,
+          memberDefinitions,
+          consumptionDefinitions,
+          cashMovementDefinitions,
+          cafeOrderDefinitions,
+        ]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          ...proofDefinitions.keys,
+          ...memberDefinitions.keys,
+          ...consumptionDefinitions.keys,
+          ...cashMovementDefinitions.keys,
+          ...cafeOrderDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return _ShopSnapshotSchemaKind.unifiedV19;
+    }
+    if (schemaVersion == 20 &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        proofExact &&
+        memberExact &&
+        consumptionExact &&
+        cashMovementExact &&
+        cafeOrderExact &&
+        cafeCancellationExact &&
+        _cashMovementColumnState(connection) ==
+            _SnapshotColumnGroupState.exact &&
+        _v16MemberRowsValid(connection) &&
+        _v17CorrectionRowsValid(connection) &&
+        _v18CashMovementRowsValid(connection) &&
+        _v19CafeOrderRowsValid(connection) &&
+        _v20CafeCancellationRowsValid(connection) &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: true,
+        ) &&
+        triggersMatch([
+          auditDefinitions,
+          workspaceDefinitions,
+          proofDefinitions,
+          memberDefinitions,
+          consumptionDefinitions,
+          cashMovementDefinitions,
+          cafeOrderDefinitions,
+          cafeCancellationDefinitions,
+        ]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          ...proofDefinitions.keys,
+          ...memberDefinitions.keys,
+          ...consumptionDefinitions.keys,
+          ...cashMovementDefinitions.keys,
+          ...cafeOrderDefinitions.keys,
+          ...cafeCancellationDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return _ShopSnapshotSchemaKind.unifiedV20;
+    }
+    if ((schemaVersion == 21 || schemaVersion == 22) &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        proofExact &&
+        memberExact &&
+        consumptionExact &&
+        cashMovementExact &&
+        cafeOrderExact &&
+        cafeCancellationExact &&
+        pendingCashCheckoutExact &&
+        _cashMovementColumnState(connection) ==
+            _SnapshotColumnGroupState.exact &&
+        _v16MemberRowsValid(connection) &&
+        _v17CorrectionRowsValid(connection) &&
+        _v18CashMovementRowsValid(connection) &&
+        _v19CafeOrderRowsValid(connection) &&
+        _v20CafeCancellationRowsValid(connection) &&
+        _v21PendingCashCheckoutRowsValid(connection) &&
+        (schemaVersion < 22 || _v22CashTenderRowsValid(connection)) &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: true,
+        ) &&
+        triggersMatch([
+          auditDefinitions,
+          workspaceDefinitions,
+          proofDefinitions,
+          memberDefinitions,
+          consumptionDefinitions,
+          cashMovementDefinitions,
+          cafeOrderDefinitions,
+          cafeCancellationDefinitions,
+          pendingCashCheckoutDefinitions,
+        ]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          ...proofDefinitions.keys,
+          ...memberDefinitions.keys,
+          ...consumptionDefinitions.keys,
+          ...cashMovementDefinitions.keys,
+          ...cafeOrderDefinitions.keys,
+          ...cafeCancellationDefinitions.keys,
+          ...pendingCashCheckoutDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return schemaVersion == 22
+          ? _ShopSnapshotSchemaKind.unifiedV22
+          : _ShopSnapshotSchemaKind.unifiedV21;
+    }
     return null;
   }
 
@@ -1661,12 +1987,57 @@ abstract final class ShopBackup {
         .map((row) => row['name'])
         .whereType<String>()
         .map((name) => name.toLowerCase())
+        .where((name) => !_v18CashShiftColumns.contains(name))
         .toList(growable: false);
     if (names.length < ordered.length ||
         !_sameOrderedStrings(
           names.sublist(names.length - ordered.length),
           ordered,
         )) {
+      return _SnapshotColumnGroupState.partial;
+    }
+    for (final name in ordered) {
+      final row = byName[name]!;
+      if ((row['type'] as String?)?.toUpperCase() != 'INTEGER' ||
+          row['notnull'] != 0 ||
+          row['dflt_value'] != null ||
+          row['pk'] != 0) {
+        return _SnapshotColumnGroupState.partial;
+      }
+    }
+    return _SnapshotColumnGroupState.exact;
+  }
+
+  static _SnapshotColumnGroupState _cashMovementColumnState(
+    Database connection,
+  ) {
+    const ordered = [
+      'cash_movement_count',
+      'cash_in_total_mmk',
+      'cash_out_total_mmk',
+      'review_cash_movement_count',
+      'review_cash_in_total_mmk',
+      'review_cash_out_total_mmk',
+    ];
+    final rows = connection.select('PRAGMA table_info(shop_cash_shifts)');
+    final byName = <String, Row>{
+      for (final row in rows)
+        if (row['name'] is String) (row['name'] as String).toLowerCase(): row,
+    };
+    final present = ordered.where(byName.containsKey).toList(growable: false);
+    if (present.isEmpty) return _SnapshotColumnGroupState.none;
+    if (present.length != ordered.length) {
+      return _SnapshotColumnGroupState.partial;
+    }
+    final names = rows
+        .map((row) => row['name'])
+        .whereType<String>()
+        .map((name) => name.toLowerCase())
+        .toList(growable: false);
+    if (!_sameOrderedStrings(
+      names.sublist(names.length - ordered.length),
+      ordered,
+    )) {
       return _SnapshotColumnGroupState.partial;
     }
     for (final name in ordered) {
@@ -1760,14 +2131,6 @@ abstract final class ShopBackup {
             'WHERE latest.member_id = card.member_id) '
             ') '
             'LIMIT 1',
-          )
-          .isNotEmpty) {
-        return false;
-      }
-      if (connection
-          .select(
-            "SELECT 1 FROM shop_products WHERE upper(COALESCE(barcode, '')) LIKE 'SMC1.%' "
-            "OR upper(COALESCE(sku, '')) LIKE 'SMC1.%' LIMIT 1",
           )
           .isNotEmpty) {
         return false;
@@ -2024,6 +2387,656 @@ abstract final class ShopBackup {
     }
   }
 
+  static bool _v18CashMovementRowsValid(Database connection) {
+    try {
+      final movements = connection.select('SELECT * FROM shop_cash_movements');
+      for (final movement in movements) {
+        final fingerprint = movement['request_fingerprint'];
+        if (fingerprint is! String ||
+            _sha256Hex(fingerprint) !=
+                movement['authorization_command_digest'] ||
+            shopCorrectionAuthorizationReceiptDigest(
+                  source: movement['authorization_source'] as String,
+                  receiptId: movement['authorization_receipt_id'] as String,
+                  workspaceId: movement['authorization_workspace_id'] as String,
+                  actorId: movement['authorized_actor_id'] as String,
+                  actorLabel: movement['authorized_actor_label'] as String,
+                  actorRole: movement['authorized_actor_role'] as String,
+                  capability: movement['authorization_capability'] as String,
+                  commandDigest:
+                      movement['authorization_command_digest'] as String,
+                  finalizationRequestId:
+                      movement['authorization_finalization_request_id']
+                          as String,
+                  finalizedAtMillis:
+                      movement['authorization_finalized_at_millis'] as int,
+                  issuedAtMillis:
+                      movement['authorization_issued_at_millis'] as int,
+                  expiresAtMillis:
+                      movement['authorization_expires_at_millis'] as int,
+                ) !=
+                movement['authorization_receipt_digest']) {
+          return false;
+        }
+      }
+      if (connection.select('''
+            SELECT 1 FROM shop_cash_movements movement
+            LEFT JOIN shop_cash_shifts shift ON shift.id = movement.shift_id
+            LEFT JOIN shop_managed_workspace_binding binding
+              ON binding.singleton = 1
+            LEFT JOIN shop_store_identity store ON store.singleton = 1
+            WHERE shift.id IS NULL
+              OR store.store_ref IS NULL
+              OR movement.store_ref != store.store_ref
+              OR binding.workspace_id IS NULL
+              OR movement.authorization_workspace_id != binding.workspace_id
+              OR movement.authorized_actor_id != binding.attached_actor_id
+              OR movement.authorized_actor_role != 'owner'
+              OR movement.authorization_capability != 'shop.cash_shift.move'
+              OR movement.authorization_source != 'managed_membership_receipt_v1'
+              OR movement.request_fingerprint != json_object(
+                'contract', 'supermega.shop.cash-movement-command.v1',
+                'operationId', movement.operation_id,
+                'storeRef', movement.store_ref,
+                'shiftId', movement.shift_id,
+                'kind', movement.movement_kind,
+                'amountMmk', movement.amount_mmk,
+                'reason', movement.reason
+              )
+            LIMIT 1
+            ''').isNotEmpty) {
+        return false;
+      }
+      return connection.select('''
+            SELECT 1 FROM shop_cash_shifts shift
+            WHERE (shift.state = 'open' AND (
+              shift.cash_movement_count IS NOT NULL
+              OR shift.cash_in_total_mmk IS NOT NULL
+              OR shift.cash_out_total_mmk IS NOT NULL
+              OR shift.review_cash_movement_count IS NOT NULL
+              OR shift.review_cash_in_total_mmk IS NOT NULL
+              OR shift.review_cash_out_total_mmk IS NOT NULL
+            )) OR (shift.state = 'closed' AND (
+              shift.cash_movement_count IS NULL
+              OR shift.cash_in_total_mmk IS NULL
+              OR shift.cash_out_total_mmk IS NULL
+              OR shift.review_cash_movement_count IS NULL
+              OR shift.review_cash_in_total_mmk IS NULL
+              OR shift.review_cash_out_total_mmk IS NULL
+              OR shift.cash_movement_count != (
+                SELECT COUNT(*) FROM shop_cash_movements movement
+                WHERE movement.shift_id = shift.id
+              )
+              OR shift.cash_in_total_mmk != COALESCE((
+                SELECT SUM(amount_mmk) FROM shop_cash_movements movement
+                WHERE movement.shift_id = shift.id AND movement_kind = 'cash_in'
+              ), 0)
+              OR shift.cash_out_total_mmk != COALESCE((
+                SELECT SUM(amount_mmk) FROM shop_cash_movements movement
+                WHERE movement.shift_id = shift.id AND movement_kind = 'cash_out'
+              ), 0)
+              OR shift.review_cash_movement_count != (
+                SELECT COUNT(*) FROM shop_cash_movements movement
+                WHERE movement.shift_id = shift.id
+              )
+              OR shift.review_cash_in_total_mmk != COALESCE((
+                SELECT SUM(amount_mmk) FROM shop_cash_movements movement
+                WHERE movement.shift_id = shift.id AND movement_kind = 'cash_in'
+              ), 0)
+              OR shift.review_cash_out_total_mmk != COALESCE((
+                SELECT SUM(amount_mmk) FROM shop_cash_movements movement
+                WHERE movement.shift_id = shift.id AND movement_kind = 'cash_out'
+              ), 0)
+            )) LIMIT 1
+            ''').isEmpty;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v19CafeOrderRowsValid(Database connection) {
+    try {
+      final hasCashTenderColumn = _tableHasColumns(
+        connection,
+        'shop_sales',
+        const {'cash_tendered_mmk'},
+      );
+      final allDispatches = connection.select(
+        "SELECT operation_id, payload_json FROM shop_sync_outbox WHERE event_type = "
+        "'shop.cafe_kitchen_dispatch.recorded.v1'",
+      );
+      final dispatchHistory =
+          <
+            ({
+              CafeOrderTicket ticket,
+              List<CafeKitchenDispatchLine> lines,
+              int historyStartVersion,
+            })
+          >[];
+      for (final dispatch in allDispatches) {
+        final parsed = cafeKitchenDispatchFromPayload(
+          jsonDecode(dispatch['payload_json'] as String),
+        );
+        dispatchHistory.add(parsed);
+        if (dispatch['operation_id'] !=
+            cafeKitchenDispatchOperationId(parsed.ticket)) {
+          return false;
+        }
+      }
+      final splitRows = connection.select(
+        'SELECT operation_id, event_type, payload_json, created_at_millis '
+        'FROM shop_sync_outbox WHERE event_type IN (?, ?)',
+        [cafeOrderSplitEventType, cafeOrderQuantitySplitEventType],
+      );
+      final splitEvents = <CafeOrderSplitEvent>[];
+      for (final row in splitRows) {
+        final event = CafeOrderSplitEvent.fromJson(
+          jsonDecode(row['payload_json'] as String),
+        );
+        if (row['event_type'] != event.eventType ||
+            row['operation_id'] != event.operationId ||
+            row['created_at_millis'] != event.createdAtMillis) {
+          return false;
+        }
+        final stateRows = connection.select(
+          'SELECT from_state, to_state, resulting_state_revision, '
+          'request_fingerprint '
+          'FROM shop_cafe_order_state_events WHERE order_id = ? '
+          'AND resulting_state_revision <= ? '
+          'ORDER BY resulting_state_revision',
+          [event.sourceOrderId, event.expectedStateRevision],
+        );
+        if (stateRows.length != event.expectedStateRevision) return false;
+        var sourceState = 'open';
+        for (var index = 0; index < stateRows.length; index++) {
+          final stateRow = stateRows[index];
+          if (stateRow['resulting_state_revision'] != index + 1 ||
+              stateRow['from_state'] != sourceState ||
+              stateRow['request_fingerprint'] !=
+                  event.sourceStateEventFingerprints[index]) {
+            return false;
+          }
+          sourceState = stateRow['to_state'] as String;
+        }
+        if (sourceState != 'open') return false;
+        splitEvents.add(event);
+      }
+      if (!cafeOrderSplitHistoryValid(
+        splitEvents,
+        dispatchHistory.map((dispatch) => dispatch.ticket),
+      )) {
+        return false;
+      }
+      final reversalRows = connection.select(
+        'SELECT operation_id, event_type, payload_json, created_at_millis '
+        'FROM shop_sync_outbox WHERE event_type = ?',
+        [cafeOrderSplitReversalEventType],
+      );
+      final reversalEvents = <CafeOrderSplitReversalEvent>[];
+      for (final row in reversalRows) {
+        final event = CafeOrderSplitReversalEvent.fromJson(
+          jsonDecode(row['payload_json'] as String),
+        );
+        if (row['event_type'] != event.eventType ||
+            row['operation_id'] != event.operationId ||
+            row['created_at_millis'] != event.createdAtMillis) {
+          return false;
+        }
+        final cancellations = connection.select(
+          'SELECT * FROM shop_cafe_order_cancellations '
+          'WHERE operation_id = ?',
+          [event.destinationCancellationOperationId],
+        );
+        if (cancellations.length != 1 ||
+            cancellations.single['order_id'] != event.destinationOrderId ||
+            cancellations.single['expected_state_revision'] !=
+                event.expectedDestinationStateRevision ||
+            cancellations.single['ticket_version'] !=
+                event.expectedDestinationTicketVersion ||
+            cancellations.single['ticket_fingerprint'] !=
+                event
+                    .splitEvent
+                    .destinationResultTicket
+                    .lastCommandFingerprint ||
+            cancellations.single['request_fingerprint'] !=
+                event.destinationCancellationFingerprint) {
+          return false;
+        }
+        reversalEvents.add(event);
+      }
+      if (!cafeOrderSplitReversalHistoryValid(
+        reversalEvents,
+        splitEvents,
+        dispatchHistory.map((dispatch) => dispatch.ticket),
+      )) {
+        return false;
+      }
+      final orders = connection.select('SELECT * FROM shop_cafe_orders');
+      final currentTickets = [
+        for (final order in orders)
+          CafeOrderTicket.fromJson(jsonDecode(order['ticket_json'] as String)),
+      ];
+      if (!cafeKitchenDispatchHistoryValid(dispatchHistory, currentTickets)) {
+        return false;
+      }
+      for (var index = 0; index < orders.length; index++) {
+        final order = orders[index];
+        final ticket = currentTickets[index];
+        final total = ticket.lines.fold<int>(0, (sum, line) {
+          final unit =
+              line.baseUnitPriceMmk +
+              line.modifiers.fold<int>(
+                0,
+                (value, item) => value + item.priceDeltaMmk,
+              );
+          return sum + unit * line.quantity;
+        });
+        if (ticket.id != order['id'] ||
+            ticket.version != order['ticket_version'] ||
+            ticket.lastCommandId != order['last_command_id'] ||
+            ticket.lastCommandFingerprint !=
+                order['last_command_fingerprint'] ||
+            total != order['total_mmk']) {
+          return false;
+        }
+        final kitchenDispatchByLine = <String, CafeKitchenDispatchLine>{};
+        if (ticket.lines.any((line) => line.hasPreparationRoute)) {
+          final dispatches = connection.select(
+            'SELECT event_type, payload_json FROM shop_sync_outbox '
+            'WHERE operation_id = ?',
+            [cafeKitchenDispatchOperationId(ticket)],
+          );
+          if (dispatches.length != 1 ||
+              dispatches.single['event_type'] !=
+                  'shop.cafe_kitchen_dispatch.recorded.v1') {
+            return false;
+          }
+          final parsed = cafeKitchenDispatchFromPayload(
+            jsonDecode(dispatches.single['payload_json'] as String),
+          );
+          if (parsed.ticket.lastCommandFingerprint !=
+              ticket.lastCommandFingerprint) {
+            return false;
+          }
+          kitchenDispatchByLine.addEntries(
+            parsed.lines.map((line) => MapEntry(line.lineId, line)),
+          );
+        }
+        final events = connection.select(
+          'SELECT * FROM shop_cafe_order_state_events WHERE order_id = ? '
+          'ORDER BY resulting_state_revision',
+          [ticket.id],
+        );
+        if (events.length != order['state_revision']) return false;
+        var state = 'open';
+        for (var index = 0; index < events.length; index++) {
+          final event = events[index];
+          final eventSaleId = event['sale_id'];
+          final saleTender = eventSaleId == null
+              ? null
+              : connection.select(
+                  'SELECT ${hasCashTenderColumn ? 'cash_tendered_mmk' : 'NULL AS cash_tendered_mmk'} '
+                  'FROM shop_sales WHERE id = ?',
+                  [eventSaleId],
+                );
+          final fingerprint = eventSaleId == null
+              ? cafeOrderStateFingerprint(
+                  operationId: event['operation_id'] as String,
+                  orderId: ticket.id,
+                  expectedStateRevision: index,
+                  fromState: event['from_state'] as String,
+                  toState: event['to_state'] as String,
+                )
+              : cafeOrderCashSaleFingerprint(
+                  operationId: event['operation_id'] as String,
+                  orderId: ticket.id,
+                  ticketVersion: ticket.version,
+                  stateRevision: index,
+                  cashTenderedMmk: saleTender == null || saleTender.length != 1
+                      ? null
+                      : saleTender.single['cash_tendered_mmk'] as int?,
+                );
+          if (event['expected_state_revision'] != index ||
+              event['resulting_state_revision'] != index + 1 ||
+              event['from_state'] != state ||
+              event['request_fingerprint'] != fingerprint ||
+              (eventSaleId != null &&
+                  (eventSaleId != event['operation_id'] ||
+                      event['to_state'] != 'completed'))) {
+            return false;
+          }
+          state = event['to_state'] as String;
+        }
+        if (state != order['state'] ||
+            (events.isEmpty
+                ? order['last_state_operation_id'] != null
+                : events.last['operation_id'] !=
+                      order['last_state_operation_id']) ||
+            (events.isNotEmpty &&
+                events.last['request_fingerprint'] !=
+                    order['last_state_fingerprint'])) {
+          return false;
+        }
+        final saleId = order['completed_sale_id'];
+        if (state == 'completed') {
+          if (saleId is! String || events.last['sale_id'] != saleId) {
+            return false;
+          }
+          final sales = connection.select(
+            'SELECT operation_id, request_fingerprint, total_mmk, '
+            'payment_method, '
+            '${hasCashTenderColumn ? 'cash_tendered_mmk' : 'NULL AS cash_tendered_mmk'}, '
+            'created_at_millis '
+            'FROM shop_sales WHERE id = ?',
+            [saleId],
+          );
+          if (sales.length != 1 ||
+              sales.single['operation_id'] != saleId ||
+              sales.single['request_fingerprint'] !=
+                  events.last['request_fingerprint'] ||
+              sales.single['total_mmk'] != total ||
+              sales.single['payment_method'] != 'cash') {
+            return false;
+          }
+          final savedLines = connection.select(
+            'SELECT id, product_id, product_name, unit_price_mmk, quantity, '
+            'line_total_mmk '
+            'FROM shop_sale_lines WHERE sale_id = ?',
+            [saleId],
+          );
+          if (savedLines.length != ticket.lines.length) return false;
+          final byId = {for (final line in savedLines) line['id']: line};
+          final movements = connection.select(
+            'SELECT id, product_id, quantity_delta, reason, created_at_millis '
+            'FROM shop_stock_movements WHERE sale_id = ? '
+            "AND reason = 'cafe_cash_sale'",
+            [saleId],
+          );
+          if (movements.length != ticket.lines.length) return false;
+          final invalidAdditionalMovement = connection.select(
+            'SELECT 1 FROM shop_stock_movements movement '
+            'LEFT JOIN shop_sale_reversal_lines reversal_line '
+            'ON reversal_line.stock_movement_id = movement.id '
+            'LEFT JOIN shop_sale_reversals reversal '
+            'ON reversal.id = reversal_line.reversal_id '
+            'WHERE movement.sale_id = ? '
+            "AND movement.reason != 'cafe_cash_sale' AND ("
+            'reversal_line.stock_movement_id IS NULL '
+            'OR reversal.sale_id != ? '
+            "OR movement.reason != 'sale_reversal_restock' "
+            'OR movement.product_id != reversal_line.product_id '
+            'OR movement.quantity_delta != reversal_line.restock_quantity) '
+            'LIMIT 1',
+            [saleId, saleId],
+          );
+          if (invalidAdditionalMovement.isNotEmpty) return false;
+          final movementsById = {
+            for (final movement in movements) movement['id']: movement,
+          };
+          final outbox = connection.select(
+            'SELECT event_type, payload_json, created_at_millis '
+            'FROM shop_sync_outbox WHERE operation_id = ?',
+            [saleId],
+          );
+          if (outbox.length != 1 ||
+              outbox.single['event_type'] !=
+                  'shop.cafe_cash_sale.completed.v1' ||
+              outbox.single['created_at_millis'] !=
+                  sales.single['created_at_millis']) {
+            return false;
+          }
+          final payload = jsonDecode(outbox.single['payload_json'] as String);
+          final cashTenderedMmk = sales.single['cash_tendered_mmk'];
+          if (payload is! Map<String, dynamic> ||
+              payload['saleId'] != saleId ||
+              payload['cafeOrderId'] != ticket.id ||
+              payload['ticketVersion'] != ticket.version ||
+              payload['totalMmk'] != total ||
+              payload['paymentMethod'] != 'cash' ||
+              (cashTenderedMmk == null
+                  ? payload.containsKey('cashTenderedMmk') ||
+                        payload.containsKey('cashChangeMmk')
+                  : cashTenderedMmk is! int ||
+                        payload['cashTenderedMmk'] != cashTenderedMmk ||
+                        payload['cashChangeMmk'] !=
+                            cashTenderedMmk -
+                                (sales.single['total_mmk'] as int)) ||
+              payload['createdAtMillis'] != sales.single['created_at_millis'] ||
+              jsonEncode(payload['serviceContext']) !=
+                  jsonEncode(ticket.serviceContext?.toJson()) ||
+              payload['lines'] is! List ||
+              (payload['lines'] as List).length != ticket.lines.length) {
+            return false;
+          }
+          final payloadLines = {
+            for (final item in payload['lines'] as List)
+              if (item is Map<String, dynamic>) item['lineId']: item,
+          };
+          if (payloadLines.length != ticket.lines.length) return false;
+          for (final line in ticket.lines) {
+            final saved = byId['$saleId:${line.id}'];
+            final movement = movementsById['$saleId:${line.id}:cafe-sale'];
+            final eventLine = payloadLines[line.id];
+            final unit =
+                line.baseUnitPriceMmk +
+                line.modifiers.fold<int>(
+                  0,
+                  (value, item) => value + item.priceDeltaMmk,
+                );
+            if (saved == null ||
+                movement == null ||
+                eventLine == null ||
+                saved['product_id'] != line.productId ||
+                saved['product_name'] != eventLine['productName'] ||
+                saved['unit_price_mmk'] != unit ||
+                saved['quantity'] != line.quantity ||
+                saved['line_total_mmk'] != unit * line.quantity ||
+                movement['product_id'] != line.productId ||
+                movement['quantity_delta'] != -line.quantity ||
+                movement['reason'] != 'cafe_cash_sale' ||
+                movement['created_at_millis'] !=
+                    sales.single['created_at_millis'] ||
+                eventLine['productId'] != line.productId ||
+                eventLine['quantity'] != line.quantity ||
+                eventLine['unitPriceMmk'] != unit ||
+                eventLine['lineTotalMmk'] != unit * line.quantity ||
+                eventLine['remark'] != line.remark ||
+                (line.hasPreparationRoute &&
+                    (eventLine['preparationStation'] !=
+                            line.preparationStation ||
+                        eventLine['kitchenTicketId'] !=
+                            kitchenDispatchByLine[line.id]?.ticketId ||
+                        eventLine['kitchenTicketSequence'] !=
+                            kitchenDispatchByLine[line.id]?.sequence)) ||
+                jsonEncode(eventLine['modifiers']) !=
+                    jsonEncode([
+                      for (final modifier in line.modifiers) modifier.toJson(),
+                    ])) {
+              return false;
+            }
+          }
+        } else if (saleId != null) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v20CafeCancellationRowsValid(Database connection) {
+    try {
+      final rows = connection.select(
+        'SELECT cancellation.*, order_row.state, order_row.state_revision, '
+        'order_row.ticket_version AS current_ticket_version, '
+        'order_row.last_command_fingerprint, order_row.completed_sale_id '
+        'FROM shop_cafe_order_cancellations cancellation '
+        'JOIN shop_cafe_orders order_row ON order_row.id = cancellation.order_id',
+      );
+      for (final row in rows) {
+        final operationId = row['operation_id'];
+        final orderId = row['order_id'];
+        final fromState = row['from_state'];
+        final revision = row['expected_state_revision'];
+        final ticketVersion = row['ticket_version'];
+        final ticketFingerprint = row['ticket_fingerprint'];
+        final createdAt = row['created_at_millis'];
+        if (operationId is! String ||
+            orderId is! String ||
+            fromState is! String ||
+            revision is! int ||
+            ticketVersion is! int ||
+            ticketFingerprint is! String ||
+            createdAt is! int) {
+          return false;
+        }
+        final fingerprint = cafeOrderCancellationFingerprint(
+          operationId: operationId,
+          orderId: orderId,
+          ticketVersion: ticketVersion,
+          ticketFingerprint: ticketFingerprint,
+          stateRevision: revision,
+          fromState: fromState,
+        );
+        if (row['request_fingerprint'] != fingerprint ||
+            row['state'] != fromState ||
+            row['state_revision'] != revision ||
+            row['current_ticket_version'] != ticketVersion ||
+            row['last_command_fingerprint'] != ticketFingerprint ||
+            row['completed_sale_id'] != null) {
+          return false;
+        }
+        final outbox = connection.select(
+          'SELECT event_type, payload_json, created_at_millis '
+          'FROM shop_sync_outbox WHERE operation_id = ?',
+          [operationId],
+        );
+        if (outbox.length != 1 ||
+            outbox.single['event_type'] != 'shop.cafe_order.cancelled.v1' ||
+            outbox.single['created_at_millis'] != createdAt) {
+          return false;
+        }
+        final payload = jsonDecode(outbox.single['payload_json'] as String);
+        if (payload is! Map<String, dynamic> ||
+            payload['contract'] != 'supermega.shop.cafe-order-cancelled.v1' ||
+            payload['operationId'] != operationId ||
+            payload['orderId'] != orderId ||
+            payload['ticketVersion'] != ticketVersion ||
+            payload['ticketFingerprint'] != ticketFingerprint ||
+            payload['fromState'] != fromState ||
+            payload['stateRevision'] != revision ||
+            payload['createdAtMillis'] != createdAt ||
+            payload['kitchenStopConfirmed'] != false) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v21PendingCashCheckoutRowsValid(Database connection) {
+    try {
+      final rows = connection.select(
+        'SELECT intent.*, sale.id AS sale_id, shift.id AS existing_shift_id, '
+        'shift.state AS existing_shift_state, '
+        'draft.operation_id AS draft_operation_id, '
+        'draft.basket_json AS draft_basket_json, '
+        'cafe.id AS cafe_order_id, cafe.state AS cafe_order_state, '
+        'cafe.ticket_json AS cafe_ticket_json, '
+        'member_card.member_id AS existing_member_id, '
+        'member_card.revision AS existing_member_revision '
+        'FROM shop_pending_cash_checkouts intent '
+        'LEFT JOIN shop_sales sale ON sale.operation_id = intent.operation_id '
+        'LEFT JOIN shop_cash_shifts shift '
+        'ON shift.id = intent.captured_shift_id '
+        'LEFT JOIN shop_counter_drafts draft '
+        "ON intent.checkout_kind = 'counter' "
+        'AND draft.operation_id = intent.subject_id '
+        'LEFT JOIN shop_cafe_orders cafe '
+        "ON intent.checkout_kind = 'cafe' AND cafe.id = intent.subject_id "
+        'LEFT JOIN shop_member_cards member_card '
+        'ON member_card.member_id = intent.member_id '
+        'AND member_card.revision = intent.member_card_revision',
+      );
+      for (final row in rows) {
+        final operationId = row['operation_id'];
+        final kind = row['checkout_kind'];
+        final subjectId = row['subject_id'];
+        final shiftId = row['captured_shift_id'];
+        final memberId = row['member_id'];
+        final memberCardRevision = row['member_card_revision'];
+        final fingerprint = row['request_fingerprint'];
+        final createdAt = row['created_at_millis'];
+        if (operationId is! String ||
+            operationId.isEmpty ||
+            operationId.length > 120 ||
+            kind is! String ||
+            !const {'counter', 'cafe'}.contains(kind) ||
+            subjectId is! String ||
+            subjectId.isEmpty ||
+            subjectId.length > 120 ||
+            (shiftId != null && shiftId is! String) ||
+            (memberId != null && memberId is! String) ||
+            (memberCardRevision != null && memberCardRevision is! int) ||
+            ((memberId == null) != (memberCardRevision == null)) ||
+            fingerprint is! String ||
+            createdAt is! int ||
+            createdAt <= 0) {
+          return false;
+        }
+        final subjectFingerprint = kind == 'counter'
+            ? crypto.sha256
+                  .convert(
+                    utf8.encode((row['draft_basket_json'] as String?) ?? ''),
+                  )
+                  .toString()
+            : crypto.sha256
+                  .convert(
+                    utf8.encode((row['cafe_ticket_json'] as String?) ?? ''),
+                  )
+                  .toString();
+        final expected = crypto.sha256
+            .convert(
+              utf8.encode(
+                jsonEncode({
+                  'contract': 'supermega.shop.pending-cash-checkout.v1',
+                  'operationId': operationId,
+                  'checkoutKind': kind,
+                  'subjectId': subjectId,
+                  'capturedShiftId': shiftId,
+                  'subjectFingerprint': subjectFingerprint,
+                  'memberId': memberId,
+                  'memberCardRevision': memberCardRevision,
+                }),
+              ),
+            )
+            .toString();
+        if (fingerprint != expected ||
+            row['sale_id'] != null ||
+            (shiftId != null &&
+                (row['existing_shift_id'] != shiftId ||
+                    row['existing_shift_state'] != 'open')) ||
+            (memberId != null &&
+                (row['existing_member_id'] != memberId ||
+                    row['existing_member_revision'] != memberCardRevision)) ||
+            (kind == 'counter' &&
+                (subjectId != operationId ||
+                    row['draft_operation_id'] != subjectId)) ||
+            (kind == 'cafe' &&
+                (row['cafe_order_id'] != subjectId ||
+                    row['cafe_order_state'] != 'open'))) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
   static bool _migrationProvenanceValid(
     Database connection, {
     required bool allowRuntimeUnboundCorrectionHistory,
@@ -2086,6 +3099,51 @@ abstract final class ShopBackup {
 
   static String _sha256Hex(String value) =>
       crypto.sha256.convert(utf8.encode(value)).toString();
+
+  static bool _v22CashTenderRowsValid(Database connection) {
+    try {
+      if (connection
+          .select(
+            'SELECT 1 FROM shop_sales WHERE cash_tendered_mmk IS NOT NULL '
+            "AND (payment_method != 'cash' OR cash_tendered_mmk < total_mmk "
+            'OR cash_tendered_mmk > 200000000000000) LIMIT 1',
+          )
+          .isNotEmpty) {
+        return false;
+      }
+      final sales = connection.select(
+        'SELECT sale.id, sale.operation_id, sale.total_mmk, '
+        'sale.cash_tendered_mmk, outbox.payload_json '
+        'FROM shop_sales sale LEFT JOIN shop_sync_outbox outbox '
+        'ON outbox.operation_id = sale.operation_id AND outbox.event_type IN '
+        "('shop.cash_sale.completed.v1', 'shop.cafe_cash_sale.completed.v1') "
+        "WHERE sale.payment_method = 'cash'",
+      );
+      for (final sale in sales) {
+        final payloadJson = sale['payload_json'];
+        if (payloadJson is! String) return false;
+        final payload = jsonDecode(payloadJson);
+        final tender = sale['cash_tendered_mmk'];
+        final total = sale['total_mmk'];
+        if (payload is! Map<String, dynamic> ||
+            payload['saleId'] != sale['id'] ||
+            total is! int ||
+            payload['totalMmk'] != total ||
+            payload['paymentMethod'] != 'cash' ||
+            (tender == null
+                ? payload.containsKey('cashTenderedMmk') ||
+                      payload.containsKey('cashChangeMmk')
+                : tender is! int ||
+                      payload['cashTenderedMmk'] != tender ||
+                      payload['cashChangeMmk'] != tender - total)) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
 
   static bool _v12WorkspaceBindingValid(
     Database connection, {
@@ -2414,6 +3472,11 @@ abstract final class ShopBackup {
     required bool hasAuthorizationProofs,
   }) {
     try {
+      final hasCashTenderColumn = _tableHasColumns(
+        connection,
+        'shop_sales',
+        const {'cash_tendered_mmk'},
+      );
       final reversals = connection.select(
         'SELECT * FROM shop_sale_reversals ORDER BY id',
       );
@@ -2484,9 +3547,13 @@ abstract final class ShopBackup {
         final sale = sales.single;
         final totalMmk = sale['total_mmk'];
         final paymentMethod = sale['payment_method'];
+        final cashTenderedMmk = hasCashTenderColumn
+            ? sale['cash_tendered_mmk']
+            : null;
         final saleCreatedAtMillis = sale['created_at_millis'];
         if (totalMmk is! int ||
             paymentMethod is! String ||
+            (cashTenderedMmk != null && cashTenderedMmk is! int) ||
             saleCreatedAtMillis is! int) {
           return false;
         }
@@ -2498,6 +3565,7 @@ abstract final class ShopBackup {
           'saleId': saleId,
           'totalMmk': totalMmk,
           'paymentMethod': paymentMethod,
+          'cashTenderedMmk': ?cashTenderedMmk,
           'createdAtMillis': saleCreatedAtMillis,
           'lines': <Map<String, Object?>>[
             for (final line in saleLines)
@@ -2753,6 +3821,12 @@ abstract final class ShopBackup {
 
   static bool _v11CashShiftsValid(Database connection) {
     try {
+      final hasCashMovements = connection
+          .select(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'shop_cash_movements' LIMIT 1",
+          )
+          .isNotEmpty;
       for (final shift in connection.select('SELECT * FROM shop_cash_shifts')) {
         final shiftId = shift['id'];
         final openingFloatMmk = shift['opening_float_mmk'];
@@ -2818,7 +3892,40 @@ abstract final class ShopBackup {
             drawerOutflow > openingFloatMmk + cashTotal) {
           return false;
         }
-        final expectedCashMmk = openingFloatMmk + cashTotal - drawerOutflow;
+        var movementCount = 0;
+        var cashInTotalMmk = 0;
+        var cashOutTotalMmk = 0;
+        if (hasCashMovements) {
+          final movements = connection
+              .select(
+                '''
+            SELECT COUNT(*) AS movement_count,
+              COALESCE(SUM(CASE WHEN movement_kind = 'cash_in' THEN amount_mmk ELSE 0 END), 0) AS cash_in_total,
+              COALESCE(SUM(CASE WHEN movement_kind = 'cash_out' THEN amount_mmk ELSE 0 END), 0) AS cash_out_total
+            FROM shop_cash_movements WHERE shift_id = ?
+          ''',
+                [shiftId],
+              )
+              .single;
+          final count = movements['movement_count'];
+          final cashIn = movements['cash_in_total'];
+          final cashOut = movements['cash_out_total'];
+          if (count is! int || cashIn is! int || cashOut is! int) return false;
+          movementCount = count;
+          cashInTotalMmk = cashIn;
+          cashOutTotalMmk = cashOut;
+        }
+        if (cashInTotalMmk > 200000000000000 - openingFloatMmk - cashTotal ||
+            drawerOutflow + cashOutTotalMmk >
+                openingFloatMmk + cashTotal + cashInTotalMmk) {
+          return false;
+        }
+        final expectedCashMmk =
+            openingFloatMmk +
+            cashTotal +
+            cashInTotalMmk -
+            drawerOutflow -
+            cashOutTotalMmk;
 
         const closeFields = <String>[
           'close_operation_id',
@@ -2859,6 +3966,13 @@ abstract final class ShopBackup {
             shift['cash_sales_total_mmk'] != cashTotal ||
             shift['wallet_sales_count'] != walletCount ||
             shift['wallet_sales_total_mmk'] != walletTotal ||
+            (hasCashMovements &&
+                (shift['cash_movement_count'] != movementCount ||
+                    shift['cash_in_total_mmk'] != cashInTotalMmk ||
+                    shift['cash_out_total_mmk'] != cashOutTotalMmk ||
+                    shift['review_cash_movement_count'] != movementCount ||
+                    shift['review_cash_in_total_mmk'] != cashInTotalMmk ||
+                    shift['review_cash_out_total_mmk'] != cashOutTotalMmk)) ||
             shift['expected_cash_mmk'] != expectedCashMmk ||
             shift['difference_mmk'] != countedCashMmk - expectedCashMmk ||
             shift['review_sale_count'] != cashCount + walletCount ||
@@ -2904,6 +4018,11 @@ abstract final class ShopBackup {
             'cashReversalCount': reversalCount,
             'cashReversalTotalMmk': reversalTotal,
             'cashDrawerOutflowMmk': drawerOutflow,
+          },
+          if (hasCashMovements) ...<String, Object?>{
+            'cashMovementCount': movementCount,
+            'cashInTotalMmk': cashInTotalMmk,
+            'cashOutTotalMmk': cashOutTotalMmk,
           },
           'expectedCashMmk': expectedCashMmk,
           'countedCashMmk': countedCashMmk,

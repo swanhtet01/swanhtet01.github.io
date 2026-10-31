@@ -43,6 +43,9 @@ const shopOperationalExportHeaders = <String>[
   'reversal_total_mmk',
   'net_sales_mmk',
   'cash_drawer_outflow_mmk',
+  'cash_movement_count',
+  'cash_in_total_mmk',
+  'cash_out_total_mmk',
   'expected_cash_mmk',
   'counted_cash_mmk',
   'difference_mmk',
@@ -73,6 +76,9 @@ final class ShopOperationalShift {
     required this.countedCashMmk,
     required this.differenceMmk,
     required this.cashDrawerOutflowMmk,
+    this.cashMovementCount = 0,
+    this.cashInTotalMmk = 0,
+    this.cashOutTotalMmk = 0,
     this.isClosed = true,
   });
 
@@ -91,6 +97,9 @@ final class ShopOperationalShift {
   final int countedCashMmk;
   final int differenceMmk;
   final int cashDrawerOutflowMmk;
+  final int cashMovementCount;
+  final int cashInTotalMmk;
+  final int cashOutTotalMmk;
   final bool isClosed;
 }
 
@@ -208,6 +217,24 @@ final class ShopOperationalStockMovement {
   final int createdAtMillis;
 }
 
+final class ShopOperationalCashMovement {
+  const ShopOperationalCashMovement({
+    required this.id,
+    required this.kind,
+    required this.amountMmk,
+    required this.reason,
+    required this.actorLabel,
+    required this.createdAtMillis,
+  });
+
+  final String id;
+  final String kind;
+  final int amountMmk;
+  final String reason;
+  final String actorLabel;
+  final int createdAtMillis;
+}
+
 final class ShopOperationalSnapshot {
   const ShopOperationalSnapshot({
     required this.shift,
@@ -215,6 +242,7 @@ final class ShopOperationalSnapshot {
     this.reversals = const [],
     this.walletReconciliations = const [],
     this.stockMovements = const [],
+    this.cashMovements = const [],
   });
 
   final ShopOperationalShift shift;
@@ -222,6 +250,7 @@ final class ShopOperationalSnapshot {
   final List<ShopOperationalReversal> reversals;
   final List<ShopOperationalWalletReconciliation> walletReconciliations;
   final List<ShopOperationalStockMovement> stockMovements;
+  final List<ShopOperationalCashMovement> cashMovements;
 }
 
 final class ShopOperationalPreviewLabels {
@@ -335,6 +364,9 @@ final class ShopOperationalExporter {
     _money(shift.expectedCashMmk, 'shift_expectedCashMmk');
     _money(shift.countedCashMmk, 'shift_countedCashMmk');
     _money(shift.cashDrawerOutflowMmk, 'shift_cashDrawerOutflowMmk');
+    _integer(shift.cashMovementCount, 'shift_cash_movement_count', minimum: 0);
+    _money(shift.cashInTotalMmk, 'shift_cash_in_total');
+    _money(shift.cashOutTotalMmk, 'shift_cash_out_total');
     _integer(
       shift.differenceMmk,
       'shift_difference',
@@ -521,6 +553,28 @@ final class ShopOperationalExporter {
         'reason': movement.reason,
       });
     }
+    for (final movement in snapshot.cashMovements) {
+      _text(movement.id, 'cash_movement_id');
+      _text(movement.reason, 'cash_movement_reason');
+      _text(movement.actorLabel, 'cash_movement_actor');
+      if (!_inWindow(shift, movement.createdAtMillis) ||
+          !const {'cash_in', 'cash_out'}.contains(movement.kind)) {
+        _fail('reference_cash_movement_invalid');
+      }
+      _money(movement.amountMmk, 'cash_movement_amount');
+      events.add({
+        ..._baseRow(
+          shift,
+          'cash_movement',
+          movement.id,
+          movement.createdAtMillis,
+        ),
+        'payment_method': movement.kind,
+        'amount_mmk': movement.amountMmk,
+        'reason': movement.reason,
+        'actor_label': movement.actorLabel,
+      });
+    }
 
     final cashSales = snapshot.sales
         .where(
@@ -552,7 +606,18 @@ final class ShopOperationalExporter {
       0,
       (sum, reversal) => sum + reversal.originalTotalMmk,
     );
-    final expectedCash = shift.openingFloatMmk + cashTotal - cashDrawerOutflow;
+    final cashInTotal = snapshot.cashMovements
+        .where((movement) => movement.kind == 'cash_in')
+        .fold<int>(0, (sum, movement) => sum + movement.amountMmk);
+    final cashOutTotal = snapshot.cashMovements
+        .where((movement) => movement.kind == 'cash_out')
+        .fold<int>(0, (sum, movement) => sum + movement.amountMmk);
+    final expectedCash =
+        shift.openingFloatMmk +
+        cashTotal +
+        cashInTotal -
+        cashDrawerOutflow -
+        cashOutTotal;
     if (cashSales.length != shift.cashSalesCount ||
         walletSales.length != shift.walletSalesCount ||
         cashTotal != shift.cashSalesTotalMmk ||
@@ -560,6 +625,9 @@ final class ShopOperationalExporter {
         cashReversals.length != shift.cashReversalCount ||
         cashReversalTotal != shift.cashReversalTotalMmk ||
         cashDrawerOutflow != shift.cashDrawerOutflowMmk ||
+        snapshot.cashMovements.length != shift.cashMovementCount ||
+        cashInTotal != shift.cashInTotalMmk ||
+        cashOutTotal != shift.cashOutTotalMmk ||
         expectedCash != shift.expectedCashMmk ||
         shift.countedCashMmk - shift.expectedCashMmk != shift.differenceMmk) {
       _fail('reference_shift_reconciliation_invalid');
@@ -579,6 +647,9 @@ final class ShopOperationalExporter {
       'reversal_total_mmk': reversalTotal,
       'net_sales_mmk': gross - reversalTotal,
       'cash_drawer_outflow_mmk': cashDrawerOutflow,
+      'cash_movement_count': shift.cashMovementCount,
+      'cash_in_total_mmk': cashInTotal,
+      'cash_out_total_mmk': cashOutTotal,
       'expected_cash_mmk': shift.expectedCashMmk,
       'counted_cash_mmk': shift.countedCashMmk,
       'difference_mmk': shift.differenceMmk,
@@ -593,6 +664,7 @@ final class ShopOperationalExporter {
       'reversal_line': 40,
       'wallet_reconciliation': 50,
       'stock_movement': 60,
+      'cash_movement': 70,
     };
     events.sort((left, right) {
       var result = (left['occurred_at_epoch_ms']! as int).compareTo(

@@ -16,7 +16,7 @@ void main() {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 17);
+        expect(database.schemaVersion, 22);
         final storeRef = await database.readStoreRef();
         expect(storeRef, matches(RegExp(r'^[0-9a-f]{64}$')));
         await expectLater(
@@ -32,6 +32,30 @@ void main() {
         );
       } finally {
         await database.close();
+      }
+    });
+
+    test('incomplete v15 downgrade remains rejected fail closed', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'shop-member-incomplete-v15-',
+      );
+      final source = ShopDatabase(NativeDatabase.memory());
+      try {
+        final snapshot = File('${directory.path}/incomplete-v15.sqlite');
+        await source.exportVerifiedLocalSnapshot(snapshot);
+        final raw = sqlite3.open(snapshot.path);
+        try {
+          raw.execute('PRAGMA user_version = 15');
+        } finally {
+          raw.close();
+        }
+        expect(
+          () => ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 15),
+          throwsFormatException,
+        );
+      } finally {
+        await source.close();
+        await directory.delete(recursive: true);
       }
     });
 
@@ -344,9 +368,11 @@ void main() {
             operationId: 'reserved-update',
             productId: 'normal-product',
             expectedName: 'Normal product',
+            expectedCategory: '',
             expectedPriceMmk: 100,
             expectedBarcode: '0012345678905',
             name: 'Normal product',
+            category: '',
             priceMmk: 100,
             barcode: token,
           ),
@@ -440,7 +466,10 @@ void main() {
           target: target,
           password: 'member backup test password',
         );
-        ShopBackup.verifySnapshot(target, expectedSchemaVersion: 17);
+        ShopBackup.verifySnapshot(
+          target,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+        );
         final restored = ShopDatabase(NativeDatabase(target));
         try {
           expect(await restored.readStoreRef(), storeRef);
@@ -515,7 +544,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 17);
+            expect(upgraded.schemaVersion, 22);
             expect(await upgraded.countSales(), 1);
             expect(await upgraded.countStockMovements(), 2);
             expect(await upgraded.countOutboxOperations(), 2);
@@ -544,7 +573,105 @@ void main() {
       },
     );
 
-    test('v15 reserved member-card catalog collision fails upgrade closed', () async {
+    test(
+      'v15 non-token SMC1 catalog code upgrades without rewriting history',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'shop-member-v15-legacy-prefix-',
+        );
+        final source = ShopDatabase(NativeDatabase.memory());
+        try {
+          await source.addProduct(
+            id: 'legacy-prefix',
+            name: 'Legacy prefix',
+            priceMmk: 500,
+            sku: 'SAFE-LEGACY-SKU',
+            openingStock: 2,
+          );
+          await source.recordCashSale(
+            operationId: 'legacy-prefix-sale',
+            lines: const [
+              ShopSaleLineInput(productId: 'legacy-prefix', quantity: 1),
+            ],
+          );
+          final snapshot = File('${directory.path}/legacy-v15-prefix.sqlite');
+          await source.exportVerifiedLocalSnapshot(snapshot);
+          final raw = sqlite3.open(snapshot.path);
+          try {
+            _removeV17CorrectionConsumptionObjects(raw);
+            raw.execute(
+              "UPDATE shop_products SET sku = 'smc1.legacy-merchant-code' "
+              "WHERE id = 'legacy-prefix'",
+            );
+            for (final table in const [
+              'shop_wallet_checkout_member_links',
+              'shop_sale_member_links',
+              'shop_member_cards',
+              'shop_members',
+              'shop_store_identity',
+            ]) {
+              raw.execute('DROP TABLE $table');
+            }
+            raw.execute('PRAGMA user_version = 15');
+          } finally {
+            raw.close();
+          }
+          ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 15);
+          final upgraded = ShopDatabase(NativeDatabase(snapshot));
+          try {
+            await upgraded.verifyReadyForUse();
+            expect(upgraded.schemaVersion, 22);
+            final product = (await upgraded.readActiveProducts()).single;
+            expect(product.sku, 'smc1.legacy-merchant-code');
+            expect(product.onHand, 1);
+            expect(await upgraded.countSales(), 1);
+            expect(await upgraded.countStockMovements(), 2);
+            expect(await upgraded.countOutboxOperations(), 2);
+            final verified = File('${directory.path}/verified-v20.sqlite');
+            await upgraded.exportVerifiedLocalSnapshot(verified);
+            ShopBackup.verifySnapshot(
+              verified,
+              expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+            );
+            final archive = File('${directory.path}/legacy-prefix.smbk');
+            final scratch = Directory('${directory.path}/scratch');
+            await scratch.create();
+            await ShopBackup.exportEncrypted(
+              database: upgraded,
+              archive: archive,
+              password: 'legacy-prefix-backup-password',
+              scratchRoot: scratch,
+            );
+            final restored = File('${directory.path}/restored.sqlite');
+            await ShopBackup.restoreIntoEmptyDatabase(
+              archive: archive,
+              target: restored,
+              password: 'legacy-prefix-backup-password',
+            );
+            final reopened = ShopDatabase(NativeDatabase(restored));
+            try {
+              await reopened.verifyReadyForUse();
+              expect(
+                (await reopened.readActiveProducts()).single.sku,
+                'smc1.legacy-merchant-code',
+              );
+              expect(await reopened.countSales(), 1);
+              expect(await reopened.countStockMovements(), 2);
+              expect(await reopened.countOutboxOperations(), 2);
+            } finally {
+              await reopened.close();
+            }
+          } finally {
+            await upgraded.close();
+          }
+        } finally {
+          await source.close();
+          await directory.delete(recursive: true);
+        }
+      },
+    );
+
+    test('v15 token-shaped catalog code upgrades but disables member cards', () async {
       final directory = await Directory.systemTemp.createTemp(
         'shop-member-v15-collision-',
       );
@@ -569,8 +696,9 @@ void main() {
         try {
           _removeV17CorrectionConsumptionObjects(raw);
           raw.execute(
-            "UPDATE shop_products SET sku = 'smc1.legacy-merchant-code' "
+            "UPDATE shop_products SET sku = ?, archived = 1 "
             "WHERE id = 'legacy-collision'",
+            [_token(21)],
           );
           for (final table in const [
             'shop_wallet_checkout_member_links',
@@ -588,13 +716,36 @@ void main() {
         ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 15);
         final upgraded = ShopDatabase(NativeDatabase(snapshot));
         try {
-          await expectLater(upgraded.verifyReadyForUse(), throwsStateError);
+          await upgraded.verifyReadyForUse();
+          expect(upgraded.schemaVersion, 22);
+          expect(await upgraded.memberCardIdentificationAvailable(), isFalse);
+          await _seedMember(
+            upgraded,
+            memberId: _memberId('d'),
+            displayCode: '444444',
+            activeToken: _token(22),
+          );
+          expect(await upgraded.lookupActiveMemberCard(_token(22)), isNull);
+          expect(await upgraded.countSales(), 1);
+          expect(await upgraded.countStockMovements(), 2);
+          expect(await upgraded.countOutboxOperations(), 2);
+          expect(await upgraded.readActiveProducts(), isEmpty);
+          final retry = await upgraded.recordCashSale(
+            operationId: 'legacy-collision-sale',
+            lines: const [
+              ShopSaleLineInput(productId: 'legacy-collision', quantity: 1),
+            ],
+          );
+          expect(retry.member, isNull);
+          expect(await upgraded.countSales(), 1);
+          expect(await upgraded.countStockMovements(), 2);
+          expect(await upgraded.countOutboxOperations(), 2);
         } finally {
           await upgraded.close();
         }
         final unchanged = sqlite3.open(snapshot.path);
         try {
-          expect(unchanged.userVersion, 15);
+          expect(unchanged.userVersion, ShopBackup.supportedSchemaVersion);
           expect(
             unchanged
                 .select(
@@ -604,7 +755,7 @@ void main() {
                   "'shop_wallet_checkout_member_links')",
                 )
                 .single['count'],
-            0,
+            5,
           );
           expect(
             unchanged
@@ -612,7 +763,7 @@ void main() {
                   "SELECT sku FROM shop_products WHERE id = 'legacy-collision'",
                 )
                 .single['sku'],
-            'smc1.legacy-merchant-code',
+            _token(21),
           );
           expect(
             unchanged
@@ -945,8 +1096,10 @@ void main() {
             raw.close();
           }
           expect(
-            () =>
-                ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 17),
+            () => ShopBackup.verifySnapshot(
+              snapshot,
+              expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+            ),
             throwsFormatException,
           );
         } finally {
@@ -1065,7 +1218,7 @@ void main() {
         expect(
           () => ShopBackup.verifySnapshot(
             tamperedSnapshot,
-            expectedSchemaVersion: 17,
+            expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
           ),
           throwsFormatException,
         );
@@ -1157,7 +1310,7 @@ void main() {
         expect(
           () => ShopBackup.verifySnapshot(
             tamperedSnapshot,
-            expectedSchemaVersion: 17,
+            expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
           ),
           throwsFormatException,
         );
@@ -1330,6 +1483,63 @@ String _syntheticStaticMmqr() {
 }
 
 void _removeV17CorrectionConsumptionObjects(Database connection) {
+  connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
+  for (final definition
+      in shopPendingCashCheckoutSchemaDefinitionsV21().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCafeCancellationSchemaDefinitionsV20().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCafeOrderSchemaDefinitionsV19().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCashMovementSchemaDefinitionsV18().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final column in const [
+    'review_cash_out_total_mmk',
+    'review_cash_in_total_mmk',
+    'review_cash_movement_count',
+    'cash_out_total_mmk',
+    'cash_in_total_mmk',
+    'cash_movement_count',
+  ]) {
+    connection.execute('ALTER TABLE shop_cash_shifts DROP COLUMN $column');
+  }
   for (final trigger in const [
     'shop_sale_reversals_require_consumption',
     'shop_wallet_reconciliations_require_consumption',

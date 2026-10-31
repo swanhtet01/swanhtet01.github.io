@@ -21,6 +21,7 @@ void main() {
       expect(profile.profileId, isEmpty);
       expect(profile.capabilities.networkPrinter, isTrue);
       expect(profile.capabilities.externalFileSaving, isTrue);
+      expect(profile.capabilities.cashMovementAuthorization, isFalse);
     }
   });
 
@@ -30,6 +31,7 @@ void main() {
     expect(profile.profile, ShopRuntimeProfile.production);
     expect(profile.profileId, isEmpty);
     expect(profile.platformIdentity, 'production-current');
+    expect(profile.capabilities.cashMovementAuthorization, isFalse);
   });
 
   test('exact generated QA tuple is fail-closed and synthetic only', () {
@@ -42,6 +44,7 @@ void main() {
       expect(profile.capabilities.loopbackPrinter, isTrue);
       expect(profile.capabilities.managedAuth, isFalse);
       expect(profile.capabilities.correctionAuthorization, isFalse);
+      expect(profile.capabilities.cashMovementAuthorization, isFalse);
       expect(profile.capabilities.connectedOrders, isFalse);
       expect(profile.capabilities.networkPrinter, isFalse);
       expect(profile.capabilities.camera, isFalse);

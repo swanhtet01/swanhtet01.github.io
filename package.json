@@ -35,7 +35,7 @@
     "research:usability:self-test": "node --test tools/record_product_usability_observation.test.mjs",
     "research:usability:record": "node tools/record_product_usability_observation.mjs",
     "tools:syntax:verify": "node tools/verify_tool_syntax.mjs && npm run shop:qa:isolation-contract:verify && npm run shop:native:ci-contract:verify && npm run shop:native:release-preflight:verify",
-    "shop:qa:isolation-contract:verify": "node --test tools/verify_shop_qa_isolation_contract.test.mjs && node tools/verify_shop_qa_isolation_contract.mjs --audit",
+    "shop:qa:isolation-contract:verify": "node --test tools/write_shop_qa_artifact_manifest.test.mjs tools/verify_shop_qa_isolation_contract.test.mjs && node tools/verify_shop_qa_isolation_contract.mjs --audit",
     "shop:qa:isolation-contract:strict": "node tools/verify_shop_qa_isolation_contract.mjs --strict",
     "shop:remote-android-qa:preflight:self-test": "node --test tools/prepare_shop_android_qa_handoff.test.mjs tools/prepare_remote_android_qa_preflight.test.mjs && node tools/prepare_remote_android_qa_preflight.mjs --self-test",
     "demo:playbooks:verify": "node tools/test_demo_playbooks.mjs && npm run shop:android-smoke:self-test",

@@ -7,6 +7,9 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_database.dart';
+
+import 'managed_staff_test_support.dart';
+
 import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/shop_operational_export.dart';
 
@@ -34,12 +37,12 @@ void main() {
       while (DateTime.now().millisecondsSinceEpoch <= openingMovementAt) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
-      final shift = await database.openCashShift(
+      final shift = await database.openManagedTestCashShift(
         operationId: 'export-open-1',
         operatorLabel: 'May',
         openingFloatMmk: 10000,
       );
-      final receipt = await database.recordCashSale(
+      final receipt = await database.recordManagedTestCashSale(
         operationId: 'export-sale-1',
         lines: const [
           ShopSaleLineInput(productId: '0099999999999', quantity: 2),
@@ -58,7 +61,7 @@ void main() {
       );
 
       final review = await database.readCashShiftReview(shift.id);
-      final closed = await database.closeCashShift(
+      final closed = await database.closeManagedTestCashShift(
         shiftId: shift.id,
         operationId: 'export-close-1',
         seenSaleCount: review.saleCount,
@@ -132,34 +135,7 @@ void main() {
 
       final raw = sqlite3.open(snapshotFile.path);
       try {
-        for (final trigger in const [
-          'shop_sale_reversals_require_consumption',
-          'shop_wallet_reconciliations_require_consumption',
-          'shop_correction_lineage_state_guard_update',
-          'shop_correction_lineage_state_no_delete',
-          'shop_correction_consumption_intents_no_update',
-          'shop_correction_consumption_intents_no_delete',
-          'shop_correction_consumptions_no_update',
-          'shop_correction_consumptions_no_delete',
-        ]) {
-          raw.execute('DROP TRIGGER IF EXISTS $trigger');
-        }
-        for (final table in const [
-          'shop_correction_consumptions',
-          'shop_correction_consumption_intents',
-          'shop_correction_lineage_state',
-        ]) {
-          raw.execute('DROP TABLE IF EXISTS $table');
-        }
-        for (final table in const [
-          'shop_wallet_checkout_member_links',
-          'shop_sale_member_links',
-          'shop_member_cards',
-          'shop_members',
-          'shop_store_identity',
-        ]) {
-          raw.execute('DROP TABLE $table');
-        }
+        _removePostV15SchemaObjects(raw);
         raw.execute('PRAGMA user_version = 15');
       } finally {
         raw.close();
@@ -171,7 +147,7 @@ void main() {
       final memberToken = _memberToken(17);
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 17);
+        expect(database.schemaVersion, 22);
         final storeRef = await database.readStoreRef();
         await _seedPseudonymousMember(
           database,
@@ -180,12 +156,12 @@ void main() {
           token: memberToken,
         );
         final tokenDigest = await _memberDigest(memberToken);
-        final shift = await database.openCashShift(
+        final shift = await database.openManagedTestCashShift(
           operationId: 'member-export-open',
           operatorLabel: 'May',
           openingFloatMmk: 5000,
         );
-        final sale = await database.recordSale(
+        final sale = await database.recordManagedTestSale(
           operationId: 'member-export-sale',
           lines: const [
             ShopSaleLineInput(productId: 'member-export-product', quantity: 1),
@@ -195,7 +171,7 @@ void main() {
         );
         expect((await database.readSaleMember(sale.id))?.memberId, memberId);
         final review = await database.readCashShiftReview(shift.id);
-        await database.closeCashShift(
+        await database.closeManagedTestCashShift(
           shiftId: shift.id,
           operationId: 'member-export-close',
           seenSaleCount: review.saleCount,
@@ -279,7 +255,7 @@ void main() {
         priceMmk: 1000,
         openingStock: 5,
       );
-      final shift = await database.openCashShift(
+      final shift = await database.openManagedTestCashShift(
         operationId: 'wallet-export-open',
         operatorLabel: 'May',
         openingFloatMmk: 10000,
@@ -297,7 +273,7 @@ void main() {
         ),
         lines: lines,
       );
-      final sale = await database.recordSale(
+      final sale = await database.recordManagedTestSale(
         operationId: 'wallet-export-sale',
         lines: lines,
         paymentMethod: 'kbzpay',
@@ -349,7 +325,7 @@ void main() {
         reversal.id,
       );
       final review = await database.readCashShiftReview(shift.id);
-      await database.closeCashShift(
+      await database.closeManagedTestCashShift(
         shiftId: shift.id,
         operationId: 'wallet-export-close',
         seenSaleCount: review.saleCount,
@@ -513,6 +489,94 @@ Future<ShopCorrectionAuthorization> _authorization({
     keyId: _testKeyId,
     signature: base64Url.encode(signed.bytes).replaceAll('=', ''),
   );
+}
+
+void _removePostV15SchemaObjects(Database connection) {
+  connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
+  for (final definition
+      in shopPendingCashCheckoutSchemaDefinitionsV21().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCafeCancellationSchemaDefinitionsV20().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCafeOrderSchemaDefinitionsV19().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCashMovementSchemaDefinitionsV18().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final column in const [
+    'review_cash_out_total_mmk',
+    'review_cash_in_total_mmk',
+    'review_cash_movement_count',
+    'cash_out_total_mmk',
+    'cash_in_total_mmk',
+    'cash_movement_count',
+  ]) {
+    connection.execute('ALTER TABLE shop_cash_shifts DROP COLUMN $column');
+  }
+  for (final trigger in const [
+    'shop_sale_reversals_require_consumption',
+    'shop_wallet_reconciliations_require_consumption',
+    'shop_correction_lineage_state_guard_update',
+    'shop_correction_lineage_state_no_delete',
+    'shop_correction_consumption_intents_no_update',
+    'shop_correction_consumption_intents_no_delete',
+    'shop_correction_consumptions_no_update',
+    'shop_correction_consumptions_no_delete',
+  ]) {
+    connection.execute('DROP TRIGGER IF EXISTS $trigger');
+  }
+  for (final table in const [
+    'shop_correction_consumptions',
+    'shop_correction_consumption_intents',
+    'shop_correction_lineage_state',
+  ]) {
+    connection.execute('DROP TABLE IF EXISTS $table');
+  }
+  for (final table in const [
+    'shop_wallet_checkout_member_links',
+    'shop_sale_member_links',
+    'shop_member_cards',
+    'shop_members',
+    'shop_store_identity',
+  ]) {
+    connection.execute('DROP TABLE IF EXISTS $table');
+  }
 }
 
 String _syntheticStaticMmqr() {

@@ -284,6 +284,10 @@ List<String> shopReceiptTextLines(
   '',
   '${myanmar ? 'စုစုပေါင်း' : 'TOTAL'}: ${_formatMmk(receipt.totalMmk)} MMK',
   '${myanmar ? 'ငွေပေးချေမှု' : 'Payment'}: ${_receiptPaymentName(receipt.paymentMethod, myanmar: myanmar)}',
+  if (receipt.cashTenderedMmk != null)
+    '${myanmar ? 'ပေးငွေ' : 'Cash received'}: ${_formatMmk(receipt.cashTenderedMmk!)} MMK',
+  if (receipt.cashChangeMmk != null)
+    '${myanmar ? 'ပြန်အမ်းငွေ' : 'Change'}: ${_formatMmk(receipt.cashChangeMmk!)} MMK',
 ];
 
 String _receiptPaymentName(String method, {required bool myanmar}) =>

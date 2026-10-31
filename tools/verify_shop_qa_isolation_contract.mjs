@@ -32,6 +32,7 @@ const implementationFiles = [
   'mobile/shop_pos/lib/shop_runtime_scope.dart',
   'mobile/shop_pos/lib/shop_build_identity.g.dart',
   'tools/generate_shop_build_identity.mjs',
+  'tools/write_shop_qa_artifact_manifest.mjs',
   'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1',
   'mobile/shop_pos/android/app/src/production/AndroidManifest.xml',
   'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml',
@@ -272,9 +273,9 @@ const workflowTuples = Object.freeze([
   { platform: 'android', profile: 'production', build: 'flutter build apk --debug --no-pub --flavor production' },
   { platform: 'android', profile: 'synthetic_qa_v1', build: 'flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'app-qa-debug.apk', inspection: ['android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"', 'test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"', 'analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"', 'test -x "$analyzer"', 'manifest application-id app-qa-debug.apk', 'dev.supermega.supermega_shop.qa', 'manifest print app-qa-debug.apk', 'xml.etree.ElementTree', 'findall("application")', 'android + "label"', 'Shop QA', '"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1"', '"dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1"', '"dev.supermega.shop.qa.scopedEncryptedRestore": "true"', '"dev.supermega.shop.qa.scopedSyntheticExport": "true"', '"dev.supermega.shop.qa.generalExternalFileAccess": "false"', 'len(metadata) == len(items)', 'all(metadata.get(key) == value for key, value in expected.items())', 'shop_android_qa_identity_or_capability_mismatch'] },
   { platform: 'ios', profile: 'production', build: 'flutter build ios --debug --no-codesign --no-pub' },
-  { platform: 'ios', profile: 'synthetic_qa_v1', build: 'flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'Runner.app.zip', inspection: ["info='build/ios/iphoneos/Runner.app/Info.plist'", 'Print :CFBundleIdentifier', 'dev.supermega.supermegaShop.qa', 'Print :CFBundleDisplayName', 'Print :CFBundleName', 'Shop QA'] },
+  { platform: 'ios', profile: 'synthetic_qa_v1', build: 'flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'Runner.app.zip', inspection: ["info='build/ios/iphoneos/Runner.app/Info.plist'", 'Print :CFBundleIdentifier', 'dev.supermega.supermegaShop.qa', 'Print :CFBundleDisplayName', 'Print :CFBundleName', 'Shop QA'], signingInspection: ['codesign -dv --verbose=4', 'code object is not signed at all', 'shop_ios_qa_unexpected_signature', 'Runner.app.zip.signing.json'], package: 'ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "${{ github.workspace }}/Runner.app.zip"', toolchain: 'flutter --version --machine > Runner.app.zip.toolchain.json' },
   { platform: 'windows', profile: 'production', build: 'flutter build windows --release --no-pub' },
-  { platform: 'windows', profile: 'synthetic_qa_v1', build: 'flutter build windows --release --no-pub --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'supermega-shop-windows-qa.zip', configure: true, inspection: ["$identity.ProductName -cne 'Shop QA'", "$identity.FileDescription -cne 'Shop QA'", "$identity.InternalName -cne 'supermega_shop_qa'", "$identity.OriginalFilename -cne 'supermega_shop_qa.exe'"], package: 'Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath' },
+  { platform: 'windows', profile: 'synthetic_qa_v1', build: 'flutter build windows --release --no-pub --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'supermega-shop-windows-qa.zip', configure: true, inspection: ["$identity.ProductName -cne 'Shop QA'", "$identity.FileDescription -cne 'Shop QA'", "$identity.InternalName -cne 'supermega_shop_qa'", "$identity.OriginalFilename -cne 'supermega_shop_qa.exe'"], signingInspection: ['Get-AuthenticodeSignature -LiteralPath $executable', "$signature.Status -cne 'NotSigned'", '$null -ne $signature.SignerCertificate', 'supermega-shop-windows-qa.zip.signing.json'], package: 'Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath', toolchain: "flutter --version --machine | Set-Content -LiteralPath 'supermega-shop-windows-qa.zip.toolchain.json' -Encoding utf8NoBOM" },
 ])
 
 function jobTargetsPlatform(job, platform) {
@@ -345,18 +346,34 @@ function qaWorkflowBlockers(workflow) {
     const packageStep = tuple.package
       ? laterSteps.find(step => requiredStepIsUnconditional(step) && step.run.includes(tuple.package))
       : inspectionStep
+    const signingInspectionStep = tuple.signingInspection
+      ? laterSteps.find(step => requiredStepIsUnconditional(step)
+        && tuple.signingInspection.every(token => step.run.includes(token)))
+      : inspectionStep
+    const toolchainStep = tuple.toolchain
+      ? laterSteps.find(step => requiredStepIsUnconditional(step)
+        && executableCommands(step.run).some(command => command === tuple.toolchain))
+      : checksumStep
     const inspectedBeforeChecksum = Boolean(inspectionStep && packageStep && checksumStep
-      && inspectionStep.index <= packageStep.index && packageStep.index < checksumStep.index)
+      && signingInspectionStep
+      && inspectionStep.index <= packageStep.index
+      && signingInspectionStep.index <= packageStep.index
+      && packageStep.index < checksumStep.index)
     const windowsCanonicalChecksum = tuple.platform !== 'windows' || laterSteps.some(step => requiredStepIsUnconditional(step)
       && step.run.includes(`$artifact = '${tuple.artifact}'`)
       && step.run.includes('"$digest  $artifact"')
       && step.run.includes('if ($recorded -cne $expected)'))
-    const metadata = laterSteps.some(step => requiredStepIsUnconditional(step) && executableCommands(step.run).some(command => (
-      command.includes('source-sha=${{ github.sha }}')
-        && /promotion-ineligible/i.test(command)
-        && new RegExp(`(?:cat|Get-Content)\\s+${artifact}\\.sha256`, 'i').test(command)
-        && new RegExp(`(?:>\\s*|Out-File\\s+)${artifact}\\.manifest$`, 'i').test(command)
-    )))
+    const manifestCommand = `node tools/write_shop_qa_artifact_manifest.mjs --platform ${tuple.platform} --artifact ${tuple.artifact} --checksum ${tuple.artifact}.sha256 --toolchain ${tuple.artifact}.toolchain.json --signing ${tuple.artifact}.signing.json --output ${tuple.artifact}.manifest`
+    const metadataStep = tuple.platform === 'android'
+      ? laterSteps.find(step => requiredStepIsUnconditional(step) && executableCommands(step.run).some(command => (
+        command.includes('source-sha=${{ github.sha }}')
+          && /promotion-ineligible/i.test(command)
+          && new RegExp(`(?:cat|Get-Content)\\s+${artifact}\\.sha256`, 'i').test(command)
+          && new RegExp(`(?:>\\s*|Out-File\\s+)${artifact}\\.manifest$`, 'i').test(command)
+      )))
+      : laterSteps.find(step => requiredStepIsUnconditional(step)
+        && executableCommands(step.run).some(command => command === manifestCommand))
+    const metadata = Boolean(metadataStep)
     const upload = laterSteps.find(step => /^actions\/upload-artifact@(?:v4(?:\.\d+\.\d+)?|[0-9a-f]{40})$/.test(step.uses)
       && requiredStepIsUnconditional(step)
       && /synthetic-qa/i.test(step.artifactName)
@@ -365,9 +382,19 @@ function qaWorkflowBlockers(workflow) {
       && /sha-?256/i.test(step.artifactName)
       && exactArtifactEntries(step.artifactPath).has(tuple.artifact)
       && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.sha256`)
-      && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.manifest`))
-    if (!checksum || !metadata || !upload || !inspectedBeforeChecksum || !windowsCanonicalChecksum) {
-      missing.push(`${tuple.platform}:${tuple.profile}:artifact_checksum_promotion_binding(checksum=${checksum},metadata=${metadata},upload=${Boolean(upload)},inspection=${inspectedBeforeChecksum},canonical=${windowsCanonicalChecksum})`)
+      && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.manifest`)
+      && (tuple.platform === 'android' || (
+        exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.toolchain.json`)
+        && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.signing.json`)
+      )))
+    const orderedBinding = tuple.platform === 'android' || Boolean(
+      checksumStep && toolchainStep && metadataStep && upload
+      && checksumStep.index < toolchainStep.index
+      && toolchainStep.index < metadataStep.index
+      && metadataStep.index < upload.index,
+    )
+    if (!checksum || !metadata || !upload || !inspectedBeforeChecksum || !windowsCanonicalChecksum || !orderedBinding) {
+      missing.push(`${tuple.platform}:${tuple.profile}:artifact_checksum_promotion_binding(checksum=${checksum},metadata=${metadata},upload=${Boolean(upload)},inspection=${inspectedBeforeChecksum},canonical=${windowsCanonicalChecksum},ordered=${orderedBinding})`)
     }
   }
   for (const platform of ['android', 'ios', 'windows']) {
@@ -617,6 +644,7 @@ export function assessShopQaIsolationContract({ sources }) {
   }
 
   const generator = sources['tools/generate_shop_build_identity.mjs'] || ''
+  const artifactManifestWriter = sources['tools/write_shop_qa_artifact_manifest.mjs'] || ''
   const windows = sources['mobile/shop_pos/scripts/configure_windows_qa_runner.ps1'] || ''
   const androidProduction = sources['mobile/shop_pos/android/app/src/production/AndroidManifest.xml'] || ''
   const androidQa = sources['mobile/shop_pos/android/app/src/qa/AndroidManifest.xml'] || ''
@@ -630,6 +658,18 @@ export function assessShopQaIsolationContract({ sources }) {
   const iosRunnerProductNames = ios.match(/PRODUCT_NAME = "\$\(TARGET_NAME\)";/g) ?? []
   if (!ios.includes('dev.supermega.supermegaShop.qa') || !ios.includes('Verify Shop build identity') || !ios.includes('shop_ios_build_identity_missing') || !ios.includes("shopBuildIdentityProfile = 'synthetic_qa_v1'") || !ios.includes("shopBuildIdentityQaProfileId = 'synthetic-qa-v1'") || !ios.includes("shopBuildIdentityProfile = 'production'") || !ios.includes("shopBuildIdentityQaProfileId = ''") || !ios.includes('shop_ios_build_configuration_unknown') || iosQaActions.length !== 5 || /buildConfiguration="(?:Debug|Profile|Release)"/.test(iosScheme) || iosRunnerProductNames.length < 6 || !ios.includes('path = Runner.app;') || !iosConfig.includes('dev.supermega.supermegaShop.qa') || iosConfig.includes('PRODUCT_NAME=') || !iosConfig.includes('SHOP_DISPLAY_NAME=Shop QA') || !iosConfig.includes('SHOP_BUNDLE_NAME=Shop QA') || !iosInfo.includes('$(SHOP_DISPLAY_NAME)') || !iosInfo.includes('$(SHOP_BUNDLE_NAME)') || !iosDebug.includes('SHOP_DISPLAY_NAME=Shop') || !iosDebug.includes('SHOP_BUNDLE_NAME=supermega_shop') || !iosRelease.includes('SHOP_DISPLAY_NAME=Shop') || !iosRelease.includes('SHOP_BUNDLE_NAME=supermega_shop')) add(blockers, 'ios_qa_identity_missing', 'Runner.app product, native generated-identity guard, QA bundle identity, and unchanged production display/bundle names')
   if (!generator.includes('synthetic_qa_v1') || !generator.includes('production') || !generator.includes('windows')) add(blockers, 'identity_generator_missing', 'allowlisted platform/profile generator')
+  for (const token of [
+    'supermega.shop.synthetic-qa-artifact.v1',
+    'HEAD:mobile/shop_pos',
+    'shop_qa_manifest_checksum_invalid',
+    'shop_qa_manifest_github_sha_mismatch',
+    'ios_no_codesign',
+    'windows_unsigned',
+    'signingEvidence.productionSigned !== false',
+    'promotionEligible: false',
+  ]) {
+    if (!artifactManifestWriter.includes(token)) add(blockers, 'qa_artifact_manifest_writer_invalid', token)
+  }
   if (!windows.includes('supermega_shop_qa.exe') || !windows.includes('Shop QA')) add(blockers, 'windows_qa_identity_missing', 'QA executable and product identity')
   const workflowBlockers = qaWorkflowBlockers(workflow)
   if (workflowBlockers.length) add(blockers, 'qa_build_contract_missing', workflowBlockers.join(','))

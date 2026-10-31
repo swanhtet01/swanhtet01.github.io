@@ -18,6 +18,9 @@ import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
+
+import 'managed_staff_test_support.dart';
+
 import 'package:supermega_shop/shop_models.dart';
 import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
@@ -394,6 +397,288 @@ void main() {
       await database.close();
     });
 
+    test('product outbox failure rolls back opening stock and retries once after reopen', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'supermega-shop-product-outbox-abort-',
+      );
+      final file = File('${directory.path}/shop.sqlite');
+      var persisted = ShopDatabase(NativeDatabase(file));
+      const productId = 'catalog-abort-tea';
+      const operationId = 'catalog.product.created:$productId';
+      try {
+        await persisted.customStatement(
+          'CREATE TEMP TRIGGER synthetic_product_outbox_abort '
+          'AFTER INSERT ON shop_sync_outbox '
+          "WHEN NEW.operation_id = '$operationId' "
+          "BEGIN SELECT RAISE(ABORT, 'synthetic product outbox failure'); END",
+        );
+        await expectLater(
+          persisted.addProduct(
+            id: productId,
+            name: 'Tea',
+            category: 'Drinks',
+            description: 'Hot tea',
+            sku: 'TEA-001',
+            barcode: '0123456789012',
+            priceMmk: 2500,
+            openingStock: 7,
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) =>
+                  error.toString().contains('synthetic product outbox failure'),
+            ),
+          ),
+        );
+        expect(
+          await _catalogCreationState(
+            persisted,
+            productId: productId,
+            operationId: operationId,
+          ),
+          const {
+            'products': <Map<String, Object?>>[],
+            'movements': <Map<String, Object?>>[],
+            'outbox': <Map<String, Object?>>[],
+          },
+        );
+
+        await persisted.close();
+        persisted = ShopDatabase(NativeDatabase(file));
+        expect(
+          await _catalogCreationState(
+            persisted,
+            productId: productId,
+            operationId: operationId,
+          ),
+          const {
+            'products': <Map<String, Object?>>[],
+            'movements': <Map<String, Object?>>[],
+            'outbox': <Map<String, Object?>>[],
+          },
+        );
+
+        Future<void> retry() => persisted.addProduct(
+          id: productId,
+          name: 'Tea',
+          category: 'Drinks',
+          description: 'Hot tea',
+          sku: 'TEA-001',
+          barcode: '0123456789012',
+          priceMmk: 2500,
+          openingStock: 7,
+        );
+
+        await retry();
+        final completed = await _catalogCreationState(
+          persisted,
+          productId: productId,
+          operationId: operationId,
+        );
+        expect(completed['products'], const [
+          {
+            'id': productId,
+            'name': 'Tea',
+            'category': 'Drinks',
+            'description': 'Hot tea',
+            'sku': 'TEA-001',
+            'barcode': '0123456789012',
+            'price_mmk': 2500,
+            'on_hand': 7,
+          },
+        ]);
+        expect(completed['movements'], const [
+          {
+            'id': '$operationId:opening',
+            'product_id': productId,
+            'quantity_delta': 7,
+            'reason': 'opening_stock',
+          },
+        ]);
+        final outbox = completed['outbox']!;
+        expect(outbox, hasLength(1));
+        expect(outbox.single, containsPair('operation_id', operationId));
+        expect(
+          outbox.single,
+          containsPair('event_type', 'catalog.product.created.v1'),
+        );
+        expect(outbox.single, containsPair('state', 'pending'));
+        expect(jsonDecode(outbox.single['payload_json']! as String), const {
+          'productId': productId,
+          'name': 'Tea',
+          'category': 'Drinks',
+          'description': 'Hot tea',
+          'sku': 'TEA-001',
+          'barcode': '0123456789012',
+          'priceMmk': 2500,
+          'openingStock': 7,
+        });
+
+        await persisted.close();
+        persisted = ShopDatabase(NativeDatabase(file));
+        await retry();
+        expect(
+          await _catalogCreationState(
+            persisted,
+            productId: productId,
+            operationId: operationId,
+          ),
+          completed,
+        );
+      } finally {
+        await persisted.close();
+        await directory.delete(recursive: true);
+      }
+    });
+
+    test('product edit outbox failure restores reviewed values and retries once after reopen', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'supermega-shop-product-edit-outbox-abort-',
+      );
+      final file = File('${directory.path}/shop.sqlite');
+      var persisted = ShopDatabase(NativeDatabase(file));
+      const productId = 'catalog-edit-tea';
+      const saleId = 'catalog-edit-prior-sale';
+      const editOperationId = 'catalog-edit-recovery';
+      try {
+        await persisted.addProduct(
+          id: productId,
+          name: 'Tea',
+          category: 'Drinks',
+          description: 'Original tea',
+          sku: 'TEA-EDIT-001',
+          barcode: '0123456789012',
+          priceMmk: 2500,
+          openingStock: 7,
+        );
+        await persisted.recordManagedTestCashSale(
+          operationId: saleId,
+          lines: const [ShopSaleLineInput(productId: productId, quantity: 1)],
+        );
+        final before = await _catalogEditState(
+          persisted,
+          productId: productId,
+          saleId: saleId,
+        );
+        await persisted.customStatement(
+          'CREATE TEMP TRIGGER synthetic_product_edit_outbox_abort '
+          'AFTER INSERT ON shop_sync_outbox '
+          "WHEN NEW.operation_id = '$editOperationId' "
+          "BEGIN SELECT RAISE(ABORT, 'synthetic product edit outbox failure'); END",
+        );
+
+        Future<void> edit() => persisted.updateProductDetails(
+          operationId: editOperationId,
+          productId: productId,
+          expectedName: 'Tea',
+          expectedCategory: 'Drinks',
+          expectedPriceMmk: 2500,
+          expectedBarcode: '0123456789012',
+          name: 'Premium Tea',
+          category: 'Hot Drinks',
+          priceMmk: 3000,
+          barcode: '0123456789098',
+        );
+
+        await expectLater(
+          edit(),
+          throwsA(
+            predicate<Object>(
+              (error) => error.toString().contains(
+                'synthetic product edit outbox failure',
+              ),
+            ),
+          ),
+        );
+        expect(
+          await _catalogEditState(
+            persisted,
+            productId: productId,
+            saleId: saleId,
+          ),
+          before,
+        );
+
+        await persisted.close();
+        persisted = ShopDatabase(NativeDatabase(file));
+        expect(
+          await _catalogEditState(
+            persisted,
+            productId: productId,
+            saleId: saleId,
+          ),
+          before,
+        );
+
+        await edit();
+        final completed = await _catalogEditState(
+          persisted,
+          productId: productId,
+          saleId: saleId,
+        );
+        expect(completed['products'], const [
+          {
+            'id': productId,
+            'name': 'Premium Tea',
+            'category': 'Hot Drinks',
+            'description': 'Original tea',
+            'sku': 'TEA-EDIT-001',
+            'barcode': '0123456789098',
+            'price_mmk': 3000,
+            'on_hand': 6,
+          },
+        ]);
+        expect(completed['saleLines'], const [
+          {
+            'sale_id': saleId,
+            'product_id': productId,
+            'product_name': 'Tea',
+            'unit_price_mmk': 2500,
+            'quantity': 1,
+            'line_total_mmk': 2500,
+          },
+        ]);
+        expect(completed['movements'], before['movements']);
+        final outbox = completed['outbox']!;
+        expect(outbox, hasLength(before['outbox']!.length + 1));
+        final editRows = outbox
+            .where((row) => row['operation_id'] == editOperationId)
+            .toList(growable: false);
+        expect(editRows, hasLength(1));
+        expect(
+          editRows.single,
+          containsPair('event_type', 'catalog.product.updated.v2'),
+        );
+        expect(editRows.single, containsPair('state', 'pending'));
+        expect(jsonDecode(editRows.single['payload_json']! as String), const {
+          'productId': productId,
+          'name': 'Premium Tea',
+          'category': 'Hot Drinks',
+          'priceMmk': 3000,
+          'barcode': '0123456789098',
+          'previousName': 'Tea',
+          'previousCategory': 'Drinks',
+          'previousPriceMmk': 2500,
+          'previousBarcode': '0123456789012',
+        });
+
+        await persisted.close();
+        persisted = ShopDatabase(NativeDatabase(file));
+        await edit();
+        expect(
+          await _catalogEditState(
+            persisted,
+            productId: productId,
+            saleId: saleId,
+          ),
+          completed,
+        );
+      } finally {
+        await persisted.close();
+        await directory.delete(recursive: true);
+      }
+    });
+
     test('managed workspace attachment is explicit and immutable', () async {
       expect(await database.readManagedWorkspaceBinding(), isNull);
       await expectLater(
@@ -419,8 +704,17 @@ void main() {
         throwsArgumentError,
       );
       expect(await database.readManagedWorkspaceBinding(), isNull);
+      await database.verifyManagedWorkspaceUnavailableWithoutSession();
 
       final attached = await _attachTestWorkspace(database);
+      await expectLater(
+        database.verifyManagedWorkspaceUnavailableWithoutSession(),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database.readManagedWorkspaceBinding())?.workspaceId,
+        attached.workspaceId,
+      );
       await expectLater(
         database.customStatement(
           "INSERT INTO shop_sale_reversals (authorization_workspace_id) VALUES ('workspace-other')",
@@ -516,12 +810,12 @@ void main() {
           priceMmk: 2500,
           openingStock: 3,
         );
-        await source.openCashShift(
+        await source.openManagedTestCashShift(
           operationId: 'clone-replay-shift',
           operatorLabel: 'May',
           openingFloatMmk: 10000,
         );
-        final sale = await source.recordCashSale(
+        final sale = await source.recordManagedTestCashSale(
           operationId: 'clone-replay-sale',
           lines: const [
             ShopSaleLineInput(productId: 'clone-replay-product', quantity: 2),
@@ -581,11 +875,11 @@ void main() {
           openingStock: 3,
         );
         const saleLines = [ShopSaleLineInput(productId: 'tea', quantity: 2)];
-        final receipt = await database.recordCashSale(
+        final receipt = await database.recordManagedTestCashSale(
           operationId: 'receipt-lines-sale',
           lines: saleLines,
         );
-        final replay = await database.recordCashSale(
+        final replay = await database.recordManagedTestCashSale(
           operationId: 'receipt-lines-sale',
           lines: saleLines,
         );
@@ -628,12 +922,12 @@ void main() {
         priceMmk: 2500,
         openingStock: 5,
       );
-      final shift = await database.openCashShift(
+      final shift = await database.openManagedTestCashShift(
         operationId: 'cash-reversal-shift',
         operatorLabel: 'May',
         openingFloatMmk: 10000,
       );
-      final sale = await database.recordCashSale(
+      final sale = await database.recordManagedTestCashSale(
         operationId: 'cash-reversal-sale',
         lines: const [
           ShopSaleLineInput(productId: 'tea-reversal', quantity: 2),
@@ -899,6 +1193,10 @@ void main() {
       final recent = (await database.readRecentSales()).single;
       expect(recent.reversal?.id, reversal.id);
       expect(recent.lines.single.productName, 'Original Tea');
+      final reversed = await database.readRecentSales(
+        filter: ShopSaleHistoryFilter.reversed,
+      );
+      expect(reversed.map((sale) => sale.id), [sale.id]);
 
       final movementCount = await database.countStockMovements();
       final outboxCount = await database.countOutboxOperations();
@@ -940,7 +1238,7 @@ void main() {
       expect(review.cashDrawerOutflowMmk, 5000);
       expect(review.expectedCashMmk, 10000);
       await expectLater(
-        database.closeCashShift(
+        database.closeManagedTestCashShift(
           shiftId: shift.id,
           operationId: 'cash-reversal-stale-close',
           seenSaleCount: reviewedBeforeReversal.saleCount,
@@ -949,7 +1247,7 @@ void main() {
         ),
         throwsA(isA<StateError>()),
       );
-      final closed = await database.closeCashShift(
+      final closed = await database.closeManagedTestCashShift(
         shiftId: shift.id,
         operationId: 'cash-reversal-close',
         seenSaleCount: review.saleCount,
@@ -971,12 +1269,12 @@ void main() {
         priceMmk: 2000,
         openingStock: 3,
       );
-      final shift = await database.openCashShift(
+      final shift = await database.openManagedTestCashShift(
         operationId: 'receipt-ttl-shift',
         operatorLabel: 'May',
         openingFloatMmk: 10000,
       );
-      final sale = await database.recordCashSale(
+      final sale = await database.recordManagedTestCashSale(
         operationId: 'receipt-ttl-sale',
         lines: const [
           ShopSaleLineInput(productId: 'receipt-ttl-product', quantity: 1),
@@ -1045,12 +1343,12 @@ void main() {
           priceMmk: 1500,
           openingStock: 2,
         );
-        await database.openCashShift(
+        await database.openManagedTestCashShift(
           operationId: 'expired-proof-shift',
           operatorLabel: 'May',
           openingFloatMmk: 5000,
         );
-        final sale = await database.recordCashSale(
+        final sale = await database.recordManagedTestCashSale(
           operationId: 'expired-proof-sale',
           lines: const [
             ShopSaleLineInput(productId: 'expired-proof-product', quantity: 1),
@@ -1110,12 +1408,12 @@ void main() {
           priceMmk: 1000,
           openingStock: 3,
         );
-        final shift = await database.openCashShift(
+        final shift = await database.openManagedTestCashShift(
           operationId: 'gross-cap-shift',
           operatorLabel: 'May',
           openingFloatMmk: maximumShiftCashMmk - 1000,
         );
-        final sale = await database.recordCashSale(
+        final sale = await database.recordManagedTestCashSale(
           operationId: 'gross-cap-sale-1',
           lines: const [
             ShopSaleLineInput(productId: 'gross-cap-product', quantity: 1),
@@ -1142,7 +1440,7 @@ void main() {
         expect(reviewed.cashDrawerOutflowMmk, 1000);
         expect(reviewed.expectedCashMmk, maximumShiftCashMmk - 1000);
         await expectLater(
-          database.recordCashSale(
+          database.recordManagedTestCashSale(
             operationId: 'gross-cap-sale-2',
             lines: const [
               ShopSaleLineInput(productId: 'gross-cap-product', quantity: 1),
@@ -1154,7 +1452,7 @@ void main() {
         expect((await database.readActiveProducts()).single.onHand, 3);
 
         final unchanged = await database.readCashShiftReview(shift.id);
-        final closed = await database.closeCashShift(
+        final closed = await database.closeManagedTestCashShift(
           shiftId: shift.id,
           operationId: 'gross-cap-close',
           seenSaleCount: unchanged.saleCount,
@@ -1177,12 +1475,12 @@ void main() {
           priceMmk: 1000,
           openingStock: 2,
         );
-        final firstShift = await database.openCashShift(
+        final firstShift = await database.openManagedTestCashShift(
           operationId: 'shift-bound-first-open',
           operatorLabel: 'May',
           openingFloatMmk: 5000,
         );
-        final sale = await database.recordCashSale(
+        final sale = await database.recordManagedTestCashSale(
           operationId: 'shift-bound-sale',
           lines: const [
             ShopSaleLineInput(
@@ -1200,14 +1498,14 @@ void main() {
         );
         expect(command.expectedCashShiftId, firstShift.id);
         final firstReview = await database.readCashShiftReview(firstShift.id);
-        await database.closeCashShift(
+        await database.closeManagedTestCashShift(
           shiftId: firstShift.id,
           operationId: 'shift-bound-first-close',
           seenSaleCount: firstReview.saleCount,
           seenCashTotalMmk: firstReview.cashSalesTotalMmk,
           countedCashMmk: firstReview.expectedCashMmk,
         );
-        final secondShift = await database.openCashShift(
+        final secondShift = await database.openManagedTestCashShift(
           operationId: 'shift-bound-second-open',
           operatorLabel: 'May',
           openingFloatMmk: 5000,
@@ -1234,6 +1532,145 @@ void main() {
       },
     );
 
+    test(
+      'multi-line cash reversal survives outbox failure, reopen, and replay',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'supermega-shop-reversal-outbox-recovery-',
+        );
+        final file = File('${directory.path}/shop.sqlite');
+        ShopDatabase? persisted;
+        try {
+          persisted = ShopDatabase.withCorrectionReceiptVerifier(
+            executor: NativeDatabase(file),
+            correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+            testOnlyAllowUnconsumedAuthorization: true,
+          );
+          await _attachTestWorkspace(persisted);
+          await persisted.addProduct(
+            id: 'reversal-recovery-tea',
+            name: 'Tea',
+            priceMmk: 2000,
+            openingStock: 5,
+          );
+          await persisted.addProduct(
+            id: 'reversal-recovery-rice',
+            name: 'Rice',
+            priceMmk: 3000,
+            openingStock: 7,
+          );
+          final shift = await persisted.openManagedTestCashShift(
+            operationId: 'reversal-recovery-shift',
+            operatorLabel: 'Synthetic cashier',
+            openingFloatMmk: 10000,
+          );
+          final sale = await persisted.recordManagedTestCashSale(
+            operationId: 'reversal-recovery-sale',
+            lines: const [
+              ShopSaleLineInput(
+                productId: 'reversal-recovery-tea',
+                quantity: 2,
+              ),
+              ShopSaleLineInput(
+                productId: 'reversal-recovery-rice',
+                quantity: 3,
+              ),
+            ],
+          );
+          expect(sale.totalMmk, 13000);
+          final command = await persisted.previewFullSaleReversal(
+            operationId: 'reversal-recovery-refund',
+            saleId: sale.id,
+            restockItems: true,
+            reason: 'Customer returned the complete sale',
+            confirmCashReturned: true,
+          );
+          final authorization = await _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'reversal-recovery-receipt',
+          );
+          await persisted.customStatement(
+            'CREATE TEMP TRIGGER synthetic_reversal_outbox_abort '
+            'AFTER INSERT ON shop_sync_outbox '
+            "WHEN NEW.operation_id = 'reversal-recovery-refund' "
+            "BEGIN SELECT RAISE(ABORT, 'synthetic outbox failure'); END",
+          );
+          final stateBefore = await _fullSaleReversalState(persisted);
+
+          await expectLater(
+            persisted.recordAuthorizedFullSaleReversal(
+              command: command,
+              authorization: authorization,
+            ),
+            throwsA(
+              predicate(
+                (error) =>
+                    error.toString().contains('synthetic outbox failure'),
+              ),
+            ),
+          );
+          expect(await _fullSaleReversalState(persisted), stateBefore);
+
+          await persisted.close();
+          persisted = ShopDatabase.withCorrectionReceiptVerifier(
+            executor: NativeDatabase(file),
+            correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+            testOnlyAllowUnconsumedAuthorization: true,
+          );
+          await persisted.verifyReadyForUse();
+          expect(await _fullSaleReversalState(persisted), stateBefore);
+
+          final reversal = await persisted.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: authorization,
+          );
+          expect(reversal.originalTotalMmk, 13000);
+          expect(reversal.cashDrawerDeltaMmk, -13000);
+          expect(
+            reversal.lines
+                .map(
+                  (line) =>
+                      (line.productId, line.quantity, line.restockQuantity),
+                )
+                .toSet(),
+            {('reversal-recovery-tea', 2, 2), ('reversal-recovery-rice', 3, 3)},
+          );
+          final products = await persisted.readActiveProducts();
+          expect(
+            {for (final product in products) product.id: product.onHand},
+            {'reversal-recovery-rice': 7, 'reversal-recovery-tea': 5},
+          );
+          final review = await persisted.readCashShiftReview(shift.id);
+          expect(review.cashSalesTotalMmk, 13000);
+          expect(review.cashReversalCount, 1);
+          expect(review.cashReversalTotalMmk, 13000);
+          expect(review.cashDrawerOutflowMmk, 13000);
+          expect(review.expectedCashMmk, 10000);
+          final stateAfter = await _fullSaleReversalState(persisted);
+
+          await persisted.close();
+          persisted = ShopDatabase.withCorrectionReceiptVerifier(
+            executor: NativeDatabase(file),
+            correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+            testOnlyAllowUnconsumedAuthorization: true,
+          );
+          await persisted.verifyReadyForUse();
+          final replay = await persisted.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: authorization,
+          );
+          expect(replay.id, reversal.id);
+          expect(await _fullSaleReversalState(persisted), stateAfter);
+        } finally {
+          await persisted?.close();
+          if (await directory.exists()) {
+            await directory.delete(recursive: true);
+          }
+        }
+      },
+    );
+
     test('wallet reversal stays externally pending until separate reconciliation', () async {
       await _attachTestWorkspace(database);
       await database.addProduct(
@@ -1255,7 +1692,7 @@ void main() {
         ),
         lines: lines,
       );
-      final sale = await database.recordSale(
+      final sale = await database.recordManagedTestSale(
         operationId: 'wallet-reversal-sale',
         lines: lines,
         paymentMethod: 'kbzpay',
@@ -1300,18 +1737,18 @@ void main() {
         isFalse,
       );
 
-      await database.recordCashSale(
+      await database.recordManagedTestCashSale(
         operationId: 'sale-after-pending-wallet-return',
         lines: lines,
       );
-      final shift = await database.openCashShift(
+      final shift = await database.openManagedTestCashShift(
         operationId: 'shift-after-pending-wallet-return',
         operatorLabel: 'May',
         openingFloatMmk: 0,
       );
       final review = await database.readCashShiftReview(shift.id);
       expect(review.expectedCashMmk, 0);
-      await database.closeCashShift(
+      await database.closeManagedTestCashShift(
         shiftId: shift.id,
         operationId: 'close-after-pending-wallet-return',
         seenSaleCount: review.saleCount,
@@ -1327,9 +1764,18 @@ void main() {
       );
       expect(pendingSummary.grossSaleCount, 2);
       expect(pendingSummary.grossSalesMmk, 2000);
+      expect(pendingSummary.grossCashSalesMmk, 1000);
+      expect(pendingSummary.grossKbzpaySalesMmk, 1000);
+      expect(pendingSummary.grossWavepaySalesMmk, 0);
       expect(pendingSummary.reversalCount, 1);
       expect(pendingSummary.reversalMmk, 1000);
+      expect(pendingSummary.cashReversalMmk, 0);
+      expect(pendingSummary.kbzpayReversalMmk, 1000);
+      expect(pendingSummary.wavepayReversalMmk, 0);
       expect(pendingSummary.netSalesMmk, 1000);
+      expect(pendingSummary.netCashSalesMmk, 1000);
+      expect(pendingSummary.netKbzpaySalesMmk, 0);
+      expect(pendingSummary.netWavepaySalesMmk, 0);
       expect(pendingSummary.pendingWalletReversalCount, 1);
 
       final reconciliation = await database.previewWalletReconciliation(
@@ -1483,23 +1929,46 @@ void main() {
         id: 'rice',
         name: 'Rice',
         priceMmk: 5000,
-        openingStock: 32,
+        openingStock: 34,
       );
-      await database.recordCashSale(
+      await database.recordManagedTestCashSale(
         operationId: 'tea-receipt',
         lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
       );
       for (var i = 0; i < 32; i++) {
-        await database.recordCashSale(
+        await database.recordManagedTestCashSale(
           operationId: 'rice-receipt-$i',
           lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
+        );
+      }
+      for (final entry in const [
+        ('KBZPay', 'kbzpay'),
+        ('WavePay', 'wavepay'),
+      ]) {
+        final operationId = 'rice-${entry.$2}-receipt';
+        final lines = const [ShopSaleLineInput(productId: 'rice', quantity: 1)];
+        await database.createWalletCheckoutIntent(
+          operationId: operationId,
+          merchant: MerchantWalletSetup(
+            provider: entry.$1,
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: lines,
+        );
+        await database.recordManagedTestSale(
+          operationId: operationId,
+          lines: lines,
+          paymentMethod: entry.$2,
+          walletCheckoutOperationId: operationId,
         );
       }
 
       final first = await database.readRecentSales(limit: 31);
       final second = await database.readRecentSales(limit: 31, offset: 30);
       expect(first, hasLength(31));
-      expect(second, hasLength(3));
+      expect(second, hasLength(5));
       expect(
         first
             .map((sale) => sale.id)
@@ -1513,6 +1982,28 @@ void main() {
         query: 'rice-receipt-10',
       );
       expect(byReceipt.map((sale) => sale.id), ['rice-receipt-10']);
+      final cash = await database.readRecentSales(
+        limit: 100,
+        filter: ShopSaleHistoryFilter.cash,
+      );
+      expect(cash, hasLength(33));
+      expect(cash.every((sale) => sale.paymentMethod == 'cash'), isTrue);
+      final kbzpay = await database.readRecentSales(
+        filter: ShopSaleHistoryFilter.kbzpay,
+      );
+      expect(kbzpay.map((sale) => sale.id), ['rice-kbzpay-receipt']);
+      final wavepay = await database.readRecentSales(
+        query: 'rice',
+        filter: ShopSaleHistoryFilter.wavepay,
+      );
+      expect(wavepay.map((sale) => sale.id), ['rice-wavepay-receipt']);
+      expect(
+        await database.readRecentSales(
+          query: 'tea',
+          filter: ShopSaleHistoryFilter.wavepay,
+        ),
+        isEmpty,
+      );
       await expectLater(
         database.readRecentSales(offset: -1),
         throwsArgumentError,
@@ -1534,7 +2025,7 @@ void main() {
           [3000, 'tea'],
         );
         await expectLater(
-          database.recordSale(
+          database.recordManagedTestSale(
             operationId: 'confirmed-cash-1',
             paymentMethod: 'cash',
             expectedTotalMmk: 2500,
@@ -1546,7 +2037,7 @@ void main() {
         expect((await database.readActiveProducts()).single.onHand, 2);
         expect(await database.countOutboxOperations(), initialOutbox);
 
-        final receipt = await database.recordSale(
+        final receipt = await database.recordManagedTestSale(
           operationId: 'confirmed-cash-1',
           paymentMethod: 'cash',
           expectedTotalMmk: 3000,
@@ -1576,7 +2067,7 @@ void main() {
         const lines = [
           ShopSaleLineInput(productId: 'offline-tea', quantity: 2),
         ];
-        await persistentDatabase.recordCashSale(
+        await persistentDatabase.recordManagedTestCashSale(
           operationId: 'offline-reopen-sale',
           lines: lines,
         );
@@ -1603,7 +2094,7 @@ void main() {
           greaterThan(0),
         );
 
-        await persistentDatabase.recordCashSale(
+        await persistentDatabase.recordManagedTestCashSale(
           operationId: 'offline-reopen-sale',
           lines: lines,
         );
@@ -1637,16 +2128,15 @@ void main() {
             ShopSaleLineInput(productId: 'concurrent-cash-tea', quantity: 1),
           ];
           final receipts = await Future.wait([
-            persisted.recordCashSale(
-              operationId: 'concurrent-cash-sale',
-              lines: lines,
-            ),
-            persisted.recordCashSale(
-              operationId: 'concurrent-cash-sale',
-              lines: lines,
-            ),
+            for (var attempt = 0; attempt < 24; attempt++)
+              persisted.recordManagedTestCashSale(
+                operationId: 'concurrent-cash-sale',
+                lines: lines,
+              ),
           ]);
-          expect(receipts.first.id, receipts.last.id);
+          expect(receipts.map((receipt) => receipt.id).toSet(), {
+            'concurrent-cash-sale',
+          });
 
           await persisted.close();
           persisted = ShopDatabase(NativeDatabase(file));
@@ -1745,13 +2235,13 @@ void main() {
             intents.last.requestFingerprint,
           );
           final receipts = await Future.wait([
-            persisted.recordSale(
+            persisted.recordManagedTestSale(
               operationId: 'concurrent-wallet-sale',
               lines: lines,
               paymentMethod: 'kbzpay',
               walletCheckoutOperationId: 'concurrent-wallet-sale',
             ),
-            persisted.recordSale(
+            persisted.recordManagedTestSale(
               operationId: 'concurrent-wallet-sale',
               lines: lines,
               paymentMethod: 'kbzpay',
@@ -1840,7 +2330,7 @@ void main() {
             operationId: 'cash-outbox-abort-sale',
           );
           await expectLater(
-            persisted.recordCashSale(
+            persisted.recordManagedTestCashSale(
               operationId: 'cash-outbox-abort-sale',
               lines: const [
                 ShopSaleLineInput(productId: 'cash-abort-tea', quantity: 1),
@@ -1945,7 +2435,7 @@ void main() {
             operationId: 'wallet-outbox-abort-sale',
           );
           await expectLater(
-            persisted.recordSale(
+            persisted.recordManagedTestSale(
               operationId: 'wallet-outbox-abort-sale',
               lines: lines,
               paymentMethod: 'kbzpay',
@@ -2053,7 +2543,7 @@ void main() {
           ['tea'],
         );
         await expectLater(
-          persisted.recordSale(
+          persisted.recordManagedTestSale(
             operationId: recovered!.operationId,
             lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
             paymentMethod: 'cash',
@@ -2069,7 +2559,7 @@ void main() {
           operationId: recovered.operationId,
           quantities: const {'tea': 1},
         );
-        final receipt = await persisted.recordSale(
+        final receipt = await persisted.recordManagedTestSale(
           operationId: recovered.operationId,
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
           paymentMethod: 'cash',
@@ -2078,7 +2568,7 @@ void main() {
         await persisted.close(); // Simulate a crash before widget-state clear.
         persisted = ShopDatabase(NativeDatabase(file));
         expect(await persisted.readCounterSaleDraft(), isNull);
-        final replay = await persisted.recordSale(
+        final replay = await persisted.recordManagedTestSale(
           operationId: recovered.operationId,
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
           paymentMethod: 'cash',
@@ -2142,7 +2632,7 @@ void main() {
           expect(await database.countSales(), 0);
           expect(await database.countOutboxOperations(), outboxBeforeHold);
           await expectLater(
-            database.recordCashSale(
+            database.recordManagedTestCashSale(
               operationId: 'customer-a',
               lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
             ),
@@ -2190,7 +2680,7 @@ void main() {
             'customer-b',
           );
           expect((await database.readHeldSaleTickets()).length, 1);
-          await database.recordCashSale(
+          await database.recordManagedTestCashSale(
             operationId: 'customer-b',
             lines: const [ShopSaleLineInput(productId: 'water', quantity: 1)],
           );
@@ -2199,7 +2689,7 @@ void main() {
           expect(reopened.operationId, 'customer-a');
           expect(reopened.quantities, {'tea': 2});
           expect(await database.readHeldSaleTickets(), isEmpty);
-          await database.recordCashSale(
+          await database.recordManagedTestCashSale(
             operationId: 'customer-a',
             lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
           );
@@ -2349,7 +2839,7 @@ void main() {
         ShopSaleLineInput(productId: 'water', quantity: 1),
       ];
       final beforeOutbox = await database.countOutboxOperations();
-      final receipt = await database.recordSale(
+      final receipt = await database.recordManagedTestSale(
         operationId: intent.operationId,
         lines: lines,
         paymentMethod: 'kbzpay',
@@ -2383,7 +2873,7 @@ void main() {
       expect((payload['lines'] as List).first['productName'], 'Original tea');
       expect((payload['lines'] as List).first['unitPriceMmk'], 2500);
 
-      final replay = await database.recordSale(
+      final replay = await database.recordManagedTestSale(
         operationId: intent.operationId,
         lines: lines,
         paymentMethod: 'kbzpay',
@@ -2393,7 +2883,7 @@ void main() {
       expect(await database.countSales(), 1);
       expect(await database.countOutboxOperations(), beforeOutbox + 1);
       await expectLater(
-        database.recordCashSale(
+        database.recordManagedTestCashSale(
           operationId: 'new-cash-on-archived',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
         ),
@@ -2442,7 +2932,7 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       await expectLater(
-        database.recordSale(
+        database.recordManagedTestSale(
           operationId: 'wallet-total-tamper',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
           paymentMethod: 'kbzpay',
@@ -2503,7 +2993,7 @@ void main() {
         ],
       );
       await expectLater(
-        database.recordSale(
+        database.recordManagedTestSale(
           operationId: 'wallet-basket-tamper',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
           paymentMethod: 'kbzpay',
@@ -2550,7 +3040,7 @@ void main() {
       final beforeOutbox = await database.countOutboxOperations();
       final beforeMovements = await database.countStockMovements();
       await expectLater(
-        database.recordSale(
+        database.recordManagedTestSale(
           operationId: 'archived-wallet-no-stock',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
           paymentMethod: 'kbzpay',
@@ -2793,7 +3283,7 @@ void main() {
           priceMmk: 1,
           openingStock: 1,
         );
-        final shift = await database.openCashShift(
+        final shift = await database.openManagedTestCashShift(
           operationId: 'open-at-limit',
           operatorLabel: 'May',
           openingFloatMmk: 200000000000000,
@@ -2801,7 +3291,7 @@ void main() {
         final outboxCount = await database.countOutboxOperations();
         final movementCount = await database.countStockMovements();
         await expectLater(
-          database.recordCashSale(
+          database.recordManagedTestCashSale(
             operationId: 'sale-over-shift-limit',
             lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
           ),
@@ -2814,7 +3304,7 @@ void main() {
         final review = await database.readCashShiftReview(shift.id);
         expect(review.expectedCashMmk, 200000000000000);
         expect(
-          (await database.closeCashShift(
+          (await database.closeManagedTestCashShift(
             shiftId: shift.id,
             operationId: 'close-at-limit',
             seenSaleCount: review.saleCount,
@@ -2839,13 +3329,13 @@ void main() {
             priceMmk: 2500,
             openingStock: 10,
           );
-          final shift = await database.openCashShift(
+          final shift = await database.openManagedTestCashShift(
             operationId: 'open-shift-1',
             operatorLabel: 'May',
             openingFloatMmk: 10000,
           );
           expect(
-            (await database.openCashShift(
+            (await database.openManagedTestCashShift(
               operationId: 'open-shift-1',
               operatorLabel: 'May',
               openingFloatMmk: 10000,
@@ -2853,7 +3343,7 @@ void main() {
             shift.id,
           );
           await expectLater(
-            database.openCashShift(
+            database.openManagedTestCashShift(
               operationId: 'open-shift-1',
               operatorLabel: 'May',
               openingFloatMmk: 9000,
@@ -2861,7 +3351,7 @@ void main() {
             throwsA(isA<StateError>()),
           );
           await expectLater(
-            database.openCashShift(
+            database.openManagedTestCashShift(
               operationId: 'another-open-shift',
               operatorLabel: 'May',
               openingFloatMmk: 0,
@@ -2869,7 +3359,7 @@ void main() {
             throwsA(isA<StateError>()),
           );
           await expectLater(
-            database.recordCashSale(
+            database.recordManagedTestCashSale(
               operationId: 'failed-shift-sale',
               lines: const [ShopSaleLineInput(productId: 'tea', quantity: 11)],
             ),
@@ -2878,11 +3368,11 @@ void main() {
           expect((await database.readCashShiftReview(shift.id)).saleCount, 0);
           expect(await database.countSales(), 0);
           const cashLines = [ShopSaleLineInput(productId: 'tea', quantity: 2)];
-          await database.recordCashSale(
+          await database.recordManagedTestCashSale(
             operationId: 'cash-shift-1',
             lines: cashLines,
           );
-          await database.recordCashSale(
+          await database.recordManagedTestCashSale(
             operationId: 'cash-shift-1',
             lines: cashLines,
           );
@@ -2891,6 +3381,8 @@ void main() {
           expect(firstReview.cashSalesTotalMmk, 5000);
           expect(firstReview.expectedCashMmk, 15000);
           expect(firstReview.walletSalesCount, 0);
+          expect(firstReview.kbzpaySalesCount, 0);
+          expect(firstReview.wavepaySalesCount, 0);
 
           const walletLines = [
             ShopSaleLineInput(productId: 'tea', quantity: 1),
@@ -2906,7 +3398,7 @@ void main() {
             lines: walletLines,
           );
           await expectLater(
-            database.closeCashShift(
+            database.closeManagedTestCashShift(
               shiftId: shift.id,
               operationId: 'close-pending',
               seenSaleCount: 1,
@@ -2915,7 +3407,7 @@ void main() {
             ),
             throwsA(isA<StateError>()),
           );
-          await database.recordSale(
+          await database.recordManagedTestSale(
             operationId: 'wallet-shift-1',
             lines: walletLines,
             paymentMethod: 'kbzpay',
@@ -2926,9 +3418,13 @@ void main() {
           expect(review.cashSalesTotalMmk, 5000);
           expect(review.walletSalesCount, 1);
           expect(review.walletSalesTotalMmk, 2500);
+          expect(review.kbzpaySalesCount, 1);
+          expect(review.kbzpaySalesTotalMmk, 2500);
+          expect(review.wavepaySalesCount, 0);
+          expect(review.wavepaySalesTotalMmk, 0);
           expect(review.expectedCashMmk, 15000);
           await expectLater(
-            database.closeCashShift(
+            database.closeManagedTestCashShift(
               shiftId: shift.id,
               operationId: 'close-stale',
               seenSaleCount: firstReview.saleCount,
@@ -2937,7 +3433,7 @@ void main() {
             ),
             throwsA(isA<StateError>()),
           );
-          final closed = await database.closeCashShift(
+          final closed = await database.closeManagedTestCashShift(
             shiftId: shift.id,
             operationId: 'close-shift-1',
             seenSaleCount: review.saleCount,
@@ -2949,7 +3445,7 @@ void main() {
           expect(closed.countedCashMmk, 14900);
           expect(closed.differenceMmk, -100);
           expect(
-            (await database.closeCashShift(
+            (await database.closeManagedTestCashShift(
               shiftId: shift.id,
               operationId: 'close-shift-1',
               seenSaleCount: review.saleCount,
@@ -2959,7 +3455,7 @@ void main() {
             -100,
           );
           await expectLater(
-            database.closeCashShift(
+            database.closeManagedTestCashShift(
               shiftId: shift.id,
               operationId: 'close-shift-1',
               seenSaleCount: review.saleCount,
@@ -2979,12 +3475,12 @@ void main() {
                 as Map<String, dynamic>)['shiftId'],
             shift.id,
           );
-          final next = await database.openCashShift(
+          final next = await database.openManagedTestCashShift(
             operationId: 'open-shift-2',
             operatorLabel: 'May',
             openingFloatMmk: 0,
           );
-          await database.recordCashSale(
+          await database.recordManagedTestCashSale(
             operationId: 'cash-shift-1',
             lines: cashLines,
           );
@@ -3016,7 +3512,7 @@ void main() {
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
         );
         await expectLater(
-          database.openCashShift(
+          database.openManagedTestCashShift(
             operationId: 'open-with-pending',
             operatorLabel: 'May',
             openingFloatMmk: 0,
@@ -3029,7 +3525,7 @@ void main() {
           isTrue,
         );
         expect(
-          (await database.openCashShift(
+          (await database.openManagedTestCashShift(
             operationId: 'open-with-pending',
             operatorLabel: 'May',
             openingFloatMmk: 0,
@@ -3054,7 +3550,7 @@ void main() {
           priceMmk: 2500,
           openingStock: 4,
         );
-        await database.recordCashSale(
+        await database.recordManagedTestCashSale(
           operationId: 'old-sale',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
         );
@@ -3103,13 +3599,13 @@ void main() {
         await database.customStatement('PRAGMA user_version = 5');
         await database.close();
         database = ShopDatabase(NativeDatabase(file));
-        final shift = await database.openCashShift(
+        final shift = await database.openManagedTestCashShift(
           operationId: 'after-upgrade',
           operatorLabel: 'May',
           openingFloatMmk: 5000,
         );
         expect((await database.readCashShiftReview(shift.id)).saleCount, 0);
-        await database.recordCashSale(
+        await database.recordManagedTestCashSale(
           operationId: 'new-sale',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
         );
@@ -3123,7 +3619,7 @@ void main() {
         );
         expect(await database.countSales(), 2);
         final review = await database.readCashShiftReview(shift.id);
-        await database.closeCashShift(
+        await database.closeManagedTestCashShift(
           shiftId: shift.id,
           operationId: 'close-after-upgrade',
           seenSaleCount: review.saleCount,
@@ -3135,7 +3631,7 @@ void main() {
         final outboxCount = await database.countOutboxOperations();
         expect((await database.readLatestCashShift())?.state, 'closed');
         expect(
-          (await database.closeCashShift(
+          (await database.closeManagedTestCashShift(
             shiftId: shift.id,
             operationId: 'close-after-upgrade',
             seenSaleCount: review.saleCount,
@@ -3170,7 +3666,14 @@ void main() {
           find.text('Expected after recorded cash activity'),
           findsOneWidget,
         );
+        expect(find.textContaining('KBZPay sales'), findsOneWidget);
+        expect(find.textContaining('WavePay sales'), findsOneWidget);
         await tester.enterText(find.byType(TextField).last, '10000');
+        await tester.scrollUntilVisible(
+          find.text('Close shift'),
+          240,
+          scrollable: find.byType(Scrollable).first,
+        );
         await tester.tap(find.text('Close shift'));
         await tester.pumpAndSettle();
         await tester.drag(find.byType(ListView), const Offset(0, -400));
@@ -3191,6 +3694,175 @@ void main() {
       } finally {
         await tester.pumpWidget(const SizedBox());
         await database.close();
+      }
+    });
+
+    testWidgets('shift review separates KBZPay and WavePay records', (
+      tester,
+    ) async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea-wallet-shift',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        final shift = await database.openManagedTestCashShift(
+          operationId: 'provider-review-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: 10000,
+        );
+        for (final wallet in const [
+          (provider: 'KBZPay', method: 'kbzpay'),
+          (provider: 'WavePay', method: 'wavepay'),
+        ]) {
+          final operationId = 'provider-review-${wallet.method}';
+          const lines = [
+            ShopSaleLineInput(productId: 'tea-wallet-shift', quantity: 1),
+          ];
+          await database.createWalletCheckoutIntent(
+            operationId: operationId,
+            merchant: MerchantWalletSetup(
+              provider: wallet.provider,
+              merchantPhone: null,
+              officialQrPayload: _syntheticStaticMmqr(),
+              issuerConfirmed: true,
+            ),
+            lines: lines,
+          );
+          await database.recordManagedTestSale(
+            operationId: operationId,
+            lines: lines,
+            paymentMethod: wallet.method,
+            walletCheckoutOperationId: operationId,
+          );
+        }
+        final review = await database.readCashShiftReview(shift.id);
+        expect(review.walletSalesCount, 2);
+        expect(review.walletSalesTotalMmk, 5000);
+        expect(review.kbzpaySalesCount, 1);
+        expect(review.kbzpaySalesTotalMmk, 2500);
+        expect(review.wavepaySalesCount, 1);
+        expect(review.wavepaySalesTotalMmk, 2500);
+        expect(review.expectedCashMmk, 10000);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ShopCashShiftScreen(database: database, myanmar: false),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('KBZPay sales (1)'), findsOneWidget);
+        expect(find.text('WavePay sales (1)'), findsOneWidget);
+        expect(find.text('2,500 MMK'), findsNWidgets(2));
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ShopCashShiftScreen(database: database, myanmar: true),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('KBZPay အရောင်း (၁)'), findsOneWidget);
+        expect(find.text('WavePay အရောင်း (၁)'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await database.close();
+      }
+    });
+
+    test('shift mutations roll back when their outbox write aborts', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'supermega-shop-shift-outbox-abort-',
+      );
+      final file = File('${directory.path}/shop.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await database.customStatement(
+          'CREATE TRIGGER synthetic_shift_open_outbox_abort '
+          'BEFORE INSERT ON shop_sync_outbox '
+          "WHEN NEW.event_type = 'shop.cash_shift.opened.v1' "
+          "BEGIN SELECT RAISE(ABORT, 'synthetic shift outbox failure'); END",
+        );
+        await expectLater(
+          database.openManagedTestCashShift(
+            operationId: 'shift-abort-open',
+            operatorLabel: 'Synthetic operator',
+            openingFloatMmk: 10000,
+          ),
+          throwsA(
+            predicate(
+              (error) =>
+                  error.toString().contains('synthetic shift outbox failure'),
+            ),
+          ),
+        );
+        await database.customStatement(
+          'DROP TRIGGER synthetic_shift_open_outbox_abort',
+        );
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        expect(await database.readLatestCashShift(), isNull);
+        expect(await database.countOutboxOperations(), 0);
+        final shift = await database.openManagedTestCashShift(
+          operationId: 'shift-abort-open',
+          operatorLabel: 'Synthetic operator',
+          openingFloatMmk: 10000,
+        );
+        final review = await database.readCashShiftReview(shift.id);
+        await database.customStatement(
+          'CREATE TRIGGER synthetic_shift_close_outbox_abort '
+          'BEFORE INSERT ON shop_sync_outbox '
+          "WHEN NEW.event_type = 'shop.cash_shift.closed.v1' "
+          "BEGIN SELECT RAISE(ABORT, 'synthetic shift outbox failure'); END",
+        );
+        await expectLater(
+          database.closeManagedTestCashShift(
+            shiftId: shift.id,
+            operationId: 'shift-abort-close',
+            seenSaleCount: review.saleCount,
+            seenCashTotalMmk: review.cashSalesTotalMmk,
+            countedCashMmk: review.expectedCashMmk,
+          ),
+          throwsA(
+            predicate(
+              (error) =>
+                  error.toString().contains('synthetic shift outbox failure'),
+            ),
+          ),
+        );
+        await database.customStatement(
+          'DROP TRIGGER synthetic_shift_close_outbox_abort',
+        );
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        expect((await database.readOpenCashShift())?.id, shift.id);
+        expect((await database.readLatestCashShift())?.state, 'open');
+        expect(await database.countOutboxOperations(), 1);
+        final closed = await database.closeManagedTestCashShift(
+          shiftId: shift.id,
+          operationId: 'shift-abort-close',
+          seenSaleCount: review.saleCount,
+          seenCashTotalMmk: review.cashSalesTotalMmk,
+          countedCashMmk: review.expectedCashMmk,
+        );
+        expect(closed.state, 'closed');
+        expect(
+          (await database.closeManagedTestCashShift(
+            shiftId: shift.id,
+            operationId: 'shift-abort-close',
+            seenSaleCount: review.saleCount,
+            seenCashTotalMmk: review.cashSalesTotalMmk,
+            countedCashMmk: review.expectedCashMmk,
+          )).id,
+          shift.id,
+        );
+        expect(await database.countOutboxOperations(), 2);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
       }
     });
   });
@@ -3351,7 +4023,7 @@ void main() {
             8,
           );
           expect(await database.countStockMovements(), 2);
-          await database.recordCashSale(
+          await database.recordManagedTestCashSale(
             operationId: 'sell-rice-1',
             lines: const [ShopSaleLineInput(productId: 'rice', quantity: 2)],
           );
@@ -3393,6 +4065,81 @@ void main() {
         }
       },
     );
+
+    test('stock mutation rolls back when its outbox write aborts', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'supermega-shop-stock-outbox-abort-',
+      );
+      final file = File('${directory.path}/shop.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await database.addProduct(
+          id: 'rice',
+          name: 'Rice',
+          priceMmk: 12000,
+          openingStock: 5,
+        );
+        await database.customStatement(
+          'CREATE TRIGGER synthetic_stock_outbox_abort '
+          'BEFORE INSERT ON shop_sync_outbox '
+          "WHEN NEW.event_type = 'shop.stock_changed.v1' "
+          "BEGIN SELECT RAISE(ABORT, 'synthetic stock outbox failure'); END",
+        );
+        await expectLater(
+          database.changeStock(
+            operationId: 'receive-rice-abort',
+            productId: 'rice',
+            kind: 'receive',
+            quantity: 3,
+            expectedOnHand: 5,
+          ),
+          throwsA(
+            predicate(
+              (error) =>
+                  error.toString().contains('synthetic stock outbox failure'),
+            ),
+          ),
+        );
+        await database.customStatement(
+          'DROP TRIGGER synthetic_stock_outbox_abort',
+        );
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        expect((await database.readActiveProducts()).single.onHand, 5);
+        expect(await database.countStockMovements(), 1);
+        expect(await database.countOutboxOperations(), 1);
+        expect(
+          await database.changeStock(
+            operationId: 'receive-rice-abort',
+            productId: 'rice',
+            kind: 'receive',
+            quantity: 3,
+            expectedOnHand: 5,
+          ),
+          8,
+        );
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        expect((await database.readActiveProducts()).single.onHand, 8);
+        expect(await database.countStockMovements(), 2);
+        expect(await database.countOutboxOperations(), 2);
+        expect(
+          await database.changeStock(
+            operationId: 'receive-rice-abort',
+            productId: 'rice',
+            kind: 'receive',
+            quantity: 3,
+            expectedOnHand: 5,
+          ),
+          8,
+        );
+        expect(await database.countStockMovements(), 2);
+        expect(await database.countOutboxOperations(), 2);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    });
   });
 
   test(
@@ -3408,7 +4155,7 @@ void main() {
           priceMmk: 12000,
           openingStock: 5,
         );
-        await database.recordCashSale(
+        await database.recordManagedTestCashSale(
           operationId: 'sale-snapshot-1',
           lines: const [ShopSaleLineInput(productId: 'rice', quantity: 2)],
         );
@@ -4035,6 +4782,55 @@ void main() {
 }
 
 Future<void> _dropV16MemberSchema(ShopDatabase database) async {
+  await database.customStatement(
+    'ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk',
+  );
+  for (final definition
+      in shopPendingCashCheckoutSchemaDefinitionsV21().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCafeCancellationSchemaDefinitionsV20().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCafeOrderSchemaDefinitionsV19().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopCashMovementSchemaDefinitionsV18().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   for (final trigger in const [
     'shop_sale_reversals_require_consumption',
     'shop_wallet_reconciliations_require_consumption',
@@ -4200,6 +4996,109 @@ Future<ShopManagedWorkspaceBinding> _attachTestWorkspace(
     actorId: 'owner-test',
   ),
 );
+
+Future<Map<String, List<Map<String, Object?>>>> _catalogCreationState(
+  ShopDatabase database, {
+  required String productId,
+  required String operationId,
+}) async {
+  Future<List<Map<String, Object?>>> rows(
+    String statement,
+    List<Variable<Object>> variables,
+  ) async =>
+      (await database.customSelect(statement, variables: variables).get())
+          .map((row) => Map<String, Object?>.from(row.data))
+          .toList(growable: false);
+
+  return {
+    'products': await rows(
+      'SELECT id, name, category, description, sku, barcode, price_mmk, '
+      'on_hand FROM shop_products WHERE id = ? ORDER BY id',
+      [Variable<String>(productId)],
+    ),
+    'movements': await rows(
+      'SELECT id, product_id, quantity_delta, reason '
+      'FROM shop_stock_movements WHERE product_id = ? ORDER BY id',
+      [Variable<String>(productId)],
+    ),
+    'outbox': await rows(
+      'SELECT operation_id, event_type, payload_json, state '
+      'FROM shop_sync_outbox WHERE operation_id = ? ORDER BY operation_id',
+      [Variable<String>(operationId)],
+    ),
+  };
+}
+
+Future<Map<String, List<Map<String, Object?>>>> _catalogEditState(
+  ShopDatabase database, {
+  required String productId,
+  required String saleId,
+}) async {
+  Future<List<Map<String, Object?>>> rows(
+    String statement,
+    List<Variable<Object>> variables,
+  ) async =>
+      (await database.customSelect(statement, variables: variables).get())
+          .map((row) => Map<String, Object?>.from(row.data))
+          .toList(growable: false);
+
+  return {
+    'products': await rows(
+      'SELECT id, name, category, description, sku, barcode, price_mmk, '
+      'on_hand FROM shop_products WHERE id = ? ORDER BY id',
+      [Variable<String>(productId)],
+    ),
+    'saleLines': await rows(
+      'SELECT sale_id, product_id, product_name, unit_price_mmk, quantity, '
+      'line_total_mmk FROM shop_sale_lines WHERE sale_id = ? ORDER BY id',
+      [Variable<String>(saleId)],
+    ),
+    'movements': await rows(
+      'SELECT id, product_id, quantity_delta, reason '
+      'FROM shop_stock_movements WHERE product_id = ? ORDER BY id',
+      [Variable<String>(productId)],
+    ),
+    'outbox': await rows(
+      'SELECT operation_id, event_type, payload_json, state '
+      'FROM shop_sync_outbox ORDER BY operation_id',
+      const [],
+    ),
+  };
+}
+
+Future<Map<String, List<Map<String, Object?>>>> _fullSaleReversalState(
+  ShopDatabase database,
+) async {
+  Future<List<Map<String, Object?>>> rows(String statement) async =>
+      (await database.customSelect(statement).get())
+          .map((row) => Map<String, Object?>.from(row.data))
+          .toList(growable: false);
+
+  return {
+    'products': await rows(
+      'SELECT id, on_hand, updated_at_millis FROM shop_products ORDER BY id',
+    ),
+    'sales': await rows('SELECT * FROM shop_sales ORDER BY id'),
+    'saleLines': await rows('SELECT * FROM shop_sale_lines ORDER BY id'),
+    'stockMovements': await rows(
+      'SELECT * FROM shop_stock_movements ORDER BY id',
+    ),
+    'outbox': await rows(
+      'SELECT * FROM shop_sync_outbox ORDER BY operation_id',
+    ),
+    'shifts': await rows('SELECT * FROM shop_cash_shifts ORDER BY id'),
+    'shiftSales': await rows(
+      'SELECT * FROM shop_cash_shift_sales ORDER BY sale_id',
+    ),
+    'reversals': await rows('SELECT * FROM shop_sale_reversals ORDER BY id'),
+    'reversalLines': await rows(
+      'SELECT * FROM shop_sale_reversal_lines ORDER BY id',
+    ),
+    'authorizationProofs': await rows(
+      'SELECT * FROM shop_correction_authorization_proofs ORDER BY receipt_id',
+    ),
+  };
+}
 
 Uint8List _pngBytes() {
   return Uint8List.fromList([

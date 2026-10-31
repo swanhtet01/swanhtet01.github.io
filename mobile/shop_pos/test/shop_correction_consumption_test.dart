@@ -3,11 +3,18 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_database.dart';
+
+import 'managed_staff_test_support.dart';
+
 import 'package:supermega_shop/shop_backup.dart';
+import 'package:supermega_shop/shop_cafe_kitchen_entitlement.dart';
+import 'package:supermega_shop/shop_cafe_order_contract.dart';
+import 'package:supermega_shop/shop_cafe_order_store.dart';
 
 const _keyId = 'shop-test-2026';
 const _publicKey = 'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
@@ -31,12 +38,12 @@ void main() {
       priceMmk: 2500,
       openingStock: 2,
     );
-    await database.openCashShift(
+    await database.openManagedTestCashShift(
       operationId: 'shift-open',
       operatorLabel: 'May',
       openingFloatMmk: 10000,
     );
-    saleId = (await database.recordCashSale(
+    saleId = (await database.recordManagedTestCashSale(
       operationId: 'sale-op',
       lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
     )).id;
@@ -360,7 +367,7 @@ void main() {
       (await database.readCorrectionLineageState())?.lifecycleState,
       'reconciliation_required',
     );
-    await database.recordCashSale(
+    await database.recordManagedTestCashSale(
       operationId: 'sale-after-quarantine',
       lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
     );
@@ -523,12 +530,12 @@ void main() {
         priceMmk: 2500,
         openingStock: 2,
       );
-      await opened.openCashShift(
+      await opened.openManagedTestCashShift(
         operationId: 'restart-shift',
         operatorLabel: 'May',
         openingFloatMmk: 10000,
       );
-      final restartSale = await opened.recordCashSale(
+      final restartSale = await opened.recordManagedTestCashSale(
         operationId: 'restart-sale',
         lines: const [
           ShopSaleLineInput(productId: 'restart-rice', quantity: 1),
@@ -594,6 +601,255 @@ void main() {
     }
   });
 
+  test('routed cafe reversal preserves kitchen audit and effects across reopens', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'shop-cafe-correction-restart-',
+    );
+    final file = File('${directory.path}/shop.sqlite');
+    final archive = File('${directory.path}/shop.smbk');
+    final restored = File('${directory.path}/restored.sqlite');
+    ShopDatabase? opened;
+    try {
+      opened = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(file),
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier({
+          _keyId: _publicKey,
+        }),
+      );
+      await opened.addProduct(
+        id: 'cafe-return-coffee',
+        name: 'Coffee',
+        priceMmk: 3000,
+        openingStock: 5,
+      );
+      final shift = await opened.openManagedTestCashShift(
+        operationId: 'cafe-return-shift',
+        operatorLabel: 'Synthetic cashier',
+        openingFloatMmk: 10000,
+      );
+      final cafeStore = ShopCafeOrderStore(
+        opened,
+        kitchenEntitlement: const _AllowKitchenEntitlement(),
+      );
+      final routedOrder = await cafeStore.applyCommand(
+        CafeOrderCommand(
+          id: 'cafe-return-create',
+          ticketId: 'cafe-return-order',
+          expectedVersion: 0,
+          serviceContext: const CafeServiceContext(
+            areaLabel: 'Ground floor',
+            tableLabel: 'T-04',
+          ),
+          lines: [
+            CafeOrderLine(
+              id: 'cafe-return-line',
+              productId: 'cafe-return-coffee',
+              quantity: 2,
+              baseUnitPriceMmk: 3000,
+              remark: 'takeaway',
+              preparationStation: 'bar',
+              modifiers: const [],
+            ),
+          ],
+        ),
+        const {},
+      );
+      expect(routedOrder.kitchenDispatchLines, hasLength(1));
+      final dispatchBeforeReversal = routedOrder.kitchenDispatchLines.single;
+      final sale = await cafeStore.completeCash(
+        orderId: 'cafe-return-order',
+        operationId: 'cafe-return-sale',
+        expectedTicketVersion: 1,
+        expectedStateRevision: 0,
+      );
+      await opened.attachAuthenticatedManagedWorkspace(
+        const ShopAuthenticatedWorkspaceSelection(
+          workspaceId: _workspaceId,
+          actorId: _actorId,
+        ),
+      );
+      await opened.acceptCorrectionLineage(
+        const ShopCorrectionLineage(
+          activationRequestId: '10000000-0000-4000-8000-000000000010',
+          workspaceId: _workspaceId,
+          actorId: _actorId,
+          lineageId: '20000000-0000-4000-8000-000000000001',
+          lineageEpoch: 1,
+          previousLineageId: null,
+          previousLineageEpoch: null,
+          consumptionOrdinal: 0,
+          consumptionDigest: null,
+          activatedAtMillis: 1000,
+        ),
+      );
+      await opened.close();
+
+      opened = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(file),
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier({
+          _keyId: _publicKey,
+        }),
+      );
+      await opened.verifyReadyForUse();
+      final command = await opened.previewFullSaleReversal(
+        operationId: 'cafe-return-reversal',
+        saleId: sale.id,
+        restockItems: true,
+        reason: 'Customer returned the complete cafe sale',
+        confirmCashReturned: true,
+      );
+      final authorization = await _authorization(
+        command.commandDigest,
+        receiptId: '50000000-0000-4000-8000-000000000020',
+        finalizationRequestId: '60000000-0000-4000-8000-000000000020',
+      );
+      const requestId = '30000000-0000-4000-8000-000000000020';
+      await opened.prepareFullSaleCorrectionConsumption(
+        consumptionRequestId: requestId,
+        command: command,
+        authorization: authorization,
+      );
+      final proof = await _proof(
+        authorization: authorization,
+        command: command,
+        consumptionId: '40000000-0000-4000-8000-000000000020',
+        requestId: requestId,
+      );
+      final reversal = await opened.recordAuthorizedFullSaleReversal(
+        command: command,
+        authorization: authorization,
+        consumptionProof: proof,
+      );
+      expect(reversal.originalTotalMmk, 6000);
+      await opened.close();
+
+      opened = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(file),
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier({
+          _keyId: _publicKey,
+        }),
+      );
+      await opened.verifyReadyForUse();
+      final replay = await opened.recordAuthorizedFullSaleReversal(
+        command: command,
+        authorization: authorization,
+        consumptionProof: proof,
+      );
+      expect(replay.id, reversal.id);
+      expect(await opened.countSales(), 1);
+      expect((await opened.readActiveProducts()).single.onHand, 5);
+      final order = await ShopCafeOrderStore(opened).read('cafe-return-order');
+      expect(order?.state, 'completed');
+      expect(order?.completedSaleId, sale.id);
+      expect(order?.ticket.serviceContext?.tableLabel, 'T-04');
+      expect(
+        order?.kitchenDispatchLines.map((line) => line.toJson()).toList(),
+        [dispatchBeforeReversal.toJson()],
+      );
+      expect(order?.kitchenDispatchLines.single.preparationStation, 'bar');
+      final review = await opened.readCashShiftReview(shift.id);
+      expect(review.cashSalesTotalMmk, 6000);
+      expect(review.cashReversalCount, 1);
+      expect(review.cashReversalTotalMmk, 6000);
+      expect(review.cashDrawerOutflowMmk, 6000);
+      expect(review.expectedCashMmk, 10000);
+      final outboxBeforeRestore = await opened.countOutboxOperations();
+      await ShopBackup.exportEncrypted(
+        database: opened,
+        archive: archive,
+        scratchRoot: Directory('${directory.path}/scratch'),
+        password: 'cafe-reversal-restore-password',
+      );
+      await opened.close();
+      opened = null;
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: restored,
+        password: 'cafe-reversal-restore-password',
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier({
+          _keyId: _publicKey,
+        }),
+      );
+      opened = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(restored),
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier({
+          _keyId: _publicKey,
+        }),
+      );
+      await opened.verifyReadyForUse();
+      final pendingLineage = await opened.readCorrectionLineageState();
+      expect(pendingLineage?.lifecycleState, 'restore_pending');
+      expect(pendingLineage?.lineage.consumptionOrdinal, 1);
+      expect(pendingLineage?.lineage.consumptionDigest, proof.historyDigest);
+      await opened.acceptCorrectionLineage(
+        ShopCorrectionLineage(
+          activationRequestId: '10000000-0000-4000-8000-000000000011',
+          workspaceId: _workspaceId,
+          actorId: _actorId,
+          lineageId: '20000000-0000-4000-8000-000000000011',
+          lineageEpoch: 2,
+          previousLineageId: '20000000-0000-4000-8000-000000000001',
+          previousLineageEpoch: 1,
+          consumptionOrdinal: 1,
+          consumptionDigest: proof.historyDigest,
+          activatedAtMillis: 2000,
+        ),
+      );
+      final restoredReplay = await opened.recordAuthorizedFullSaleReversal(
+        command: command,
+        authorization: authorization,
+        consumptionProof: proof,
+      );
+      expect(restoredReplay.id, reversal.id);
+      expect(await opened.countSales(), 1);
+      expect(await opened.countOutboxOperations(), outboxBeforeRestore);
+      expect((await opened.readActiveProducts()).single.onHand, 5);
+      final restoredOrder = await ShopCafeOrderStore(opened)
+          .read('cafe-return-order');
+      expect(restoredOrder?.state, 'completed');
+      expect(restoredOrder?.completedSaleId, sale.id);
+      expect(restoredOrder?.ticket.serviceContext?.tableLabel, 'T-04');
+      expect(
+        restoredOrder?.kitchenDispatchLines
+            .map((line) => line.toJson())
+            .toList(),
+        [dispatchBeforeReversal.toJson()],
+      );
+      final restoredReview = await opened.readCashShiftReview(shift.id);
+      expect(restoredReview.cashSalesTotalMmk, 6000);
+      expect(restoredReview.cashReversalCount, 1);
+      expect(restoredReview.cashReversalTotalMmk, 6000);
+      expect(restoredReview.cashDrawerOutflowMmk, 6000);
+      expect(restoredReview.expectedCashMmk, 10000);
+      await opened.customInsert(
+        'INSERT INTO shop_stock_movements '
+        '(id, sale_id, product_id, quantity_delta, reason, created_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+        variables: [
+          const Variable<String>('cafe-return-unlinked-movement'),
+          Variable<String>(sale.id),
+          const Variable<String>('cafe-return-coffee'),
+          const Variable<int>(1),
+          const Variable<String>('count'),
+          Variable<int>(DateTime.now().millisecondsSinceEpoch),
+        ],
+      );
+      await expectLater(opened.verifyReadyForUse(), throwsStateError);
+      await opened.close();
+      opened = null;
+      expect(
+        () => ShopBackup.verifySnapshot(
+          restored,
+          expectedSchemaVersion: ShopBackup.supportedSchemaVersion,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    } finally {
+      await opened?.close();
+      await directory.delete(recursive: true);
+    }
+  });
+
   test(
     'restore-pending lineage mismatch persists correction quarantine',
     () async {
@@ -620,7 +876,7 @@ void main() {
         'reconciliation_required',
         reason: 'a signed watermark mismatch must survive transaction rollback',
       );
-      await database.recordCashSale(
+      await database.recordManagedTestCashSale(
         operationId: 'sale-after-restore-quarantine',
         lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
       );
@@ -808,6 +1064,19 @@ void main() {
       }
     },
   );
+}
+
+class _AllowKitchenEntitlement implements ShopCafeKitchenEntitlement {
+  const _AllowKitchenEntitlement();
+
+  @override
+  bool get allowsKitchenDispatch => true;
+
+  @override
+  void requireKitchenDispatch({
+    required String orderId,
+    required String commandId,
+  }) {}
 }
 
 Future<ShopCorrectionAuthorization> _authorization(

@@ -519,6 +519,64 @@ void main() {
     },
   );
 
+  test(
+    'cash movement uses its narrow capability and signed owner receipt',
+    () async {
+      const fingerprint =
+          '{"contract":"supermega.shop.cash-movement-command.v1",'
+          '"operationId":"cash-movement-1","storeRef":"store-1",'
+          '"shiftId":"shift-1","kind":"cash_out","amountMmk":3000,'
+          '"reason":"petty_cash_expense"}';
+      final digest = crypto.sha256.convert(utf8.encode(fingerprint)).toString();
+      late http.Request sent;
+      final service = _service(
+        MockClient((request) async {
+          sent = request;
+          return _jsonResponse(
+            await _envelope(
+              receipt: await _receipt(
+                capability: shopCashMovementCapability,
+                commandDigest: digest,
+              ),
+            ),
+            200,
+          );
+        }),
+      );
+
+      expect(
+        await service.canRequestAuthorization(
+          workspaceId: _workspaceId,
+          requiredActorId: _ownerId,
+          capability: shopCashMovementCapability,
+        ),
+        isTrue,
+      );
+      final result = await _authorize(
+        service,
+        capability: shopCashMovementCapability,
+        commandDigest: digest,
+        requestFingerprint: fingerprint,
+      );
+
+      final body = jsonDecode(sent.body) as Map<String, dynamic>;
+      expect(body, {
+        'authorization_request_id': _requestId,
+        'capability': shopCashMovementCapability,
+        'command_digest': digest,
+        'request_fingerprint': fingerprint,
+        'confirmation': 'AUTHORIZE CASH DRAWER MOVEMENT',
+      });
+      expect(result.authorization.capability, shopCashMovementCapability);
+      expect(result.authorization.workspaceId, _workspaceId);
+      expect(result.authorization.actorId, _ownerId);
+      expect(result.authorization.commandDigest, digest);
+      expect(result.authorization.keyId, _testKeyId);
+      expect(result.idempotentReplay, isFalse);
+      expect(result.externalWritesPerformed, isTrue);
+    },
+  );
+
   test('missing session fails before a request is sent', () async {
     var calls = 0;
     final client = MockClient((_) async {
