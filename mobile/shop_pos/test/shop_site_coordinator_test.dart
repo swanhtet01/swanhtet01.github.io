@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supermega_shop/shop_connected_coordinator_host.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_runtime.dart';
 import 'package:supermega_shop/shop_offline_staff_lease.dart';
@@ -40,6 +41,50 @@ void main() {
   });
   tearDownAll(() async => _tlsFixtureDirectory.delete(recursive: true));
   group('coordinator bind policy', () {
+    test('transport requires the server runtime write gate', () {
+      SiteCoordinatorServer serverFor(ShopConnectedSharedWriteGate writes) {
+        final keys = _ClientKeys();
+        return SiteCoordinatorServer(
+          runtimeEnabled: true,
+          sharedWriteAvailability: writes,
+          pairing: _NonceStore(),
+          requestAuthenticator: Ed25519CoordinatorRequestAuthenticator(
+            clients: keys,
+            nonces: _RequestNonces(),
+            now: () => _now,
+          ),
+          commands: _Commands(),
+          replication: _Replication(),
+          health: _Health(),
+          pairingResponse: _pairing(),
+          now: () => _now,
+        );
+      }
+
+      final writes = ShopConnectedSharedWriteGate();
+      final server = serverFor(writes);
+      expect(
+        SiteCoordinatorServerTransport(
+          server: server,
+          sharedWrites: writes,
+        ).sharedWrites,
+        same(writes),
+      );
+      expect(
+        () => SiteCoordinatorServerTransport(
+          server: server,
+          sharedWrites: ShopConnectedSharedWriteGate(),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'connected_transport_shared_write_gate_mismatch',
+          ),
+        ),
+      );
+    });
+
     test('accepts private addresses and rejects wildcard/public addresses', () {
       expect(
         isPermittedCoordinatorBindAddress(InternetAddress('192.168.10.4')),

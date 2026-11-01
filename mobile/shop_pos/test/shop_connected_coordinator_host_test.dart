@@ -5,18 +5,39 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_coordinator_host.dart';
 import 'package:supermega_shop/shop_connected_platform_security.dart';
+import 'package:supermega_shop/shop_connected_runtime.dart';
 
 void main() {
   late _Platform platform;
   late _Transport transport;
   late ConnectedCoordinatorRuntimeHost host;
+  late ShopConnectedSharedWriteGate writes;
 
   setUp(() {
     platform = _Platform();
-    transport = _Transport();
+    writes = ShopConnectedSharedWriteGate();
+    transport = _Transport(writes);
     host = ConnectedCoordinatorRuntimeHost(
       platform: platform,
       transport: transport,
+      sharedWrites: writes,
+    );
+  });
+
+  test('host rejects a transport bound to another write gate', () {
+    expect(
+      () => ConnectedCoordinatorRuntimeHost(
+        platform: platform,
+        transport: transport,
+        sharedWrites: ShopConnectedSharedWriteGate(),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'connected_host_shared_write_gate_mismatch',
+        ),
+      ),
     );
   });
 
@@ -429,6 +450,11 @@ class _Platform implements ConnectedCoordinatorPlatformLifecycle {
 }
 
 class _Transport implements ConnectedCoordinatorTransport {
+  _Transport(this.sharedWrites);
+
+  @override
+  final ConnectedSharedWriteGate sharedWrites;
+
   final events = <String>[];
   final timeline = _timeline;
   bool failStart = false;

@@ -426,6 +426,8 @@ class UnavailableConnectedCoordinatorPlatformLifecycle
 }
 
 abstract interface class ConnectedCoordinatorTransport {
+  ConnectedSharedWriteGate get sharedWrites;
+
   Future<void> start({
     required String bindAddress,
     required ConnectedEphemeralTlsIdentity tlsIdentity,
@@ -438,9 +440,19 @@ abstract interface class ConnectedCoordinatorTransport {
 /// The server still enforces its own default-off flag, private address, exact
 /// pairing endpoint, certificate fingerprint and request authorization.
 class SiteCoordinatorServerTransport implements ConnectedCoordinatorTransport {
-  SiteCoordinatorServerTransport(this.server);
+  SiteCoordinatorServerTransport({
+    required this.server,
+    required this.sharedWrites,
+  }) {
+    if (!identical(server.sharedWriteAvailability, sharedWrites)) {
+      throw StateError('connected_transport_shared_write_gate_mismatch');
+    }
+  }
 
   final SiteCoordinatorServer server;
+
+  @override
+  final ConnectedSharedWriteGate sharedWrites;
 
   @override
   Future<void> start({
@@ -477,10 +489,18 @@ class ConnectedCoordinatorRuntimeHost implements ConnectedCoordinatorHost {
   ConnectedCoordinatorRuntimeHost({
     required this.platform,
     required this.transport,
-  });
+    required this.sharedWrites,
+  }) {
+    if (!identical(transport.sharedWrites, sharedWrites)) {
+      throw StateError('connected_host_shared_write_gate_mismatch');
+    }
+  }
 
   final ConnectedCoordinatorPlatformLifecycle platform;
   final ConnectedCoordinatorTransport transport;
+
+  @override
+  final ConnectedSharedWriteGate sharedWrites;
 
   bool _platformStarted = false;
   bool _transportStarted = false;

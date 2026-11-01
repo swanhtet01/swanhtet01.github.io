@@ -127,6 +127,8 @@ class ShopConnectedSharedWriteGate
 }
 
 abstract interface class ConnectedCoordinatorHost {
+  ConnectedSharedWriteGate get sharedWrites;
+
   Future<void> start({
     required String bindAddress,
     required ConnectedPlatformIdentity identity,
@@ -152,7 +154,11 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
     required this.readiness,
     required this.sharedWrites,
     required this.coordinator,
-  });
+  }) {
+    if (!identical(sharedWrites, coordinator.sharedWrites)) {
+      throw StateError('connected_runtime_shared_write_gate_mismatch');
+    }
+  }
 
   final ConnectedPlatformSecurity platformSecurity;
   final ConnectedRuntimeReadiness readiness;

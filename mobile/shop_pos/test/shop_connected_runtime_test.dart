@@ -51,12 +51,30 @@ void main() {
     security = _Security();
     readiness = _Readiness();
     writes = _Writes();
-    coordinator = _Coordinator();
+    coordinator = _Coordinator(writes);
     runtime = ShopConnectedRuntime(
       platformSecurity: security,
       readiness: readiness,
       sharedWrites: writes,
       coordinator: coordinator,
+    );
+  });
+
+  test('runtime rejects a coordinator bound to another write gate', () {
+    expect(
+      () => ShopConnectedRuntime(
+        platformSecurity: security,
+        readiness: readiness,
+        sharedWrites: writes,
+        coordinator: _Coordinator(_Writes()),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'connected_runtime_shared_write_gate_mismatch',
+        ),
+      ),
     );
   });
 
@@ -390,6 +408,11 @@ class _Writes implements ConnectedSharedWriteGate {
 }
 
 class _Coordinator implements ConnectedCoordinatorHost {
+  _Coordinator(this.sharedWrites);
+
+  @override
+  final ConnectedSharedWriteGate sharedWrites;
+
   int starts = 0;
   int stops = 0;
   String? address;
