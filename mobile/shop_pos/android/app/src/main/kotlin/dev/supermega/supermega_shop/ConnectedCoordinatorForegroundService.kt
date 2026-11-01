@@ -19,9 +19,10 @@ import java.time.Instant
 import org.json.JSONObject
 
 /**
- * Lifecycle-only coordinator boundary. It never opens a socket or claims LAN
- * availability. The service can remain running only after feature, API,
- * notification, issuer-trust, and committed-identity prerequisites pass.
+ * Lifecycle-only coordinator boundary. It never opens a socket and reports LAN
+ * availability only after an explicit Dart listener confirmation. The service
+ * can remain running only after feature, API, notification, issuer-trust, and
+ * committed-identity prerequisites pass.
  */
 internal class ConnectedCoordinatorForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
@@ -50,7 +51,7 @@ internal class ConnectedCoordinatorForegroundService : Service() {
         preferences(applicationContext).edit()
             .putString(KEY_REQUESTED_ALIAS, alias)
             .commit()
-        val status = CoordinatorStatus.running(alias!!)
+        val status = CoordinatorStatus.running(alias!!, listenerActive = false)
         persistStatus(applicationContext, status)
         startVisible(status)
         // A system restart may recreate only a previously ready service. Every
@@ -67,35 +68,7 @@ internal class ConnectedCoordinatorForegroundService : Service() {
     }
 
     private fun startVisible(status: CoordinatorStatus) {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(
-                NOTIFICATION_CHANNEL,
-                "SuperMega coordinator",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = "Persistent status for the local Shop coordinator"
-                setShowBadge(false)
-            },
-        )
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        val pendingIntent = launchIntent?.let {
-            PendingIntent.getActivity(
-                this,
-                0,
-                it,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-        }
-        val notification = Notification.Builder(this, NOTIFICATION_CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-            .setContentTitle("SuperMega coordinator")
-            .setContentText(status.notificationText())
-            .setOngoing(status.state == STATE_RUNNING)
-            .setOnlyAlertOnce(true)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .apply { if (pendingIntent != null) setContentIntent(pendingIntent) }
-            .build()
+        val notification = coordinatorNotification(this, status)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -143,6 +116,22 @@ internal class ConnectedCoordinatorForegroundService : Service() {
             return CoordinatorStatus.stopped("explicit_stop").also { persistStatus(context, it) }
         }
 
+        internal fun requestMarkListening(context: Context, alias: String): CoordinatorStatus {
+            val current = currentStatus(context)
+            val readiness = coordinatorReadiness(context, alias)
+            if (!readiness.ready || current.state != STATE_RUNNING ||
+                current.coordinatorAlias != alias || current.lanListenerActive) {
+                return CoordinatorStatus.unavailable(
+                    if (!readiness.ready) readiness.reason else "listener_transition_invalid",
+                    alias,
+                ).also { persistStatus(context, it) }
+            }
+            return CoordinatorStatus.running(alias, listenerActive = true).also {
+                persistStatus(context, it)
+                updateVisibleNotification(context, it)
+            }
+        }
+
         internal fun currentStatus(context: Context): CoordinatorStatus {
             val raw = preferences(context).getString(KEY_STATUS, null)
                 ?: return CoordinatorStatus.stopped("never_started")
@@ -183,6 +172,50 @@ internal class ConnectedCoordinatorForegroundService : Service() {
             preferences(context).edit().putString(KEY_STATUS, status.toJson().toString()).commit()
         }
 
+        private fun updateVisibleNotification(context: Context, status: CoordinatorStatus) {
+            context.getSystemService(NotificationManager::class.java).notify(
+                NOTIFICATION_ID,
+                coordinatorNotification(context, status),
+            )
+        }
+
+        private fun coordinatorNotification(
+            context: Context,
+            status: CoordinatorStatus,
+        ): Notification {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    NOTIFICATION_CHANNEL,
+                    "SuperMega coordinator",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Persistent status for the local Shop coordinator"
+                    setShowBadge(false)
+                },
+            )
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(
+                context.packageName,
+            )
+            val pendingIntent = launchIntent?.let {
+                PendingIntent.getActivity(
+                    context,
+                    0,
+                    it,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                )
+            }
+            return Notification.Builder(context, NOTIFICATION_CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+                .setContentTitle("SuperMega coordinator")
+                .setContentText(status.notificationText())
+                .setOngoing(status.state == STATE_RUNNING)
+                .setOnlyAlertOnce(true)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .apply { if (pendingIntent != null) setContentIntent(pendingIntent) }
+                .build()
+        }
+
         private val ALIAS = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     }
 }
@@ -215,6 +248,17 @@ internal class ConnectedCoordinatorServiceChannel(
                 "stop" -> {
                     if (args.keys != setOf("schema")) throw IllegalArgumentException()
                     ConnectedCoordinatorForegroundService.requestStop(context).toMap()
+                }
+                "markListening" -> {
+                    if (args.keys != setOf("schema", "coordinatorAlias")) {
+                        throw IllegalArgumentException()
+                    }
+                    val alias = args["coordinatorAlias"] as? String
+                        ?: throw IllegalArgumentException()
+                    ConnectedCoordinatorForegroundService.requestMarkListening(
+                        context,
+                        alias,
+                    ).toMap()
                 }
                 "status" -> {
                     if (args.keys != setOf("schema")) throw IllegalArgumentException()
@@ -292,6 +336,8 @@ internal data class CoordinatorStatus(
     val state: String,
     val reason: String,
     val coordinatorAlias: String?,
+    val lanListenerActive: Boolean,
+    val connectedOperationEnabled: Boolean,
     val updatedAt: String,
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
@@ -299,8 +345,8 @@ internal data class CoordinatorStatus(
         "state" to state,
         "reason" to reason,
         "coordinatorAlias" to coordinatorAlias,
-        "lanListenerActive" to false,
-        "connectedOperationEnabled" to false,
+        "lanListenerActive" to lanListenerActive,
+        "connectedOperationEnabled" to connectedOperationEnabled,
         "restartPolicy" to "sticky_when_ready",
         "updatedAt" to updatedAt,
     )
@@ -308,8 +354,11 @@ internal data class CoordinatorStatus(
     fun toJson() = JSONObject(toMap())
 
     fun notificationText(): String = when (state) {
-        ConnectedCoordinatorForegroundService.STATE_RUNNING ->
+        ConnectedCoordinatorForegroundService.STATE_RUNNING -> if (lanListenerActive) {
+            "Coordinator active · private LAN"
+        } else {
             "Coordinator ready · LAN listener inactive"
+        }
         ConnectedCoordinatorForegroundService.STATE_UNAVAILABLE ->
             "Coordinator unavailable · ${reason.replace('_', ' ')}"
         else -> "Coordinator stopped"
@@ -317,10 +366,11 @@ internal data class CoordinatorStatus(
 
     companion object {
         fun starting(alias: String) = status("starting", "start_requested", alias)
-        fun running(alias: String) = status(
+        fun running(alias: String, listenerActive: Boolean) = status(
             ConnectedCoordinatorForegroundService.STATE_RUNNING,
             "ready",
             alias,
+            listenerActive,
         )
         fun stopped(reason: String) = status(
             ConnectedCoordinatorForegroundService.STATE_STOPPED,
@@ -335,8 +385,6 @@ internal data class CoordinatorStatus(
 
         fun fromJson(json: JSONObject): CoordinatorStatus {
             if (json.getString("schema") != ConnectedCoordinatorForegroundService.STATUS_SCHEMA ||
-                json.getBoolean("lanListenerActive") ||
-                json.getBoolean("connectedOperationEnabled") ||
                 json.getString("restartPolicy") != "sticky_when_ready") {
                 throw IllegalArgumentException()
             }
@@ -344,19 +392,34 @@ internal data class CoordinatorStatus(
             if (state !in setOf("starting", "running", "stopped", "unavailable")) {
                 throw IllegalArgumentException()
             }
+            val listenerActive = json.getBoolean("lanListenerActive")
+            val operationEnabled = json.getBoolean("connectedOperationEnabled")
+            if (listenerActive != operationEnabled ||
+                state != ConnectedCoordinatorForegroundService.STATE_RUNNING && listenerActive) {
+                throw IllegalArgumentException()
+            }
             return CoordinatorStatus(
                 state = state,
                 reason = json.getString("reason"),
                 coordinatorAlias = if (json.isNull("coordinatorAlias")) null
                     else json.getString("coordinatorAlias"),
+                lanListenerActive = listenerActive,
+                connectedOperationEnabled = operationEnabled,
                 updatedAt = json.getString("updatedAt"),
             )
         }
 
-        private fun status(state: String, reason: String, alias: String?) = CoordinatorStatus(
+        private fun status(
+            state: String,
+            reason: String,
+            alias: String?,
+            listenerActive: Boolean = false,
+        ) = CoordinatorStatus(
             state = state,
             reason = reason,
             coordinatorAlias = alias,
+            lanListenerActive = listenerActive,
+            connectedOperationEnabled = listenerActive,
             updatedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS).toString(),
         )
     }

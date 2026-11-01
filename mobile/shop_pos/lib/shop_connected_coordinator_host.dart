@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
 import 'shop_connected_platform_security.dart';
 import 'shop_connected_runtime.dart';
 import 'shop_site_coordinator.dart';
@@ -14,6 +16,198 @@ abstract interface class ConnectedCoordinatorPlatformLifecycle {
   Future<void> markListening({required String coordinatorAlias});
 
   Future<void> stop();
+}
+
+const connectedCoordinatorServiceChannel =
+    'dev.supermega.supermega_shop/connected_coordinator_service_v1';
+const _connectedCoordinatorRequestSchema =
+    'supermega.connected-coordinator-service-request.v1';
+const _connectedCoordinatorStatusSchema =
+    'supermega.connected-coordinator-status.v1';
+
+typedef ConnectedCoordinatorPlatformInvoker = Future<Object?> Function(
+  String method,
+  Map<String, Object> arguments,
+);
+
+/// Fail-closed Android bridge for the visible foreground-service lifecycle.
+/// It never assumes that requesting a service means Android started it: start
+/// polls the persisted native status, and listening is acknowledged only after
+/// the native side confirms the exact alias and active-listener state.
+class MethodChannelConnectedCoordinatorPlatformLifecycle
+    implements ConnectedCoordinatorPlatformLifecycle {
+  MethodChannelConnectedCoordinatorPlatformLifecycle({
+    MethodChannel? channel,
+    ConnectedCoordinatorPlatformInvoker? invoke,
+    Future<void> Function(Duration duration)? delay,
+    this.startPollAttempts = 40,
+    this.startPollInterval = const Duration(milliseconds: 50),
+  }) : assert(startPollAttempts > 0),
+       _channel =
+           channel ?? const MethodChannel(connectedCoordinatorServiceChannel),
+       _invokeOverride = invoke,
+       _delay = delay ?? Future<void>.delayed;
+
+  final MethodChannel _channel;
+  final ConnectedCoordinatorPlatformInvoker? _invokeOverride;
+  final Future<void> Function(Duration duration) _delay;
+  final int startPollAttempts;
+  final Duration startPollInterval;
+
+  String? _alias;
+
+  Future<Object?> _invoke(String method, Map<String, Object> arguments) =>
+      _invokeOverride?.call(method, arguments) ??
+      _channel.invokeMethod<Object?>(method, arguments);
+
+  @override
+  Future<void> start({required String coordinatorAlias}) async {
+    if (_alias != null) {
+      throw StateError('connected_coordinator_platform_already_started');
+    }
+    try {
+      var status = _status(
+        await _invoke('start', <String, Object>{
+          'schema': _connectedCoordinatorRequestSchema,
+          'coordinatorAlias': coordinatorAlias,
+        }),
+      );
+      for (
+        var attempt = 0;
+        status.state == 'starting' && attempt < startPollAttempts;
+        attempt += 1
+      ) {
+        await _delay(startPollInterval);
+        status = _status(
+          await _invoke('status', const <String, Object>{
+            'schema': _connectedCoordinatorRequestSchema,
+          }),
+        );
+      }
+      if (status.state != 'running' ||
+          status.coordinatorAlias != coordinatorAlias ||
+          status.lanListenerActive ||
+          status.connectedOperationEnabled) {
+        throw StateError('connected_coordinator_platform_start_unconfirmed');
+      }
+      _alias = coordinatorAlias;
+    } catch (error, stackTrace) {
+      try {
+        await _stopNative();
+      } catch (_) {
+        Error.throwWithStackTrace(
+          StateError('connected_coordinator_platform_cleanup_unconfirmed'),
+          stackTrace,
+        );
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  @override
+  Future<void> markListening({required String coordinatorAlias}) async {
+    if (_alias != coordinatorAlias) {
+      throw StateError('connected_coordinator_platform_alias_mismatch');
+    }
+    final status = _status(
+      await _invoke('markListening', <String, Object>{
+        'schema': _connectedCoordinatorRequestSchema,
+        'coordinatorAlias': coordinatorAlias,
+      }),
+    );
+    if (status.state != 'running' ||
+        status.coordinatorAlias != coordinatorAlias ||
+        !status.lanListenerActive ||
+        !status.connectedOperationEnabled) {
+      throw StateError('connected_coordinator_platform_listening_unconfirmed');
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    await _stopNative();
+    _alias = null;
+  }
+
+  Future<void> _stopNative() async {
+    final status = _status(
+      await _invoke('stop', const <String, Object>{
+        'schema': _connectedCoordinatorRequestSchema,
+      }),
+    );
+    if (status.state != 'stopped' ||
+        status.coordinatorAlias != null ||
+        status.lanListenerActive ||
+        status.connectedOperationEnabled) {
+      throw StateError('connected_coordinator_platform_stop_unconfirmed');
+    }
+  }
+
+  _ConnectedCoordinatorPlatformStatus _status(Object? value) {
+    if (value is! Map) {
+      throw StateError('connected_coordinator_platform_status_invalid');
+    }
+    final map = value.map<String, Object?>((key, value) {
+      if (key is! String) {
+        throw StateError('connected_coordinator_platform_status_invalid');
+      }
+      return MapEntry(key, value);
+    });
+    const fields = <String>{
+      'schema',
+      'state',
+      'reason',
+      'coordinatorAlias',
+      'lanListenerActive',
+      'connectedOperationEnabled',
+      'restartPolicy',
+      'updatedAt',
+    };
+    if (map.keys.toSet().difference(fields).isNotEmpty ||
+        fields.difference(map.keys.toSet()).isNotEmpty ||
+        map['schema'] != _connectedCoordinatorStatusSchema ||
+        map['state'] is! String ||
+        map['reason'] is! String ||
+        map['coordinatorAlias'] != null && map['coordinatorAlias'] is! String ||
+        map['lanListenerActive'] is! bool ||
+        map['connectedOperationEnabled'] is! bool ||
+        map['restartPolicy'] != 'sticky_when_ready' ||
+        map['updatedAt'] is! String) {
+      throw StateError('connected_coordinator_platform_status_invalid');
+    }
+    final status = _ConnectedCoordinatorPlatformStatus(
+      state: map['state']! as String,
+      coordinatorAlias: map['coordinatorAlias'] as String?,
+      lanListenerActive: map['lanListenerActive']! as bool,
+      connectedOperationEnabled: map['connectedOperationEnabled']! as bool,
+    );
+    if (!const <String>{
+          'starting',
+          'running',
+          'stopped',
+          'unavailable',
+        }.contains(status.state) ||
+        (status.state != 'running' &&
+            (status.lanListenerActive || status.connectedOperationEnabled)) ||
+        status.lanListenerActive != status.connectedOperationEnabled) {
+      throw StateError('connected_coordinator_platform_status_invalid');
+    }
+    return status;
+  }
+}
+
+class _ConnectedCoordinatorPlatformStatus {
+  const _ConnectedCoordinatorPlatformStatus({
+    required this.state,
+    required this.coordinatorAlias,
+    required this.lanListenerActive,
+    required this.connectedOperationEnabled,
+  });
+
+  final String state;
+  final String? coordinatorAlias;
+  final bool lanListenerActive;
+  final bool connectedOperationEnabled;
 }
 
 class UnavailableConnectedCoordinatorPlatformLifecycle

@@ -139,6 +139,86 @@ void main() {
       hasLength(1),
     );
   });
+
+  test(
+    'Android bridge confirms start, listener, and stop transitions',
+    () async {
+      final native = _NativeLifecycle(<Object?>[
+        _status(state: 'starting', alias: 'site-primary'),
+        _status(state: 'running', alias: 'site-primary'),
+        _status(state: 'running', alias: 'site-primary', listening: true),
+        _status(state: 'stopped'),
+      ]);
+      final bridge = MethodChannelConnectedCoordinatorPlatformLifecycle(
+        invoke: native.invoke,
+        delay: (_) async {},
+        startPollAttempts: 2,
+      );
+
+      await bridge.start(coordinatorAlias: 'site-primary');
+      await bridge.markListening(coordinatorAlias: 'site-primary');
+      await bridge.stop();
+
+      expect(native.methods, ['start', 'status', 'markListening', 'stop']);
+      expect(native.arguments.first, {
+        'schema': 'supermega.connected-coordinator-service-request.v1',
+        'coordinatorAlias': 'site-primary',
+      });
+    },
+  );
+
+  test(
+    'Android bridge rejects an already-active listener during start',
+    () async {
+      final native = _NativeLifecycle(<Object?>[
+        _status(state: 'running', alias: 'site-primary', listening: true),
+        _status(state: 'stopped'),
+      ]);
+      final bridge = MethodChannelConnectedCoordinatorPlatformLifecycle(
+        invoke: native.invoke,
+        delay: (_) async {},
+      );
+
+      await expectLater(
+        bridge.start(coordinatorAlias: 'site-primary'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'connected_coordinator_platform_start_unconfirmed',
+          ),
+        ),
+      );
+      expect(native.methods, ['start', 'stop']);
+    },
+  );
+
+  test(
+    'Android bridge rejects malformed or inconsistent native status',
+    () async {
+      final malformed = _status(state: 'running', alias: 'site-primary')
+        ..['unexpected'] = true;
+      final native = _NativeLifecycle(<Object?>[
+        malformed,
+        _status(state: 'stopped'),
+      ]);
+      final bridge = MethodChannelConnectedCoordinatorPlatformLifecycle(
+        invoke: native.invoke,
+        delay: (_) async {},
+      );
+
+      await expectLater(
+        bridge.start(coordinatorAlias: 'site-primary'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'connected_coordinator_platform_status_invalid',
+          ),
+        ),
+      );
+    },
+  );
 }
 
 final _timeline = <String>[];
@@ -218,4 +298,34 @@ ConnectedEphemeralTlsIdentity _tls() => ConnectedEphemeralTlsIdentity(
 
 extension<T> on Iterable<T> {
   List<T> takeLast(int count) => skip(length - count).toList();
+}
+
+Map<String, Object?> _status({
+  required String state,
+  String? alias,
+  bool listening = false,
+}) => <String, Object?>{
+  'schema': 'supermega.connected-coordinator-status.v1',
+  'state': state,
+  'reason': state == 'running' ? 'ready' : 'synthetic',
+  'coordinatorAlias': alias,
+  'lanListenerActive': listening,
+  'connectedOperationEnabled': listening,
+  'restartPolicy': 'sticky_when_ready',
+  'updatedAt': '2026-11-01T00:00:00.000Z',
+};
+
+class _NativeLifecycle {
+  _NativeLifecycle(this.responses);
+
+  final List<Object?> responses;
+  final methods = <String>[];
+  final arguments = <Map<String, Object>>[];
+
+  Future<Object?> invoke(String method, Map<String, Object> arguments) async {
+    methods.add(method);
+    this.arguments.add(arguments);
+    if (responses.isEmpty) throw StateError('missing_synthetic_response');
+    return responses.removeAt(0);
+  }
 }
