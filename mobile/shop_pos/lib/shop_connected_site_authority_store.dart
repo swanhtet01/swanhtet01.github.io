@@ -466,10 +466,19 @@ class ShopConnectedSiteAuthorityPayloadStore {
         )
         .get();
     for (final row in rows) {
-      await verifier.verify(
-        canonicalPayloadBytes: row.read<String>('payload_bytes'),
+      final payload = ConnectedSiteAuthorityPayloadV1.parse(
+        canonicalBytes: row.read<String>('payload_bytes'),
         signature: row.read<String>('signature'),
-        issuerKeyId: row.read<String>('issuer_key_id'),
+      );
+      if (payload.issuerKeyId != row.read<String>('issuer_key_id')) {
+        throw const ConnectedSiteReconciliationException(
+          'connected_site_authority_payload_issuer_mismatch',
+        );
+      }
+      await verifier.verify(
+        canonicalPayloadBytes: payload.canonicalBytes,
+        signature: payload.signature,
+        issuerKeyId: payload.issuerKeyId,
       );
     }
     _retainedPayloadsVerified = true;

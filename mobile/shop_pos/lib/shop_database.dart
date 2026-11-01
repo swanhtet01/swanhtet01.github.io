@@ -2346,12 +2346,12 @@ const shopSiteAuthorityPayloadsV30Sql = '''
     tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
     site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
     authority_sequence INTEGER NOT NULL CHECK (authority_sequence > 0),
-    authority_event_id TEXT NOT NULL UNIQUE CHECK (length(authority_event_id) BETWEEN 1 AND 128),
+    authority_event_id TEXT NOT NULL CHECK (length(authority_event_id) BETWEEN 1 AND 128),
     previous_authority_digest TEXT CHECK (previous_authority_digest IS NULL OR length(previous_authority_digest) = 64),
     issuer_key_id TEXT NOT NULL CHECK (length(issuer_key_id) BETWEEN 1 AND 128),
     issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
     payload_bytes TEXT NOT NULL CHECK (json_valid(payload_bytes)),
-    payload_digest TEXT NOT NULL UNIQUE CHECK (length(payload_digest) = 64),
+    payload_digest TEXT NOT NULL CHECK (length(payload_digest) = 64),
     signature TEXT NOT NULL CHECK (length(signature) BETWEEN 32 AND 4096),
     membership_digest TEXT NOT NULL CHECK (length(membership_digest) = 64),
     configuration_digest TEXT NOT NULL CHECK (length(configuration_digest) = 64),
@@ -2360,6 +2360,9 @@ const shopSiteAuthorityPayloadsV30Sql = '''
     observation_sequence INTEGER NOT NULL,
     observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
     PRIMARY KEY (tenant_id, site_id, authority_sequence),
+    UNIQUE (tenant_id, site_id, authority_event_id),
+    UNIQUE (tenant_id, site_id, payload_digest),
+    UNIQUE (tenant_id, site_id, observation_sequence),
     FOREIGN KEY (tenant_id, site_id, observation_sequence) REFERENCES
       shop_site_authority_deltas(tenant_id, site_id, observation_sequence)
   )

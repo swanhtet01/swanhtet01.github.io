@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -455,6 +456,24 @@ void main() {
         canonicalPayloadBytes: first,
         signature: _signature,
       );
+      await expectLater(
+        database.customStatement(
+          'INSERT INTO shop_site_authority_payloads '
+          '(tenant_id, site_id, authority_sequence, authority_event_id, '
+          'previous_authority_digest, issuer_key_id, issued_at_millis, '
+          'payload_bytes, payload_digest, signature, membership_digest, '
+          'configuration_digest, revocation_generation, configuration_version, '
+          'observation_sequence, observed_at_millis) '
+          "SELECT tenant_id, site_id, 2, 'duplicate-observation', "
+          'payload_digest, issuer_key_id, issued_at_millis, payload_bytes, ?, '
+          'signature, membership_digest, configuration_digest, '
+          'revocation_generation, configuration_version, observation_sequence, '
+          'observed_at_millis + 1 FROM shop_site_authority_payloads '
+          'WHERE tenant_id = ? AND site_id = ?',
+          [_digest('distinct-payload'), _workspace, _site],
+        ),
+        throwsA(anything),
+      );
       await store.apply(
         _scope(),
         canonicalPayloadBytes: first,
@@ -603,7 +622,7 @@ void main() {
       await _seedDeviceAndRevocation(
         database,
         workspace: 'workspace-two',
-        site: 'site-two',
+        site: _site,
         device: 'device-two',
         seed: 'two',
       );
@@ -621,17 +640,26 @@ void main() {
       await store.apply(
         ConnectedSiteScope(
           workspaceId: 'workspace-two',
-          siteId: 'site-two',
+          siteId: _site,
           deviceId: 'device-two',
         ),
         canonicalPayloadBytes: _authorityPayload(
           workspace: 'workspace-two',
-          site: 'site-two',
-          actor: 'actor-two',
+          site: _site,
         ),
         signature: _signature,
       );
       expect(await _count(database, 'shop_site_authority_payloads'), 2);
+      final eventIds = await database
+          .customSelect(
+            'SELECT authority_event_id FROM shop_site_authority_payloads '
+            'ORDER BY tenant_id',
+          )
+          .get();
+      expect(
+        eventIds.map((row) => row.read<String>('authority_event_id')),
+        everyElement('authority-event-1'),
+      );
       await database.verifyConnectedAuthorityEvidence();
     } finally {
       await database.close();
@@ -707,6 +735,73 @@ void main() {
       }
     },
   );
+
+  test('restore reverify rejects contract-invalid canonical bytes before signature verifier', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'shop-authority-v30-contract-',
+    );
+    final file = File('${root.path}/shop.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      await _seedDeviceAndRevocation(database);
+      await ShopConnectedSiteAuthorityPayloadStore(
+        database: database,
+        nowMillis: () => _now,
+        verifier: const _AllowAuthorityVerifier(),
+        runtimeEnabled: true,
+      ).apply(
+        _scope(),
+        canonicalPayloadBytes: _authorityPayload(),
+        signature: _signature,
+      );
+      await database.close();
+
+      final raw = sqlite3.open(file.path);
+      try {
+        final original = jsonDecode(
+          raw
+                  .select(
+                    'SELECT payload_bytes FROM shop_site_authority_payloads',
+                  )
+                  .single['payload_bytes']
+              as String,
+        ) as Map<String, dynamic>;
+        final unsigned = Map<String, Object?>.from(original)
+          ..remove('payloadDigest')
+          ..['unexpectedAuthority'] = true;
+        final invalidBytes = canonicalConnectedSiteJson({
+          ...unsigned,
+          'payloadDigest': connectedSiteSha256(unsigned),
+        });
+        raw.execute('DROP TRIGGER shop_site_authority_payloads_no_update');
+        raw.execute(
+          'UPDATE shop_site_authority_payloads '
+          'SET payload_bytes = ?, payload_digest = ?',
+          [invalidBytes, _digest(invalidBytes)],
+        );
+        raw.execute(
+          shopConnectedAuthorityPayloadSchemaDefinitionsV30()['shop_site_authority_payloads_no_update']!,
+        );
+      } finally {
+        raw.close();
+      }
+      ShopBackup.verifySnapshot(file);
+      database = ShopDatabase(NativeDatabase(file));
+      final verifier = _RecordingAuthorityVerifier();
+      await expectLater(
+        ShopConnectedSiteAuthorityPayloadStore(
+          database: database,
+          nowMillis: () => _now,
+          verifier: verifier,
+        ).reverifyRetainedPayloads(),
+        _throwsCode('connected_site_authority_payload_shape'),
+      );
+      expect(verifier.calls, 0);
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
 
   test('v29 migration creates empty v30 authority payload evidence', () async {
     final root = await Directory.systemTemp.createTemp('shop-authority-v29-');
@@ -843,6 +938,20 @@ class _AllowAuthorityVerifier implements ConnectedSiteAuthorityPayloadVerifier {
   }) async {}
 }
 
+class _RecordingAuthorityVerifier
+    implements ConnectedSiteAuthorityPayloadVerifier {
+  int calls = 0;
+
+  @override
+  Future<void> verify({
+    required String canonicalPayloadBytes,
+    required String signature,
+    required String issuerKeyId,
+  }) async {
+    calls++;
+  }
+}
+
 String _authorityPayload({
   String workspace = _workspace,
   String site = _site,
@@ -856,7 +965,7 @@ String _authorityPayload({
   int issuedAtMillis = _now - 100,
 }) {
   final unsigned = <String, Object?>{
-    'authorityEventId': 'authority-$workspace-$sequence',
+    'authorityEventId': 'authority-event-$sequence',
     'authoritySequence': sequence,
     'configurationSnapshot': {
       'businessProfile': {
