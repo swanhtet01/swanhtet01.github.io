@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import replace
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 import unittest
 
 from fastapi import FastAPI, HTTPException, Request
@@ -15,6 +16,7 @@ from supermega_runtime.connected_site_runtime import (
     RECONCILE_REQUEST_CONTRACT,
     _read_bounded_body,
     create_connected_site_router,
+    canonical_json,
 )
 from supermega_runtime.connected_site_v15 import MemoryConnectedSiteRepository, UploadEvent
 from tests.test_connected_site_v15 import DEVICE_A, DEVICE_B, NOW, _authority, _upload
@@ -50,6 +52,8 @@ def _request(authority, upload: UploadEvent, *, after_cursor: int = 0) -> dict[s
         "siteId": authority.site_id,
         "deviceId": device.device_id,
         "sessionGeneration": device.session_generation,
+        "authorityGeneration": authority.authority_generation,
+        "authorityPayloadDigest": authority.authority_payload_digest,
         "revocationGeneration": authority.revocation_generation,
         "afterCursor": after_cursor,
         "events": [_event_json(upload)],
@@ -106,6 +110,35 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["detail"]["error"], "server_adapter_disabled")
 
+    def test_cross_runtime_wire_golden_is_byte_exact(self) -> None:
+        service = ConnectedSiteRuntimeService(
+            authority_provider=self.authorities,
+            repository=MemoryConnectedSiteRepository(),
+            runtime_enabled=True,
+            now=lambda: NOW,
+        )
+        request = _request(
+            self.authority_a,
+            _upload(self.authority_a, key=DEVICE_A),
+        )
+        generated = {
+            "contract": "supermega.connected-site-wire-golden.v1",
+            "authorityResponse": service.authority(
+                principal=self.principal,
+                workspace_id="workspace-a",
+                site_id="site-a",
+            ),
+            "reconcileRequest": request,
+            "reconcileResponse": service.reconcile(
+                principal=self.principal,
+                request=request,
+            ),
+        }
+        fixture = Path(
+            "mobile/shop_pos/test/fixtures/connected_site_cloud_wire_v1.json"
+        ).read_text(encoding="utf-8").rstrip("\n")
+        self.assertEqual(canonical_json(generated), fixture)
+
     def test_accept_replay_and_conflict_are_explicit_and_idempotent(self) -> None:
         client = self.client()
         first = _upload(self.authority_a, key=DEVICE_A)
@@ -114,7 +147,12 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
             json=_request(self.authority_a, first),
         )
         self.assertEqual(accepted.status_code, 200, accepted.text)
-        self.assertEqual(accepted.json()["decisions"][0]["state"], "accepted")
+        self.assertEqual(accepted.json()["acknowledgements"][0]["state"], "accepted")
+        self.assertEqual(accepted.json()["conflicts"], [])
+        self.assertEqual(
+            accepted.json()["authorityPayloadDigest"],
+            self.authority_a.authority_payload_digest,
+        )
         self.assertNotIn("cloudProof", accepted.text)
         self.assertNotIn("totalMmk", accepted.text)
 
@@ -124,7 +162,7 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
             json=_request(self.authority_a, replay, after_cursor=1),
         )
         self.assertEqual(replayed.status_code, 200, replayed.text)
-        self.assertEqual(replayed.json()["decisions"][0]["state"], "replayed")
+        self.assertEqual(replayed.json()["acknowledgements"][0]["state"], "replayed")
         self.assertEqual(len(self.repository.events), 1)
 
         conflict_upload = _upload(
@@ -139,9 +177,21 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
             json=_request(self.authority_a, conflict_upload, after_cursor=2),
         )
         self.assertEqual(conflict.status_code, 200, conflict.text)
-        decision = conflict.json()["decisions"][0]
-        self.assertEqual(decision["state"], "conflict")
+        self.assertEqual(conflict.json()["acknowledgements"], [])
+        decision = conflict.json()["conflicts"][0]
+        self.assertEqual(decision["state"], "quarantined")
         self.assertEqual(decision["reason"], "aggregate_version_conflict")
+        self.assertEqual(decision["conflictId"], "conflict:command-2")
+        self.assertEqual(decision["aggregateId"], "basket-1")
+        self.assertEqual(len(self.repository.events), 1)
+
+        replay_conflict = replace(conflict_upload, cursor=4)
+        replayed_conflict = client.post(
+            "/api/connected-site/v1/reconcile",
+            json=_request(self.authority_a, replay_conflict, after_cursor=3),
+        )
+        self.assertEqual(replayed_conflict.status_code, 200, replayed_conflict.text)
+        self.assertEqual(replayed_conflict.json()["conflicts"], [decision])
         self.assertEqual(len(self.repository.events), 1)
 
     def test_reused_command_with_altered_digest_fails_without_effect(self) -> None:
@@ -277,9 +327,29 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["workspaceId"], "workspace-a")
         self.assertEqual(payload["deviceId"], "device-a")
         self.assertEqual(payload["revocationGeneration"], 3)
+        self.assertEqual(
+            payload["authorityGeneration"], self.authority_a.authority_generation
+        )
+        self.assertEqual(
+            payload["authorityPayloadBytes"],
+            json.dumps(
+                self.authority_a.authority_payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
         self.assertNotIn("private", response.text.casefold())
         self.assertNotIn("password", response.text.casefold())
         self.assertEqual(response.headers["cache-control"], "no-store")
+
+    def test_reconcile_binds_exact_refreshed_authority_snapshot(self) -> None:
+        request = _request(self.authority_a, _upload(self.authority_a, key=DEVICE_A))
+        request["authorityPayloadDigest"] = "f" * 64
+        response = self.client().post("/api/connected-site/v1/reconcile", json=request)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "authority_generation")
+        self.assertEqual(self.repository.events, [])
 
 
 if __name__ == "__main__":

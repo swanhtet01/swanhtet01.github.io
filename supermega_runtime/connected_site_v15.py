@@ -93,6 +93,12 @@ def _time(value: Any, reason: str) -> datetime:
     return parsed
 
 
+def _utc_millis(value: datetime) -> str:
+    if value.tzinfo is None:
+        _fail("database_timestamp_timezone")
+    return value.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 def _decode(value: str, length: int, reason: str) -> bytes:
     if not isinstance(value, str) or "=" in value:
         _fail(reason)
@@ -230,6 +236,7 @@ class UploadDecision:
     canonical_version: int
     event_digest: str | None = None
     reason: str | None = None
+    conflict: Mapping[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -251,6 +258,7 @@ class MemoryConnectedSiteRepository:
         device_id: str,
         after_cursor: int,
         validated: Sequence[tuple[UploadEvent, Mapping[str, Any]]],
+        observed_at: datetime,
     ) -> list[UploadDecision]:
         cursor_key = (authority.workspace_id, authority.site_id, device_id)
         if self.upload_cursors.get(cursor_key, 0) != after_cursor:
@@ -284,25 +292,33 @@ class MemoryConnectedSiteRepository:
             )
             current = self.aggregate_versions.get(aggregate_key, 0)
             if command["expectedVersion"] != current:
+                conflict = {
+                    "protocolVersion": 1,
+                    "workspaceId": authority.workspace_id,
+                    "siteId": authority.site_id,
+                    "conflictId": f"conflict:{upload.command_id}",
+                    "commandId": upload.command_id,
+                    "commandDigest": upload.command_digest,
+                    "aggregateType": command["aggregateType"],
+                    "aggregateId": command["aggregateId"],
+                    "expectedVersion": command["expectedVersion"],
+                    "actualVersion": current,
+                    "reason": "aggregate_version_conflict",
+                    "createdAt": _utc_millis(observed_at),
+                    "state": "quarantined",
+                }
                 decision = UploadDecision(
                     command_id=upload.command_id,
                     command_digest=upload.command_digest,
                     state="conflict",
                     canonical_version=current,
                     reason="aggregate_version_conflict",
+                    conflict=conflict,
                 )
                 self.commands[command_key] = (upload.command_digest, decision)
-                self.conflicts.append(
-                    {
-                        "workspaceId": authority.workspace_id,
-                        "siteId": authority.site_id,
-                        "commandId": upload.command_id,
-                        "commandDigest": upload.command_digest,
-                        "expectedVersion": command["expectedVersion"],
-                        "canonicalVersion": current,
-                        "financialRewritePermitted": False,
-                    }
-                )
+                retained_conflict = dict(conflict)
+                retained_conflict["financialRewritePermitted"] = False
+                self.conflicts.append(retained_conflict)
                 decisions.append(decision)
                 continue
             next_version = current + 1
@@ -352,6 +368,7 @@ class PostgresConnectedSiteRepository:
         device_id: str,
         after_cursor: int,
         validated: Sequence[tuple[UploadEvent, Mapping[str, Any]]],
+        observed_at: datetime,
     ) -> list[UploadDecision]:
         decisions: list[UploadDecision] = []
         with self._connection_factory() as connection:
@@ -396,7 +413,17 @@ class PostgresConnectedSiteRepository:
                         if ack is None or ack[0] != prior[1]:
                             _fail("replay_evidence_incomplete")
                         if prior[1] == "conflict":
-                            decisions.append(UploadDecision(upload.command_id, upload.command_digest, "conflict", ack[1], reason=ack[3]))
+                            cursor.execute(
+                                "select conflict_json,created_at from app_private.connected_site_conflicts "
+                                "where workspace_id=%s and site_id=%s and command_id=%s",
+                                (authority.workspace_id, authority.site_id, upload.command_id),
+                            )
+                            retained = cursor.fetchone()
+                            if retained is None:
+                                _fail("replay_conflict_evidence_incomplete")
+                            retained_conflict = dict(retained[0])
+                            retained_conflict["createdAt"] = _utc_millis(retained[1])
+                            decisions.append(UploadDecision(upload.command_id, upload.command_digest, "conflict", ack[1], reason=ack[3], conflict=retained_conflict))
                         elif prior[1] == "accepted":
                             decisions.append(UploadDecision(upload.command_id, upload.command_digest, "replayed", ack[1], ack[2]))
                         else:
@@ -424,20 +451,30 @@ class PostgresConnectedSiteRepository:
                     if state == "conflict":
                         reason = "aggregate_version_conflict"
                         conflict_id = f"conflict:{upload.command_id}"
-                        conflict = {"commandId": upload.command_id, "reason": reason,
+                        conflict = {"protocolVersion": 1,
+                                    "workspaceId": authority.workspace_id,
+                                    "siteId": authority.site_id,
+                                    "conflictId": conflict_id,
+                                    "commandId": upload.command_id,
+                                    "commandDigest": upload.command_digest,
+                                    "aggregateType": command["aggregateType"],
+                                    "aggregateId": command["aggregateId"],
                                     "expectedVersion": command["expectedVersion"],
-                                    "canonicalVersion": canonical_version,
-                                    "financialRewritePermitted": False}
+                                    "actualVersion": canonical_version,
+                                    "reason": reason,
+                                    "state": "quarantined"}
                         cursor.execute(
                             "insert into app_private.connected_site_conflicts "
                             "(workspace_id,site_id,conflict_id,command_id,command_digest,aggregate_type,aggregate_id,"
                             "expected_version,canonical_version,reason,conflict_json) "
-                            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)",
+                            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) returning created_at",
                             (authority.workspace_id, authority.site_id, conflict_id, upload.command_id,
                              upload.command_digest, command["aggregateType"], command["aggregateId"],
                              command["expectedVersion"], canonical_version, reason, canonical_json(conflict)),
                         )
-                        decision = UploadDecision(upload.command_id, upload.command_digest, "conflict", canonical_version, reason=reason)
+                        created_at = cursor.fetchone()[0]
+                        conflict["createdAt"] = _utc_millis(created_at)
+                        decision = UploadDecision(upload.command_id, upload.command_digest, "conflict", canonical_version, reason=reason, conflict=conflict)
                     else:
                         next_version = canonical_version + 1
                         cursor.execute(
@@ -533,6 +570,7 @@ class ConnectedSiteV15Adapter:
             device_id=device_id,
             after_cursor=after_cursor,
             validated=validated,
+            observed_at=now,
         )
 
     def _validate_upload(

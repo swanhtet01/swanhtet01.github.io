@@ -15,7 +15,7 @@ import re
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 from starlette.requests import ClientDisconnect
 
 from .connected_site_v15 import (
@@ -24,6 +24,8 @@ from .connected_site_v15 import (
     SiteAuthority,
     UploadDecision,
     UploadEvent,
+    canonical_json,
+    digest,
 )
 
 
@@ -109,27 +111,25 @@ class ConnectedSiteRuntimeService:
         device = authority.devices.get(principal.device_id)
         if device is None or not device.active:
             raise ConnectedSiteV15Error("connected_site_device_denied")
+        authority_payload_bytes = canonical_json(authority.authority_payload)
+        issuer_key_id = authority.authority_payload.get("issuerKeyId")
+        if not isinstance(issuer_key_id, str):
+            raise ConnectedSiteV15Error("connected_site_authority_issuer")
         return {
             "contract": AUTHORITY_RESPONSE_CONTRACT,
+            "protocolVersion": 1,
             "workspaceId": authority.workspace_id,
             "siteId": authority.site_id,
             "deviceId": principal.device_id,
+            "active": True,
+            "sessionGeneration": device.session_generation,
             "authorityGeneration": authority.authority_generation,
             "configurationGeneration": authority.configuration_generation,
             "revocationGeneration": authority.revocation_generation,
-            "authorityPayload": dict(authority.authority_payload),
+            "authorityPayloadBytes": authority_payload_bytes,
             "authorityPayloadDigest": authority.authority_payload_digest,
             "authoritySignature": authority.authority_signature,
-            "authorityIssuerKeys": dict(authority.authority_issuer_keys),
-            "leaseIssuerKeys": dict(authority.issuer_keys),
-            "device": {
-                "signingKeyId": device.signing_key_id,
-                "publicKey": device.public_key,
-                "clientFingerprint": device.client_fingerprint,
-                "enrollmentEvidenceDigest": device.enrollment_evidence_digest,
-                "coordinatorBindingDigest": device.coordinator_binding_digest,
-                "sessionGeneration": device.session_generation,
-            },
+            "issuerKeyId": issuer_key_id,
         }
 
     def reconcile(
@@ -146,6 +146,11 @@ class ConnectedSiteRuntimeService:
         )
         if parsed["deviceId"] != principal.device_id:
             raise ConnectedSiteV15Error("connected_site_device_scope")
+        if (
+            parsed["authorityGeneration"] != authority.authority_generation
+            or parsed["authorityPayloadDigest"] != authority.authority_payload_digest
+        ):
+            raise ConnectedSiteV15Error("connected_site_authority_generation")
         adapter = ConnectedSiteV15Adapter(
             authorities={(authority.workspace_id, authority.site_id): authority},
             repository=self._repository,
@@ -161,16 +166,47 @@ class ConnectedSiteRuntimeService:
             events=parsed["events"],
             now=self._now(),
         )
+        event_by_command = {event.command_id: event for event in parsed["events"]}
+        acknowledgements: list[dict[str, Any]] = []
+        conflicts: list[dict[str, Any]] = []
+        for decision in decisions:
+            event = event_by_command.get(decision.command_id)
+            if event is None:
+                raise ConnectedSiteV15Error("connected_site_decision_binding")
+            if decision.state == "conflict":
+                if decision.conflict is None:
+                    raise ConnectedSiteV15Error("connected_site_conflict_binding")
+                conflicts.append(dict(decision.conflict))
+            elif decision.state in {"accepted", "replayed"}:
+                acknowledgements.append(_acknowledgement_json(decision))
+            else:
+                raise ConnectedSiteV15Error("connected_site_decision_state")
+        membership = authority.authority_payload.get("membershipSnapshot")
+        configuration = authority.authority_payload.get("configurationSnapshot")
+        if not isinstance(membership, dict) or not isinstance(configuration, dict):
+            raise ConnectedSiteV15Error("connected_site_authority_payload_generation")
         return {
             "contract": RECONCILE_RESPONSE_CONTRACT,
+            "protocolVersion": 1,
             "workspaceId": authority.workspace_id,
             "siteId": authority.site_id,
             "deviceId": principal.device_id,
+            "authorityGeneration": authority.authority_generation,
+            "authorityPayloadDigest": authority.authority_payload_digest,
             "afterCursor": parsed["afterCursor"],
             "nextCursor": (
                 parsed["events"][-1].cursor if parsed["events"] else parsed["afterCursor"]
             ),
-            "decisions": [_decision_json(decision) for decision in decisions],
+            "acknowledgements": acknowledgements,
+            "conflicts": conflicts,
+            "authorityDelta": {
+                "workspaceId": authority.workspace_id,
+                "siteId": authority.site_id,
+                "revocationGeneration": authority.revocation_generation,
+                "membershipDigest": digest(membership),
+                "configurationVersion": authority.configuration_generation,
+                "configurationDigest": digest(configuration),
+            },
         }
 
     def _current_authority(
@@ -210,7 +246,7 @@ def create_connected_site_router(
     router = APIRouter(prefix="/api/connected-site/v1", tags=["connected-site-disabled"])
 
     @router.get("/workspaces/{workspace_id}/sites/{site_id}/authority")
-    async def authority(workspace_id: str, site_id: str, request: Request) -> JSONResponse:
+    async def authority(workspace_id: str, site_id: str, request: Request) -> Response:
         _reject_ambient_authority(request)
         principal = _principal(resolve_principal, request)
         try:
@@ -219,12 +255,12 @@ def create_connected_site_router(
                 workspace_id=_identifier(workspace_id),
                 site_id=_identifier(site_id),
             )
-            return JSONResponse(result, headers={"cache-control": "no-store"})
+            return _canonical_response(result)
         except ConnectedSiteV15Error as exc:
             raise _http_error(exc) from None
 
     @router.post("/reconcile")
-    async def reconcile(request: Request) -> JSONResponse:
+    async def reconcile(request: Request) -> Response:
         _reject_ambient_authority(request)
         principal = _principal(resolve_principal, request)
         content_length = request.headers.get("content-length")
@@ -243,7 +279,7 @@ def create_connected_site_router(
             raise _error(400, "request_shape_invalid")
         try:
             result = service.reconcile(principal=principal, request=parsed)
-            return JSONResponse(result, headers={"cache-control": "no-store"})
+            return _canonical_response(result)
         except ConnectedSiteV15Error as exc:
             raise _http_error(exc) from None
 
@@ -301,6 +337,8 @@ def _parse_reconcile_request(value: Mapping[str, Any]) -> dict[str, Any]:
         "siteId",
         "deviceId",
         "sessionGeneration",
+        "authorityGeneration",
+        "authorityPayloadDigest",
         "revocationGeneration",
         "afterCursor",
         "events",
@@ -310,12 +348,21 @@ def _parse_reconcile_request(value: Mapping[str, Any]) -> dict[str, Any]:
     workspace_id = _identifier(value["workspaceId"])
     site_id = _identifier(value["siteId"])
     device_id = _identifier(value["deviceId"])
-    integers = ("sessionGeneration", "revocationGeneration", "afterCursor")
+    integers = (
+        "sessionGeneration",
+        "authorityGeneration",
+        "revocationGeneration",
+        "afterCursor",
+    )
     if any(
         not isinstance(value[key], int) or isinstance(value[key], bool) or value[key] < 0
         for key in integers
-    ) or value["sessionGeneration"] < 1:
+    ) or value["sessionGeneration"] < 1 or value["authorityGeneration"] < 1:
         raise ConnectedSiteV15Error("connected_site_request_generation")
+    if not isinstance(value["authorityPayloadDigest"], str) or not _DIGEST.fullmatch(
+        value["authorityPayloadDigest"]
+    ):
+        raise ConnectedSiteV15Error("connected_site_request_authority_digest")
     events = value["events"]
     if not isinstance(events, list) or len(events) > 256:
         raise ConnectedSiteV15Error("connected_site_request_events")
@@ -353,6 +400,8 @@ def _parse_reconcile_request(value: Mapping[str, Any]) -> dict[str, Any]:
         "siteId": site_id,
         "deviceId": device_id,
         "sessionGeneration": value["sessionGeneration"],
+        "authorityGeneration": value["authorityGeneration"],
+        "authorityPayloadDigest": value["authorityPayloadDigest"],
         "revocationGeneration": value["revocationGeneration"],
         "afterCursor": value["afterCursor"],
         "events": tuple(uploads),
@@ -365,15 +414,28 @@ def _identifier(value: Any) -> str:
     return value
 
 
-def _decision_json(decision: UploadDecision) -> dict[str, Any]:
-    return {
+def _acknowledgement_json(decision: UploadDecision) -> dict[str, Any]:
+    result = {
+        "protocolVersion": 1,
         "commandId": decision.command_id,
         "commandDigest": decision.command_digest,
         "state": decision.state,
         "canonicalVersion": decision.canonical_version,
-        "eventDigest": decision.event_digest,
-        "reason": decision.reason,
     }
+    if decision.event_digest is not None:
+        result["eventDigest"] = decision.event_digest
+    if decision.reason is not None:
+        result["reason"] = decision.reason
+    return result
+
+
+def _canonical_response(value: Mapping[str, Any]) -> Response:
+    body = canonical_json(value).encode("utf-8")
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"cache-control": "no-store"},
+    )
 
 
 def _unique_object(pairs: Sequence[tuple[str, Any]]) -> dict[str, Any]:

@@ -17,6 +17,7 @@ from supermega_runtime.connected_site_v15 import (
     UploadEvent,
     canonical_json,
     digest,
+    _utc_millis,
 )
 
 
@@ -55,20 +56,20 @@ def _authority(workspace: str, site: str, device_id: str, key: _Key) -> SiteAuth
         coordinator_binding_digest=digest({"coordinator": site}),
         session_generation=2,
     )
-    member = CurrentMember("actor-1", "cashier", ("counterSale",), 2)
+    member = CurrentMember("actor-1", "cashierCounter", ("counterSale",), 2)
     authority_unsigned = {
         "schemaId": "ConnectedSiteAuthorityPayloadV1",
         "protocolVersion": 1,
         "authorityEventId": f"authority-{workspace}-{site}",
-        "authoritySequence": 4,
-        "previousAuthorityDigest": digest({"previous": site}),
+        "authoritySequence": 1,
+        "previousAuthorityDigest": None,
         "workspaceId": workspace,
         "siteId": site,
         "issuedAtMillis": 1793530800000,
         "issuerKeyId": "issuer-1",
         "membershipSnapshot": {
             "revocationGeneration": 3,
-            "members": [{"actorId": "actor-1", "role": "cashier", "capabilities": ["counterSale"], "sessionGeneration": 2}],
+            "members": [{"actorId": "actor-1", "role": "cashierCounter", "capabilities": ["counterSale"], "sessionGeneration": 2}],
         },
         "configurationSnapshot": {
             "configurationVersion": 7,
@@ -80,7 +81,7 @@ def _authority(workspace: str, site: str, device_id: str, key: _Key) -> SiteAuth
     return SiteAuthority(
         workspace_id=workspace,
         site_id=site,
-        authority_generation=4,
+        authority_generation=1,
         configuration_generation=7,
         revocation_generation=3,
         authority_payload_digest=digest(authority_payload),
@@ -112,7 +113,7 @@ def _upload(
         "workspaceId": authority.workspace_id,
         "siteId": authority.site_id,
         "actorId": "actor-1",
-        "role": "cashier",
+        "role": "cashierCounter",
         "capabilities": ["counterSale"],
         "deviceId": device.device_id,
         "sessionGeneration": device.session_generation,
@@ -275,6 +276,24 @@ def _derived_upload(authority: SiteAuthority, *, key: _Key, source: UploadEvent)
 
 
 class ConnectedSiteV15Tests(unittest.TestCase):
+    def test_database_conflict_timestamp_is_canonical_utc(self) -> None:
+        local = datetime(
+            2026,
+            11,
+            1,
+            18,
+            30,
+            0,
+            123000,
+            tzinfo=timezone(timedelta(hours=6, minutes=30)),
+        )
+        self.assertEqual(_utc_millis(local), "2026-11-01T12:00:00.123Z")
+        with self.assertRaisesRegex(
+            ConnectedSiteV15Error,
+            "database_timestamp_timezone",
+        ):
+            _utc_millis(datetime(2026, 11, 1, 12))
+
     def setUp(self) -> None:
         self.a = _authority("workspace-a", "site-a", "device-a", DEVICE_A)
         self.b = _authority("workspace-b", "site-b", "device-b", DEVICE_B)

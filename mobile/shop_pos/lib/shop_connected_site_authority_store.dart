@@ -440,6 +440,77 @@ class ConnectedSiteAuthorityPayloadV1 {
   }
 }
 
+/// Reuses the retained-authority parser and the independently supplied
+/// signature verifier for cloud observations. This keeps one exact authority
+/// grammar across online refresh, restart recovery, and offline lease checks.
+class ShopConnectedSiteCloudAuthorityVerifier
+    implements ConnectedSiteCloudAuthorityVerifier {
+  const ShopConnectedSiteCloudAuthorityVerifier({required this.verifier});
+
+  final ConnectedSiteAuthorityPayloadVerifier verifier;
+
+  @override
+  Future<ConnectedSiteVerifiedAuthorityReceipt> parseAndVerify({
+    required String canonicalPayloadBytes,
+    required String signature,
+    required ConnectedSiteScope expectedScope,
+  }) async {
+    final payload = ConnectedSiteAuthorityPayloadV1.parse(
+      canonicalBytes: canonicalPayloadBytes,
+      signature: signature,
+    );
+    if (payload.workspaceId != expectedScope.workspaceId ||
+        payload.siteId != expectedScope.siteId) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_payload_scope_mismatch',
+      );
+    }
+    await verifier.verify(
+      canonicalPayloadBytes: payload.canonicalBytes,
+      signature: payload.signature,
+      issuerKeyId: payload.issuerKeyId,
+    );
+    return ConnectedSiteVerifiedAuthorityReceipt(
+      workspaceId: payload.workspaceId,
+      siteId: payload.siteId,
+      authoritySequence: payload.authoritySequence,
+      previousAuthorityDigest: payload.previousAuthorityDigest,
+      payloadDigest: payload.payloadDigest,
+      issuerKeyId: payload.issuerKeyId,
+      revocationGeneration: payload.revocationGeneration,
+      membershipDigest: payload.membershipDigest,
+      configurationVersion: payload.configurationVersion,
+      configurationDigest: payload.configurationDigest,
+    );
+  }
+}
+
+class ShopConnectedSiteVerifiedAuthorityReceiptStore
+    implements ConnectedSiteVerifiedAuthorityReceiptStore {
+  const ShopConnectedSiteVerifiedAuthorityReceiptStore({
+    required this.payloadStore,
+  });
+
+  final ShopConnectedSiteAuthorityPayloadStore payloadStore;
+
+  @override
+  Future<ConnectedSiteVerifiedAuthorityReceipt?> latest(
+    ConnectedSiteScope scope,
+  ) => payloadStore.latestVerifiedReceipt(scope);
+
+  @override
+  Future<void> retain(
+    ConnectedSiteScope scope, {
+    required ConnectedSiteVerifiedAuthorityReceipt receipt,
+    required String canonicalPayloadBytes,
+    required String signature,
+  }) => payloadStore.apply(
+    scope,
+    canonicalPayloadBytes: canonicalPayloadBytes,
+    signature: signature,
+  );
+}
+
 class ShopConnectedSiteAuthorityPayloadStore {
   ShopConnectedSiteAuthorityPayloadStore({
     required this.database,
@@ -454,6 +525,42 @@ class ShopConnectedSiteAuthorityPayloadStore {
   final ConnectedSiteAuthorityPayloadVerifier verifier;
   final bool runtimeEnabled;
   bool _retainedPayloadsVerified = false;
+
+  Future<ConnectedSiteVerifiedAuthorityReceipt?> latestVerifiedReceipt(
+    ConnectedSiteScope scope,
+  ) async {
+    if (!runtimeEnabled) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_payload_disabled',
+      );
+    }
+    await reverifyRetainedPayloads();
+    final row = await database
+        .customSelect(
+          'SELECT payload_bytes, signature FROM shop_site_authority_payloads '
+          'WHERE tenant_id = ? AND site_id = ? '
+          'ORDER BY authority_sequence DESC LIMIT 1',
+          variables: [Variable(scope.workspaceId), Variable(scope.siteId)],
+        )
+        .getSingleOrNull();
+    if (row == null) return null;
+    final payload = ConnectedSiteAuthorityPayloadV1.parse(
+      canonicalBytes: row.read<String>('payload_bytes'),
+      signature: row.read<String>('signature'),
+    );
+    return ConnectedSiteVerifiedAuthorityReceipt(
+      workspaceId: payload.workspaceId,
+      siteId: payload.siteId,
+      authoritySequence: payload.authoritySequence,
+      previousAuthorityDigest: payload.previousAuthorityDigest,
+      payloadDigest: payload.payloadDigest,
+      issuerKeyId: payload.issuerKeyId,
+      revocationGeneration: payload.revocationGeneration,
+      membershipDigest: payload.membershipDigest,
+      configurationVersion: payload.configurationVersion,
+      configurationDigest: payload.configurationDigest,
+    );
+  }
 
   /// Re-authenticates every retained payload before restored authority is used.
   /// Backup structure validation deliberately cannot substitute for this.

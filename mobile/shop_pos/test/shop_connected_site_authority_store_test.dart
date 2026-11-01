@@ -615,6 +615,83 @@ void main() {
     }
   });
 
+  test('cloud verifier and durable receipt adapter survive restart and reject gaps', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'shop-cloud-authority-receipt-',
+    );
+    final file = File('${root.path}/shop.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      await _seedDeviceAndRevocation(database);
+      var payloadStore = ShopConnectedSiteAuthorityPayloadStore(
+        database: database,
+        nowMillis: () => _now,
+        verifier: const _AllowAuthorityVerifier(),
+        runtimeEnabled: true,
+      );
+      final verifier = ShopConnectedSiteCloudAuthorityVerifier(
+        verifier: const _AllowAuthorityVerifier(),
+      );
+      final receiptStore = ShopConnectedSiteVerifiedAuthorityReceiptStore(
+        payloadStore: payloadStore,
+      );
+      final firstBytes = _authorityPayload();
+      final first = await verifier.parseAndVerify(
+        canonicalPayloadBytes: firstBytes,
+        signature: _signature,
+        expectedScope: _scope(),
+      );
+      await receiptStore.retain(
+        _scope(),
+        receipt: first,
+        canonicalPayloadBytes: firstBytes,
+        signature: _signature,
+      );
+      await database.close();
+
+      database = ShopDatabase(NativeDatabase(file));
+      payloadStore = ShopConnectedSiteAuthorityPayloadStore(
+        database: database,
+        nowMillis: () => _now + 2,
+        verifier: const _AllowAuthorityVerifier(),
+        runtimeEnabled: true,
+      );
+      final restarted = ShopConnectedSiteVerifiedAuthorityReceiptStore(
+        payloadStore: payloadStore,
+      );
+      final retained = await restarted.latest(_scope());
+      expect(retained?.authoritySequence, 1);
+      expect(retained?.payloadDigest, first.payloadDigest);
+
+      final gapBytes = _authorityPayload(
+        sequence: 3,
+        previousDigest: first.payloadDigest,
+        issuedAtMillis: _now + 1,
+      );
+      final gap = await verifier.parseAndVerify(
+        canonicalPayloadBytes: gapBytes,
+        signature: _signature,
+        expectedScope: _scope(),
+      );
+      await expectLater(
+        restarted.retain(
+          _scope(),
+          receipt: gap,
+          canonicalPayloadBytes: gapBytes,
+          signature: _signature,
+        ),
+        _throwsCode('connected_site_authority_payload_sequence'),
+      );
+      expect(
+        (await restarted.latest(_scope()))?.payloadDigest,
+        first.payloadDigest,
+      );
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
   test('v30 authority scopes isolate two tenants', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {

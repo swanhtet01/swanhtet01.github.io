@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
+import 'package:supermega_shop/shop_staff_authorization.dart';
 
 void main() {
   final now = DateTime.utc(2026, 10, 31, 12);
@@ -63,6 +68,8 @@ void main() {
       fixture.transport.handler = (request) async => ConnectedSiteCloudResponse(
         scope: fixture.scopeB,
         deviceId: fixture.scopeB.deviceId,
+        authorityGeneration: request.authorityGeneration,
+        authorityPayloadDigest: request.authorityPayloadDigest,
         afterCursor: request.afterCursor,
         nextCursor: request.afterCursor + request.events.length,
         acknowledgements: [
@@ -467,6 +474,337 @@ void main() {
       },
     );
   });
+
+  group('connected-site cloud wire', () {
+    final scope = ConnectedSiteScope(
+      workspaceId: 'tenant-a',
+      siteId: 'site-a',
+      deviceId: 'device-a',
+    );
+
+    test('cross-runtime golden drives accepted upload byte-exactly', () async {
+      final text = File('test/fixtures/connected_site_cloud_wire_v1.json')
+          .readAsStringSync()
+          .trim();
+      final golden = jsonDecode(text) as Map<String, dynamic>;
+      expect(canonicalConnectedSiteJson(golden), text);
+      expect(golden['contract'], 'supermega.connected-site-wire-golden.v1');
+      final authority = golden['authorityResponse'] as Map<String, dynamic>;
+      final payload = ConnectedSiteAuthorityPayloadV1.parse(
+        canonicalBytes: authority['authorityPayloadBytes'] as String,
+        signature: authority['authoritySignature'] as String,
+      );
+      expect(payload.workspaceId, 'workspace-a');
+      expect(payload.members.single.role, ShopStaffRole.cashierCounter);
+      expect(payload.payloadDigest, authority['authorityPayloadDigest']);
+      final request = golden['reconcileRequest'] as Map<String, dynamic>;
+      final response = golden['reconcileResponse'] as Map<String, dynamic>;
+      expect(request['authorityPayloadDigest'], payload.payloadDigest);
+      expect(response['authorityPayloadDigest'], payload.payloadDigest);
+      final eventJson = (request['events'] as List).single as Map;
+      final pending = ConnectedSitePendingEvent(
+        cursor: eventJson['cursor'] as int,
+        commandId: eventJson['commandId'] as String,
+        commandDigest: eventJson['commandDigest'] as String,
+        event: Map<String, Object?>.from(eventJson['event'] as Map),
+        eventDigest: eventJson['eventDigest'] as String,
+        cloudProof: ConnectedSiteCloudProofV1.fromJson(eventJson['cloudProof']),
+      );
+      final executor = _CloudExecutor()
+        ..handler =
+            ({
+              required uri,
+              required method,
+              required headers,
+              required body,
+              required maxResponseBytes,
+            }) async {
+              if (method == 'GET') {
+                return _cloudHttpJson(authority, effectiveUri: uri);
+              }
+              expect(utf8.decode(body), canonicalConnectedSiteJson(request));
+              return _cloudHttpJson(response, effectiveUri: uri);
+            };
+      final client = ConnectedSiteCloudWireClient(
+        baseUri: Uri.parse('https://cloud.example.invalid'),
+        executor: executor,
+        authorityVerifier: ShopConnectedSiteCloudAuthorityVerifier(
+          verifier: _AcceptingSignatureVerifier(),
+        ),
+        authorityReceiptStore: _CloudAuthorityReceiptStore(),
+        runtimeEnabled: true,
+        now: () => now,
+      );
+      final refreshed = await client.refresh(
+        ConnectedSiteScope(
+          workspaceId: request['workspaceId'] as String,
+          siteId: request['siteId'] as String,
+          deviceId: request['deviceId'] as String,
+        ),
+      );
+      final parsed = await client.reconcile(
+        ConnectedSiteUploadRequest(
+          scope: refreshed.scope,
+          sessionGeneration: request['sessionGeneration'] as int,
+          authorityGeneration: request['authorityGeneration'] as int,
+          authorityPayloadDigest: request['authorityPayloadDigest'] as String,
+          revocationGeneration: request['revocationGeneration'] as int,
+          afterCursor: request['afterCursor'] as int,
+          events: [pending],
+        ),
+      );
+      expect(parsed.nextCursor, 1);
+      expect(parsed.acknowledgements.single.commandId, 'command-1');
+      expect(
+        parsed.acknowledgements.single.state,
+        SiteCommandAckState.accepted,
+      );
+    });
+
+    test('remains default-off before authenticated execution', () async {
+      final executor = _CloudExecutor();
+      final client = ConnectedSiteCloudWireClient(
+        baseUri: Uri.parse('https://cloud.example.invalid'),
+        executor: executor,
+        authorityVerifier: _CloudAuthorityVerifier(),
+        authorityReceiptStore: _CloudAuthorityReceiptStore(),
+      );
+
+      await expectLater(
+        client.refresh(scope),
+        throwsA(_reconciliationCode('connected_site_cloud_wire_disabled')),
+      );
+      expect(executor.calls, 0);
+    });
+
+    test('requires a retained verified authority before upload', () async {
+      final executor = _CloudExecutor();
+      final client = ConnectedSiteCloudWireClient(
+        baseUri: Uri.parse('https://cloud.example.invalid'),
+        executor: executor,
+        authorityVerifier: _CloudAuthorityVerifier(),
+        authorityReceiptStore: _CloudAuthorityReceiptStore(),
+        runtimeEnabled: true,
+      );
+      await expectLater(
+        client.reconcile(
+          ConnectedSiteUploadRequest(
+            scope: scope,
+            sessionGeneration: 1,
+            authorityGeneration: 1,
+            authorityPayloadDigest: 'a' * 64,
+            revocationGeneration: 0,
+            afterCursor: 0,
+            events: const [],
+          ),
+        ),
+        throwsA(
+          _reconciliationCode(
+            'connected_site_cloud_verified_authority_required',
+          ),
+        ),
+      );
+      expect(executor.calls, 0);
+    });
+
+    test(
+      'verifies signed authority before canonical reconciliation upload',
+      () async {
+        final verifier = _CloudAuthorityVerifier();
+        final event = _event(scope: scope, cursor: 1, sequence: 1);
+        late final Map<String, Object?> authorityResponse;
+        final executor = _CloudExecutor()
+          ..handler =
+              ({
+                required uri,
+                required method,
+                required headers,
+                required body,
+                required maxResponseBytes,
+              }) async {
+                expect(maxResponseBytes, connectedSiteCloudMaximumBodyBytes);
+                expect(headers, isNot(contains('authorization')));
+                expect(headers, isNot(contains('cookie')));
+                if (method == 'GET') {
+                  authorityResponse = _cloudAuthorityResponse(scope);
+                  return _cloudHttpJson(authorityResponse, effectiveUri: uri);
+                }
+                expect(uri.path, '/api/connected-site/v1/reconcile');
+                final request = jsonDecode(utf8.decode(body)) as Map;
+                expect(canonicalConnectedSiteJson(request), utf8.decode(body));
+                expect(request['authorityGeneration'], 4);
+                expect(request['events'], hasLength(1));
+                expect(
+                  (request['events'] as List).single,
+                  isNot(contains('authorization')),
+                );
+                final response = <String, Object?>{
+                  'contract': connectedSiteCloudReconcileResponseContract,
+                  'protocolVersion': connectedSiteProtocolVersion,
+                  'workspaceId': scope.workspaceId,
+                  'siteId': scope.siteId,
+                  'deviceId': scope.deviceId,
+                  'authorityGeneration': 4,
+                  'authorityPayloadDigest':
+                      authorityResponse['authorityPayloadDigest'],
+                  'afterCursor': 0,
+                  'nextCursor': 1,
+                  'acknowledgements': [
+                    SiteCommandAckV1(
+                      commandId: event.commandId,
+                      commandDigest: event.commandDigest,
+                      state: SiteCommandAckState.accepted,
+                      canonicalVersion: 1,
+                      eventDigest: event.eventDigest,
+                    ).toJson(),
+                  ],
+                  'conflicts': <Object?>[],
+                  'authorityDelta': <String, Object?>{
+                    'workspaceId': scope.workspaceId,
+                    'siteId': scope.siteId,
+                    'revocationGeneration': 3,
+                    'membershipDigest': connectedSiteSha256({
+                      'revocationGeneration': 3,
+                      'members': <Object?>[
+                        <String, Object?>{
+                          'actorId': 'actor-test',
+                          'role': 'cashierCounter',
+                          'capabilities': <Object?>['counterSale'],
+                          'sessionGeneration': 3,
+                        },
+                      ],
+                    }),
+                    'configurationVersion': 6,
+                    'configurationDigest': connectedSiteSha256({
+                      'configurationVersion': 6,
+                      'businessProfile': {
+                        'schemaId': 'business-profile-v1',
+                        'templateId': 'retail',
+                        'templateVersion': 1,
+                      },
+                      'catalogReference': {
+                        'catalogVersion': 1,
+                        'catalogDigest': 'c' * 64,
+                      },
+                    }),
+                  },
+                };
+                return _cloudHttpJson(response, effectiveUri: uri);
+              };
+        final client = ConnectedSiteCloudWireClient(
+          baseUri: Uri.parse('https://cloud.example.invalid'),
+          executor: executor,
+          authorityVerifier: verifier,
+          authorityReceiptStore: _CloudAuthorityReceiptStore(),
+          runtimeEnabled: true,
+          now: () => now,
+        );
+
+        final authority = await client.refresh(scope);
+        expect(authority.authorityGeneration, 4);
+        expect(authority.revocationGeneration, 3);
+        expect(authority.observedAt, now);
+        expect(authority.expiresAt, now.add(const Duration(minutes: 5)));
+        expect(verifier.calls, 1);
+        final response = await client.reconcile(
+          ConnectedSiteUploadRequest(
+            scope: scope,
+            sessionGeneration: authority.sessionGeneration,
+            authorityGeneration: authority.authorityGeneration,
+            authorityPayloadDigest: authority.authorityPayloadDigest,
+            revocationGeneration: authority.revocationGeneration,
+            afterCursor: 0,
+            events: [event],
+          ),
+        );
+
+        expect(response.acknowledgements.single.commandId, event.commandId);
+        expect(response.conflicts, isEmpty);
+        expect(response.authorityDelta.revocationGeneration, 3);
+        expect(executor.calls, 2);
+      },
+    );
+
+    test(
+      'rejects noncanonical, oversized and authority-substituted replies',
+      () async {
+        final cases = <ConnectedSiteAuthenticatedHttpResponse>[
+          ConnectedSiteAuthenticatedHttpResponse(
+            statusCode: 200,
+            contentType: 'application/json',
+            body: <int>[123, 34, 97, 34, 58, 49, 44, 34, 97, 34, 58, 50, 125],
+            effectiveUri: _cloudAuthorityUri,
+          ),
+          ConnectedSiteAuthenticatedHttpResponse(
+            statusCode: 200,
+            contentType: 'application/json',
+            body: List<int>.filled(2048, 120),
+            effectiveUri: _cloudAuthorityUri,
+          ),
+          _cloudHttpJson(
+            _cloudAuthorityResponse(scope, workspaceId: 'tenant-b'),
+            effectiveUri: _cloudAuthorityUri,
+          ),
+          _cloudHttpJson(
+            _cloudAuthorityResponse(scope),
+            effectiveUri: Uri.parse(
+              'https://redirect.example.invalid/authority',
+            ),
+          ),
+        ];
+        for (final response in cases) {
+          final executor = _CloudExecutor()..response = response;
+          final client = ConnectedSiteCloudWireClient(
+            baseUri: Uri.parse('https://cloud.example.invalid'),
+            executor: executor,
+            authorityVerifier: _CloudAuthorityVerifier(),
+            authorityReceiptStore: _CloudAuthorityReceiptStore(),
+            runtimeEnabled: true,
+            maximumBodyBytes: 1024,
+            now: () => now,
+          );
+          await expectLater(
+            client.refresh(scope),
+            throwsA(isA<ConnectedSiteReconciliationException>()),
+          );
+        }
+      },
+    );
+
+    test(
+      'maps authentication and server failures without trusting bodies',
+      () async {
+        for (final entry in <int, String>{
+          401: 'connected_site_cloud_authority_rejected',
+          403: 'connected_site_cloud_authority_rejected',
+          409: 'connected_site_cloud_conflict',
+          413: 'connected_site_cloud_request_too_large',
+          422: 'connected_site_cloud_request_invalid',
+          429: 'connected_site_cloud_rate_limited',
+          500: 'connected_site_cloud_unavailable',
+        }.entries) {
+          final executor = _CloudExecutor()
+            ..response = ConnectedSiteAuthenticatedHttpResponse(
+              statusCode: entry.key,
+              contentType: 'text/plain',
+              body: utf8.encode('untrusted server body'),
+              effectiveUri: _cloudAuthorityUri,
+            );
+          final client = ConnectedSiteCloudWireClient(
+            baseUri: Uri.parse('https://cloud.example.invalid'),
+            executor: executor,
+            authorityVerifier: _CloudAuthorityVerifier(),
+            authorityReceiptStore: _CloudAuthorityReceiptStore(),
+            runtimeEnabled: true,
+          );
+          await expectLater(
+            client.refresh(scope),
+            throwsA(_reconciliationCode(entry.value)),
+          );
+        }
+      },
+    );
+  });
 }
 
 Matcher _reconciliationCode(String code) =>
@@ -535,6 +873,8 @@ class _Fixture {
   }) => ConnectedSiteCloudResponse(
     scope: request.scope,
     deviceId: request.scope.deviceId,
+    authorityGeneration: request.authorityGeneration,
+    authorityPayloadDigest: request.authorityPayloadDigest,
     afterCursor: request.afterCursor,
     nextCursor: request.afterCursor + request.events.length,
     acknowledgements: acknowledgements,
@@ -559,6 +899,8 @@ class _Authority implements ConnectedSiteAuthorityProvider {
       scope: this.scope,
       active: active,
       sessionGeneration: 3,
+      authorityGeneration: 2,
+      authorityPayloadDigest: connectedSiteSha256({'authority': 'current'}),
       revocationGeneration: revocationGeneration,
       observedAt: now.subtract(const Duration(minutes: 1)),
       expiresAt: now.add(const Duration(days: 7)),
@@ -791,3 +1133,185 @@ SiteConflictV1 _conflict(
   createdAt: '2026-10-31T12:00:01.000Z',
   state: SiteConflictState.quarantined,
 );
+
+typedef _CloudHandler =
+    Future<ConnectedSiteAuthenticatedHttpResponse> Function({
+      required Uri uri,
+      required String method,
+      required Map<String, String> headers,
+      required List<int> body,
+      required int maxResponseBytes,
+    });
+
+class _CloudExecutor implements ConnectedSiteAuthenticatedRequestExecutor {
+  _CloudHandler? handler;
+  ConnectedSiteAuthenticatedHttpResponse? response;
+  int calls = 0;
+
+  @override
+  Future<ConnectedSiteAuthenticatedHttpResponse> execute({
+    required Uri uri,
+    required String method,
+    required Map<String, String> headers,
+    required List<int> body,
+    required int maxResponseBytes,
+  }) async {
+    calls += 1;
+    final active = handler;
+    if (active != null) {
+      return active(
+        uri: uri,
+        method: method,
+        headers: headers,
+        body: body,
+        maxResponseBytes: maxResponseBytes,
+      );
+    }
+    final fixed = response;
+    if (fixed != null) return fixed;
+    throw StateError('cloud executor response missing');
+  }
+}
+
+class _CloudAuthorityVerifier extends ShopConnectedSiteCloudAuthorityVerifier {
+  factory _CloudAuthorityVerifier() {
+    final verifier = _SignatureVerifier();
+    return _CloudAuthorityVerifier._(verifier);
+  }
+
+  _CloudAuthorityVerifier._(this.signatureVerifier)
+    : super(verifier: signatureVerifier);
+
+  final _SignatureVerifier signatureVerifier;
+  int get calls => signatureVerifier.calls;
+}
+
+class _CloudAuthorityReceiptStore
+    implements ConnectedSiteVerifiedAuthorityReceiptStore {
+  ConnectedSiteVerifiedAuthorityReceipt? receipt;
+
+  @override
+  Future<ConnectedSiteVerifiedAuthorityReceipt?> latest(
+    ConnectedSiteScope scope,
+  ) async => receipt;
+
+  @override
+  Future<void> retain(
+    ConnectedSiteScope scope, {
+    required ConnectedSiteVerifiedAuthorityReceipt receipt,
+    required String canonicalPayloadBytes,
+    required String signature,
+  }) async {
+    this.receipt = receipt;
+  }
+}
+
+class _SignatureVerifier implements ConnectedSiteAuthorityPayloadVerifier {
+  int calls = 0;
+
+  @override
+  Future<void> verify({
+    required String canonicalPayloadBytes,
+    required String signature,
+    required String issuerKeyId,
+  }) async {
+    calls += 1;
+    expect(
+      canonicalConnectedSiteJson(jsonDecode(canonicalPayloadBytes)),
+      canonicalPayloadBytes,
+    );
+    expect(signature, 's' * 64);
+    expect(issuerKeyId, 'authority-key-1');
+  }
+}
+
+class _AcceptingSignatureVerifier
+    implements ConnectedSiteAuthorityPayloadVerifier {
+  @override
+  Future<void> verify({
+    required String canonicalPayloadBytes,
+    required String signature,
+    required String issuerKeyId,
+  }) async {}
+}
+
+final _cloudAuthorityUri = Uri(
+  scheme: 'https',
+  host: 'cloud.example.invalid',
+  path: '/api/connected-site/v1/workspaces/tenant-a/sites/site-a/authority',
+);
+
+ConnectedSiteAuthenticatedHttpResponse _cloudHttpJson(
+  Object value, {
+  Uri? effectiveUri,
+}) {
+  final body = utf8.encode(canonicalConnectedSiteJson(value));
+  return ConnectedSiteAuthenticatedHttpResponse(
+    statusCode: 200,
+    contentType: 'application/json',
+    body: body,
+    effectiveUri: effectiveUri ?? _cloudAuthorityUri,
+  );
+}
+
+Map<String, Object?> _cloudAuthorityResponse(
+  ConnectedSiteScope scope, {
+  String? workspaceId,
+}) {
+  final membership = <String, Object?>{
+    'revocationGeneration': 3,
+    'members': <Object?>[
+      <String, Object?>{
+        'actorId': 'actor-test',
+        'role': 'cashierCounter',
+        'capabilities': <Object?>['counterSale'],
+        'sessionGeneration': 3,
+      },
+    ],
+  };
+  final configuration = <String, Object?>{
+    'configurationVersion': 6,
+    'businessProfile': <String, Object?>{
+      'schemaId': 'business-profile-v1',
+      'templateId': 'retail',
+      'templateVersion': 1,
+    },
+    'catalogReference': <String, Object?>{
+      'catalogVersion': 1,
+      'catalogDigest': 'c' * 64,
+    },
+  };
+  final unsigned = <String, Object?>{
+    'schemaId': 'ConnectedSiteAuthorityPayloadV1',
+    'protocolVersion': connectedSiteProtocolVersion,
+    'authorityEventId': 'authority-event-4',
+    'authoritySequence': 4,
+    'previousAuthorityDigest': 'd' * 64,
+    'workspaceId': scope.workspaceId,
+    'siteId': scope.siteId,
+    'issuedAtMillis': DateTime.utc(2026, 10, 31, 11).millisecondsSinceEpoch,
+    'issuerKeyId': 'authority-key-1',
+    'membershipSnapshot': membership,
+    'configurationSnapshot': configuration,
+  };
+  final payload = <String, Object?>{
+    ...unsigned,
+    'payloadDigest': connectedSiteSha256(unsigned),
+  };
+  return <String, Object?>{
+    'contract': connectedSiteCloudAuthorityResponseContract,
+    'protocolVersion': connectedSiteProtocolVersion,
+    'workspaceId': workspaceId ?? scope.workspaceId,
+    'siteId': scope.siteId,
+    'deviceId': scope.deviceId,
+    'active': true,
+    'sessionGeneration': 2,
+    'authorityGeneration': 4,
+    'configurationGeneration': 6,
+    'revocationGeneration': 3,
+    'authorityPayloadBytes': canonicalConnectedSiteJson(payload),
+    'authorityPayloadDigest': connectedSiteSha256(payload),
+    'authoritySignature': 's' * 64,
+    'issuerKeyId': 'authority-key-1',
+  };
+}
