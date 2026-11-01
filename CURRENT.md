@@ -7,6 +7,45 @@
 
 ## 2026-11-01 exact-head release checkpoint
 
+### Private connected-cloud reconciliation successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `157f94c84e143aa95591c1be17447001c8f888ef`, repository tree
+  `906e8b0108d8fd213f89ee291eb9445ec33e4b90`, native tree
+  `b9b977fa2a309a43d02bd527a2bf73ddbbe2aca4`, native `lib/` tree
+  `dc0a94fa9c6e0e2778fd846e7d8b3ee3d53ed429`, and server runtime tree
+  `fcc85008422d7fdeb977a41d4856dda8b2e74b06`. Patch SHA-256 is
+  `3ecef31fa46a4f0114eb4cbd532895d1d2cf0a0f3d132fe667157e62e92fdc95`.
+  This private successor has not been pushed or published.
+- The native client now requires an injected authenticated executor and a
+  durably retained, independently signature-verified authority receipt before
+  upload. It reuses the exact offline/restart authority parser, rejects
+  redirects and oversized/non-canonical responses, binds authority generation
+  and the complete signed membership/configuration delta, and cannot advance a
+  cursor on an incomplete disposition. The server returns retained conflict
+  facts rather than reconstructing them from client event time; PostgreSQL
+  timestamps normalize to canonical UTC.
+- Cross-runtime evidence is byte-bound through one non-empty Python/Dart
+  golden containing a real signed upload and accepted acknowledgement.
+  Python runtime/v15 tests **20/20 PASS**; native authority/reconciliation
+  focused tests **37/37 PASS**; broader reconciliation, durable store,
+  authority, restart/restore and reservation persistence shard **64/64 PASS**
+  in 1:40; targeted analyzer **PASS**; `git diff --check` **PASS**. The first
+  run without the pinned LLVM path failed during toolchain setup and is not
+  counted as product evidence. Independent follow-up review **ACCEPT** after
+  two rounds; its first round held the change for durable bootstrap, real-store
+  integration, UTC conflict time, non-empty golden coverage and lockfile scope.
+- **BLOCKED / NOT RUN:** the router and client remain unmounted/default-off.
+  No production authenticated HTTP executor, pinned issuer/key custody,
+  Android Keystore/Windows DPAPI binding, real PostgreSQL rehearsal, installed
+  device, hardware, merchant or production acceptance exists. Authority-chain
+  bootstrap is proven from sequence 1; a later-joining device after authority
+  advances needs a separately reviewed authenticated chain/checkpoint protocol
+  and must fail closed until then.
+- Capacity is not build-ready in this worktree: `/dev/shm` had 5,316,472,832
+  bytes free, while durable `/workspace` had only 287,547,392 bytes free at
+  this checkpoint. No build or cleanup was attempted.
+
 - Draft PR [#752](https://github.com/swanhtet01/swanhtet01.github.io/pull/752)
   is open, unmerged and published at exact head
   `584b713554120ae4833ddd0d6517b759854f469d`, tree
