@@ -5,6 +5,68 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-01 exact-head release checkpoint
+
+- Draft PR [#752](https://github.com/swanhtet01/swanhtet01.github.io/pull/752)
+  is open, unmerged and published at exact head
+  `584b713554120ae4833ddd0d6517b759854f469d`, tree
+  `7d11d6690f85d02e467de3e16d6ac1b445da41e3`. Its guarded non-force
+  publication and only the resulting automatic CI were authorized; no merge,
+  deployment, signing, manual dispatch or production change occurred.
+- Exact-head Native POS run `41354762889` is **PASS**. Android, Windows,
+  iOS/iPad and all three isolated synthetic QA jobs passed. The full Android
+  job completed the seven serial shards with all 52 Flutter test files, real
+  interruption checks, analysis, synthetic gallery capture, unsigned-release
+  rejection and a debug APK build. Recorded shard durations were 2:44, 2:09,
+  2:40, 2:43, 2:00, 3:22 and 3:14. This is hosted build evidence, not
+  installed-device, production-signing or hardware evidence.
+- Exact-head Kernel run `41354762885` is **PASS**. App run `41354758410`
+  passed checks 1--637/668 and remains **FAIL / BLOCKED** only at canonical
+  `hq:verify` step 1/37 with `database_rehearsal_evidence_stale` and
+  `secretValuesExposed:false`. Dependency run `41354762868` remains **FAIL /
+  BLOCKED** only for the app/kernel minimatch advisory; platform, pip and
+  added-line credential checks passed. No compatible supported upstream
+  dependency set is currently available, and the rejected blanket v11
+  override or forced downgrade must not be used.
+- GitGuardian remains **FAIL / BLOCKED** with two distinct findings across the
+  PR history. Neither finding is resolved by this ledger and their contents
+  must not be reproduced here.
+- Local test-only successor
+  `beb03ceb149f7e961d1d78b148b8da425e553726`, tree
+  `dc2329e0f6db22f20522c249d8b3bd12ae97d677`, adds a fail-closed historical
+  fixture inventory guard without changing production migration code. It
+  rejects retained post-v15 tables/indexes/triggers and all views before a
+  fixture claims an older version, binds the registry to schema version 35,
+  and protects the repaired v15/v5 fixtures. Adversarial guard checks are
+  **2/2 PASS**, both historical regressions pass, the complete affected files
+  are **82/82 PASS**, diff checks pass and independent review **ACCEPTS** the
+  bounded change. It is unpublished.
+- A separate local registration-only candidate based directly on default
+  branch `5479c5d1ece3d697cf5c505e7feb431dc88baf75` is
+  `6e3d1511a9711e752a8b5529164d8ecb54a4bf3f`, tree
+  `1f50bf314ad8ac2d0684d8ee94d0754e09cc9276`. Its sole file is manual-only
+  `.github/workflows/postgres17-windows-evidence.yml`, exact blob
+  `121dbe0526e354a88e198203d0be65206e47a5d9`. Independent security review
+  **ACCEPTS** registration scope: `contents: read`, full-SHA-pinned actions,
+  no secrets and six explicit JSON output paths retained for seven days.
+  Registration and merge execute nothing. Default branch lacks the referenced
+  scripts and tests, so this registration-only candidate is not successfully
+  runnable on `main`; any later dispatch must select and reverify an exact
+  reviewed ref containing the workflow and every dependency. Publication,
+  merge and every later probe/capture/rehearsal dispatch remain separate
+  decisions. No workflow or PostgreSQL process has run from this candidate,
+  and path allowlisting alone is not proof that future generated contents are
+  sanitized.
+- Release remains **BLOCKED** on a genuine authenticated PostgreSQL 17 Windows
+  rehearsal and fresh receipt, a compatible dependency-security resolution,
+  both GitGuardian findings, production signing, exact installed
+  restart/restore, named hardware and Burmese paper evidence, merchant
+  acceptance, and the joint go/no-go. Connected operation remains default-off.
+
+All older checkpoint sections below are retained as chronology. Where an
+older identity or status conflicts with this section, this exact-head section
+is authoritative; evidence must never be combined across source trees.
+
 ## 2026-11-01 native full-suite successor checkpoint
 
 - Local implementation `b696cff4da4c30372a1b0435242987bfb10d6f29`, tree
