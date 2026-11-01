@@ -1991,7 +1991,7 @@ void main() {
 
       final first = await database.readRecentSales(limit: 31);
       final second = await database.readRecentSales(limit: 31, offset: 30);
-      expect(first, hasLength(31));
+      expect(first, hasLength(32));
       expect(second, hasLength(5));
       expect(
         first

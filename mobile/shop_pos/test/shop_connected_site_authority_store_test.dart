@@ -833,7 +833,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 31);
+      expect(database.schemaVersion, 32);
       expect(await _count(database, 'shop_site_authority_payloads'), 0);
       expect(await _count(database, 'shop_site_authority_members'), 0);
       expect(await _count(database, 'shop_site_configuration_snapshots'), 0);

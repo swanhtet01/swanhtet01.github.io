@@ -665,16 +665,54 @@ class ShopConnectedSiteDatabaseReplicationReader
           variables: [Variable<String>(workspaceId), Variable<String>(siteId)],
         )
         .getSingle();
-    final conflictRow = await database
+    final cafeRows = await database
         .customSelect(
-          'SELECT COUNT(*) AS total FROM shop_site_conflicts conflict '
-          'JOIN shop_site_commands command ON command.command_id = conflict.command_id '
-          "WHERE command.tenant_id = ? AND command.site_id = ? AND conflict.state = 'pending'",
+          "SELECT id, state, state_revision, ticket_version, ticket_json FROM shop_cafe_orders WHERE state != 'completed' ORDER BY id",
+        )
+        .get();
+    final kitchenRows = await database
+        .customSelect(
+          'SELECT payload_json FROM shop_sync_outbox WHERE event_type = ? ORDER BY created_at_millis, operation_id',
+          variables: [const Variable<String>(cafeKitchenStatusEventType)],
+        )
+        .get();
+    final kitchenByOrder = <String, List<Object?>>{};
+    for (final row in kitchenRows) {
+      final payload = jsonDecode(row.read<String>('payload_json'));
+      if (payload is! Map || payload['orderId'] is! String) {
+        throw StateError('Connected café kitchen evidence is invalid.');
+      }
+      kitchenByOrder
+          .putIfAbsent(payload['orderId']! as String, () => <Object?>[])
+          .add(Map<String, Object?>.from(payload));
+    }
+    final reservationRows = await database
+        .customSelect(
+          'SELECT header.reservation_id, header.reservation_json, '
+          "COALESCE(transition.to_state, 'held') AS state "
+          'FROM shop_connected_stock_reservation_headers header '
+          'LEFT JOIN shop_connected_stock_reservation_transitions transition '
+          'ON transition.reservation_id = header.reservation_id '
+          'WHERE header.tenant_id = ? AND header.site_id = ? AND header.legacy_source = 0 '
+          'ORDER BY header.reservation_id',
           variables: [Variable<String>(workspaceId), Variable<String>(siteId)],
         )
-        .getSingle();
+        .get();
+    final conflictRows = await database
+        .customSelect(
+          'SELECT conflict.conflict_id, conflict.reason_code, conflict.state, '
+          'command.aggregate_id, COALESCE(aggregate.version, command.expected_version) AS actual_version '
+          'FROM shop_site_conflicts conflict JOIN shop_site_commands command '
+          'ON command.command_id = conflict.command_id '
+          'LEFT JOIN shop_site_aggregate_versions aggregate ON aggregate.tenant_id = command.tenant_id '
+          'AND aggregate.site_id = command.site_id AND aggregate.aggregate_type = command.aggregate_type '
+          'AND aggregate.aggregate_id = command.aggregate_id '
+          'WHERE command.tenant_id = ? AND command.site_id = ? ORDER BY conflict.conflict_id',
+          variables: [Variable<String>(workspaceId), Variable<String>(siteId)],
+        )
+        .get();
     final projections = <String, Object?>{
-      'schema': 'supermega.shop.connected-site-projections.v1',
+      'schema': 'supermega.shop.connected-site-projections.v2',
       'aggregates': [
         for (final row in aggregateRows)
           {
@@ -684,21 +722,52 @@ class ShopConnectedSiteDatabaseReplicationReader
             'lastSiteSequence': row.read<int>('last_site_sequence'),
           },
       ],
-      'pendingConflictCount': conflictRow.read<int>('total'),
+      'cafeOrders': [
+        for (final row in cafeRows)
+          {
+            'orderId': row.read<String>('id'),
+            'state': row.read<String>('state'),
+            'stateRevision': row.read<int>('state_revision'),
+            'ticketVersion': row.read<int>('ticket_version'),
+            'ticket': jsonDecode(row.read<String>('ticket_json')),
+            'kitchenStateEvents':
+                kitchenByOrder[row.read<String>('id')] ?? const <Object?>[],
+          },
+      ],
+      'stockReservations': [
+        for (final row in reservationRows)
+          {
+            ...(jsonDecode(row.read<String>('reservation_json')) as Map)
+                .cast<String, Object?>(),
+            'reservationId': row.read<String>('reservation_id'),
+            'state': row.read<String>('state'),
+            'stateVersion': row.read<String>('state') == 'held' ? 1 : 2,
+          },
+      ],
+      'conflicts': [
+        for (final row in conflictRows)
+          {
+            'conflictId': row.read<String>('conflict_id'),
+            'reasonCode': row.read<String>('reason_code'),
+            'state': row.read<String>('state'),
+            'aggregateId': row.read<String>('aggregate_id'),
+            'actualVersion': row.read<int>('actual_version'),
+          },
+      ],
     };
     final cursor = cursorRow.read<int>('cursor');
     final unsigned = <String, Object?>{
       'protocolVersion': connectedSiteProtocolVersion,
       'workspaceId': workspaceId,
       'siteId': siteId,
-      'version': 1,
+      'version': 2,
       'continuationCursor': cursor,
       'projections': projections,
     };
     return SiteSnapshotV1(
       workspaceId: workspaceId,
       siteId: siteId,
-      version: 1,
+      version: 2,
       continuationCursor: cursor,
       projections: projections,
       checkpointDigest: connectedSiteSha256(unsigned),

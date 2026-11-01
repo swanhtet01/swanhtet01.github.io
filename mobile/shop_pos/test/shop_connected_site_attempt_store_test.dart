@@ -593,7 +593,7 @@ void main() {
 
       persisted = ShopDatabase(NativeDatabase(file));
       await persisted.verifyReadyForUse();
-      expect(persisted.schemaVersion, 31);
+      expect(persisted.schemaVersion, 32);
       final retained = await persisted
           .customSelect(
             'SELECT reserve_command_id, reserve_command_digest FROM '

@@ -2453,6 +2453,67 @@ Map<String, String> shopConnectedReservationSessionSchemaDefinitionsV31() => {
       ),
 };
 
+const shopConnectedReplicaHeadsV32Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_replica_heads (
+    workspace_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    certificate_sha256 TEXT NOT NULL CHECK (length(certificate_sha256) = 64),
+    evidence_start_cursor INTEGER NOT NULL CHECK (evidence_start_cursor >= 0),
+    snapshot_cursor INTEGER NOT NULL CHECK (snapshot_cursor >= evidence_start_cursor),
+    continuation_cursor INTEGER NOT NULL CHECK (continuation_cursor >= 0),
+    snapshot_version INTEGER NOT NULL CHECK (snapshot_version >= 1),
+    snapshot_json TEXT NOT NULL CHECK (json_valid(snapshot_json)),
+    checkpoint_digest TEXT NOT NULL CHECK (length(checkpoint_digest) = 64),
+    writes_paused INTEGER NOT NULL CHECK (writes_paused IN (0, 1)),
+    updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis > 0),
+    PRIMARY KEY (workspace_id, site_id, client_fingerprint)
+  )
+''';
+
+const shopConnectedReplicaEventsV32Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_replica_events (
+    workspace_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL, cursor INTEGER NOT NULL CHECK (cursor > 0),
+    event_json TEXT NOT NULL CHECK (json_valid(event_json)),
+    event_digest TEXT NOT NULL CHECK (length(event_digest) = 64),
+    received_at_millis INTEGER NOT NULL CHECK (received_at_millis > 0),
+    PRIMARY KEY (workspace_id, site_id, client_fingerprint, cursor),
+    FOREIGN KEY (workspace_id, site_id, client_fingerprint) REFERENCES
+      shop_connected_replica_heads(workspace_id, site_id, client_fingerprint)
+  )
+''';
+
+const shopConnectedReplicaProjectionsV32Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_replica_projections (
+    workspace_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL,
+    projection_kind TEXT NOT NULL CHECK (projection_kind IN ('aggregate','cafeOrder','stockReservation','conflict')),
+    aggregate_id TEXT NOT NULL, aggregate_version INTEGER NOT NULL CHECK (aggregate_version >= 0),
+    last_cursor INTEGER NOT NULL CHECK (last_cursor >= 0),
+    payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+    payload_digest TEXT NOT NULL CHECK (length(payload_digest) = 64),
+    PRIMARY KEY (workspace_id, site_id, client_fingerprint, projection_kind, aggregate_id),
+    FOREIGN KEY (workspace_id, site_id, client_fingerprint) REFERENCES
+      shop_connected_replica_heads(workspace_id, site_id, client_fingerprint)
+  )
+''';
+
+Map<String, String> shopConnectedReplicaSchemaDefinitionsV32() => {
+  'shop_connected_replica_heads': shopConnectedReplicaHeadsV32Sql,
+  'shop_connected_replica_events': shopConnectedReplicaEventsV32Sql,
+  'shop_connected_replica_projections': shopConnectedReplicaProjectionsV32Sql,
+  'shop_connected_replica_events_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_replica_events',
+    operation: 'update',
+    message: 'Connected replica event evidence is immutable',
+  ),
+  'shop_connected_replica_events_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_replica_events',
+    operation: 'delete',
+    message: 'Connected replica event evidence is immutable',
+  ),
+};
+
 bool shopConnectedAuthorityPayloadRowsValidV30({
   required Iterable<Map<String, Object?>> payloads,
   required Iterable<Map<String, Object?>> members,
@@ -4179,7 +4240,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 31) return const {};
+  if (schemaVersion < 5 || schemaVersion > 32) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -5265,7 +5326,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5307,16 +5368,26 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV30Schema();
       await _createConnectedReservationSessionSchemaV31();
       await _requireUnifiedV31Schema();
+      await _createConnectedReplicaSchemaV32();
+      await _requireUnifiedV32Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 31) {
+        await _requireUnifiedV31Schema();
+        await _createConnectedReplicaSchemaV32();
+        await _requireUnifiedV32Schema();
+        return;
+      }
       if (from == 30) {
         await _requireUnifiedV30Schema();
         await _createConnectedReservationSessionSchemaV31();
         await _backfillConnectedReservationSessionBindingsV31();
         await _requireUnifiedV31Schema();
+        await _createConnectedReplicaSchemaV32();
+        await _requireUnifiedV32Schema();
         return;
       }
       final origin = await _classifyUpgradeOrigin(from);
@@ -5327,6 +5398,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _createConnectedReservationSessionSchemaV31();
         await _backfillConnectedReservationSessionBindingsV31();
         await _requireUnifiedV31Schema();
+        await _createConnectedReplicaSchemaV32();
+        await _requireUnifiedV32Schema();
         return;
       }
       if (from == 28) {
@@ -5351,6 +5424,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _createConnectedReservationSessionSchemaV31();
         await _backfillConnectedReservationSessionBindingsV31();
         await _requireUnifiedV31Schema();
+        await _createConnectedReplicaSchemaV32();
+        await _requireUnifiedV32Schema();
         return;
       }
       if (from < 2) {
@@ -5571,14 +5646,22 @@ class ShopDatabase extends _$ShopDatabase {
       await _createConnectedReservationSessionSchemaV31();
       await _backfillConnectedReservationSessionBindingsV31();
       await _requireUnifiedV31Schema();
+      await _createConnectedReplicaSchemaV32();
+      await _requireUnifiedV32Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV31Schema();
+      await _requireUnifiedV32Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV31Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV32Schema();
+
+  Future<void> verifyConnectedReplicaEvidence() async {
+    if (!await _v32ConnectedReplicaRowsValid()) {
+      throw StateError('Connected replica evidence is invalid.');
+    }
+  }
 
   /// Revalidates the complete immutable cloud-disposition chain before a
   /// reconstructed upload cursor is trusted in the current process.
@@ -5781,6 +5864,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedReservationSessionSchemaV31() async {
     for (final definition
         in shopConnectedReservationSessionSchemaDefinitionsV31().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedReplicaSchemaV32() async {
+    for (final definition
+        in shopConnectedReplicaSchemaDefinitionsV32().values) {
       await customStatement(definition);
     }
   }
@@ -7399,6 +7489,9 @@ class ShopDatabase extends _$ShopDatabase {
         shopConnectedReservationSessionSchemaDefinitionsV31().keys.every(
           objects.containsKey,
         );
+    final hasReplicaV32 = shopConnectedReplicaSchemaDefinitionsV32().keys.every(
+      objects.containsKey,
+    );
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -7455,6 +7548,10 @@ class ShopDatabase extends _$ShopDatabase {
             in shopConnectedReservationSessionSchemaDefinitionsV31().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasReplicaV32)
+        for (final entry in shopConnectedReplicaSchemaDefinitionsV32().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -7486,6 +7583,7 @@ class ShopDatabase extends _$ShopDatabase {
         ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,
       if (hasReservationSessionV31)
         ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
+      if (hasReplicaV32) ...shopConnectedReplicaSchemaDefinitionsV32().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -7670,6 +7768,9 @@ class ShopDatabase extends _$ShopDatabase {
         shopConnectedReservationSessionSchemaDefinitionsV31().keys.every(
           objects.containsKey,
         );
+    final hasReplicaV32 = shopConnectedReplicaSchemaDefinitionsV32().keys.every(
+      objects.containsKey,
+    );
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -7705,6 +7806,7 @@ class ShopDatabase extends _$ShopDatabase {
         ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,
       if (hasReservationSessionV31)
         ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
+      if (hasReplicaV32) ...shopConnectedReplicaSchemaDefinitionsV32().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -8188,6 +8290,141 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v31 reservation-session schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV32Schema() async {
+    await _requireUnifiedV31Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedReplicaSchemaDefinitionsV32();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v32ConnectedReplicaRowsValid()) {
+      throw StateError(
+        'The unified Shop v32 connected-replica schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v32ConnectedReplicaRowsValid() async {
+    try {
+      final heads = await customSelect(
+        'SELECT * FROM shop_connected_replica_heads ORDER BY workspace_id, site_id, client_fingerprint',
+      ).get();
+      final events = await customSelect(
+        'SELECT * FROM shop_connected_replica_events ORDER BY workspace_id, site_id, client_fingerprint, cursor',
+      ).get();
+      final projections = await customSelect(
+        'SELECT * FROM shop_connected_replica_projections ORDER BY workspace_id, site_id, client_fingerprint, projection_kind, aggregate_id',
+      ).get();
+      final digest = RegExp(r'^[0-9a-f]{64}$');
+      for (final head in heads) {
+        final workspace = head.read<String>('workspace_id');
+        final site = head.read<String>('site_id');
+        final fingerprint = head.read<String>('client_fingerprint');
+        final evidenceStartCursor = head.read<int>('evidence_start_cursor');
+        final snapshotCursor = head.read<int>('snapshot_cursor');
+        final cursor = head.read<int>('continuation_cursor');
+        if (workspace.isEmpty ||
+            site.isEmpty ||
+            !digest.hasMatch(fingerprint) ||
+            !digest.hasMatch(head.read<String>('certificate_sha256')) ||
+            !digest.hasMatch(head.read<String>('checkpoint_digest')) ||
+            snapshotCursor > cursor ||
+            evidenceStartCursor > snapshotCursor) {
+          return false;
+        }
+        final snapshot = jsonDecode(head.read<String>('snapshot_json'));
+        if (snapshot is! Map ||
+            canonicalConnectedSiteJson(snapshot) !=
+                head.read<String>('snapshot_json') ||
+            connectedSiteSha256(snapshot) !=
+                head.read<String>('checkpoint_digest') ||
+            snapshot['workspaceId'] != workspace ||
+            snapshot['siteId'] != site ||
+            snapshot['version'] != head.read<int>('snapshot_version') ||
+            snapshot['continuationCursor'] != snapshotCursor) {
+          return false;
+        }
+        var expected = evidenceStartCursor + 1;
+        for (final row in events.where(
+          (row) =>
+              row.read<String>('workspace_id') == workspace &&
+              row.read<String>('site_id') == site &&
+              row.read<String>('client_fingerprint') == fingerprint,
+        )) {
+          final eventCursor = row.read<int>('cursor');
+          if (eventCursor != expected++) {
+            return false;
+          }
+          final decoded = jsonDecode(row.read<String>('event_json'));
+          if (decoded is! Map ||
+              decoded.keys.toSet().difference(const {
+                'eventId',
+                'workspaceId',
+                'siteId',
+                'aggregateType',
+                'aggregateId',
+                'aggregateVersion',
+                'eventType',
+                'occurredAt',
+                'payload',
+              }).isNotEmpty ||
+              decoded.length != 9 ||
+              decoded['workspaceId'] != workspace ||
+              decoded['siteId'] != site ||
+              canonicalConnectedSiteJson(decoded) !=
+                  row.read<String>('event_json') ||
+              connectedSiteSha256(decoded) !=
+                  row.read<String>('event_digest')) {
+            return false;
+          }
+        }
+        if (expected - 1 != cursor) return false;
+        for (final row in projections.where(
+          (row) =>
+              row.read<String>('workspace_id') == workspace &&
+              row.read<String>('site_id') == site &&
+              row.read<String>('client_fingerprint') == fingerprint,
+        )) {
+          final decoded = jsonDecode(row.read<String>('payload_json'));
+          if (decoded is! Map ||
+              row.read<int>('last_cursor') > cursor ||
+              canonicalConnectedSiteJson(decoded) !=
+                  row.read<String>('payload_json') ||
+              connectedSiteSha256(decoded) !=
+                  row.read<String>('payload_digest')) {
+            return false;
+          }
+        }
+      }
+      return events.every(
+            (event) => heads.any(
+              (head) =>
+                  head.read<String>('workspace_id') ==
+                      event.read<String>('workspace_id') &&
+                  head.read<String>('site_id') ==
+                      event.read<String>('site_id') &&
+                  head.read<String>('client_fingerprint') ==
+                      event.read<String>('client_fingerprint'),
+            ),
+          ) &&
+          projections.every(
+            (projection) => heads.any(
+              (head) =>
+                  head.read<String>('workspace_id') ==
+                      projection.read<String>('workspace_id') &&
+                  head.read<String>('site_id') ==
+                      projection.read<String>('site_id') &&
+                  head.read<String>('client_fingerprint') ==
+                      projection.read<String>('client_fingerprint'),
+            ),
+          );
+    } on Object {
+      return false;
     }
   }
 

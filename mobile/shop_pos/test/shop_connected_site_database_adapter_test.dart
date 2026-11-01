@@ -227,7 +227,7 @@ void main() {
         expect(snapshot.continuationCursor, 1);
         expect(
           snapshot.projections['schema'],
-          'supermega.shop.connected-site-projections.v1',
+          'supermega.shop.connected-site-projections.v2',
         );
         await expectLater(
           reader.readDelta(_digest('wrong-reader'), 0),

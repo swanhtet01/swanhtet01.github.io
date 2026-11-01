@@ -63,7 +63,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 31;
+  static const supportedSchemaVersion = 32;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1916,6 +1916,9 @@ abstract final class ShopBackup {
     final reservationSessionDefinitions = schemaVersion >= 31
         ? shopConnectedReservationSessionSchemaDefinitionsV31()
         : const <String, String>{};
+    final replicaDefinitions = schemaVersion >= 32
+        ? shopConnectedReplicaSchemaDefinitionsV32()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1933,7 +1936,8 @@ abstract final class ShopBackup {
             schemaVersion == 28 ||
             schemaVersion == 29 ||
             schemaVersion == 30 ||
-            schemaVersion == 31) &&
+            schemaVersion == 31 ||
+            schemaVersion == 32) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -1985,6 +1989,13 @@ abstract final class ShopBackup {
             )) &&
         (schemaVersion < 31 ||
             _v31ConnectedReservationSessionRowsValid(connection)) &&
+        (schemaVersion < 32 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              replicaDefinitions,
+              replicaDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 32 || _v32ConnectedReplicaRowsValid(connection)) &&
         _snapshotDefinitionGroupExact(
           objects,
           const {
@@ -2012,6 +2023,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 29) envelopeDefinitions,
           if (schemaVersion >= 30) authorityPayloadDefinitions,
           if (schemaVersion >= 31) reservationSessionDefinitions,
+          if (schemaVersion >= 32) replicaDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2028,6 +2040,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 29) ...envelopeDefinitions.keys,
           if (schemaVersion >= 30) ...authorityPayloadDefinitions.keys,
           if (schemaVersion >= 31) ...reservationSessionDefinitions.keys,
+          if (schemaVersion >= 32) ...replicaDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3545,6 +3558,89 @@ abstract final class ShopBackup {
         configurations: rows('shop_site_configuration_snapshots'),
         deltas: rows('shop_site_authority_deltas'),
       );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v32ConnectedReplicaRowsValid(Database connection) {
+    try {
+      final heads = connection.select(
+        'SELECT * FROM shop_connected_replica_heads ORDER BY workspace_id, site_id, client_fingerprint',
+      );
+      final events = connection.select(
+        'SELECT * FROM shop_connected_replica_events ORDER BY workspace_id, site_id, client_fingerprint, cursor',
+      );
+      final projections = connection.select(
+        'SELECT * FROM shop_connected_replica_projections ORDER BY workspace_id, site_id, client_fingerprint, projection_kind, aggregate_id',
+      );
+      for (final head in heads) {
+        final workspace = head['workspace_id'];
+        final site = head['site_id'];
+        final fingerprint = head['client_fingerprint'];
+        final evidenceStartCursor = head['evidence_start_cursor'] as int;
+        final snapshotCursor = head['snapshot_cursor'] as int;
+        final cursor = head['continuation_cursor'] as int;
+        final snapshot = jsonDecode(head['snapshot_json'] as String);
+        if (snapshot is! Map ||
+            canonicalConnectedSiteJson(snapshot) != head['snapshot_json'] ||
+            connectedSiteSha256(snapshot) != head['checkpoint_digest'] ||
+            snapshot['workspaceId'] != workspace ||
+            snapshot['siteId'] != site ||
+            snapshot['version'] != head['snapshot_version'] ||
+            snapshot['continuationCursor'] != snapshotCursor ||
+            evidenceStartCursor > snapshotCursor) {
+          return false;
+        }
+        var expected = evidenceStartCursor + 1;
+        for (final row in events.where(
+          (row) =>
+              row['workspace_id'] == workspace &&
+              row['site_id'] == site &&
+              row['client_fingerprint'] == fingerprint,
+        )) {
+          if (row['cursor'] != expected++) return false;
+          final decoded = jsonDecode(row['event_json'] as String);
+          if (decoded is! Map ||
+              canonicalConnectedSiteJson(decoded) != row['event_json'] ||
+              connectedSiteSha256(decoded) != row['event_digest'] ||
+              decoded['workspaceId'] != workspace ||
+              decoded['siteId'] != site) {
+            return false;
+          }
+        }
+        if (expected - 1 != cursor) return false;
+        for (final row in projections.where(
+          (row) =>
+              row['workspace_id'] == workspace &&
+              row['site_id'] == site &&
+              row['client_fingerprint'] == fingerprint,
+        )) {
+          final decoded = jsonDecode(row['payload_json'] as String);
+          if (decoded is! Map ||
+              (row['last_cursor'] as int) > cursor ||
+              canonicalConnectedSiteJson(decoded) != row['payload_json'] ||
+              connectedSiteSha256(decoded) != row['payload_digest']) {
+            return false;
+          }
+        }
+      }
+      return events.every(
+            (row) => heads.any(
+              (head) =>
+                  head['workspace_id'] == row['workspace_id'] &&
+                  head['site_id'] == row['site_id'] &&
+                  head['client_fingerprint'] == row['client_fingerprint'],
+            ),
+          ) &&
+          projections.every(
+            (row) => heads.any(
+              (head) =>
+                  head['workspace_id'] == row['workspace_id'] &&
+                  head['site_id'] == row['site_id'] &&
+                  head['client_fingerprint'] == row['client_fingerprint'],
+            ),
+          );
     } on Object {
       return false;
     }
