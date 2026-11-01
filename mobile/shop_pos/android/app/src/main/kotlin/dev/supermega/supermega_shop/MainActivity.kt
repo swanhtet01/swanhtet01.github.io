@@ -11,7 +11,6 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -632,6 +631,10 @@ internal class ConnectedPlatformSecurityAndroid(
         val validationDate = Date.from(currentTime)
         try {
             certificates.forEach { it.checkValidity(validationDate) }
+            val certificateDigests = certificates.map { sha256(it.encoded) }
+            if (certificateDigests.toSet().size != certificateDigests.size) {
+                throw PlatformSecurityError("platform_certificate_chain_invalid")
+            }
             if (certificates.first().basicConstraints >= 0) {
                 throw PlatformSecurityError("platform_certificate_chain_invalid")
             }
@@ -639,7 +642,7 @@ internal class ConnectedPlatformSecurityAndroid(
                 val certificate = certificates[index]
                 val issuer = certificates[index + 1]
                 if (certificate.issuerX500Principal != issuer.subjectX500Principal ||
-                    issuer.basicConstraints < 0 || !canSignCertificates(issuer)) {
+                    issuer.basicConstraints < index || !canSignCertificates(issuer)) {
                     throw PlatformSecurityError("platform_certificate_chain_invalid")
                 }
                 certificate.verify(issuer.publicKey)
@@ -717,19 +720,31 @@ internal class ConnectedPlatformSecurityAndroid(
     }
     private fun pem(label: String, bytes: ByteArray): ByteArray {
         val encoded = Base64.encode(bytes, Base64.NO_WRAP)
+        val header = "-----BEGIN $label-----\n".toByteArray(StandardCharsets.US_ASCII)
+        val footer = "-----END $label-----\n".toByteArray(StandardCharsets.US_ASCII)
+        val lineCount = (encoded.size + PEM_LINE_BYTES - 1) / PEM_LINE_BYTES
+        val output = ByteArray(header.size + encoded.size + lineCount + footer.size)
         return try {
-            ByteArrayOutputStream(encoded.size + 96).use { output ->
-                output.write("-----BEGIN $label-----\n".toByteArray(StandardCharsets.US_ASCII))
-                var offset = 0
-                while (offset < encoded.size) {
-                    val length = minOf(64, encoded.size - offset)
-                    output.write(encoded, offset, length)
-                    output.write('\n'.code)
-                    offset += length
-                }
-                output.write("-----END $label-----\n".toByteArray(StandardCharsets.US_ASCII))
-                output.toByteArray()
+            var sourceOffset = 0
+            var outputOffset = 0
+            header.copyInto(output, outputOffset)
+            outputOffset += header.size
+            while (sourceOffset < encoded.size) {
+                val length = minOf(PEM_LINE_BYTES, encoded.size - sourceOffset)
+                encoded.copyInto(
+                    output,
+                    destinationOffset = outputOffset,
+                    startIndex = sourceOffset,
+                    endIndex = sourceOffset + length,
+                )
+                sourceOffset += length
+                outputOffset += length
+                output[outputOffset++] = '\n'.code.toByte()
             }
+            footer.copyInto(output, outputOffset)
+            outputOffset += footer.size
+            check(outputOffset == output.size)
+            output
         } finally {
             encoded.fill(0)
         }
@@ -916,6 +931,7 @@ internal class ConnectedPlatformSecurityAndroid(
         const val MAX_CERTIFICATE_BYTES = 64 * 1024
         const val MAX_SIGNING_BYTES = 1024 * 1024
         const val KEY_CERT_SIGN_INDEX = 5
+        const val PEM_LINE_BYTES = 64
         const val UNAVAILABLE = "platform_security_unavailable"
         const val OPERATION_FAILED = "platform_security_operation_failed"
         val TOKEN = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")

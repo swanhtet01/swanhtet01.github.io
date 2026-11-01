@@ -158,13 +158,15 @@ val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
             "certificates.forEach { it.checkValidity(validationDate) }",
             "certificate.verify(issuer.publicKey)",
             "certificate.issuerX500Principal != issuer.subjectX500Principal",
-            "issuer.basicConstraints < 0",
+            "issuer.basicConstraints < index",
             "canSignCertificates(issuer)",
+            "certificateDigests.toSet().size != certificateDigests.size",
             "root.verify(root.publicKey)",
             "sha256(root.encoded) != expectedRootDerSha256",
             "platform_certificate_root_mismatch",
             "(value[\"privateKeyPem\"] as? ByteArray)?.fill(0)",
             "encoded.fill(0)",
+            "val output = ByteArray(header.size + encoded.size + lineCount + footer.size)",
             "expectedBundleDigest",
             "expectedIdentity",
             "PENDING_TTL_MINUTES = 10L",
@@ -174,6 +176,9 @@ val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
         }
         check(!text.contains("BEGIN PRIVATE KEY")) {
             "connected_platform_security_embedded_private_key_forbidden"
+        }
+        check(!text.contains("ByteArrayOutputStream")) {
+            "connected_platform_security_unwiped_output_buffer_forbidden"
         }
         check(!text.contains("CONNECTED_SITE_PLATFORM_SECURITY_ENABLED\", \"true")) {
             "connected_platform_security_must_remain_default_off"
