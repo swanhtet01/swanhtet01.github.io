@@ -501,6 +501,14 @@ void main() {
       await database.customStatement(
         shopConnectedCloudProofSchemaDefinitionsV34()['shop_site_cloud_proofs_no_update']!,
       );
+      await expectLater(
+        database.readConnectedSitePendingEvents(
+          tenantId: _workspace,
+          siteId: _site,
+          afterSequence: 0,
+        ),
+        throwsStateError,
+      );
       await expectLater(database.verifyReadyForUse(), throwsStateError);
       await database.close();
       expect(
@@ -512,6 +520,194 @@ void main() {
       await root.delete(recursive: true);
     }
   });
+
+  test(
+    'v34 proof rows migrate as local-only without inventing issuer evidence',
+    () async {
+      final root = await Directory.systemTemp.createTemp('cloud-proof-v34-');
+      final file = File('${root.path}/legacy.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await _seedAuthority(database);
+        await _appendEvent(database, 'v34-command', 'v34-aggregate');
+        await database.customStatement(
+          'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_update',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_delete',
+        );
+        await database.customStatement(
+          'DROP TABLE shop_site_cloud_proof_legacy_boundary',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_lease_issuer_evidence_no_update',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_lease_issuer_evidence_no_delete',
+        );
+        await database.customStatement(
+          'DROP TABLE shop_site_lease_issuer_evidence',
+        );
+        await database.customStatement('PRAGMA user_version = 34');
+        await database.close();
+
+        database = ShopDatabase(NativeDatabase(file));
+        await database.verifyReadyForUse();
+        final retained = await database
+            .customSelect(
+              'SELECT command.command_id, requirement.proof_state, '
+              'boundary.command_id AS boundary_command_id, '
+              'proof.command_id AS proof_command_id '
+              'FROM shop_site_commands command '
+              'JOIN shop_site_cloud_proof_requirements requirement '
+              'ON requirement.command_id = command.command_id '
+              'LEFT JOIN shop_site_cloud_proof_legacy_boundary boundary '
+              'ON boundary.command_id = command.command_id '
+              'LEFT JOIN shop_site_cloud_proofs proof '
+              'ON proof.command_id = command.command_id '
+              "WHERE command.command_id = 'v34-command'",
+            )
+            .getSingle();
+        expect(retained.read<String>('proof_state'), 'legacyUnverifiable');
+        expect(retained.read<String>('boundary_command_id'), 'v34-command');
+        expect(retained.readNullable<String>('proof_command_id'), isNull);
+        await expectLater(
+          database.customUpdate(
+            "UPDATE shop_site_cloud_proof_requirements SET proof_state = 'proofRequired' "
+            "WHERE command_id = 'v34-command'",
+          ),
+          throwsA(anything),
+        );
+        await expectLater(
+          database.customUpdate(
+            "DELETE FROM shop_site_cloud_proof_legacy_boundary WHERE command_id = 'v34-command'",
+          ),
+          throwsA(anything),
+        );
+        expect(
+          (await database
+                  .customSelect('SELECT COUNT(*) AS n FROM shop_site_events')
+                  .getSingle())
+              .read<int>('n'),
+          1,
+        );
+        await expectLater(
+          ShopConnectedSiteReconciliationStore(
+            database: database,
+            nowMillis: () => _now + 1000,
+          ).pendingEvents(
+            ConnectedSiteScope(
+              workspaceId: _workspace,
+              siteId: _site,
+              deviceId: _device,
+            ),
+            afterCursor: 0,
+            limit: 10,
+          ),
+          throwsStateError,
+        );
+      } finally {
+        await database.close();
+        await root.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'revoked current authority blocks upload without corrupting history',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'cloud-proof-revoked-',
+      );
+      final file = File('${root.path}/revoked.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await _seedAuthority(database);
+        await _appendEvent(database, 'revoked-command', 'revoked-aggregate');
+        final scope = ConnectedSiteScope(
+          workspaceId: _workspace,
+          siteId: _site,
+          deviceId: _device,
+        );
+        final store = ShopConnectedSiteReconciliationStore(
+          database: database,
+          nowMillis: () => _now + 1000,
+        );
+        expect(
+          await store.pendingEvents(scope, afterCursor: 0, limit: 10),
+          hasLength(1),
+        );
+        await ShopConnectedSiteAttemptStore(
+          database: database,
+          approvalVerifier: const _AllowApprovalVerifier(),
+          runtimeEnabled: true,
+          now: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+        ).revoke(
+          ConnectedCoordinatorRevocationV1(
+            targetBindingDigest: _cloudStoreApproval.bindingDigest,
+            workspaceId: _workspace,
+            siteId: _site,
+            clientDeviceId: _device,
+            approvalGeneration: 2,
+            issuedAtMillis: _now - 100,
+            authorityKeyId: 'owner-test',
+            authoritySignature: 'r' * 64,
+          ),
+        );
+        await expectLater(
+          store.pendingEvents(scope, afterCursor: 0, limit: 10),
+          throwsStateError,
+        );
+        await ShopConnectedSiteAttemptStore(
+          database: database,
+          approvalVerifier: const _AllowApprovalVerifier(),
+          runtimeEnabled: true,
+          now: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+        ).importApproval(
+          ConnectedCoordinatorApprovalV1(
+            workspaceId: _workspace,
+            siteId: _site,
+            coordinatorDeviceId: 'coordinator-cloud-store',
+            pairingDigest: _digest('replacement-pairing-cloud-store'),
+            enrollmentEvidenceDigest: _enrollmentEvidenceDigest,
+            clientDeviceId: _device,
+            clientFingerprint: _cloudStoreFingerprint,
+            clientSigningKeyId: 'device-key',
+            address: '192.168.50.3',
+            port: 9443,
+            certificateSha256: _digest('replacement-certificate-cloud-store'),
+            approvalGeneration: 3,
+            issuedAtMillis: _now - 50,
+            expiresAtMillis: _now + 60000,
+            authorityKeyId: 'owner-test',
+            authoritySignature: 'n' * 64,
+          ),
+        );
+        await expectLater(
+          store.pendingEvents(scope, afterCursor: 0, limit: 10),
+          throwsStateError,
+        );
+        await database.verifyReadyForUse();
+        await database.close();
+
+        database = ShopDatabase(NativeDatabase(file));
+        await database.verifyReadyForUse();
+        final snapshot = File('${root.path}/revoked-snapshot.sqlite');
+        await database.exportVerifiedLocalSnapshot(snapshot);
+        ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 35);
+        await expectLater(
+          ShopConnectedSiteReconciliationStore(
+            database: database,
+            nowMillis: () => _now + 1000,
+          ).pendingEvents(scope, afterCursor: 0, limit: 10),
+          throwsStateError,
+        );
+      } finally {
+        await database.close();
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
   test(
     'v33 events remain local and refuse cloud upload after v35 migration',

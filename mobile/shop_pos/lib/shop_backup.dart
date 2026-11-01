@@ -3904,15 +3904,34 @@ abstract final class ShopBackup {
             'SELECT COUNT(*) AS total FROM shop_site_cloud_proofs source_proof '
             'JOIN shop_site_commands source_command '
             'ON source_command.command_id = source_proof.command_id '
+            'JOIN shop_site_command_acks source_ack '
+            'ON source_ack.command_id = source_command.command_id '
+            'JOIN shop_connected_stock_reservation_headers header '
+            'ON header.command_id = source_command.command_id '
+            'JOIN shop_connected_stock_reservation_transitions transition '
+            'ON transition.reservation_id = header.reservation_id '
             'WHERE source_proof.command_id = ? AND source_proof.proof_digest = ? '
             'AND source_command.tenant_id = ? AND source_command.site_id = ? '
-            'AND source_command.device_id = ?',
+            'AND source_command.device_id = ? '
+            "AND source_command.state = 'accepted' AND source_ack.status = 'accepted' "
+            'AND header.reservation_id = ? AND header.legacy_source = 0 '
+            'AND header.reservation_json = ? '
+            'AND (transition.operation_id = ? OR transition.sale_id = ?) '
+            'AND transition.transition_digest = ? AND transition.to_state = ? '
+            'AND transition.transition_json = ?',
             [
               sourceProof.commandId,
               sourceProof.proofDigest,
               proof.workspaceId,
               proof.siteId,
               proof.deviceId,
+              derivedMap['reservationId'],
+              canonicalConnectedSiteJson(sourceReservation),
+              derivedMap['operationId'],
+              derivedMap['operationId'],
+              derivedMap['transitionDigest'],
+              derivedMap['state'],
+              canonicalConnectedSiteJson(eventPayloadMap['transition']),
             ],
           ).single['total'];
           if (source != 1 ||
@@ -3944,20 +3963,10 @@ abstract final class ShopBackup {
             'AND device.site_id = enrollment.site_id '
             'AND device.public_key_fingerprint = enrollment.client_fingerprint '
             'AND device.session_generation = enrollment.session_generation '
-            "AND device.state = 'active' AND binding.binding_digest = ? "
+            'AND binding.binding_digest = ? '
             'AND binding.client_signing_key_id = ? '
             'AND binding.client_device_id = enrollment.device_id '
-            'AND binding.client_fingerprint = enrollment.client_fingerprint '
-            'AND NOT EXISTS (SELECT 1 FROM shop_site_coordinator_binding_revocations r '
-            'WHERE r.target_binding_digest = binding.binding_digest) '
-            "AND 'approve:' || binding.binding_digest = (SELECT latest.action || ':' || latest.binding_digest FROM ("
-            'SELECT binding_digest, action, approval_generation FROM shop_site_coordinator_bindings '
-            'WHERE workspace_id = enrollment.tenant_id AND site_id = enrollment.site_id '
-            'AND client_device_id = enrollment.device_id UNION ALL '
-            'SELECT target_binding_digest, action, approval_generation FROM '
-            'shop_site_coordinator_binding_revocations WHERE workspace_id = enrollment.tenant_id '
-            'AND site_id = enrollment.site_id AND client_device_id = enrollment.device_id) latest '
-            'ORDER BY latest.approval_generation DESC LIMIT 1)',
+            'AND binding.client_fingerprint = enrollment.client_fingerprint',
             [
               proofMap['enrollmentEvidenceDigest'],
               'approve',

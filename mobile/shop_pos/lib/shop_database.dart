@@ -5532,7 +5532,9 @@ class ShopDatabase extends _$ShopDatabase {
       if (from == 34) {
         await _createConnectedCloudProofSchemaV34();
         await _requireUnifiedV34Schema();
-        await _createConnectedCloudProofBoundaryV35();
+        await _createConnectedCloudProofBoundaryV35(
+          quarantineUnverifiableV34Proofs: true,
+        );
         await _requireUnifiedV35Schema();
         return;
       }
@@ -6313,7 +6315,30 @@ class ShopDatabase extends _$ShopDatabase {
     );
   }
 
-  Future<void> _createConnectedCloudProofBoundaryV35() async {
+  Future<void> _createConnectedCloudProofBoundaryV35({
+    bool quarantineUnverifiableV34Proofs = false,
+  }) async {
+    // V34 retained only the issuer evidence digest, not the authenticated
+    // issuer evidence bytes. Those bytes cannot be reconstructed safely.
+    // V34 was never released, so an upgrade preserves every business/event
+    // row but deliberately retires only its cloud-upload proof eligibility.
+    // The immutable boundary below records the complete retired command list.
+    // Raw same-user SQLite replacement remains outside this source-only trust
+    // boundary until platform key custody and signed storage are available.
+    if (quarantineUnverifiableV34Proofs) {
+      await customStatement('DROP TRIGGER shop_site_cloud_proofs_no_delete');
+      await customStatement(
+        'DROP TRIGGER shop_site_cloud_proof_requirements_no_update',
+      );
+      await customStatement(
+        'DROP TRIGGER shop_site_cloud_proof_requirements_no_delete',
+      );
+      await customStatement('DELETE FROM shop_site_cloud_proofs');
+      await customStatement(
+        "UPDATE shop_site_cloud_proof_requirements SET proof_state = 'legacyUnverifiable' "
+        "WHERE proof_state = 'proofRequired'",
+      );
+    }
     for (final definition
         in shopConnectedCloudProofSchemaDefinitionsV35().values) {
       await customStatement(definition);
@@ -9087,15 +9112,36 @@ class ShopDatabase extends _$ShopDatabase {
             'SELECT COUNT(*) AS total FROM shop_site_cloud_proofs source_proof '
             'JOIN shop_site_commands source_command '
             'ON source_command.command_id = source_proof.command_id '
+            'JOIN shop_site_command_acks source_ack '
+            'ON source_ack.command_id = source_command.command_id '
+            'JOIN shop_connected_stock_reservation_headers header '
+            'ON header.command_id = source_command.command_id '
+            'JOIN shop_connected_stock_reservation_transitions transition '
+            'ON transition.reservation_id = header.reservation_id '
             'WHERE source_proof.command_id = ? AND source_proof.proof_digest = ? '
             'AND source_command.tenant_id = ? AND source_command.site_id = ? '
-            'AND source_command.device_id = ?',
+            'AND source_command.device_id = ? '
+            "AND source_command.state = 'accepted' AND source_ack.status = 'accepted' "
+            'AND header.reservation_id = ? AND header.legacy_source = 0 '
+            'AND header.reservation_json = ? '
+            'AND (transition.operation_id = ? OR transition.sale_id = ?) '
+            'AND transition.transition_digest = ? AND transition.to_state = ? '
+            'AND transition.transition_json = ?',
             variables: [
               Variable<String>(sourceProof.commandId),
               Variable<String>(sourceProof.proofDigest),
               Variable<String>(proof.workspaceId),
               Variable<String>(proof.siteId),
               Variable<String>(proof.deviceId),
+              Variable<String>(derivedMap['reservationId']! as String),
+              Variable<String>(canonicalConnectedSiteJson(sourceReservation)),
+              Variable<String>(derivedMap['operationId']! as String),
+              Variable<String>(derivedMap['operationId']! as String),
+              Variable<String>(derivedMap['transitionDigest']! as String),
+              Variable<String>(derivedMap['state']! as String),
+              Variable<String>(
+                canonicalConnectedSiteJson(eventPayloadMap['transition']),
+              ),
             ],
           ).getSingle();
           if (source.read<int>('total') != 1 ||
@@ -9131,20 +9177,10 @@ class ShopDatabase extends _$ShopDatabase {
             'AND device.site_id = enrollment.site_id '
             'AND device.public_key_fingerprint = enrollment.client_fingerprint '
             'AND device.session_generation = enrollment.session_generation '
-            "AND device.state = 'active' AND binding.binding_digest = ? "
+            'AND binding.binding_digest = ? '
             'AND binding.client_signing_key_id = ? '
             'AND binding.client_device_id = enrollment.device_id '
-            'AND binding.client_fingerprint = enrollment.client_fingerprint '
-            'AND NOT EXISTS (SELECT 1 FROM shop_site_coordinator_binding_revocations r '
-            'WHERE r.target_binding_digest = binding.binding_digest) '
-            "AND 'approve:' || binding.binding_digest = (SELECT latest.action || ':' || latest.binding_digest FROM ("
-            'SELECT binding_digest, action, approval_generation FROM shop_site_coordinator_bindings '
-            'WHERE workspace_id = enrollment.tenant_id AND site_id = enrollment.site_id '
-            'AND client_device_id = enrollment.device_id UNION ALL '
-            'SELECT target_binding_digest, action, approval_generation FROM '
-            'shop_site_coordinator_binding_revocations WHERE workspace_id = enrollment.tenant_id '
-            'AND site_id = enrollment.site_id AND client_device_id = enrollment.device_id) latest '
-            'ORDER BY latest.approval_generation DESC LIMIT 1)',
+            'AND binding.client_fingerprint = enrollment.client_fingerprint',
             variables: [
               Variable<String>(enrollmentDigest),
               const Variable<String>('approve'),
@@ -11693,6 +11729,78 @@ class ShopDatabase extends _$ShopDatabase {
   /// [tenantId] is the local persistence name for the wire `workspaceId`.
   /// Construction of [ConnectedSitePendingEvent] revalidates the complete
   /// canonical event-envelope digest and fails closed on any stored mismatch.
+  Future<void> requireConnectedCloudUploadAuthority(
+    ConnectedSiteCloudProofV1 proof,
+  ) async {
+    final proofJson = proof.toJson();
+    final signedProof = proof.proofKind == 'coordinatorDerived'
+        ? ConnectedSiteCloudProofV1.fromJson(proofJson['sourceProof'])
+        : proof;
+    final command = signedProof.signedCommand;
+    final signedJson = signedProof.toJson();
+    if (command == null) {
+      throw StateError('connected_site_cloud_authority_evidence_unavailable');
+    }
+    final rows = await customSelect(
+      'SELECT retained.lease_json, issuer.evidence_json '
+      'FROM shop_site_enrollment_evidence enrollment '
+      'JOIN shop_site_devices device ON device.device_id = enrollment.device_id '
+      'JOIN shop_site_coordinator_bindings binding '
+      'ON binding.enrollment_evidence_digest = enrollment.evidence_digest '
+      'JOIN shop_site_offline_lease_payloads retained '
+      'ON retained.payload_digest = ? '
+      'JOIN shop_site_lease_issuer_evidence issuer '
+      'ON issuer.evidence_digest = retained.issuer_evidence_digest '
+      "WHERE enrollment.action = 'approve' AND enrollment.evidence_digest = ? "
+      'AND enrollment.tenant_id = ? AND enrollment.site_id = ? '
+      'AND enrollment.device_id = ? AND enrollment.client_fingerprint = ? '
+      'AND device.tenant_id = enrollment.tenant_id '
+      'AND device.site_id = enrollment.site_id '
+      'AND device.public_key_fingerprint = enrollment.client_fingerprint '
+      'AND device.session_generation = enrollment.session_generation '
+      "AND device.state = 'active' AND binding.binding_digest = ? "
+      'AND binding.client_signing_key_id = ? '
+      'AND binding.client_device_id = enrollment.device_id '
+      'AND binding.client_fingerprint = enrollment.client_fingerprint '
+      'AND NOT EXISTS (SELECT 1 FROM shop_site_enrollment_evidence revoked '
+      "WHERE revoked.action = 'revoke' AND revoked.tenant_id = enrollment.tenant_id "
+      'AND revoked.site_id = enrollment.site_id '
+      'AND revoked.device_id = enrollment.device_id '
+      'AND revoked.client_fingerprint = enrollment.client_fingerprint '
+      'AND revoked.session_generation >= enrollment.session_generation) '
+      'AND NOT EXISTS (SELECT 1 FROM shop_site_coordinator_binding_revocations revoked '
+      'WHERE revoked.target_binding_digest = binding.binding_digest) '
+      "AND 'approve:' || binding.binding_digest = (SELECT latest.action || ':' || latest.binding_digest FROM ("
+      'SELECT binding_digest, action, approval_generation FROM '
+      'shop_site_coordinator_bindings WHERE workspace_id = enrollment.tenant_id '
+      'AND site_id = enrollment.site_id AND client_device_id = enrollment.device_id '
+      'UNION ALL SELECT target_binding_digest, action, approval_generation FROM '
+      'shop_site_coordinator_binding_revocations '
+      'WHERE workspace_id = enrollment.tenant_id AND site_id = enrollment.site_id '
+      'AND client_device_id = enrollment.device_id) latest '
+      'ORDER BY latest.approval_generation DESC LIMIT 1)',
+      variables: [
+        Variable<String>(command.leaseDigest),
+        Variable<String>(signedJson['enrollmentEvidenceDigest']! as String),
+        Variable<String>(command.workspaceId),
+        Variable<String>(command.siteId),
+        Variable<String>(command.deviceId),
+        Variable<String>(signedJson['clientFingerprint']! as String),
+        Variable<String>(signedJson['coordinatorBindingDigest']! as String),
+        Variable<String>(command.signingKeyId),
+      ],
+    ).get();
+    if (rows.length != 1 ||
+        rows.single.read<String>('lease_json') !=
+            canonicalConnectedSiteJson(signedJson['lease']) ||
+        connectedSiteSha256(
+              jsonDecode(rows.single.read<String>('evidence_json')),
+            ) !=
+            signedJson['authorityPayloadDigest']) {
+      throw StateError('connected_site_cloud_authority_evidence_unavailable');
+    }
+  }
+
   Future<List<ConnectedSitePendingEvent>> readConnectedSitePendingEvents({
     required String tenantId,
     required String siteId,
@@ -11707,14 +11815,18 @@ class ShopDatabase extends _$ShopDatabase {
         limit > 500) {
       throw ArgumentError('Connected-site pending-event query is invalid.');
     }
+    if (!await _v34ConnectedCloudProofRowsValid()) {
+      throw StateError('connected_site_cloud_proof_invalid');
+    }
     final rows = await customSelect(
       'SELECT event.site_sequence, event.event_id, event.aggregate_type, '
       'event.aggregate_id, event.aggregate_version, event.event_type, '
       'event.payload_json, event.event_digest, event.created_at_millis, '
-      'command.command_id, command.command_digest, proof.proof_json, '
-      'proof.proof_digest '
+      'command.command_id, command.command_digest, command.capability, '
+      'audit.action AS audit_action, proof.proof_json, proof.proof_digest '
       'FROM shop_site_events event '
       'JOIN shop_site_commands command ON command.command_id = event.command_id '
+      'JOIN shop_site_audit audit ON audit.command_id = command.command_id '
       'LEFT JOIN shop_site_cloud_proofs proof ON proof.command_id = command.command_id '
       'WHERE event.tenant_id = ? AND event.site_id = ? '
       'AND event.site_sequence > ? ORDER BY event.site_sequence LIMIT ?',
@@ -11725,45 +11837,54 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<int>(limit),
       ],
     ).get();
-    return rows
-        .map((row) {
-          final payload = _connectedSiteEventPayload(
-            row.read<String>('payload_json'),
-          );
-          final event = <String, Object?>{
-            'eventId': row.read<String>('event_id'),
-            'workspaceId': tenantId,
-            'siteId': siteId,
-            'aggregateType': row.read<String>('aggregate_type'),
-            'aggregateId': row.read<String>('aggregate_id'),
-            'aggregateVersion': row.read<int>('aggregate_version'),
-            'eventType': row.read<String>('event_type'),
-            'occurredAt': _connectedSiteOccurredAt(
-              row.read<int>('created_at_millis'),
-            ),
-            'payload': payload,
-          };
-          final proofJson = row.readNullable<String>('proof_json');
-          final proofDigest = row.readNullable<String>('proof_digest');
-          if (proofJson == null || proofDigest == null) {
-            throw StateError('connected_site_cloud_proof_unavailable');
-          }
-          final proofDecoded = jsonDecode(proofJson);
-          final proof = ConnectedSiteCloudProofV1.fromJson(proofDecoded);
-          if (canonicalConnectedSiteJson(proofDecoded) != proofJson ||
-              proof.proofDigest != proofDigest) {
-            throw StateError('connected_site_cloud_proof_invalid');
-          }
-          return ConnectedSitePendingEvent(
-            cursor: row.read<int>('site_sequence'),
-            commandId: row.read<String>('command_id'),
-            commandDigest: row.read<String>('command_digest'),
-            event: event,
-            eventDigest: row.read<String>('event_digest'),
-            cloudProof: proof,
-          );
-        })
-        .toList(growable: false);
+    final pending = <ConnectedSitePendingEvent>[];
+    for (final row in rows) {
+      final payload = _connectedSiteEventPayload(
+        row.read<String>('payload_json'),
+      );
+      final event = <String, Object?>{
+        'eventId': row.read<String>('event_id'),
+        'workspaceId': tenantId,
+        'siteId': siteId,
+        'aggregateType': row.read<String>('aggregate_type'),
+        'aggregateId': row.read<String>('aggregate_id'),
+        'aggregateVersion': row.read<int>('aggregate_version'),
+        'eventType': row.read<String>('event_type'),
+        'occurredAt': _connectedSiteOccurredAt(
+          row.read<int>('created_at_millis'),
+        ),
+        'payload': payload,
+      };
+      final proofJson = row.readNullable<String>('proof_json');
+      final proofDigest = row.readNullable<String>('proof_digest');
+      if (proofJson == null || proofDigest == null) {
+        throw StateError('connected_site_cloud_proof_unavailable');
+      }
+      final proofDecoded = jsonDecode(proofJson);
+      final proof = ConnectedSiteCloudProofV1.fromJson(proofDecoded);
+      if (canonicalConnectedSiteJson(proofDecoded) != proofJson ||
+          proof.proofDigest != proofDigest) {
+        throw StateError('connected_site_cloud_proof_invalid');
+      }
+      proof.requireUploadEventBinding(
+        event: event,
+        eventDigest: row.read<String>('event_digest'),
+        capability: row.read<String>('capability'),
+        auditAction: row.read<String>('audit_action'),
+      );
+      await requireConnectedCloudUploadAuthority(proof);
+      pending.add(
+        ConnectedSitePendingEvent(
+          cursor: row.read<int>('site_sequence'),
+          commandId: row.read<String>('command_id'),
+          commandDigest: row.read<String>('command_digest'),
+          event: event,
+          eventDigest: row.read<String>('event_digest'),
+          cloudProof: proof,
+        ),
+      );
+    }
+    return List.unmodifiable(pending);
   }
 
   Future<void> _insertConnectedStockReservation(

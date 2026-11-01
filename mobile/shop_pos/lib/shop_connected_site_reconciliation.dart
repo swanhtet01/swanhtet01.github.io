@@ -240,6 +240,67 @@ class ConnectedSiteCloudProofV1 {
     return this;
   }
 
+  /// Revalidates the complete event bytes immediately before cloud upload.
+  /// Historical proof integrity and current authority are distinct: this
+  /// method binds the retained proof to the emitted event, while the store
+  /// separately requires that the retained authority is still current.
+  ConnectedSiteCloudProofV1 requireUploadEventBinding({
+    required Map<String, Object?> event,
+    required String eventDigest,
+    required String capability,
+    required String auditAction,
+  }) {
+    if (connectedSiteSha256(event) != eventDigest) {
+      throw const FormatException('connected_site_cloud_event_binding');
+    }
+    final json = _json;
+    if (proofKind == 'signedClientCommand') {
+      final command = signedCommand!;
+      final binding = json['eventBinding'];
+      final exactBinding =
+          binding is Map &&
+          binding.length == 6 &&
+          const {
+            'eventId',
+            'eventType',
+            'eventDigest',
+            'capability',
+            'auditAction',
+            'commandType',
+          }.every(binding.containsKey);
+      if (!exactBinding ||
+          binding['eventId'] != event['eventId'] ||
+          binding['eventType'] != event['eventType'] ||
+          binding['eventDigest'] != eventDigest ||
+          binding['capability'] != capability ||
+          binding['auditAction'] != auditAction ||
+          binding['commandType'] != command.commandType ||
+          event['workspaceId'] != command.workspaceId ||
+          event['siteId'] != command.siteId ||
+          event['aggregateType'] != command.aggregateType ||
+          event['aggregateId'] != command.aggregateId ||
+          event['aggregateVersion'] != command.expectedVersion + 1 ||
+          event['occurredAt'] != command.issuedAt ||
+          canonicalConnectedSiteJson(event['payload']) !=
+              canonicalConnectedSiteJson(command.payload)) {
+        throw const FormatException('connected_site_cloud_event_binding');
+      }
+    } else {
+      final derivation = json['derivation'];
+      final payload = event['payload'];
+      if (derivation is! Map ||
+          payload is! Map ||
+          derivation['eventDigest'] != eventDigest ||
+          payload['operationId'] != derivation['operationId'] ||
+          payload['reservationId'] != derivation['reservationId'] ||
+          payload['transitionDigest'] != derivation['transitionDigest'] ||
+          payload['state'] != derivation['state']) {
+        throw const FormatException('connected_site_cloud_event_binding');
+      }
+    }
+    return this;
+  }
+
   static Map<String, Object?> _validate(Map<String, Object?> source) {
     bool exact(Set<String> keys) =>
         source.length == keys.length && source.keys.every(keys.contains);

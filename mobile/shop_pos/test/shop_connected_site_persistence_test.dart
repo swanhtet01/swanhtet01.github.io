@@ -1481,6 +1481,104 @@ void main() {
     }
   });
 
+  test('derived proof rejects a genuine but unrelated reservation source', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'connected-derived-source-',
+    );
+    final file = File('${root.path}/shop.sqlite');
+    final database = ShopDatabase(NativeDatabase(file));
+    try {
+      await _seedAuthority(database);
+      await database.addProduct(
+        id: 'derived-source-item',
+        name: 'Derived source item',
+        priceMmk: 1000,
+        openingStock: 2,
+      );
+      final original = _command(
+        'derived-original',
+        reservationProductId: 'derived-source-item',
+      );
+      expect(
+        (await database.applyConnectedSiteCommandForTest(
+          original,
+          connectedSiteEnabled: true,
+        )).status,
+        ShopConnectedSiteCommandStatus.accepted,
+      );
+      final foreign = _command(
+        'derived-foreign',
+        aggregateType: ConnectedStockWorkflowType.retailCart.name,
+        aggregateId: 'derived-original',
+        stockReservation: original.stockReservation,
+      );
+      expect(
+        (await database.applyConnectedSiteCommandForTest(
+          foreign,
+          connectedSiteEnabled: true,
+        )).status,
+        ShopConnectedSiteCommandStatus.conflict,
+      );
+      await database.recordCashSale(
+        operationId: 'derived-original',
+        lines: const [
+          ShopSaleLineInput(productId: 'derived-source-item', quantity: 1),
+        ],
+        connectedStockReservation: original.stockReservation,
+        connectedTimeAuthority: const _FixedTime(_now + 1000),
+      );
+      final foreignProof = await database
+          .customSelect(
+            "SELECT proof_json FROM shop_site_cloud_proofs WHERE command_id = 'derived-foreign'",
+          )
+          .getSingle();
+      final derivedRow = await database
+          .customSelect(
+            "SELECT command_id, proof_json FROM shop_site_cloud_proofs WHERE proof_kind = 'coordinatorDerived'",
+          )
+          .getSingle();
+      final substituted = Map<String, Object?>.from(
+        jsonDecode(derivedRow.read<String>('proof_json')) as Map,
+      );
+      final foreignDecoded = jsonDecode(
+        foreignProof.read<String>('proof_json'),
+      );
+      final foreignCloudProof = ConnectedSiteCloudProofV1.fromJson(
+        foreignDecoded,
+      );
+      substituted['sourceProof'] = foreignCloudProof.toJson();
+      substituted['sourceProofDigest'] = foreignCloudProof.proofDigest;
+      final encoded = canonicalConnectedSiteJson(substituted);
+      await database.customStatement(
+        'DROP TRIGGER shop_site_cloud_proofs_no_update',
+      );
+      await database.customUpdate(
+        'UPDATE shop_site_cloud_proofs SET proof_json = ?, proof_digest = ? '
+        'WHERE command_id = ?',
+        variables: [
+          Variable<String>(encoded),
+          Variable<String>(connectedSiteSha256(substituted)),
+          Variable<String>(derivedRow.read<String>('command_id')),
+        ],
+      );
+      await database.customStatement(
+        shopConnectedCloudProofSchemaDefinitionsV34()['shop_site_cloud_proofs_no_update']!,
+      );
+      await expectLater(database.verifyReadyForUse(), throwsStateError);
+      await expectLater(
+        database.readConnectedSitePendingEvents(
+          tenantId: _tenant,
+          siteId: _site,
+          afterSequence: 0,
+        ),
+        throwsStateError,
+      );
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
   test(
     'v22 migrates to v31 and encrypted-backup snapshot remains valid',
     () async {
