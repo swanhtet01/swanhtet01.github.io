@@ -6,8 +6,6 @@ import 'shop_connected_site_contracts.dart';
 import 'shop_staff_authorization.dart';
 
 const shopOfflineStaffLeaseContract = 'supermega.shop.offline-staff-lease.v1';
-const shopOfflineStaffLeaseSignatureContract =
-    'supermega.shop.offline-staff-lease-signature.v1';
 const shopOfflineStaffLeaseMaximumValidity = Duration(days: 7);
 const shopOfflineStaffLeaseDefaultClockSkew = Duration(minutes: 5);
 
@@ -195,12 +193,7 @@ class ShopOfflineStaffLeaseVerifier {
     }
     final signatureValid = await signatureVerifier.verify(
       keyId: lease.keyId,
-      message: utf8.encode(
-        shopOfflineStaffLeaseSignatureMessage(
-          keyId: lease.keyId,
-          payloadDigest: lease.payloadDigest,
-        ),
-      ),
+      message: utf8.encode(canonicalConnectedSiteJson(lease.unsignedPayload)),
       signature: lease.signature,
     );
     if (!signatureValid) {
@@ -227,11 +220,6 @@ class ShopOfflineStaffLeaseVerifier {
 
 String shopOfflineStaffLeasePayloadDigest(OfflineStaffLeaseV1 lease) =>
     connectedSiteSha256(lease.unsignedPayload);
-
-String shopOfflineStaffLeaseSignatureMessage({
-  required String keyId,
-  required String payloadDigest,
-}) => '$shopOfflineStaffLeaseSignatureContract\n$keyId\n$payloadDigest';
 
 void _validateShape(OfflineStaffLeaseV1 lease) {
   if (!_keyIdPattern.hasMatch(lease.keyId) ||

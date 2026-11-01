@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,12 +51,71 @@ void main() {
     expect(verified.payloadDigest, lease.payloadDigest);
   });
 
+  test('matches the cross-language canonical lease golden vector', () async {
+    final fixture = jsonDecode(
+      await File('test/fixtures/offline_staff_lease_v1_golden.json')
+          .readAsString(),
+    ) as Map<String, dynamic>;
+    final lease = OfflineStaffLeaseV1.fromJson(fixture['lease']);
+    final keyBytes = base64Url.decode(
+      '${fixture['issuerPublicKeyBase64Url']}=',
+    );
+    final goldenVerifier = ShopOfflineStaffLeaseVerifier(
+      signatureVerifier: PinnedEd25519ShopOfflineStaffLeaseSignatureVerifier(
+        publicKeys: {lease.keyId: keyBytes},
+      ),
+    );
+
+    expect(
+      canonicalConnectedSiteJson(lease.unsignedPayload),
+      canonicalConnectedSiteJson(fixture['unsignedPayload']),
+    );
+    expect(shopOfflineStaffLeasePayloadDigest(lease), fixture['payloadDigest']);
+    final verified = await goldenVerifier.verify(
+      lease: lease,
+      expected: const ShopOfflineStaffLeaseExpectedBinding(
+        tenantId: 'workspace-golden',
+        siteId: 'site-golden',
+        deviceId: 'device-golden',
+        sessionGeneration: 7,
+        revocationGeneration: 12,
+        requiredCapability: ShopStaffCapability.counterSale,
+      ),
+      nowMillis: DateTime.utc(2026, 11, 2).millisecondsSinceEpoch,
+    );
+    expect(verified.leaseId, 'lease-golden-v1');
+  });
+
   test('default verifier remains fail closed without a trusted key', () async {
     final lease = await _signedLease(keyPair: keyPair);
 
     await expectLater(
       const ShopOfflineStaffLeaseVerifier().verify(
         lease: lease,
+        expected: expected,
+        nowMillis: _now,
+      ),
+      _denied('shop_offline_staff_lease_signature_invalid'),
+    );
+  });
+
+  test('rejects the retired digest-message signature contract', () async {
+    final canonicalLease = await _signedLease(keyPair: keyPair);
+    final retiredSignature = await Ed25519().sign(
+      utf8.encode(
+        'supermega.shop.offline-staff-lease-signature.v1\n'
+        '${canonicalLease.keyId}\n${canonicalLease.payloadDigest}',
+      ),
+      keyPair: keyPair,
+    );
+    final retiredLease = OfflineStaffLeaseV1.fromJson({
+      ...canonicalLease.toJson(),
+      'signature': base64Url.encode(retiredSignature.bytes).replaceAll('=', ''),
+    });
+
+    await expectLater(
+      verifier().verify(
+        lease: retiredLease,
         expected: expected,
         nowMillis: _now,
       ),
@@ -304,12 +364,7 @@ Future<OfflineStaffLeaseV1> _signedLease({
   };
   final digest = connectedSiteSha256(unsignedPayload);
   final signed = await Ed25519().sign(
-    utf8.encode(
-      shopOfflineStaffLeaseSignatureMessage(
-        keyId: keyId,
-        payloadDigest: digest,
-      ),
-    ),
+    utf8.encode(canonicalConnectedSiteJson(unsignedPayload)),
     keyPair: keyPair,
   );
   return OfflineStaffLeaseV1(

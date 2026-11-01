@@ -1221,12 +1221,7 @@ Future<OfflineStaffLeaseV1> _signedLease(
   };
   final digest = connectedSiteSha256(unsigned);
   final signature = await Ed25519().sign(
-    utf8.encode(
-      shopOfflineStaffLeaseSignatureMessage(
-        keyId: 'lease-key-1',
-        payloadDigest: digest,
-      ),
-    ),
+    utf8.encode(canonicalConnectedSiteJson(unsigned)),
     keyPair: issuerKey,
   );
   return OfflineStaffLeaseV1(
