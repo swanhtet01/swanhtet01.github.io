@@ -2573,6 +2573,14 @@ const shopSiteCloudProofsV34Sql = '''
   )
 ''';
 
+const shopSiteCloudProofRequirementsV34Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_proof_requirements (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_commands(command_id),
+    proof_state TEXT NOT NULL CHECK (proof_state IN ('proofRequired','legacyUnverifiable')),
+    recorded_at_millis INTEGER NOT NULL CHECK (recorded_at_millis > 0)
+  )
+''';
+
 const shopSiteOfflineLeasePayloadsV34Sql = '''
   CREATE TABLE IF NOT EXISTS shop_site_offline_lease_payloads (
     payload_digest TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_offline_leases(payload_digest),
@@ -2584,9 +2592,11 @@ const shopSiteOfflineLeasePayloadsV34Sql = '''
 ''';
 
 Map<String, String> shopConnectedCloudProofSchemaDefinitionsV34() => {
+  'shop_site_cloud_proof_requirements': shopSiteCloudProofRequirementsV34Sql,
   'shop_site_offline_lease_payloads': shopSiteOfflineLeasePayloadsV34Sql,
   'shop_site_cloud_proofs': shopSiteCloudProofsV34Sql,
   for (final table in const [
+    'shop_site_cloud_proof_requirements',
     'shop_site_offline_lease_payloads',
     'shop_site_cloud_proofs',
   ]) ...{
@@ -6208,6 +6218,14 @@ class ShopDatabase extends _$ShopDatabase {
         in shopConnectedCloudProofSchemaDefinitionsV34().values) {
       await customStatement(definition);
     }
+    await customStatement(
+      'INSERT INTO shop_site_cloud_proof_requirements '
+      '(command_id, proof_state, recorded_at_millis) '
+      "SELECT command_id, 'legacyUnverifiable', received_at_millis "
+      'FROM shop_site_commands command WHERE NOT EXISTS ('
+      'SELECT 1 FROM shop_site_cloud_proof_requirements requirement '
+      'WHERE requirement.command_id = command.command_id)',
+    );
   }
 
   /// V32 retained deltas as individually valid events, but did not retain the
@@ -8728,6 +8746,36 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<bool> _v34ConnectedCloudProofRowsValid() async {
     try {
+      final missingRequirement = await customSelect(
+        'SELECT COUNT(*) AS total FROM shop_site_commands command '
+        'LEFT JOIN shop_site_cloud_proof_requirements requirement '
+        'ON requirement.command_id = command.command_id '
+        'WHERE requirement.command_id IS NULL',
+      ).getSingle();
+      if (missingRequirement.read<int>('total') != 0) return false;
+      final requirements = await customSelect(
+        'SELECT requirement.command_id, requirement.proof_state, '
+        'requirement.recorded_at_millis, command.received_at_millis, '
+        'proof.command_id AS proof_command_id FROM '
+        'shop_site_cloud_proof_requirements requirement '
+        'LEFT JOIN shop_site_commands command '
+        'ON command.command_id = requirement.command_id '
+        'LEFT JOIN shop_site_cloud_proofs proof '
+        'ON proof.command_id = requirement.command_id '
+        'ORDER BY requirement.command_id',
+      ).get();
+      for (final row in requirements) {
+        final state = row.read<String>('proof_state');
+        final receivedAt = row.readNullable<int>('received_at_millis');
+        if (receivedAt == null ||
+            row.read<int>('recorded_at_millis') != receivedAt ||
+            (state == 'proofRequired' &&
+                row.readNullable<String>('proof_command_id') == null) ||
+            (state == 'legacyUnverifiable' &&
+                row.readNullable<String>('proof_command_id') != null)) {
+          return false;
+        }
+      }
       final leaseRows = await customSelect(
         'SELECT retained.payload_digest, retained.lease_json, '
         'retained.lease_bytes_digest, retained.issuer_evidence_digest, '
@@ -8773,22 +8821,82 @@ class ShopDatabase extends _$ShopDatabase {
       final rows = await customSelect(
         'SELECT proof.command_id, proof.proof_kind, proof.proof_json, '
         'proof.proof_digest, command.command_digest, command.tenant_id, '
-        'command.site_id FROM shop_site_cloud_proofs proof '
+        'command.site_id, command.actor_id, command.device_id, '
+        'command.aggregate_type, command.aggregate_id, command.expected_version, '
+        'command.payload_digest, command.lease_digest, command.received_at_millis, '
+        'event.payload_json, event.event_digest FROM shop_site_cloud_proofs proof '
         'LEFT JOIN shop_site_commands command ON command.command_id = proof.command_id '
+        'LEFT JOIN shop_site_events event ON event.command_id = proof.command_id '
         'ORDER BY proof.command_id',
       ).get();
       for (final row in rows) {
         final encoded = row.read<String>('proof_json');
         final decoded = jsonDecode(encoded);
         final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
+        final signed = proof.signedCommand;
+        final eventPayload = row.readNullable<String>('payload_json');
+        final derived = decoded is Map ? decoded['derivation'] : null;
         if (canonicalConnectedSiteJson(decoded) != encoded ||
             proof.proofKind != row.read<String>('proof_kind') ||
             proof.proofDigest != row.read<String>('proof_digest') ||
             proof.commandId != row.read<String>('command_id') ||
             proof.commandDigest != row.read<String>('command_digest') ||
             proof.workspaceId != row.read<String>('tenant_id') ||
-            proof.siteId != row.read<String>('site_id')) {
+            proof.siteId != row.read<String>('site_id') ||
+            proof.deviceId != row.read<String>('device_id') ||
+            proof.leaseDigest != row.read<String>('lease_digest') ||
+            (signed != null &&
+                (signed.actorId != row.read<String>('actor_id') ||
+                    signed.aggregateType !=
+                        row.read<String>('aggregate_type') ||
+                    signed.aggregateId != row.read<String>('aggregate_id') ||
+                    signed.expectedVersion !=
+                        row.read<int>('expected_version') ||
+                    signed.payloadDigest !=
+                        row.read<String>('payload_digest') ||
+                    DateTime.parse(signed.issuedAt).millisecondsSinceEpoch !=
+                        row.read<int>('received_at_millis') ||
+                    (eventPayload != null &&
+                        canonicalConnectedSiteJson(signed.payload) !=
+                            eventPayload))) ||
+            (proof.proofKind == 'coordinatorDerived' &&
+                (eventPayload == null ||
+                    derived is! Map ||
+                    derived['eventDigest'] !=
+                        row.readNullable<String>('event_digest')))) {
           return false;
+        }
+        if (proof.proofKind == 'coordinatorDerived') {
+          final derivedMap = Map<String, Object?>.from(derived! as Map);
+          final sourceProof = ConnectedSiteCloudProofV1.fromJson(
+            (decoded as Map)['sourceProof'],
+          );
+          final eventPayloadMap = Map<String, Object?>.from(
+            jsonDecode(eventPayload!) as Map,
+          );
+          final source = await customSelect(
+            'SELECT COUNT(*) AS total FROM shop_site_cloud_proofs source_proof '
+            'JOIN shop_site_commands source_command '
+            'ON source_command.command_id = source_proof.command_id '
+            'WHERE source_proof.command_id = ? AND source_proof.proof_digest = ? '
+            'AND source_command.tenant_id = ? AND source_command.site_id = ? '
+            'AND source_command.device_id = ?',
+            variables: [
+              Variable<String>(sourceProof.commandId),
+              Variable<String>(sourceProof.proofDigest),
+              Variable<String>(proof.workspaceId),
+              Variable<String>(proof.siteId),
+              Variable<String>(proof.deviceId),
+            ],
+          ).getSingle();
+          if (source.read<int>('total') != 1 ||
+              eventPayloadMap['operationId'] != derivedMap['operationId'] ||
+              eventPayloadMap['reservationId'] != derivedMap['reservationId'] ||
+              eventPayloadMap['transitionDigest'] !=
+                  derivedMap['transitionDigest'] ||
+              eventPayloadMap['state'] != derivedMap['state']) {
+            return false;
+          }
         }
       }
       return true;
@@ -11301,6 +11409,12 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<int>(createdAtMillis),
       ],
     );
+    await customInsert(
+      'INSERT INTO shop_site_cloud_proof_requirements '
+      '(command_id, proof_state, recorded_at_millis) '
+      "VALUES (?, 'proofRequired', ?)",
+      variables: [Variable<String>(commandId), Variable<int>(createdAtMillis)],
+    );
   }
 
   /// Reconstructs strict wire events from immutable database rows.
@@ -12414,7 +12528,7 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<String>(payloadDigest),
         Variable<String>(source.read<String>('lease_digest')),
         Variable<String>(commandDigest),
-        Variable<int>(source.read<int>('received_at_millis')),
+        Variable<int>(occurredAtMillis),
       ],
     );
     final sourceProofDecoded = jsonDecode(source.read<String>('proof_json'));
@@ -12841,9 +12955,21 @@ class ShopDatabase extends _$ShopDatabase {
           commandId: input.commandId,
           commandDigest: input.commandDigest,
         );
+    final signedCommand = proof.signedCommand;
     if (canonicalConnectedSiteJson(proofDecoded) != input.cloudProofJson ||
         proof.proofDigest != input.cloudProofDigest ||
         proof.proofKind != 'signedClientCommand' ||
+        signedCommand == null ||
+        signedCommand.actorId != input.actorId ||
+        signedCommand.deviceId != input.deviceId ||
+        signedCommand.aggregateType != input.aggregateType ||
+        signedCommand.aggregateId != input.aggregateId ||
+        signedCommand.expectedVersion != input.expectedVersion ||
+        signedCommand.payloadDigest != input.payloadDigest ||
+        canonicalConnectedSiteJson(signedCommand.payload) !=
+            input.eventPayloadJson ||
+        DateTime.parse(signedCommand.issuedAt).millisecondsSinceEpoch !=
+            input.createdAtMillis ||
         proof.leaseDigest != input.leaseDigest ||
         proof.deviceId != input.deviceId) {
       throw ArgumentError('Connected-site cloud proof is invalid.');

@@ -2275,6 +2275,7 @@ ShopConnectedSiteCommandInput _command(
     lease: lease,
     clientFingerprint: _digest('device-key:$deviceId'),
     enrollmentEvidenceDigest: _digest('enrollment:$tenantId:$siteId'),
+    coordinatorBindingDigest: _digest('binding:$tenantId:$siteId:$deviceId'),
     authorityPayloadDigest: _digest('issuer:$tenantId:$siteId:$deviceId'),
   );
   final effectiveLeaseDigest = leaseDigest ?? lease.payloadDigest;
@@ -2296,7 +2297,7 @@ ShopConnectedSiteCommandInput _command(
     cloudProofDigest: proof.proofDigest,
     eventId: 'event:$id',
     eventType: eventType,
-    eventPayloadJson: jsonEncode(payload),
+    eventPayloadJson: canonicalConnectedSiteJson(payload),
     eventDigest: eventDigest ?? connectedSiteSha256(event),
     ackDigest: _digest('ack:$id'),
     auditAction: 'shop.stock.reserve',

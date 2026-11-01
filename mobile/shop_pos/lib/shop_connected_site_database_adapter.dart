@@ -199,19 +199,83 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
           ],
         )
         .getSingleOrNull();
-    final deviceAuthority = await database
+    final enrollmentRows = await database
         .customSelect(
-          'SELECT enrollment_evidence_digest FROM shop_connected_scope_binding '
-          'WHERE singleton = 1 AND tenant_id = ? AND site_id = ?',
+          'SELECT evidence.evidence_digest, evidence.evidence_json, '
+          'evidence.coordinator_device_id, evidence.session_generation '
+          'FROM shop_site_enrollment_evidence evidence '
+          'JOIN shop_site_devices device ON device.device_id = evidence.device_id '
+          "WHERE evidence.action = 'approve' AND evidence.tenant_id = ? "
+          'AND evidence.site_id = ? AND evidence.device_id = ? '
+          'AND evidence.client_fingerprint = ? '
+          'AND device.tenant_id = evidence.tenant_id '
+          'AND device.site_id = evidence.site_id '
+          'AND device.public_key_fingerprint = evidence.client_fingerprint '
+          'AND device.session_generation = evidence.session_generation '
+          "AND device.state = 'active' AND NOT EXISTS ("
+          'SELECT 1 FROM shop_site_enrollment_evidence revoked '
+          "WHERE revoked.action = 'revoke' "
+          'AND revoked.tenant_id = evidence.tenant_id '
+          'AND revoked.site_id = evidence.site_id '
+          'AND revoked.device_id = evidence.device_id '
+          'AND revoked.client_fingerprint = evidence.client_fingerprint '
+          'AND revoked.session_generation >= evidence.session_generation)',
           variables: [
             Variable<String>(command.workspaceId),
             Variable<String>(command.siteId),
+            Variable<String>(command.deviceId),
+            Variable<String>(clientFingerprint),
           ],
         )
-        .getSingleOrNull();
-    if (leaseRow == null || deviceAuthority == null) {
+        .get();
+    if (leaseRow == null || enrollmentRows.length != 1) {
       throw StateError('connected_site_cloud_authority_evidence_unavailable');
     }
+    final enrollment = enrollmentRows.single;
+    final enrollmentDigest = enrollment.read<String>('evidence_digest');
+    _requireCanonicalEnrollmentEvidence(
+      enrollment.read<String>('evidence_json'),
+      enrollmentDigest: enrollmentDigest,
+      command: command,
+      clientFingerprint: clientFingerprint,
+    );
+    final commandIssuedAt = DateTime.parse(command.issuedAt)
+        .toUtc()
+        .millisecondsSinceEpoch;
+    final bindingRows = await database
+        .customSelect(
+          'SELECT binding_digest, evidence_json FROM '
+          'shop_site_coordinator_bindings binding '
+          'WHERE workspace_id = ? AND site_id = ? AND client_device_id = ? '
+          'AND client_fingerprint = ? AND client_signing_key_id = ? '
+          'AND enrollment_evidence_digest = ? AND issued_at_millis <= ? '
+          'AND expires_at_millis > ? AND NOT EXISTS ('
+          'SELECT 1 FROM shop_site_coordinator_binding_revocations revoked '
+          'WHERE revoked.target_binding_digest = binding.binding_digest)',
+          variables: [
+            Variable<String>(command.workspaceId),
+            Variable<String>(command.siteId),
+            Variable<String>(command.deviceId),
+            Variable<String>(clientFingerprint),
+            Variable<String>(command.signingKeyId),
+            Variable<String>(enrollmentDigest),
+            Variable<int>(commandIssuedAt),
+            Variable<int>(commandIssuedAt),
+          ],
+        )
+        .get();
+    if (bindingRows.length != 1) {
+      throw StateError('connected_site_cloud_binding_evidence_unavailable');
+    }
+    final binding = bindingRows.single;
+    final bindingDigest = binding.read<String>('binding_digest');
+    _requireCanonicalCoordinatorBinding(
+      binding.read<String>('evidence_json'),
+      bindingDigest: bindingDigest,
+      enrollmentEvidenceDigest: enrollmentDigest,
+      command: command,
+      clientFingerprint: clientFingerprint,
+    );
     final lease = OfflineStaffLeaseV1.fromJson(
       jsonDecode(leaseRow.read<String>('lease_json')),
     );
@@ -219,11 +283,60 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
       command: command,
       lease: lease,
       clientFingerprint: clientFingerprint,
-      enrollmentEvidenceDigest: deviceAuthority.read<String>(
-        'enrollment_evidence_digest',
-      ),
+      enrollmentEvidenceDigest: enrollmentDigest,
+      coordinatorBindingDigest: bindingDigest,
       authorityPayloadDigest: leaseRow.read<String>('issuer_evidence_digest'),
     );
+  }
+
+  void _requireCanonicalEnrollmentEvidence(
+    String encoded, {
+    required String enrollmentDigest,
+    required SiteCommandV1 command,
+    required String clientFingerprint,
+  }) {
+    final decoded = jsonDecode(encoded);
+    if (decoded is! Map || canonicalConnectedSiteJson(decoded) != encoded) {
+      throw StateError('connected_site_enrollment_evidence_invalid');
+    }
+    final evidence = Map<String, Object?>.from(decoded);
+    final signingPayload = Map<String, Object?>.from(evidence)
+      ..remove('signature')
+      ..remove('evidenceDigest');
+    if (evidence['schema'] != 'supermega.shop.owner-enrollment-evidence.v1' ||
+        evidence['action'] != 'approve' ||
+        evidence['evidenceDigest'] != enrollmentDigest ||
+        connectedSiteSha256(signingPayload) != enrollmentDigest ||
+        evidence['tenantId'] != command.workspaceId ||
+        evidence['siteId'] != command.siteId ||
+        evidence['deviceId'] != command.deviceId ||
+        evidence['clientFingerprint'] != clientFingerprint) {
+      throw StateError('connected_site_enrollment_evidence_invalid');
+    }
+  }
+
+  void _requireCanonicalCoordinatorBinding(
+    String encoded, {
+    required String bindingDigest,
+    required String enrollmentEvidenceDigest,
+    required SiteCommandV1 command,
+    required String clientFingerprint,
+  }) {
+    final decoded = jsonDecode(encoded);
+    if (decoded is! Map ||
+        canonicalConnectedSiteJson(decoded) != encoded ||
+        connectedSiteSha256(decoded) != bindingDigest ||
+        decoded['schema'] !=
+            'supermega.connected-site.coordinator-approval.v1' ||
+        decoded['action'] != 'approve' ||
+        decoded['workspaceId'] != command.workspaceId ||
+        decoded['siteId'] != command.siteId ||
+        decoded['enrollmentEvidenceDigest'] != enrollmentEvidenceDigest ||
+        decoded['clientDeviceId'] != command.deviceId ||
+        decoded['clientFingerprint'] != clientFingerprint ||
+        decoded['clientSigningKeyId'] != command.signingKeyId) {
+      throw StateError('connected_site_coordinator_binding_invalid');
+    }
   }
 
   Future<_CommandMapping> _mapping(SiteCommandV1 command) async {

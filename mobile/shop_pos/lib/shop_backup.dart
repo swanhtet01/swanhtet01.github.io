@@ -3725,6 +3725,34 @@ abstract final class ShopBackup {
 
   static bool _v34ConnectedCloudProofRowsValid(Database connection) {
     try {
+      final missingRequirement = connection
+          .select(
+            'SELECT COUNT(*) AS total FROM shop_site_commands command '
+            'LEFT JOIN shop_site_cloud_proof_requirements requirement '
+            'ON requirement.command_id = command.command_id '
+            'WHERE requirement.command_id IS NULL',
+          )
+          .single['total'];
+      if (missingRequirement != 0) return false;
+      for (final row in connection.select(
+        'SELECT requirement.*, command.received_at_millis, '
+        'proof.command_id AS proof_command_id FROM '
+        'shop_site_cloud_proof_requirements requirement '
+        'LEFT JOIN shop_site_commands command '
+        'ON command.command_id = requirement.command_id '
+        'LEFT JOIN shop_site_cloud_proofs proof '
+        'ON proof.command_id = requirement.command_id',
+      )) {
+        final state = row['proof_state'];
+        final receivedAt = row['received_at_millis'];
+        if (receivedAt is! int ||
+            row['recorded_at_millis'] != receivedAt ||
+            (state == 'proofRequired' && row['proof_command_id'] == null) ||
+            (state == 'legacyUnverifiable' &&
+                row['proof_command_id'] != null)) {
+          return false;
+        }
+      }
       for (final row in connection.select(
         'SELECT retained.*, lease.lease_id, lease.tenant_id, lease.site_id, '
         'lease.actor_id, lease.actor_role, lease.capabilities_json, '
@@ -3763,20 +3791,76 @@ abstract final class ShopBackup {
       }
       for (final row in connection.select(
         'SELECT proof.*, command.command_digest, command.tenant_id, '
-        'command.site_id FROM shop_site_cloud_proofs proof '
-        'LEFT JOIN shop_site_commands command ON command.command_id = proof.command_id',
+        'command.site_id, command.actor_id, command.device_id, '
+        'command.aggregate_type, command.aggregate_id, command.expected_version, '
+        'command.payload_digest, command.lease_digest, command.received_at_millis, '
+        'event.payload_json, event.event_digest FROM shop_site_cloud_proofs proof '
+        'LEFT JOIN shop_site_commands command ON command.command_id = proof.command_id '
+        'LEFT JOIN shop_site_events event ON event.command_id = proof.command_id',
       )) {
         final encoded = row['proof_json'] as String;
         final decoded = jsonDecode(encoded);
         final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
+        final signed = proof.signedCommand;
+        final eventPayload = row['payload_json'];
+        final derived = decoded is Map ? decoded['derivation'] : null;
         if (canonicalConnectedSiteJson(decoded) != encoded ||
             proof.proofKind != row['proof_kind'] ||
             proof.proofDigest != row['proof_digest'] ||
             proof.commandId != row['command_id'] ||
             proof.commandDigest != row['command_digest'] ||
             proof.workspaceId != row['tenant_id'] ||
-            proof.siteId != row['site_id']) {
+            proof.siteId != row['site_id'] ||
+            proof.deviceId != row['device_id'] ||
+            proof.leaseDigest != row['lease_digest'] ||
+            (signed != null &&
+                (signed.actorId != row['actor_id'] ||
+                    signed.aggregateType != row['aggregate_type'] ||
+                    signed.aggregateId != row['aggregate_id'] ||
+                    signed.expectedVersion != row['expected_version'] ||
+                    signed.payloadDigest != row['payload_digest'] ||
+                    DateTime.parse(signed.issuedAt).millisecondsSinceEpoch !=
+                        row['received_at_millis'] ||
+                    (eventPayload != null &&
+                        canonicalConnectedSiteJson(signed.payload) !=
+                            eventPayload))) ||
+            (proof.proofKind == 'coordinatorDerived' &&
+                (eventPayload == null ||
+                    derived is! Map ||
+                    derived['eventDigest'] != row['event_digest']))) {
           return false;
+        }
+        if (proof.proofKind == 'coordinatorDerived') {
+          final derivedMap = Map<String, Object?>.from(derived! as Map);
+          final sourceProof = ConnectedSiteCloudProofV1.fromJson(
+            (decoded as Map)['sourceProof'],
+          );
+          final eventPayloadMap = Map<String, Object?>.from(
+            jsonDecode(eventPayload!) as Map,
+          );
+          final source = connection.select(
+            'SELECT COUNT(*) AS total FROM shop_site_cloud_proofs source_proof '
+            'JOIN shop_site_commands source_command '
+            'ON source_command.command_id = source_proof.command_id '
+            'WHERE source_proof.command_id = ? AND source_proof.proof_digest = ? '
+            'AND source_command.tenant_id = ? AND source_command.site_id = ? '
+            'AND source_command.device_id = ?',
+            [
+              sourceProof.commandId,
+              sourceProof.proofDigest,
+              proof.workspaceId,
+              proof.siteId,
+              proof.deviceId,
+            ],
+          ).single['total'];
+          if (source != 1 ||
+              eventPayloadMap['operationId'] != derivedMap['operationId'] ||
+              eventPayloadMap['reservationId'] != derivedMap['reservationId'] ||
+              eventPayloadMap['transitionDigest'] !=
+                  derivedMap['transitionDigest'] ||
+              eventPayloadMap['state'] != derivedMap['state']) {
+            return false;
+          }
         }
       }
       return true;

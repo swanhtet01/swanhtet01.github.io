@@ -445,6 +445,15 @@ void main() {
         await database.customStatement(
           'DROP TRIGGER shop_site_offline_lease_payloads_no_delete',
         );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_cloud_proof_requirements_no_update',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_cloud_proof_requirements_no_delete',
+        );
+        await database.customStatement(
+          'DROP TABLE shop_site_cloud_proof_requirements',
+        );
         await database.customStatement('DROP TABLE shop_site_cloud_proofs');
         await database.customStatement(
           'DROP TABLE shop_site_offline_lease_payloads',
@@ -579,6 +588,7 @@ _appendEvent(
     lease: _lease(),
     clientFingerprint: _digest('cloud-store-device'),
     enrollmentEvidenceDigest: _digest('cloud-store-enrollment'),
+    coordinatorBindingDigest: _digest('cloud-store-binding'),
     authorityPayloadDigest: _digest('cloud-store-issuer'),
   );
   final commandDigest = command.commandDigest;

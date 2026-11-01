@@ -13,6 +13,7 @@ import 'package:supermega_shop/shop_cafe_kitchen_entitlement.dart';
 import 'package:supermega_shop/shop_cafe_order_contract.dart';
 import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
 import 'package:supermega_shop/shop_connected_site_database_adapter.dart';
 import 'package:supermega_shop/shop_connected_stock_reservation.dart';
 import 'package:supermega_shop/shop_database.dart';
@@ -24,7 +25,8 @@ const _workspace = 'workspace-adapter';
 const _site = 'site-adapter';
 const _actor = 'actor-adapter';
 const _device = 'device-adapter';
-final _fingerprint = _digest('adapter-device-key');
+final _adapterPublicKey = List<int>.generate(32, (index) => index + 1);
+final _fingerprint = sha256.convert(_adapterPublicKey).toString();
 const _adapterCapabilities = <String>[
   'cafeKitchenStatus',
   'cafeOrderWrite',
@@ -145,6 +147,129 @@ void main() {
       await database.close();
     }
   });
+
+  test('cloud proof requires one active exact coordinator binding', () async {
+    Future<void> expectRejected(
+      ShopDatabase database,
+      SiteCommandV1 command,
+    ) async {
+      final handler = ShopConnectedSiteDatabaseCommandHandler(
+        database: database,
+        timeAuthority: const _FixedTime(_now),
+        connectedSiteEnabled: true,
+      );
+      await expectLater(
+        handler.handle(_fingerprint, command),
+        throwsStateError,
+      );
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS total FROM shop_site_commands',
+                )
+                .getSingle())
+            .read<int>('total'),
+        0,
+      );
+    }
+
+    final missing = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seed(missing, includeCoordinatorBinding: false);
+      await expectRejected(missing, _reserveCommand('missing-binding'));
+    } finally {
+      await missing.close();
+    }
+
+    final ambiguous = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seed(ambiguous);
+      final original = await ambiguous
+          .customSelect(
+            "SELECT evidence_json FROM shop_site_enrollment_evidence WHERE action = 'approve'",
+          )
+          .getSingle();
+      final duplicate = Map<String, Object>.from(
+        jsonDecode(original.read<String>('evidence_json')) as Map,
+      )..['observedAtMillis'] = _now - 999;
+      final duplicateJson = canonicalConnectedSiteJson(duplicate);
+      await ambiguous.customInsert(
+        'INSERT INTO shop_site_enrollment_evidence '
+        '(evidence_digest, action, tenant_id, site_id, coordinator_device_id, '
+        'device_id, client_fingerprint, session_generation, observed_at_millis, '
+        "authority_key_id, evidence_json) VALUES (?, 'approve', ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+        variables: [
+          Variable<String>(_digest(duplicateJson)),
+          const Variable<String>(_workspace),
+          const Variable<String>(_site),
+          const Variable<String>('coordinator-adapter'),
+          const Variable<String>(_device),
+          Variable<String>(_fingerprint),
+          const Variable<int>(_now - 999),
+          const Variable<String>('owner-authority-adapter'),
+          Variable<String>(duplicateJson),
+        ],
+      );
+      await expectRejected(ambiguous, _reserveCommand('ambiguous-binding'));
+    } finally {
+      await ambiguous.close();
+    }
+
+    final revoked = ShopDatabase(NativeDatabase.memory());
+    try {
+      final bindingDigest = (await _seed(revoked))!;
+      await _attemptStore(revoked).revoke(
+        ConnectedCoordinatorRevocationV1(
+          targetBindingDigest: bindingDigest,
+          workspaceId: _workspace,
+          siteId: _site,
+          clientDeviceId: _device,
+          approvalGeneration: 2,
+          issuedAtMillis: _now - 100,
+          authorityKeyId: 'adapter-binding-authority',
+          authoritySignature: 'A' * 86,
+        ),
+      );
+      await expectRejected(revoked, _reserveCommand('revoked-binding'));
+    } finally {
+      await revoked.close();
+    }
+  });
+
+  test(
+    'cloud proof binds the exact device enrollment among two devices',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        final bindingDigest = (await _seed(database))!;
+        final primaryEnrollment = await _enrollmentDigest(database);
+        final foreignEnrollment = await _seedAdditionalEnrollment(database);
+        final handler = ShopConnectedSiteDatabaseCommandHandler(
+          database: database,
+          timeAuthority: const _FixedTime(_now),
+          connectedSiteEnabled: true,
+        );
+        expect(
+          (await handler.handle(
+            _fingerprint,
+            _reserveCommand('two-device-proof'),
+          )).state,
+          SiteCommandAckState.accepted,
+        );
+        final pending = await database.readConnectedSitePendingEvents(
+          tenantId: _workspace,
+          siteId: _site,
+          afterSequence: 0,
+        );
+        final proof = pending.single.cloudProof.toJson();
+        expect(proof['enrollmentEvidenceDigest'], primaryEnrollment);
+        expect(proof['enrollmentEvidenceDigest'], isNot(foreignEnrollment));
+        expect(proof['coordinatorBindingDigest'], bindingDigest);
+      } finally {
+        await database.close();
+      }
+    },
+  );
 
   test('cafe put rejects missing foreign and expired reservations', () async {
     final database = ShopDatabase(NativeDatabase.memory());
@@ -291,6 +416,16 @@ void main() {
         await database.close();
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
+        final retained = await database.readConnectedSitePendingEvents(
+          tenantId: _workspace,
+          siteId: _site,
+          afterSequence: 0,
+        );
+        expect(retained.single.cloudProof.proofDigest, isNotEmpty);
+        expect(
+          retained.single.cloudProof.toJson()['enrollmentEvidenceDigest'],
+          await _enrollmentDigest(database),
+        );
         handler = ShopConnectedSiteDatabaseCommandHandler(
           database: database,
           timeAuthority: const _FixedTime(_now + 1000),
@@ -1499,7 +1634,11 @@ void main() {
         );
         final publicKey = await keyPair.extractPublicKey();
         final clientFingerprint = sha256.convert(publicKey.bytes).toString();
-        await _seed(database, clientFingerprint: clientFingerprint);
+        await _seed(
+          database,
+          clientFingerprint: clientFingerprint,
+          clientPublicKey: publicKey.bytes,
+        );
         final clientKeys = _AdapterClientKeyStore(
           publicKey: publicKey,
           fingerprint: clientFingerprint,
@@ -1817,11 +1956,13 @@ Future<void> _seedForeignAcceptedCafeMarker(
   });
 }
 
-Future<void> _seed(
+Future<String?> _seed(
   ShopDatabase database, {
   String? clientFingerprint,
+  List<int>? clientPublicKey,
   bool includeKitchenCapability = true,
   int openingStock = 1,
+  bool includeCoordinatorBinding = true,
 }) async {
   final capabilities = <String>[
     if (includeKitchenCapability) 'cafeKitchenStatus',
@@ -1829,6 +1970,26 @@ Future<void> _seed(
     'counterSale',
   ];
   final lease = _adapterLease(capabilities);
+  final fingerprint = clientFingerprint ?? _fingerprint;
+  final publicKey = clientPublicKey ?? _adapterPublicKey;
+  final enrollmentPayload = <String, Object>{
+    'schema': 'supermega.shop.owner-enrollment-evidence.v1',
+    'action': 'approve',
+    'tenantId': _workspace,
+    'siteId': _site,
+    'coordinatorDeviceId': 'coordinator-adapter',
+    'deviceId': _device,
+    'clientFingerprint': fingerprint,
+    'sessionGeneration': 1,
+    'observedAtMillis': _now - 1000,
+    'authorityKeyId': 'owner-authority-adapter',
+  };
+  final enrollmentDigest = connectedSiteSha256(enrollmentPayload);
+  final enrollmentEvidence = <String, Object>{
+    ...enrollmentPayload,
+    'signature': 'E' * 86,
+    'evidenceDigest': enrollmentDigest,
+  };
   await database.addProduct(
     id: 'adapter-item',
     name: 'Adapter item',
@@ -1844,8 +2005,54 @@ Future<void> _seed(
       const Variable<String>(_device),
       const Variable<String>(_workspace),
       const Variable<String>(_site),
-      Variable<String>(clientFingerprint ?? _fingerprint),
+      Variable<String>(fingerprint),
       const Variable<int>(_now - 1000),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_site_pairing_nonces '
+    '(nonce, tenant_id, site_id, coordinator_device_id, issued_at_millis, '
+    'expires_at_millis, consumed_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    variables: [
+      const Variable<String>('adapter-pairing-nonce-0001'),
+      const Variable<String>(_workspace),
+      const Variable<String>(_site),
+      const Variable<String>('coordinator-adapter'),
+      const Variable<int>(_now - 2000),
+      const Variable<int>(_now + 60000),
+      const Variable<int>(_now - 1000),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_site_pending_enrollments '
+    '(client_fingerprint, nonce, tenant_id, site_id, coordinator_device_id, '
+    'public_key, key_algorithm, observed_at_millis) '
+    "VALUES (?, ?, ?, ?, ?, ?, 'ed25519', ?)",
+    variables: [
+      Variable<String>(fingerprint),
+      const Variable<String>('adapter-pairing-nonce-0001'),
+      const Variable<String>(_workspace),
+      const Variable<String>(_site),
+      const Variable<String>('coordinator-adapter'),
+      Variable<Uint8List>(Uint8List.fromList(publicKey)),
+      const Variable<int>(_now - 1000),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_site_enrollment_evidence '
+    '(evidence_digest, action, tenant_id, site_id, coordinator_device_id, '
+    'device_id, client_fingerprint, session_generation, observed_at_millis, '
+    "authority_key_id, evidence_json) VALUES (?, 'approve', ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+    variables: [
+      Variable<String>(enrollmentDigest),
+      const Variable<String>(_workspace),
+      const Variable<String>(_site),
+      const Variable<String>('coordinator-adapter'),
+      const Variable<String>(_device),
+      Variable<String>(fingerprint),
+      const Variable<int>(_now - 1000),
+      const Variable<String>('owner-authority-adapter'),
+      Variable<String>(canonicalConnectedSiteJson(enrollmentEvidence)),
     ],
   );
   await database.customInsert(
@@ -1886,10 +2093,153 @@ Future<void> _seed(
   await database.bindConnectedStockScopeForEnrollment(
     tenantId: _workspace,
     siteId: _site,
-    enrollmentEvidenceDigest: _digest('adapter-enrollment'),
+    enrollmentEvidenceDigest: enrollmentDigest,
     boundAtMillis: _now - 500,
     connectedSiteEnabled: true,
   );
+  if (!includeCoordinatorBinding) return null;
+  final approval = ConnectedCoordinatorApprovalV1(
+    workspaceId: _workspace,
+    siteId: _site,
+    coordinatorDeviceId: 'coordinator-adapter',
+    pairingDigest: _digest('adapter-pairing'),
+    enrollmentEvidenceDigest: enrollmentDigest,
+    clientDeviceId: _device,
+    clientFingerprint: fingerprint,
+    clientSigningKeyId: 'test-key',
+    address: '192.168.10.2',
+    port: 9443,
+    certificateSha256: _digest('adapter-certificate'),
+    approvalGeneration: 1,
+    issuedAtMillis: _now - 500,
+    expiresAtMillis: _now + 60000,
+    authorityKeyId: 'adapter-binding-authority',
+    authoritySignature: 'A' * 86,
+  );
+  return ShopConnectedSiteAttemptStore(
+    database: database,
+    approvalVerifier: const _AllowCoordinatorApprovalVerifier(),
+    runtimeEnabled: true,
+    now: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+  ).importApproval(approval);
+}
+
+ShopConnectedSiteAttemptStore _attemptStore(ShopDatabase database) =>
+    ShopConnectedSiteAttemptStore(
+      database: database,
+      approvalVerifier: const _AllowCoordinatorApprovalVerifier(),
+      runtimeEnabled: true,
+      now: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+    );
+
+Future<String> _enrollmentDigest(ShopDatabase database) async =>
+    (await database
+            .customSelect(
+              "SELECT evidence_digest FROM shop_site_enrollment_evidence WHERE action = 'approve' "
+              'AND tenant_id = ? AND site_id = ? AND device_id = ? '
+              'AND client_fingerprint = ?',
+              variables: [
+                const Variable<String>(_workspace),
+                const Variable<String>(_site),
+                const Variable<String>(_device),
+                Variable<String>(_fingerprint),
+              ],
+            )
+            .getSingle())
+        .read<String>('evidence_digest');
+
+Future<String> _seedAdditionalEnrollment(ShopDatabase database) async {
+  const deviceId = 'device-adapter-secondary';
+  const coordinatorId = 'coordinator-adapter';
+  final publicKey = List<int>.generate(32, (index) => 100 + index);
+  final fingerprint = sha256.convert(publicKey).toString();
+  final payload = <String, Object>{
+    'schema': 'supermega.shop.owner-enrollment-evidence.v1',
+    'action': 'approve',
+    'tenantId': _workspace,
+    'siteId': _site,
+    'coordinatorDeviceId': coordinatorId,
+    'deviceId': deviceId,
+    'clientFingerprint': fingerprint,
+    'sessionGeneration': 1,
+    'observedAtMillis': _now - 900,
+    'authorityKeyId': 'owner-authority-adapter',
+  };
+  final digest = connectedSiteSha256(payload);
+  final evidence = <String, Object>{
+    ...payload,
+    'signature': 'S' * 86,
+    'evidenceDigest': digest,
+  };
+  await database.transaction(() async {
+    await database.customStatement(
+      'INSERT INTO shop_site_pairing_nonces '
+      '(nonce, tenant_id, site_id, coordinator_device_id, issued_at_millis, '
+      'expires_at_millis, consumed_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        'adapter-pairing-nonce-0002',
+        _workspace,
+        _site,
+        coordinatorId,
+        _now - 2000,
+        _now + 60000,
+        _now - 900,
+      ],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_pending_enrollments '
+      '(client_fingerprint, nonce, tenant_id, site_id, coordinator_device_id, '
+      "public_key, key_algorithm, observed_at_millis) VALUES (?, ?, ?, ?, ?, ?, 'ed25519', ?)",
+      [
+        fingerprint,
+        'adapter-pairing-nonce-0002',
+        _workspace,
+        _site,
+        coordinatorId,
+        publicKey,
+        _now - 900,
+      ],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_devices '
+      '(device_id, tenant_id, site_id, public_key_fingerprint, '
+      "session_generation, state, enrolled_at_millis) VALUES (?, ?, ?, ?, 1, 'active', ?)",
+      [deviceId, _workspace, _site, fingerprint, _now - 900],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_enrollment_evidence '
+      '(evidence_digest, action, tenant_id, site_id, coordinator_device_id, '
+      'device_id, client_fingerprint, session_generation, observed_at_millis, '
+      "authority_key_id, evidence_json) VALUES (?, 'approve', ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+      [
+        digest,
+        _workspace,
+        _site,
+        coordinatorId,
+        deviceId,
+        fingerprint,
+        _now - 900,
+        'owner-authority-adapter',
+        canonicalConnectedSiteJson(evidence),
+      ],
+    );
+  });
+  return digest;
+}
+
+class _AllowCoordinatorApprovalVerifier
+    implements ConnectedCoordinatorApprovalVerifier {
+  const _AllowCoordinatorApprovalVerifier();
+
+  @override
+  Future<bool> verify({
+    required String authorityKeyId,
+    required String canonicalEvidence,
+    required String signature,
+  }) async =>
+      authorityKeyId == 'adapter-binding-authority' &&
+      signature == 'A' * 86 &&
+      canonicalEvidence.isNotEmpty;
 }
 
 SiteCommandV1 _reserveCommand(

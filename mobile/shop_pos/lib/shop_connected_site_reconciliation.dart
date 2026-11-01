@@ -139,6 +139,7 @@ class ConnectedSiteCloudProofV1 {
     required OfflineStaffLeaseV1 lease,
     required String clientFingerprint,
     required String enrollmentEvidenceDigest,
+    required String coordinatorBindingDigest,
     required String authorityPayloadDigest,
   }) : this._fromStrict({
          'contract': 'supermega.shop.connected-site-cloud-proof.v1',
@@ -149,6 +150,7 @@ class ConnectedSiteCloudProofV1 {
          'leaseBytesDigest': connectedSiteSha256(lease.toJson()),
          'clientFingerprint': clientFingerprint,
          'enrollmentEvidenceDigest': enrollmentEvidenceDigest,
+         'coordinatorBindingDigest': coordinatorBindingDigest,
          'authorityPayloadDigest': authorityPayloadDigest,
        });
 
@@ -212,6 +214,9 @@ class ConnectedSiteCloudProofV1 {
   String get leaseDigest => proofKind == 'signedClientCommand'
       ? SiteCommandV1.fromJson(_json['command']).leaseDigest
       : _json['leaseDigest']! as String;
+  SiteCommandV1? get signedCommand => proofKind == 'signedClientCommand'
+      ? SiteCommandV1.fromJson(_json['command'])
+      : null;
   String get proofDigest => connectedSiteSha256(_json);
 
   /// Returns a detached copy so callers cannot mutate the validated proof.
@@ -248,6 +253,7 @@ class ConnectedSiteCloudProofV1 {
         'leaseBytesDigest',
         'clientFingerprint',
         'enrollmentEvidenceDigest',
+        'coordinatorBindingDigest',
         'authorityPayloadDigest',
       })) {
         throw const FormatException('connected_site_cloud_proof_shape');
@@ -266,6 +272,8 @@ class ConnectedSiteCloudProofV1 {
           !_isDigest(source['clientFingerprint']! as String) ||
           source['enrollmentEvidenceDigest'] is! String ||
           !_isDigest(source['enrollmentEvidenceDigest']! as String) ||
+          source['coordinatorBindingDigest'] is! String ||
+          !_isDigest(source['coordinatorBindingDigest']! as String) ||
           source['authorityPayloadDigest'] is! String ||
           !_isDigest(source['authorityPayloadDigest']! as String)) {
         throw const FormatException('connected_site_cloud_proof_binding');
@@ -290,6 +298,18 @@ class ConnectedSiteCloudProofV1 {
       final sourceProof = ConnectedSiteCloudProofV1.fromJson(
         source['sourceProof'],
       );
+      final derivation = source['derivation'];
+      final exactDerivation =
+          derivation is Map &&
+          derivation.length == 6 &&
+          const {
+            'contract',
+            'operationId',
+            'reservationId',
+            'transitionDigest',
+            'state',
+            'eventDigest',
+          }.every(derivation.containsKey);
       if (sourceProof.proofKind != 'signedClientCommand' ||
           source['sourceProofDigest'] != sourceProof.proofDigest ||
           source['workspaceId'] != sourceProof.workspaceId ||
@@ -300,9 +320,23 @@ class ConnectedSiteCloudProofV1 {
           !_isIdentifier(source['commandId']! as String) ||
           source['commandDigest'] is! String ||
           !_isDigest(source['commandDigest']! as String) ||
-          source['derivation'] is! Map ||
-          source['derivationDigest'] !=
-              connectedSiteSha256(source['derivation'])) {
+          !exactDerivation ||
+          derivation['contract'] !=
+              'supermega.shop.connected-stock-terminal-derivation.v1' ||
+          derivation['operationId'] is! String ||
+          !_isIdentifier(derivation['operationId']! as String) ||
+          derivation['reservationId'] is! String ||
+          !_isIdentifier(derivation['reservationId']! as String) ||
+          derivation['transitionDigest'] is! String ||
+          !_isDigest(derivation['transitionDigest']! as String) ||
+          !const {
+            'released',
+            'expired',
+            'committed',
+          }.contains(derivation['state']) ||
+          derivation['eventDigest'] is! String ||
+          !_isDigest(derivation['eventDigest']! as String) ||
+          source['derivationDigest'] != connectedSiteSha256(derivation)) {
         throw const FormatException('connected_site_cloud_proof_binding');
       }
     } else {

@@ -750,6 +750,7 @@ ConnectedSiteCloudProofV1 _proof(ConnectedSiteScope scope, String commandId) {
     lease: lease,
     clientFingerprint: connectedSiteSha256({'device': scope.deviceId}),
     enrollmentEvidenceDigest: connectedSiteSha256({'enrollment': commandId}),
+    coordinatorBindingDigest: connectedSiteSha256({'binding': commandId}),
     authorityPayloadDigest: connectedSiteSha256({'authority': commandId}),
   );
 }
