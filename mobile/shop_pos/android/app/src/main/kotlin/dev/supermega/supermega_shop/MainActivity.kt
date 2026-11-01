@@ -39,6 +39,10 @@ class MainActivity : FlutterActivity() {
                 applicationContext,
                 flutterEngine.dartExecutor.binaryMessenger,
             ).register()
+            ConnectedCoordinatorServiceChannel(
+                applicationContext,
+                flutterEngine.dartExecutor.binaryMessenger,
+            ).register()
         }
     }
 }
@@ -900,7 +904,35 @@ internal class ConnectedPlatformSecurityAndroid(
 
     private class PlatformSecurityError(val code: String) : RuntimeException()
 
-    private companion object {
+    companion object {
+        internal fun hasApprovedIssuerTrust(): Boolean =
+            APPROVED_ISSUERS.isNotEmpty()
+
+        internal fun hasCommittedIdentity(context: Context, alias: String): Boolean {
+            if (!TOKEN.matches(alias) || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                return false
+            }
+            return try {
+                val preferences = context.applicationContext.getSharedPreferences(
+                    PREFERENCES,
+                    Context.MODE_PRIVATE,
+                )
+                val raw = preferences.getString("$RECORD_PREFIX$alias", null) ?: return false
+                val record = JSONObject(raw)
+                if (record.getString("schema") != RECORD_SCHEMA ||
+                    record.getString("state") != STATE_COMMITTED) {
+                    return false
+                }
+                KeyStore.getInstance(ANDROID_KEYSTORE).run {
+                    load(null)
+                    containsAlias("supermega-connected-signing-$alias") &&
+                        containsAlias("supermega-connected-seal-$alias")
+                }
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
         const val CHANNEL = "dev.supermega.supermega_shop/connected_security_v1"
         const val PREFERENCES = "supermega_connected_security_v1"
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
@@ -940,7 +972,7 @@ internal class ConnectedPlatformSecurityAndroid(
 
         // Deliberately empty. Adding a key requires independent source review;
         // runtime input, preferences, QR data, and URLs can never populate it.
-        val APPROVED_ISSUERS: Map<String, IssuerTrust> = emptyMap()
+        private val APPROVED_ISSUERS: Map<String, IssuerTrust> = emptyMap()
 
         val COMPLETE_KEYS = setOf(
             "schema", "enrollmentSchema", "requestDigest", "alias", "workspaceId", "siteId",

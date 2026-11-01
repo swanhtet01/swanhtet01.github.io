@@ -140,9 +140,14 @@ flutter {
 
 val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
     val source = file("src/main/kotlin/dev/supermega/supermega_shop/MainActivity.kt")
-    inputs.file(source)
+    val coordinator = file(
+        "src/main/kotlin/dev/supermega/supermega_shop/ConnectedCoordinatorForegroundService.kt",
+    )
+    val manifest = file("src/main/AndroidManifest.xml")
+    inputs.files(source, coordinator, manifest)
     doLast {
-        val text = source.readText()
+        val text = source.readText() + coordinator.readText()
+        val manifestText = manifest.readText()
         val required = listOf(
             "BuildConfig.CONNECTED_SITE_PLATFORM_SECURITY_ENABLED",
             "Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU",
@@ -152,7 +157,7 @@ val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
             "platform_identity_pending_conflict",
             "platform_identity_bundle_conflict",
             "incomplete-only",
-            "APPROVED_ISSUERS: Map<String, IssuerTrust> = emptyMap()",
+            "private val APPROVED_ISSUERS: Map<String, IssuerTrust> = emptyMap()",
             "certificateChainSha256",
             "parseCertificateChain",
             "certificates.forEach { it.checkValidity(validationDate) }",
@@ -182,6 +187,30 @@ val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
         }
         check(!text.contains("CONNECTED_SITE_PLATFORM_SECURITY_ENABLED\", \"true")) {
             "connected_platform_security_must_remain_default_off"
+        }
+        val coordinatorRequired = listOf(
+            "ConnectedCoordinatorForegroundService",
+            "startForeground",
+            "START_STICKY",
+            "POST_NOTIFICATIONS",
+            "issuer_trust_unavailable",
+            "identity_unavailable",
+            "lanListenerActive\" to false",
+            "connectedOperationEnabled\" to false",
+            "sticky_when_ready",
+            "ACTION_START",
+            "ACTION_STOP",
+        )
+        check(coordinatorRequired.all(text::contains)) {
+            "connected_coordinator_service_contract_missing"
+        }
+        check(!text.contains("ServerSocket") && !text.contains("DatagramSocket")) {
+            "connected_coordinator_listener_forbidden"
+        }
+        check(manifestText.contains("android:foregroundServiceType=\"connectedDevice\"") &&
+            manifestText.contains("android:exported=\"false\"") &&
+            manifestText.contains("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE")) {
+            "connected_coordinator_manifest_contract_missing"
         }
     }
 }
