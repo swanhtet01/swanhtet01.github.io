@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import 'shop_connected_site_contracts.dart';
@@ -11,6 +13,7 @@ class ShopConnectedSiteReplicaStore {
     required this.localWorkspaceId,
     required this.localSiteId,
     required this.localClientFingerprint,
+    required this.approvedBindingDigest,
     this.runtimeEnabled = false,
   });
 
@@ -18,6 +21,7 @@ class ShopConnectedSiteReplicaStore {
   final String localWorkspaceId;
   final String localSiteId;
   final String localClientFingerprint;
+  final String approvedBindingDigest;
   final bool runtimeEnabled;
 
   Future<void> applySnapshot({
@@ -30,12 +34,24 @@ class ShopConnectedSiteReplicaStore {
     _requireScope(snapshot.workspaceId, snapshot.siteId);
     final projections = _parseSnapshot(snapshot.projections);
     await database.transaction(() async {
+      await _requireApprovedBinding(certificateSha256, observedAtMillis);
       final head = await _head(
         snapshot.workspaceId,
         snapshot.siteId,
         clientFingerprint,
       );
       _requireBinding(head, certificateSha256);
+      if (head != null &&
+          canonicalConnectedSiteJson(snapshot.projections) !=
+              canonicalConnectedSiteJson(
+                await _readCurrentProjectionState(
+                  snapshot.workspaceId,
+                  snapshot.siteId,
+                  clientFingerprint,
+                ),
+              )) {
+        throw StateError('connected_replica_snapshot_projection_changed');
+      }
       if (head != null &&
           snapshot.continuationCursor < head.read<int>('continuation_cursor')) {
         throw StateError('connected_replica_snapshot_stale');
@@ -87,6 +103,7 @@ class ShopConnectedSiteReplicaStore {
     _requireEnabled(clientFingerprint, certificateSha256, observedAtMillis);
     _requireScope(delta.workspaceId, delta.siteId);
     await database.transaction(() async {
+      await _requireApprovedBinding(certificateSha256, observedAtMillis);
       final head = await _head(
         delta.workspaceId,
         delta.siteId,
@@ -96,28 +113,27 @@ class ShopConnectedSiteReplicaStore {
         throw StateError('connected_replica_delta_cursor_mismatch');
       }
       _requireBinding(head, certificateSha256);
+      final deltaJson = canonicalConnectedSiteJson(delta.toJson());
+      final deltaDigest = connectedSiteSha256(delta.toJson());
       if (head.read<int>('continuation_cursor') == delta.nextCursor) {
-        for (final entry in delta.events) {
-          final existing = await database
-              .customSelect(
-                'SELECT event_json, event_digest FROM shop_connected_replica_events '
-                'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? AND cursor = ?',
-                variables: [
-                  Variable(delta.workspaceId),
-                  Variable(delta.siteId),
-                  Variable(clientFingerprint),
-                  Variable(entry['cursor']! as int),
-                ],
-              )
-              .getSingleOrNull();
-          final canonical = canonicalConnectedSiteJson(
-            (entry['event']! as Map).cast<String, Object?>(),
-          );
-          if (existing == null ||
-              existing.read<String>('event_json') != canonical ||
-              existing.read<String>('event_digest') != entry['eventDigest']) {
-            throw StateError('connected_replica_event_changed_replay');
-          }
+        final delivery = await database
+            .customSelect(
+              'SELECT delta_json, delta_digest FROM shop_connected_replica_deliveries '
+              'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+              'AND after_cursor = ? AND next_cursor = ?',
+              variables: [
+                Variable(delta.workspaceId),
+                Variable(delta.siteId),
+                Variable(clientFingerprint),
+                Variable(delta.afterCursor),
+                Variable(delta.nextCursor),
+              ],
+            )
+            .getSingleOrNull();
+        if (delivery == null ||
+            delivery.read<String>('delta_json') != deltaJson ||
+            delivery.read<String>('delta_digest') != deltaDigest) {
+          throw StateError('connected_replica_event_changed_replay');
         }
         await database.verifyConnectedReplicaEvidence();
         return;
@@ -125,6 +141,21 @@ class ShopConnectedSiteReplicaStore {
       if (head.read<int>('continuation_cursor') != delta.afterCursor) {
         throw StateError('connected_replica_delta_cursor_mismatch');
       }
+      await database.customStatement(
+        'INSERT INTO shop_connected_replica_deliveries '
+        '(workspace_id, site_id, client_fingerprint, after_cursor, next_cursor, delta_json, delta_digest, applied_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          delta.workspaceId,
+          delta.siteId,
+          clientFingerprint,
+          delta.afterCursor,
+          delta.nextCursor,
+          deltaJson,
+          deltaDigest,
+          observedAtMillis,
+        ],
+      );
       for (final entry in delta.events) {
         final cursor = entry['cursor']! as int;
         final event = (entry['event']! as Map).cast<String, Object?>();
@@ -161,7 +192,7 @@ class ShopConnectedSiteReplicaStore {
             observedAtMillis,
           ],
         );
-        await _applyEventProjection(
+        await _applyEventProjections(
           delta.workspaceId,
           delta.siteId,
           clientFingerprint,
@@ -197,6 +228,7 @@ class ShopConnectedSiteReplicaStore {
     _requireEnabled(clientFingerprint, certificateSha256, observedAtMillis);
     _requireScope(workspaceId, siteId);
     await database.transaction(() async {
+      await _requireApprovedBinding(certificateSha256, observedAtMillis);
       final head = await _head(workspaceId, siteId, clientFingerprint);
       if (head == null) throw StateError('connected_replica_missing');
       _requireBinding(head, certificateSha256);
@@ -283,6 +315,88 @@ class ShopConnectedSiteReplicaStore {
     if (workspaceId != localWorkspaceId || siteId != localSiteId) {
       throw StateError('connected_replica_scope_substituted');
     }
+  }
+
+  Future<void> _requireApprovedBinding(
+    String observedCertificateSha256,
+    int observedAtMillis,
+  ) async {
+    final binding = await database
+        .customSelect(
+          'SELECT binding.certificate_sha256, binding.expires_at_millis, '
+          'binding.client_device_id, binding.enrollment_evidence_digest '
+          'FROM shop_site_coordinator_bindings binding '
+          'JOIN shop_site_enrollment_evidence evidence '
+          'ON evidence.evidence_digest = binding.enrollment_evidence_digest '
+          'JOIN shop_site_devices device ON device.device_id = binding.client_device_id '
+          'WHERE binding.binding_digest = ? AND binding.workspace_id = ? '
+          'AND binding.site_id = ? AND binding.client_fingerprint = ? '
+          "AND evidence.action = 'approve' AND evidence.tenant_id = binding.workspace_id "
+          'AND evidence.site_id = binding.site_id '
+          'AND evidence.device_id = binding.client_device_id '
+          'AND evidence.client_fingerprint = binding.client_fingerprint '
+          "AND device.state = 'active' AND device.tenant_id = binding.workspace_id "
+          'AND device.site_id = binding.site_id '
+          'AND device.public_key_fingerprint = binding.client_fingerprint '
+          'AND NOT EXISTS (SELECT 1 FROM shop_site_coordinator_binding_revocations revocation '
+          'WHERE revocation.target_binding_digest = binding.binding_digest '
+          'AND revocation.approval_generation >= binding.approval_generation) LIMIT 1',
+          variables: [
+            Variable(approvedBindingDigest),
+            Variable(localWorkspaceId),
+            Variable(localSiteId),
+            Variable(localClientFingerprint),
+          ],
+        )
+        .getSingleOrNull();
+    if (binding == null ||
+        binding.read<int>('expires_at_millis') <= observedAtMillis ||
+        binding.read<String>('certificate_sha256') !=
+            observedCertificateSha256) {
+      throw StateError('connected_replica_approval_rejected');
+    }
+  }
+
+  Future<Map<String, Object?>> _readCurrentProjectionState(
+    String workspaceId,
+    String siteId,
+    String clientFingerprint,
+  ) async {
+    final rows = await database
+        .customSelect(
+          'SELECT projection_kind, payload_json FROM shop_connected_replica_projections '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+          'ORDER BY projection_kind, aggregate_id',
+          variables: [
+            Variable(workspaceId),
+            Variable(siteId),
+            Variable(clientFingerprint),
+          ],
+        )
+        .get();
+    final result = <String, Object?>{
+      'schema': 'supermega.shop.connected-site-projections.v2',
+      'aggregates': <Object?>[],
+      'cafeOrders': <Object?>[],
+      'stockReservations': <Object?>[],
+      'conflicts': <Object?>[],
+    };
+    const keys = {
+      'aggregate': 'aggregates',
+      'cafeOrder': 'cafeOrders',
+      'stockReservation': 'stockReservations',
+      'conflict': 'conflicts',
+    };
+    for (final row in rows) {
+      final key = keys[row.read<String>('projection_kind')];
+      if (key == null) {
+        throw StateError('connected_replica_projection_kind_invalid');
+      }
+      (result[key]! as List<Object?>).add(
+        jsonDecode(row.read<String>('payload_json')),
+      );
+    }
+    return result;
   }
 
   Future<void> _upsertHead({
@@ -389,79 +503,39 @@ class ShopConnectedSiteReplicaStore {
     );
   }
 
-  Future<void> _applyEventProjection(
+  Future<void> _applyEventProjections(
     String workspaceId,
     String siteId,
     String fingerprint,
     int cursor,
     Map<String, Object?> event,
   ) async {
-    final type = event['eventType'] as String;
-    final aggregateId = event['aggregateId'] as String;
-    final version = event['aggregateVersion'] as int;
     final payload = (event['payload'] as Map).cast<String, Object?>();
-    final kind = type.startsWith('shop.cafe_')
-        ? 'cafeOrder'
-        : type.contains('stock')
-        ? 'stockReservation'
-        : 'aggregate';
-    final replica = switch (kind) {
-      'cafeOrder' => <String, Object?>{
-        'orderId': aggregateId,
-        'ticketVersion': version,
-        'eventType': type,
-        'payload': payload,
-      },
-      'stockReservation' => <String, Object?>{
-        'reservationId': aggregateId,
-        'stateVersion': version,
-        'eventType': type,
-        'payload': payload,
-      },
-      _ => <String, Object?>{
-        'aggregateId': aggregateId,
-        'version': version,
-        'eventType': type,
-        'payload': payload,
-      },
-    };
-    final canonical = canonicalConnectedSiteJson(replica);
-    final current = await database
-        .customSelect(
-          'SELECT aggregate_version, payload_json FROM shop_connected_replica_projections '
-          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? AND projection_kind = ? AND aggregate_id = ?',
-          variables: [
-            Variable(workspaceId),
-            Variable(siteId),
-            Variable(fingerprint),
-            Variable(kind),
-            Variable(aggregateId),
-          ],
-        )
-        .getSingleOrNull();
-    if (current != null &&
-        version != current.read<int>('aggregate_version') + 1) {
-      throw StateError('connected_replica_aggregate_version_gap');
+    if (payload.keys.toSet().difference(const {
+          'contract',
+          'projections',
+        }).isNotEmpty ||
+        payload.length != 2 ||
+        payload['contract'] !=
+            'supermega.shop.connected-site-replica-state.v1' ||
+        payload['projections'] is! Map) {
+      throw StateError('connected_replica_projection_envelope_invalid');
     }
-    if (current == null && version != 1) {
-      throw StateError('connected_replica_aggregate_version_missing');
-    }
+    final projections = _parseSnapshot(
+      (payload['projections']! as Map).cast<String, Object?>(),
+    );
     await database.customStatement(
-      'INSERT INTO shop_connected_replica_projections (workspace_id, site_id, client_fingerprint, projection_kind, aggregate_id, aggregate_version, last_cursor, payload_json, payload_digest) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(workspace_id,site_id,client_fingerprint,projection_kind,aggregate_id) DO UPDATE SET '
-      'aggregate_version=excluded.aggregate_version, last_cursor=excluded.last_cursor, payload_json=excluded.payload_json, payload_digest=excluded.payload_digest '
-      'WHERE excluded.aggregate_version > shop_connected_replica_projections.aggregate_version',
-      [
+      'DELETE FROM shop_connected_replica_projections WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ?',
+      [workspaceId, siteId, fingerprint],
+    );
+    for (final projection in projections) {
+      await _insertProjection(
         workspaceId,
         siteId,
         fingerprint,
-        kind,
-        aggregateId,
-        version,
+        projection,
         cursor,
-        canonical,
-        connectedSiteSha256(replica),
-      ],
-    );
+      );
+    }
   }
 }

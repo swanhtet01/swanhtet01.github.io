@@ -63,7 +63,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 32;
+  static const supportedSchemaVersion = 33;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1919,6 +1919,9 @@ abstract final class ShopBackup {
     final replicaDefinitions = schemaVersion >= 32
         ? shopConnectedReplicaSchemaDefinitionsV32()
         : const <String, String>{};
+    final replicaDeliveryDefinitions = schemaVersion >= 33
+        ? shopConnectedReplicaSchemaDefinitionsV33()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1937,7 +1940,8 @@ abstract final class ShopBackup {
             schemaVersion == 29 ||
             schemaVersion == 30 ||
             schemaVersion == 31 ||
-            schemaVersion == 32) &&
+            schemaVersion == 32 ||
+            schemaVersion == 33) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -1996,6 +2000,14 @@ abstract final class ShopBackup {
               replicaDefinitions.keys.toSet(),
             )) &&
         (schemaVersion < 32 || _v32ConnectedReplicaRowsValid(connection)) &&
+        (schemaVersion < 33 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              replicaDeliveryDefinitions,
+              replicaDeliveryDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 33 ||
+            _v33ConnectedReplicaDeliveryRowsValid(connection)) &&
         _snapshotDefinitionGroupExact(
           objects,
           const {
@@ -2024,6 +2036,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 30) authorityPayloadDefinitions,
           if (schemaVersion >= 31) reservationSessionDefinitions,
           if (schemaVersion >= 32) replicaDefinitions,
+          if (schemaVersion >= 33) replicaDeliveryDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2041,6 +2054,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 30) ...authorityPayloadDefinitions.keys,
           if (schemaVersion >= 31) ...reservationSessionDefinitions.keys,
           if (schemaVersion >= 32) ...replicaDefinitions.keys,
+          if (schemaVersion >= 33) ...replicaDeliveryDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3558,6 +3572,123 @@ abstract final class ShopBackup {
         configurations: rows('shop_site_configuration_snapshots'),
         deltas: rows('shop_site_authority_deltas'),
       );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v33ConnectedReplicaDeliveryRowsValid(Database connection) {
+    try {
+      for (final row in connection.select(
+        'SELECT * FROM shop_site_replica_event_envelopes',
+      )) {
+        final event = jsonDecode(row['event_json'] as String);
+        if (event is! Map ||
+            canonicalConnectedSiteJson(event) != row['event_json'] ||
+            connectedSiteSha256(event) != row['event_digest']) {
+          return false;
+        }
+      }
+      for (final row in connection.select(
+        'SELECT * FROM shop_connected_replica_deliveries',
+      )) {
+        final decoded = jsonDecode(row['delta_json'] as String);
+        if (decoded is! Map ||
+            canonicalConnectedSiteJson(decoded) != row['delta_json'] ||
+            connectedSiteSha256(decoded) != row['delta_digest']) {
+          return false;
+        }
+        final delta = SiteDeltaV1.fromJson(decoded.cast<String, Object?>());
+        final retained = connection.select(
+          'SELECT cursor, event_json, event_digest FROM shop_connected_replica_events '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+          'AND cursor > ? AND cursor <= ? ORDER BY cursor',
+          [
+            row['workspace_id'],
+            row['site_id'],
+            row['client_fingerprint'],
+            row['after_cursor'],
+            row['next_cursor'],
+          ],
+        );
+        if (retained.length != delta.events.length) return false;
+        for (var index = 0; index < retained.length; index++) {
+          final expected = delta.events[index];
+          if (retained[index]['cursor'] != expected['cursor'] ||
+              retained[index]['event_json'] !=
+                  canonicalConnectedSiteJson(expected['event']) ||
+              retained[index]['event_digest'] != expected['eventDigest']) {
+            return false;
+          }
+        }
+      }
+      for (final head in connection.select(
+        'SELECT * FROM shop_connected_replica_heads',
+      )) {
+        final workspace = head['workspace_id'];
+        final site = head['site_id'];
+        final client = head['client_fingerprint'];
+        final snapshot = jsonDecode(head['snapshot_json'] as String) as Map;
+        var projections = (snapshot['projections'] as Map)
+            .cast<String, Object?>();
+        var cursor = head['snapshot_cursor'] as int;
+        final events = connection.select(
+          'SELECT cursor, event_json FROM shop_connected_replica_events '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? AND cursor > ? ORDER BY cursor',
+          [workspace, site, client, cursor],
+        );
+        for (final row in events) {
+          final event = jsonDecode(row['event_json'] as String) as Map;
+          final payload = (event['payload'] as Map).cast<String, Object?>();
+          if (payload.length != 2 ||
+              payload['contract'] !=
+                  'supermega.shop.connected-site-replica-state.v1' ||
+              payload['projections'] is! Map) {
+            return false;
+          }
+          projections = (payload['projections'] as Map).cast<String, Object?>();
+          cursor = row['cursor'] as int;
+        }
+        final expected = <String, (int, String, String)>{};
+        void add(String kind, String list, String id, String version) {
+          for (final raw in projections[list] as List) {
+            final value = (raw as Map).cast<String, Object?>();
+            final canonical = canonicalConnectedSiteJson(value);
+            expected['$kind\u0000${value[id]}'] = (
+              value[version] as int,
+              canonical,
+              connectedSiteSha256(value),
+            );
+          }
+        }
+
+        add('aggregate', 'aggregates', 'aggregateId', 'version');
+        add('cafeOrder', 'cafeOrders', 'orderId', 'ticketVersion');
+        add(
+          'stockReservation',
+          'stockReservations',
+          'reservationId',
+          'stateVersion',
+        );
+        add('conflict', 'conflicts', 'conflictId', 'actualVersion');
+        final actual = connection.select(
+          'SELECT * FROM shop_connected_replica_projections WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ?',
+          [workspace, site, client],
+        );
+        if (actual.length != expected.length) return false;
+        for (final row in actual) {
+          final value =
+              expected['${row['projection_kind']}\u0000${row['aggregate_id']}'];
+          if (value == null ||
+              row['aggregate_version'] != value.$1 ||
+              row['last_cursor'] != cursor ||
+              row['payload_json'] != value.$2 ||
+              row['payload_digest'] != value.$3) {
+            return false;
+          }
+        }
+      }
+      return true;
     } on Object {
       return false;
     }

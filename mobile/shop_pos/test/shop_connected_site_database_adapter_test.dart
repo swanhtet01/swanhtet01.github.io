@@ -221,7 +221,11 @@ void main() {
         expect(delta.events, hasLength(1));
         expect(
           (delta.events.single['event']! as Map)['eventType'],
-          shopConnectedStockReservedEventType,
+          'shop.connected_replica.state.v1',
+        );
+        expect(
+          ((delta.events.single['event']! as Map)['payload']! as Map)['contract'],
+          'supermega.shop.connected-site-replica-state.v1',
         );
         final snapshot = await reader.readSnapshot(_fingerprint);
         expect(snapshot.continuationCursor, 1);
@@ -367,6 +371,13 @@ void main() {
         cafeStore: store,
         connectedSiteEnabled: true,
       );
+      final reader = ShopConnectedSiteDatabaseReplicationReader(
+        database: database,
+        workspaceId: _workspace,
+        siteId: _site,
+      );
+      final initialSnapshot = await reader.readSnapshot(_fingerprint);
+      expect(initialSnapshot.continuationCursor, 0);
       final reserve = _cafeReserveCommand('cafe-reserve');
       expect(
         (await handler.handle(_fingerprint, reserve)).state,
@@ -510,6 +521,32 @@ void main() {
       );
       expect(await _siteCommandCount(database), 5);
       expect(await database.countSales(), 0);
+
+      final conflict = await handler.handle(
+        _fingerprint,
+        _cafeStateCommand('replica-conflict', expectedVersion: 0),
+      );
+      expect(conflict.state, SiteCommandAckState.conflict);
+      final delta = await reader.readDelta(
+        _fingerprint,
+        initialSnapshot.continuationCursor,
+      );
+      final finalSnapshot = await reader.readSnapshot(_fingerprint);
+      expect(delta.nextCursor, finalSnapshot.continuationCursor);
+      expect(delta.events, hasLength(6));
+      final lastEvent = (delta.events.last['event']! as Map)
+          .cast<String, Object?>();
+      final lastPayload = (lastEvent['payload']! as Map)
+          .cast<String, Object?>();
+      expect(
+        canonicalConnectedSiteJson(lastPayload['projections']),
+        canonicalConnectedSiteJson(finalSnapshot.projections),
+      );
+      final projections = (lastPayload['projections']! as Map)
+          .cast<String, Object?>();
+      expect(projections['cafeOrders'], isNotEmpty);
+      expect(projections['stockReservations'], isNotEmpty);
+      expect(projections['conflicts'], isNotEmpty);
     } finally {
       await database.close();
     }

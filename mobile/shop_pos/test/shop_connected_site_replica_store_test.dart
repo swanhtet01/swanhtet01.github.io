@@ -1,20 +1,30 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
+import 'package:supermega_shop/shop_backup.dart';
+import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_replica_store.dart';
 import 'package:supermega_shop/shop_database.dart';
 
 void main() {
   late ShopDatabase database;
-  const client =
-      'a6f50a0df1317f12b89d4e1282347b7e2280b75a70e91f5453693d11f3065777';
+  late String client;
+  late String approvedBindingDigest;
   const certificate =
-      'bb91aec1fe8ac06cf6724b612195d2272eef5ca5d0aa3dabaa4cd290c7e48a8b';
+      '4444444444444444444444444444444444444444444444444444444444444444';
+  final clock = DateTime.utc(2026, 11, 1, 12);
 
-  setUp(() => database = ShopDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    database = ShopDatabase(NativeDatabase.memory());
+    final approval = await _seedApprovedBinding(database, clock);
+    client = approval.$1;
+    approvedBindingDigest = approval.$2;
+  });
   tearDown(() => database.close());
 
   test(
@@ -26,6 +36,7 @@ void main() {
           localWorkspaceId: 'workspace_1',
           localSiteId: 'site_1',
           localClientFingerprint: client,
+          approvedBindingDigest: approvedBindingDigest,
         ).applySnapshot(
           snapshot: _snapshot(),
           clientFingerprint: client,
@@ -39,7 +50,26 @@ void main() {
         localWorkspaceId: 'workspace_1',
         localSiteId: 'site_1',
         localClientFingerprint: client,
+        approvedBindingDigest: approvedBindingDigest,
         runtimeEnabled: true,
+      );
+      await expectLater(
+        store.applySnapshot(
+          snapshot: _snapshot(),
+          clientFingerprint: client,
+          certificateSha256: 'c' * 64,
+          observedAtMillis: 1,
+        ),
+        throwsStateError,
+      );
+      expect(
+        await database
+            .customSelect(
+              'SELECT COUNT(*) AS n FROM shop_connected_replica_heads',
+            )
+            .getSingle()
+            .then((row) => row.read<int>('n')),
+        0,
       );
       await store.applySnapshot(
         snapshot: _snapshot(),
@@ -86,6 +116,7 @@ void main() {
         localWorkspaceId: 'workspace_1',
         localSiteId: 'site_1',
         localClientFingerprint: client,
+        approvedBindingDigest: approvedBindingDigest,
         runtimeEnabled: true,
       );
       await store.applySnapshot(
@@ -158,6 +189,7 @@ void main() {
       localWorkspaceId: 'workspace_1',
       localSiteId: 'site_1',
       localClientFingerprint: client,
+      approvedBindingDigest: approvedBindingDigest,
       runtimeEnabled: true,
     );
     await store.applySnapshot(
@@ -201,6 +233,87 @@ void main() {
     );
   });
 
+  test('exact replay rejects a tail subset of an accepted delivery', () async {
+    final store = ShopConnectedSiteReplicaStore(
+      database: database,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientFingerprint: client,
+      approvedBindingDigest: approvedBindingDigest,
+      runtimeEnabled: true,
+    );
+    await store.applySnapshot(
+      snapshot: _snapshot(),
+      clientFingerprint: client,
+      certificateSha256: certificate,
+      observedAtMillis: 1,
+    );
+    final full = SiteDeltaV1(
+      workspaceId: 'workspace_1',
+      siteId: 'site_1',
+      afterCursor: 0,
+      nextCursor: 2,
+      events: [_entry(1), _entry(2)],
+    );
+    await store.applyDelta(
+      delta: full,
+      clientFingerprint: client,
+      certificateSha256: certificate,
+      observedAtMillis: 2,
+    );
+    await expectLater(
+      store.applyDelta(
+        delta: SiteDeltaV1(
+          workspaceId: 'workspace_1',
+          siteId: 'site_1',
+          afterCursor: 1,
+          nextCursor: 2,
+          events: [_entry(2)],
+        ),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: 3,
+      ),
+      throwsStateError,
+    );
+  });
+
+  test(
+    'recomputed projection digest cannot hide projection tampering',
+    () async {
+      final store = ShopConnectedSiteReplicaStore(
+        database: database,
+        localWorkspaceId: 'workspace_1',
+        localSiteId: 'site_1',
+        localClientFingerprint: client,
+        approvedBindingDigest: approvedBindingDigest,
+        runtimeEnabled: true,
+      );
+      await store.applySnapshot(
+        snapshot: _snapshot(),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: 1,
+      );
+      final tampered = <String, Object?>{
+        'orderId': 'order_1',
+        'ticketVersion': 1,
+        'state': 'paid',
+        'stateRevision': 99,
+        'ticket': <String, Object?>{},
+      };
+      await database.customStatement(
+        'UPDATE shop_connected_replica_projections SET payload_json = ?, payload_digest = ? '
+        "WHERE projection_kind = 'cafeOrder' AND aggregate_id = 'order_1'",
+        [canonicalConnectedSiteJson(tampered), connectedSiteSha256(tampered)],
+      );
+      await expectLater(
+        database.verifyConnectedReplicaEvidence(),
+        throwsStateError,
+      );
+    },
+  );
+
   test(
     'crash between event work and cursor commit leaves no partial evidence',
     () async {
@@ -209,6 +322,7 @@ void main() {
         localWorkspaceId: 'workspace_1',
         localSiteId: 'site_1',
         localClientFingerprint: client,
+        approvedBindingDigest: approvedBindingDigest,
         runtimeEnabled: true,
       );
       await store.applySnapshot(
@@ -250,6 +364,7 @@ void main() {
       localWorkspaceId: 'workspace_1',
       localSiteId: 'site_1',
       localClientFingerprint: client,
+      approvedBindingDigest: approvedBindingDigest,
       runtimeEnabled: true,
     );
     await store.applySnapshot(
@@ -290,10 +405,22 @@ void main() {
       ),
       isTrue,
     );
-    final directory = await Directory.systemTemp.createTemp('replica-v32-');
-    final file = File('${directory.path}/snapshot.sqlite');
+    final directory = await Directory.systemTemp.createTemp('replica-v33-');
+    final archive = File('${directory.path}/replica.smbackup');
+    final file = File('${directory.path}/restored/shop.sqlite');
     addTearDown(() => directory.delete(recursive: true));
-    await database.exportVerifiedLocalSnapshot(file);
+    await ShopBackup.exportEncrypted(
+      database: database,
+      archive: archive,
+      password: 'replica-backup-passphrase',
+      scratchRoot: directory,
+    );
+    await file.parent.create(recursive: true);
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: file,
+      password: 'replica-backup-passphrase',
+    );
     final restored = ShopDatabase(NativeDatabase(file));
     addTearDown(restored.close);
     await restored.verifyConnectedReplicaEvidence();
@@ -308,6 +435,19 @@ void main() {
     await source.close();
     final raw = sqlite.sqlite3.open(file.path);
     try {
+      for (final definition
+          in shopConnectedReplicaSchemaDefinitionsV33().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(definition.value);
+        raw.execute(
+          'DROP ${type == 'table'
+              ? 'TABLE'
+              : type == 'index'
+              ? 'INDEX'
+              : 'TRIGGER'} IF EXISTS ${definition.key}',
+        );
+      }
       for (final definition
           in shopConnectedReplicaSchemaDefinitionsV32().entries
               .toList()
@@ -328,7 +468,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 32);
+    expect(migrated.schemaVersion, 33);
     await migrated.verifyConnectedReplicaEvidence();
   });
 }
@@ -377,6 +517,7 @@ SiteSnapshotV1 _snapshot({String workspaceId = 'workspace_1'}) {
 }
 
 Map<String, Object?> _entry(int cursor) {
+  final projections = _projectionsAfterDelta();
   final event = <String, Object?>{
     'eventId': 'event_$cursor',
     'workspaceId': 'workspace_1',
@@ -384,9 +525,12 @@ Map<String, Object?> _entry(int cursor) {
     'aggregateType': 'cafeOrder',
     'aggregateId': 'order_1',
     'aggregateVersion': 2,
-    'eventType': 'shop.cafe_order.updated',
+    'eventType': 'shop.connected_replica.state.v1',
     'occurredAt': '2026-11-01T00:00:00.000Z',
-    'payload': {'state': 'held'},
+    'payload': {
+      'contract': 'supermega.shop.connected-site-replica-state.v1',
+      'projections': projections,
+    },
   };
   return {
     'cursor': cursor,
@@ -404,29 +548,7 @@ SiteDeltaV1 _delta() => SiteDeltaV1(
 );
 
 SiteSnapshotV1 _snapshotAfterDelta() {
-  final projections = <String, Object?>{
-    'schema': 'supermega.shop.connected-site-projections.v2',
-    'aggregates': [
-      {
-        'aggregateType': 'cafeOrder',
-        'aggregateId': 'order_1',
-        'version': 1,
-        'lastSiteSequence': 0,
-      },
-    ],
-    'cafeOrders': [
-      {
-        'orderId': 'order_1',
-        'ticketVersion': 2,
-        'eventType': 'shop.cafe_order.updated',
-        'payload': {'state': 'held'},
-      },
-    ],
-    'stockReservations': [
-      {'reservationId': 'reservation_1', 'stateVersion': 1, 'state': 'held'},
-    ],
-    'conflicts': <Object?>[],
-  };
+  final projections = _projectionsAfterDelta();
   final unsigned = <String, Object?>{
     'protocolVersion': connectedSiteProtocolVersion,
     'workspaceId': 'workspace_1',
@@ -443,4 +565,153 @@ SiteSnapshotV1 _snapshotAfterDelta() {
     projections: projections,
     checkpointDigest: connectedSiteSha256(unsigned),
   );
+}
+
+Map<String, Object?> _projectionsAfterDelta() => <String, Object?>{
+  'schema': 'supermega.shop.connected-site-projections.v2',
+  'aggregates': [
+    {
+      'aggregateType': 'cafeOrder',
+      'aggregateId': 'order_1',
+      'version': 1,
+      'lastSiteSequence': 0,
+    },
+  ],
+  'cafeOrders': [
+    {
+      'orderId': 'order_1',
+      'ticketVersion': 2,
+      'state': 'held',
+      'stateRevision': 1,
+      'ticket': <String, Object?>{},
+    },
+  ],
+  'stockReservations': [
+    {'reservationId': 'reservation_1', 'stateVersion': 1, 'state': 'held'},
+  ],
+  'conflicts': <Object?>[],
+};
+
+Future<(String, String)> _seedApprovedBinding(
+  ShopDatabase database,
+  DateTime now,
+) async {
+  final publicKey = List<int>.generate(32, (index) => index + 1);
+  final fingerprint = crypto.sha256.convert(publicKey).toString();
+  final observed = now
+      .subtract(const Duration(minutes: 2))
+      .millisecondsSinceEpoch;
+  final payload = <String, Object>{
+    'schema': 'supermega.shop.owner-enrollment-evidence.v1',
+    'action': 'approve',
+    'tenantId': 'workspace_1',
+    'siteId': 'site_1',
+    'coordinatorDeviceId': 'coordinator_1',
+    'deviceId': 'device_1',
+    'clientFingerprint': fingerprint,
+    'sessionGeneration': 1,
+    'observedAtMillis': observed,
+    'authorityKeyId': 'owner_authority_1',
+  };
+  final evidenceDigest = connectedSiteSha256(payload);
+  final evidence = {
+    ...payload,
+    'signature': 'E' * 86,
+    'evidenceDigest': evidenceDigest,
+  };
+  await database.transaction(() async {
+    await database.customStatement(
+      'INSERT INTO shop_site_pairing_nonces (nonce, tenant_id, site_id, '
+      'coordinator_device_id, issued_at_millis, expires_at_millis, consumed_at_millis) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        'pairing_nonce_abcdefghijklmnop',
+        'workspace_1',
+        'site_1',
+        'coordinator_1',
+        observed - 1000,
+        observed + 60000,
+        observed,
+      ],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_pending_enrollments (client_fingerprint, nonce, tenant_id, site_id, '
+      'coordinator_device_id, public_key, key_algorithm, observed_at_millis) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        fingerprint,
+        'pairing_nonce_abcdefghijklmnop',
+        'workspace_1',
+        'site_1',
+        'coordinator_1',
+        publicKey,
+        'ed25519',
+        observed,
+      ],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_devices (device_id, tenant_id, site_id, public_key_fingerprint, '
+      "session_generation, state, enrolled_at_millis) VALUES (?, ?, ?, ?, ?, 'active', ?)",
+      ['device_1', 'workspace_1', 'site_1', fingerprint, 1, observed],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_enrollment_evidence (evidence_digest, action, tenant_id, site_id, '
+      'coordinator_device_id, device_id, client_fingerprint, session_generation, observed_at_millis, '
+      'authority_key_id, evidence_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        evidenceDigest,
+        'approve',
+        'workspace_1',
+        'site_1',
+        'coordinator_1',
+        'device_1',
+        fingerprint,
+        1,
+        observed,
+        'owner_authority_1',
+        canonicalConnectedSiteJson(evidence),
+      ],
+    );
+  });
+  final approval = ConnectedCoordinatorApprovalV1(
+    workspaceId: 'workspace_1',
+    siteId: 'site_1',
+    coordinatorDeviceId: 'coordinator_1',
+    pairingDigest: '1' * 64,
+    enrollmentEvidenceDigest: evidenceDigest,
+    clientDeviceId: 'device_1',
+    clientFingerprint: fingerprint,
+    clientSigningKeyId: 'key_1',
+    address: '192.168.1.2',
+    port: 9443,
+    certificateSha256: '4' * 64,
+    approvalGeneration: 1,
+    issuedAtMillis: now
+        .subtract(const Duration(minutes: 1))
+        .millisecondsSinceEpoch,
+    expiresAtMillis: now.add(const Duration(days: 6)).millisecondsSinceEpoch,
+    authorityKeyId: 'authority_1',
+    authoritySignature: 'A' * 86,
+  );
+  final store = ShopConnectedSiteAttemptStore(
+    database: database,
+    approvalVerifier: const _ReplicaApprovalVerifier(),
+    runtimeEnabled: true,
+    now: () => now,
+  );
+  return (fingerprint, await store.importApproval(approval));
+}
+
+class _ReplicaApprovalVerifier implements ConnectedCoordinatorApprovalVerifier {
+  const _ReplicaApprovalVerifier();
+
+  @override
+  Future<bool> verify({
+    required String authorityKeyId,
+    required String canonicalEvidence,
+    required String signature,
+  }) async =>
+      authorityKeyId == 'authority_1' &&
+      signature == 'A' * 86 &&
+      crypto.sha256.convert(utf8.encode(canonicalEvidence)).bytes.isNotEmpty;
 }

@@ -2514,6 +2514,55 @@ Map<String, String> shopConnectedReplicaSchemaDefinitionsV32() => {
   ),
 };
 
+const shopSiteReplicaEventEnvelopesV33Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_replica_event_envelopes (
+    envelope_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_event_row_id INTEGER REFERENCES shop_site_events(event_row_id),
+    tenant_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    replica_sequence INTEGER NOT NULL CHECK (replica_sequence > 0),
+    event_json TEXT NOT NULL CHECK (json_valid(event_json)),
+    event_digest TEXT NOT NULL CHECK (length(event_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    UNIQUE (tenant_id, site_id, replica_sequence),
+    UNIQUE (source_event_row_id)
+  )
+''';
+
+const shopConnectedReplicaDeliveriesV33Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_replica_deliveries (
+    workspace_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL,
+    after_cursor INTEGER NOT NULL CHECK (after_cursor >= 0),
+    next_cursor INTEGER NOT NULL CHECK (next_cursor > after_cursor),
+    delta_json TEXT NOT NULL CHECK (json_valid(delta_json)),
+    delta_digest TEXT NOT NULL CHECK (length(delta_digest) = 64),
+    applied_at_millis INTEGER NOT NULL CHECK (applied_at_millis > 0),
+    PRIMARY KEY (workspace_id, site_id, client_fingerprint, after_cursor, next_cursor),
+    FOREIGN KEY (workspace_id, site_id, client_fingerprint) REFERENCES
+      shop_connected_replica_heads(workspace_id, site_id, client_fingerprint)
+  )
+''';
+
+Map<String, String> shopConnectedReplicaSchemaDefinitionsV33() => {
+  'shop_site_replica_event_envelopes': shopSiteReplicaEventEnvelopesV33Sql,
+  'shop_connected_replica_deliveries': shopConnectedReplicaDeliveriesV33Sql,
+  for (final table in const [
+    'shop_site_replica_event_envelopes',
+    'shop_connected_replica_deliveries',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected replica delivery evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected replica delivery evidence is immutable',
+    ),
+  },
+};
+
 bool shopConnectedAuthorityPayloadRowsValidV30({
   required Iterable<Map<String, Object?>> payloads,
   required Iterable<Map<String, Object?>> members,
@@ -4240,7 +4289,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 32) return const {};
+  if (schemaVersion < 5 || schemaVersion > 33) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -5326,7 +5375,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 33;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5370,15 +5419,25 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV31Schema();
       await _createConnectedReplicaSchemaV32();
       await _requireUnifiedV32Schema();
+      await _createConnectedReplicaDeliverySchemaV33();
+      await _requireUnifiedV33Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 32) {
+        await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
+        return;
+      }
       if (from == 31) {
         await _requireUnifiedV31Schema();
         await _createConnectedReplicaSchemaV32();
         await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
         return;
       }
       if (from == 30) {
@@ -5388,6 +5447,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV31Schema();
         await _createConnectedReplicaSchemaV32();
         await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
         return;
       }
       final origin = await _classifyUpgradeOrigin(from);
@@ -5400,6 +5461,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV31Schema();
         await _createConnectedReplicaSchemaV32();
         await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
         return;
       }
       if (from == 28) {
@@ -5426,6 +5489,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV31Schema();
         await _createConnectedReplicaSchemaV32();
         await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
         return;
       }
       if (from < 2) {
@@ -5648,19 +5713,116 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV31Schema();
       await _createConnectedReplicaSchemaV32();
       await _requireUnifiedV32Schema();
+      await _createConnectedReplicaDeliverySchemaV33();
+      await _requireUnifiedV33Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV32Schema();
+      await _requireUnifiedV33Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV32Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV33Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
-    if (!await _v32ConnectedReplicaRowsValid()) {
+    if (!await _v32ConnectedReplicaRowsValid() ||
+        !await _v33ConnectedReplicaDeliveryRowsValid()) {
       throw StateError('Connected replica evidence is invalid.');
     }
+  }
+
+  Future<Map<String, Object?>> readConnectedReplicaProjectionV2({
+    required String tenantId,
+    required String siteId,
+  }) async {
+    final aggregateRows = await customSelect(
+      'SELECT aggregate_type, aggregate_id, version, last_site_sequence '
+      'FROM shop_site_aggregate_versions WHERE tenant_id = ? AND site_id = ? '
+      'ORDER BY aggregate_type, aggregate_id',
+      variables: [Variable(tenantId), Variable(siteId)],
+    ).get();
+    final cafeRows = await customSelect(
+      "SELECT id, state, state_revision, ticket_version, ticket_json FROM shop_cafe_orders WHERE state != 'completed' ORDER BY id",
+    ).get();
+    final kitchenRows = await customSelect(
+      'SELECT payload_json FROM shop_sync_outbox WHERE event_type = ? ORDER BY created_at_millis, operation_id',
+      variables: [const Variable(cafeKitchenStatusEventType)],
+    ).get();
+    final kitchenByOrder = <String, List<Object?>>{};
+    for (final row in kitchenRows) {
+      final payload = jsonDecode(row.read<String>('payload_json'));
+      if (payload is! Map || payload['orderId'] is! String) {
+        throw StateError('Connected café kitchen evidence is invalid.');
+      }
+      kitchenByOrder
+          .putIfAbsent(payload['orderId']! as String, () => <Object?>[])
+          .add(Map<String, Object?>.from(payload));
+    }
+    final reservationRows = await customSelect(
+      'SELECT header.reservation_id, header.reservation_json, '
+      "COALESCE(transition.to_state, 'held') AS state "
+      'FROM shop_connected_stock_reservation_headers header '
+      'LEFT JOIN shop_connected_stock_reservation_transitions transition '
+      'ON transition.reservation_id = header.reservation_id '
+      'WHERE header.tenant_id = ? AND header.site_id = ? AND header.legacy_source = 0 '
+      'ORDER BY header.reservation_id',
+      variables: [Variable(tenantId), Variable(siteId)],
+    ).get();
+    final conflictRows = await customSelect(
+      'SELECT conflict.conflict_id, conflict.reason_code, conflict.state, '
+      'command.aggregate_id, COALESCE(aggregate.version, command.expected_version) AS actual_version '
+      'FROM shop_site_conflicts conflict JOIN shop_site_commands command '
+      'ON command.command_id = conflict.command_id '
+      'LEFT JOIN shop_site_aggregate_versions aggregate ON aggregate.tenant_id = command.tenant_id '
+      'AND aggregate.site_id = command.site_id AND aggregate.aggregate_type = command.aggregate_type '
+      'AND aggregate.aggregate_id = command.aggregate_id '
+      'WHERE command.tenant_id = ? AND command.site_id = ? ORDER BY conflict.conflict_id',
+      variables: [Variable(tenantId), Variable(siteId)],
+    ).get();
+    return <String, Object?>{
+      'schema': 'supermega.shop.connected-site-projections.v2',
+      'aggregates': [
+        for (final row in aggregateRows)
+          {
+            'aggregateType': row.read<String>('aggregate_type'),
+            'aggregateId': row.read<String>('aggregate_id'),
+            'version': row.read<int>('version'),
+            'lastSiteSequence': row.read<int>('last_site_sequence'),
+          },
+      ],
+      'cafeOrders': [
+        for (final row in cafeRows)
+          {
+            'orderId': row.read<String>('id'),
+            'state': row.read<String>('state'),
+            'stateRevision': row.read<int>('state_revision'),
+            'ticketVersion': row.read<int>('ticket_version'),
+            'ticket': jsonDecode(row.read<String>('ticket_json')),
+            'kitchenStateEvents':
+                kitchenByOrder[row.read<String>('id')] ?? const <Object?>[],
+          },
+      ],
+      'stockReservations': [
+        for (final row in reservationRows)
+          {
+            ...(jsonDecode(row.read<String>('reservation_json')) as Map)
+                .cast<String, Object?>(),
+            'reservationId': row.read<String>('reservation_id'),
+            'state': row.read<String>('state'),
+            'stateVersion': row.read<String>('state') == 'held' ? 1 : 2,
+          },
+      ],
+      'conflicts': [
+        for (final row in conflictRows)
+          {
+            'conflictId': row.read<String>('conflict_id'),
+            'reasonCode': row.read<String>('reason_code'),
+            'state': row.read<String>('state'),
+            'aggregateId': row.read<String>('aggregate_id'),
+            'actualVersion': row.read<int>('actual_version'),
+          },
+      ],
+    };
   }
 
   /// Revalidates the complete immutable cloud-disposition chain before a
@@ -5871,6 +6033,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedReplicaSchemaV32() async {
     for (final definition
         in shopConnectedReplicaSchemaDefinitionsV32().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedReplicaDeliverySchemaV33() async {
+    for (final definition
+        in shopConnectedReplicaSchemaDefinitionsV33().values) {
       await customStatement(definition);
     }
   }
@@ -7492,6 +7661,9 @@ class ShopDatabase extends _$ShopDatabase {
     final hasReplicaV32 = shopConnectedReplicaSchemaDefinitionsV32().keys.every(
       objects.containsKey,
     );
+    final hasReplicaV33 = shopConnectedReplicaSchemaDefinitionsV33().keys.every(
+      objects.containsKey,
+    );
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -7552,6 +7724,10 @@ class ShopDatabase extends _$ShopDatabase {
         for (final entry in shopConnectedReplicaSchemaDefinitionsV32().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasReplicaV33)
+        for (final entry in shopConnectedReplicaSchemaDefinitionsV33().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -7584,6 +7760,7 @@ class ShopDatabase extends _$ShopDatabase {
       if (hasReservationSessionV31)
         ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
       if (hasReplicaV32) ...shopConnectedReplicaSchemaDefinitionsV32().keys,
+      if (hasReplicaV33) ...shopConnectedReplicaSchemaDefinitionsV33().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -7771,6 +7948,9 @@ class ShopDatabase extends _$ShopDatabase {
     final hasReplicaV32 = shopConnectedReplicaSchemaDefinitionsV32().keys.every(
       objects.containsKey,
     );
+    final hasReplicaV33 = shopConnectedReplicaSchemaDefinitionsV33().keys.every(
+      objects.containsKey,
+    );
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -7807,6 +7987,7 @@ class ShopDatabase extends _$ShopDatabase {
       if (hasReservationSessionV31)
         ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
       if (hasReplicaV32) ...shopConnectedReplicaSchemaDefinitionsV32().keys,
+      if (hasReplicaV33) ...shopConnectedReplicaSchemaDefinitionsV33().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -8307,6 +8488,177 @@ class ShopDatabase extends _$ShopDatabase {
         'The unified Shop v32 connected-replica schema failed verification.',
       );
     }
+  }
+
+  Future<void> _requireUnifiedV33Schema() async {
+    await _requireUnifiedV32Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedReplicaSchemaDefinitionsV33();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v33ConnectedReplicaDeliveryRowsValid()) {
+      throw StateError(
+        'The unified Shop v33 replica-delivery schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v33ConnectedReplicaDeliveryRowsValid() async {
+    try {
+      final envelopes = await customSelect(
+        'SELECT * FROM shop_site_replica_event_envelopes ORDER BY tenant_id, site_id, replica_sequence',
+      ).get();
+      for (final row in envelopes) {
+        final decoded = jsonDecode(row.read<String>('event_json'));
+        if (decoded is! Map ||
+            canonicalConnectedSiteJson(decoded) !=
+                row.read<String>('event_json') ||
+            connectedSiteSha256(decoded) != row.read<String>('event_digest') ||
+            decoded['workspaceId'] != row.read<String>('tenant_id') ||
+            decoded['siteId'] != row.read<String>('site_id')) {
+          return false;
+        }
+      }
+      final deliveries = await customSelect(
+        'SELECT * FROM shop_connected_replica_deliveries ORDER BY workspace_id, site_id, client_fingerprint, after_cursor',
+      ).get();
+      for (final row in deliveries) {
+        final decoded = jsonDecode(row.read<String>('delta_json'));
+        if (decoded is! Map ||
+            canonicalConnectedSiteJson(decoded) !=
+                row.read<String>('delta_json') ||
+            connectedSiteSha256(decoded) != row.read<String>('delta_digest') ||
+            decoded['workspaceId'] != row.read<String>('workspace_id') ||
+            decoded['siteId'] != row.read<String>('site_id') ||
+            decoded['afterCursor'] != row.read<int>('after_cursor') ||
+            decoded['nextCursor'] != row.read<int>('next_cursor')) {
+          return false;
+        }
+        final delta = SiteDeltaV1.fromJson(decoded.cast<String, Object?>());
+        final retained = await customSelect(
+          'SELECT cursor, event_json, event_digest FROM shop_connected_replica_events '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+          'AND cursor > ? AND cursor <= ? ORDER BY cursor',
+          variables: [
+            Variable(row.read<String>('workspace_id')),
+            Variable(row.read<String>('site_id')),
+            Variable(row.read<String>('client_fingerprint')),
+            Variable(row.read<int>('after_cursor')),
+            Variable(row.read<int>('next_cursor')),
+          ],
+        ).get();
+        if (retained.length != delta.events.length) return false;
+        for (var index = 0; index < retained.length; index++) {
+          final expected = delta.events[index];
+          if (retained[index].read<int>('cursor') != expected['cursor'] ||
+              retained[index].read<String>('event_json') !=
+                  canonicalConnectedSiteJson(expected['event']) ||
+              retained[index].read<String>('event_digest') !=
+                  expected['eventDigest']) {
+            return false;
+          }
+        }
+      }
+      final heads = await customSelect(
+        'SELECT * FROM shop_connected_replica_heads',
+      ).get();
+      for (final head in heads) {
+        final workspace = head.read<String>('workspace_id');
+        final site = head.read<String>('site_id');
+        final client = head.read<String>('client_fingerprint');
+        final snapshot = jsonDecode(head.read<String>('snapshot_json')) as Map;
+        var projections = (snapshot['projections'] as Map)
+            .cast<String, Object?>();
+        var projectionCursor = head.read<int>('snapshot_cursor');
+        final events = await customSelect(
+          'SELECT cursor, event_json FROM shop_connected_replica_events '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? AND cursor > ? '
+          'ORDER BY cursor',
+          variables: [
+            Variable(workspace),
+            Variable(site),
+            Variable(client),
+            Variable(projectionCursor),
+          ],
+        ).get();
+        for (final row in events) {
+          final event = jsonDecode(row.read<String>('event_json')) as Map;
+          final payload = (event['payload'] as Map).cast<String, Object?>();
+          if (payload.length != 2 ||
+              payload['contract'] !=
+                  'supermega.shop.connected-site-replica-state.v1' ||
+              payload['projections'] is! Map) {
+            return false;
+          }
+          projections = (payload['projections'] as Map).cast<String, Object?>();
+          projectionCursor = row.read<int>('cursor');
+        }
+        final expected = _connectedReplicaProjectionRows(projections);
+        final actual = await customSelect(
+          'SELECT projection_kind, aggregate_id, aggregate_version, last_cursor, payload_json, payload_digest '
+          'FROM shop_connected_replica_projections WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+          'ORDER BY projection_kind, aggregate_id',
+          variables: [Variable(workspace), Variable(site), Variable(client)],
+        ).get();
+        if (actual.length != expected.length) return false;
+        for (var index = 0; index < actual.length; index++) {
+          final row = actual[index];
+          final wanted = expected[index];
+          if (row.read<String>('projection_kind') != wanted.$1 ||
+              row.read<String>('aggregate_id') != wanted.$2 ||
+              row.read<int>('aggregate_version') != wanted.$3 ||
+              row.read<int>('last_cursor') != projectionCursor ||
+              row.read<String>('payload_json') != wanted.$4 ||
+              row.read<String>('payload_digest') != wanted.$5) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  List<(String, String, int, String, String)> _connectedReplicaProjectionRows(
+    Map<String, Object?> projections,
+  ) {
+    if (projections['schema'] !=
+        'supermega.shop.connected-site-projections.v2') {
+      throw const FormatException('replica projection schema');
+    }
+    final rows = <(String, String, int, String, String)>[];
+    void add(String kind, String listKey, String idKey, String versionKey) {
+      final values = projections[listKey];
+      if (values is! List) {
+        throw const FormatException('replica projection list');
+      }
+      for (final value in values) {
+        final row = (value as Map).cast<String, Object?>();
+        final id = row[idKey] as String;
+        final version = row[versionKey] as int;
+        final canonical = canonicalConnectedSiteJson(row);
+        rows.add((kind, id, version, canonical, connectedSiteSha256(row)));
+      }
+    }
+
+    add('aggregate', 'aggregates', 'aggregateId', 'version');
+    add('cafeOrder', 'cafeOrders', 'orderId', 'ticketVersion');
+    add(
+      'stockReservation',
+      'stockReservations',
+      'reservationId',
+      'stateVersion',
+    );
+    add('conflict', 'conflicts', 'conflictId', 'actualVersion');
+    rows.sort((left, right) {
+      final kind = left.$1.compareTo(right.$1);
+      return kind != 0 ? kind : left.$2.compareTo(right.$2);
+    });
+    return rows;
   }
 
   Future<bool> _v32ConnectedReplicaRowsValid() async {
@@ -10425,6 +10777,16 @@ class ShopDatabase extends _$ShopDatabase {
           ],
         );
         await input.acceptedProjection?.call();
+        await _appendConnectedReplicaEnvelope(
+          sourceEventRowId: eventRowId,
+          eventId: input.eventId,
+          tenantId: input.tenantId,
+          siteId: input.siteId,
+          aggregateType: input.aggregateType,
+          aggregateId: input.aggregateId,
+          aggregateVersion: nextVersion,
+          occurredAtMillis: input.createdAtMillis,
+        );
         await customInsert(
           'INSERT INTO shop_site_command_acks '
           '(command_id, status, event_row_id, site_sequence, canonical_version, '
@@ -10460,6 +10822,55 @@ class ShopDatabase extends _$ShopDatabase {
         );
       }
     });
+  }
+
+  Future<void> _appendConnectedReplicaEnvelope({
+    required int? sourceEventRowId,
+    required String eventId,
+    required String tenantId,
+    required String siteId,
+    required String aggregateType,
+    required String aggregateId,
+    required int aggregateVersion,
+    required int occurredAtMillis,
+  }) async {
+    final replicaSequence = (await customSelect(
+      'SELECT COALESCE(MAX(replica_sequence), 0) + 1 AS next_sequence '
+      'FROM shop_site_replica_event_envelopes WHERE tenant_id = ? AND site_id = ?',
+      variables: [Variable(tenantId), Variable(siteId)],
+    ).getSingle()).read<int>('next_sequence');
+    final projections = await readConnectedReplicaProjectionV2(
+      tenantId: tenantId,
+      siteId: siteId,
+    );
+    final event = <String, Object?>{
+      'eventId': eventId,
+      'workspaceId': tenantId,
+      'siteId': siteId,
+      'aggregateType': aggregateType,
+      'aggregateId': aggregateId,
+      'aggregateVersion': aggregateVersion,
+      'eventType': 'shop.connected_replica.state.v1',
+      'occurredAt': _connectedSiteOccurredAt(occurredAtMillis),
+      'payload': {
+        'contract': 'supermega.shop.connected-site-replica-state.v1',
+        'projections': projections,
+      },
+    };
+    await customStatement(
+      'INSERT INTO shop_site_replica_event_envelopes '
+      '(source_event_row_id, tenant_id, site_id, replica_sequence, event_json, event_digest, created_at_millis) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        sourceEventRowId,
+        tenantId,
+        siteId,
+        replicaSequence,
+        canonicalConnectedSiteJson(event),
+        connectedSiteSha256(event),
+        occurredAtMillis,
+      ],
+    );
   }
 
   Future<ShopConnectedSiteCommandResult> _recordConnectedSiteConflict(
@@ -10514,6 +10925,17 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<String>(conflictDigest),
         Variable<int>(input.createdAtMillis),
       ],
+    );
+    final conflictId = 'conflict:${input.commandId}';
+    await _appendConnectedReplicaEnvelope(
+      sourceEventRowId: null,
+      eventId: 'conflict-event:${input.commandId}',
+      tenantId: input.tenantId,
+      siteId: input.siteId,
+      aggregateType: 'conflict',
+      aggregateId: conflictId,
+      aggregateVersion: 1,
+      occurredAtMillis: input.createdAtMillis,
     );
     return ShopConnectedSiteCommandResult(
       status: ShopConnectedSiteCommandStatus.conflict,
@@ -11696,6 +12118,16 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<String>(eventDigest),
         Variable<int>(occurredAtMillis),
       ],
+    );
+    await _appendConnectedReplicaEnvelope(
+      sourceEventRowId: eventRowId,
+      eventId: eventId,
+      tenantId: tenantId,
+      siteId: siteId,
+      aggregateType: aggregateType,
+      aggregateId: aggregateId,
+      aggregateVersion: nextVersion,
+      occurredAtMillis: occurredAtMillis,
     );
   }
 

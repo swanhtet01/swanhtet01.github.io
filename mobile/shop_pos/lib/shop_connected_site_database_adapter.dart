@@ -625,136 +625,55 @@ class ShopConnectedSiteDatabaseReplicationReader
     int afterCursor,
   ) async {
     await _requireActiveClient(clientFingerprint);
-    final events = await database.readConnectedSitePendingEvents(
-      tenantId: workspaceId,
-      siteId: siteId,
-      afterSequence: afterCursor,
-      limit: pageSize,
-    );
+    final rows = await database
+        .customSelect(
+          'SELECT replica_sequence, event_json, event_digest '
+          'FROM shop_site_replica_event_envelopes '
+          'WHERE tenant_id = ? AND site_id = ? AND replica_sequence > ? '
+          'ORDER BY replica_sequence LIMIT ?',
+          variables: [
+            Variable(workspaceId),
+            Variable(siteId),
+            Variable(afterCursor),
+            Variable(pageSize),
+          ],
+        )
+        .get();
+    final replicaEvents = <Map<String, Object?>>[];
+    for (final row in rows) {
+      replicaEvents.add({
+        'cursor': row.read<int>('replica_sequence'),
+        'event': (jsonDecode(row.read<String>('event_json')) as Map)
+            .cast<String, Object?>(),
+        'eventDigest': row.read<String>('event_digest'),
+      });
+    }
     return SiteDeltaV1(
       workspaceId: workspaceId,
       siteId: siteId,
       afterCursor: afterCursor,
-      nextCursor: events.isEmpty ? afterCursor : events.last.cursor,
-      events: [
-        for (final entry in events)
-          {
-            'cursor': entry.cursor,
-            'event': entry.event,
-            'eventDigest': entry.eventDigest,
-          },
-      ],
+      nextCursor: rows.isEmpty
+          ? afterCursor
+          : rows.last.read<int>('replica_sequence'),
+      events: replicaEvents,
     );
   }
 
   @override
   Future<SiteSnapshotV1> readSnapshot(String clientFingerprint) async {
     await _requireActiveClient(clientFingerprint);
-    final aggregateRows = await database
-        .customSelect(
-          'SELECT aggregate_type, aggregate_id, version, last_site_sequence '
-          'FROM shop_site_aggregate_versions WHERE tenant_id = ? AND site_id = ? '
-          'ORDER BY aggregate_type, aggregate_id',
-          variables: [Variable<String>(workspaceId), Variable<String>(siteId)],
-        )
-        .get();
+    final projections = await database.readConnectedReplicaProjectionV2(
+      tenantId: workspaceId,
+      siteId: siteId,
+    );
     final cursorRow = await database
         .customSelect(
-          'SELECT COALESCE(MAX(site_sequence), 0) AS cursor '
-          'FROM shop_site_events WHERE tenant_id = ? AND site_id = ?',
+          'SELECT COALESCE(MAX(replica_sequence), 0) AS cursor '
+          'FROM shop_site_replica_event_envelopes '
+          'WHERE tenant_id = ? AND site_id = ?',
           variables: [Variable<String>(workspaceId), Variable<String>(siteId)],
         )
         .getSingle();
-    final cafeRows = await database
-        .customSelect(
-          "SELECT id, state, state_revision, ticket_version, ticket_json FROM shop_cafe_orders WHERE state != 'completed' ORDER BY id",
-        )
-        .get();
-    final kitchenRows = await database
-        .customSelect(
-          'SELECT payload_json FROM shop_sync_outbox WHERE event_type = ? ORDER BY created_at_millis, operation_id',
-          variables: [const Variable<String>(cafeKitchenStatusEventType)],
-        )
-        .get();
-    final kitchenByOrder = <String, List<Object?>>{};
-    for (final row in kitchenRows) {
-      final payload = jsonDecode(row.read<String>('payload_json'));
-      if (payload is! Map || payload['orderId'] is! String) {
-        throw StateError('Connected café kitchen evidence is invalid.');
-      }
-      kitchenByOrder
-          .putIfAbsent(payload['orderId']! as String, () => <Object?>[])
-          .add(Map<String, Object?>.from(payload));
-    }
-    final reservationRows = await database
-        .customSelect(
-          'SELECT header.reservation_id, header.reservation_json, '
-          "COALESCE(transition.to_state, 'held') AS state "
-          'FROM shop_connected_stock_reservation_headers header '
-          'LEFT JOIN shop_connected_stock_reservation_transitions transition '
-          'ON transition.reservation_id = header.reservation_id '
-          'WHERE header.tenant_id = ? AND header.site_id = ? AND header.legacy_source = 0 '
-          'ORDER BY header.reservation_id',
-          variables: [Variable<String>(workspaceId), Variable<String>(siteId)],
-        )
-        .get();
-    final conflictRows = await database
-        .customSelect(
-          'SELECT conflict.conflict_id, conflict.reason_code, conflict.state, '
-          'command.aggregate_id, COALESCE(aggregate.version, command.expected_version) AS actual_version '
-          'FROM shop_site_conflicts conflict JOIN shop_site_commands command '
-          'ON command.command_id = conflict.command_id '
-          'LEFT JOIN shop_site_aggregate_versions aggregate ON aggregate.tenant_id = command.tenant_id '
-          'AND aggregate.site_id = command.site_id AND aggregate.aggregate_type = command.aggregate_type '
-          'AND aggregate.aggregate_id = command.aggregate_id '
-          'WHERE command.tenant_id = ? AND command.site_id = ? ORDER BY conflict.conflict_id',
-          variables: [Variable<String>(workspaceId), Variable<String>(siteId)],
-        )
-        .get();
-    final projections = <String, Object?>{
-      'schema': 'supermega.shop.connected-site-projections.v2',
-      'aggregates': [
-        for (final row in aggregateRows)
-          {
-            'aggregateType': row.read<String>('aggregate_type'),
-            'aggregateId': row.read<String>('aggregate_id'),
-            'version': row.read<int>('version'),
-            'lastSiteSequence': row.read<int>('last_site_sequence'),
-          },
-      ],
-      'cafeOrders': [
-        for (final row in cafeRows)
-          {
-            'orderId': row.read<String>('id'),
-            'state': row.read<String>('state'),
-            'stateRevision': row.read<int>('state_revision'),
-            'ticketVersion': row.read<int>('ticket_version'),
-            'ticket': jsonDecode(row.read<String>('ticket_json')),
-            'kitchenStateEvents':
-                kitchenByOrder[row.read<String>('id')] ?? const <Object?>[],
-          },
-      ],
-      'stockReservations': [
-        for (final row in reservationRows)
-          {
-            ...(jsonDecode(row.read<String>('reservation_json')) as Map)
-                .cast<String, Object?>(),
-            'reservationId': row.read<String>('reservation_id'),
-            'state': row.read<String>('state'),
-            'stateVersion': row.read<String>('state') == 'held' ? 1 : 2,
-          },
-      ],
-      'conflicts': [
-        for (final row in conflictRows)
-          {
-            'conflictId': row.read<String>('conflict_id'),
-            'reasonCode': row.read<String>('reason_code'),
-            'state': row.read<String>('state'),
-            'aggregateId': row.read<String>('aggregate_id'),
-            'actualVersion': row.read<int>('actual_version'),
-          },
-      ],
-    };
     final cursor = cursorRow.read<int>('cursor');
     final unsigned = <String, Object?>{
       'protocolVersion': connectedSiteProtocolVersion,
