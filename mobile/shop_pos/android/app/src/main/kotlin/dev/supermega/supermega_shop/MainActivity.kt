@@ -205,6 +205,8 @@ internal class ConnectedPlatformSecurityAndroid(
             issuerKeyId = "",
             enrollmentIssuedAt = "",
             enrollmentExpiresAt = "",
+            enrollmentSignatureAlgorithm = "",
+            issuerSignatureBase64Url = "",
             certificateChainSha256 = "",
         )
         if (!writeRecord(record)) {
@@ -352,6 +354,8 @@ internal class ConnectedPlatformSecurityAndroid(
             issuerKeyId = issuerKeyId,
             enrollmentIssuedAt = bundlePayload["issuedAt"] as String,
             enrollmentExpiresAt = bundlePayload["expiresAt"] as String,
+            enrollmentSignatureAlgorithm = bundlePayload["signatureAlgorithm"] as String,
+            issuerSignatureBase64Url = signatureText,
         )
         if (!writeRecord(committed)) throw PlatformSecurityError(OPERATION_FAILED)
         return completion(committed, replayed = false)
@@ -597,7 +601,7 @@ internal class ConnectedPlatformSecurityAndroid(
     private fun timestampText(args: Map<String, Any?>, key: String): String {
         val value = boundedText(args, key, 40)
         try {
-            Instant.parse(value)
+            canonicalInstant(value)
         } catch (_: Throwable) {
             throw PlatformSecurityError(OPERATION_FAILED)
         }
@@ -612,24 +616,6 @@ internal class ConnectedPlatformSecurityAndroid(
 
     private fun requireValue(args: Map<String, Any?>, key: String, expected: String) {
         if (args[key] != expected) throw PlatformSecurityError(OPERATION_FAILED)
-    }
-
-    private fun digestCanonical(value: Map<String, Any>): String = sha256(
-        canonicalJson(value).toByteArray(StandardCharsets.UTF_8),
-    )
-
-    private fun canonicalJson(value: Any?): String = when (value) {
-        null -> "null"
-        is String -> JSONObject.quote(value)
-        is Boolean, is Int, is Long -> value.toString()
-        is Map<*, *> -> value.entries
-            .map { (key, item) -> (key as? String ?: throw PlatformSecurityError(OPERATION_FAILED)) to item }
-            .sortedBy { it.first }
-            .joinToString(prefix = "{", postfix = "}") { (key, item) ->
-                "${JSONObject.quote(key)}:${canonicalJson(item)}"
-            }
-        is List<*> -> value.joinToString(prefix = "[", postfix = "]") { canonicalJson(it) }
-        else -> throw PlatformSecurityError(OPERATION_FAILED)
     }
 
     private fun encrypt(key: SecretKey, plaintext: ByteArray, aad: ByteArray): SealedBytes =
@@ -647,12 +633,6 @@ internal class ConnectedPlatformSecurityAndroid(
         Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE,
     )
     private fun decodeBase64(value: String) = Base64.decode(value, Base64.NO_WRAP)
-    private fun decodeBase64Url(value: String, length: Int): ByteArray {
-        if (!BASE64_URL.matches(value)) throw PlatformSecurityError(OPERATION_FAILED)
-        val decoded = Base64.decode(value, Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE)
-        if (decoded.size != length || base64Url(decoded) != value) throw PlatformSecurityError(OPERATION_FAILED)
-        return decoded
-    }
     private fun pem(label: String, bytes: ByteArray): ByteArray {
         val encoded = Base64.encode(bytes, Base64.NO_WRAP)
         val header = "-----BEGIN $label-----\n".toByteArray(StandardCharsets.US_ASCII)
@@ -729,6 +709,8 @@ internal class ConnectedPlatformSecurityAndroid(
         val issuerKeyId: String,
         val enrollmentIssuedAt: String,
         val enrollmentExpiresAt: String,
+        val enrollmentSignatureAlgorithm: String,
+        val issuerSignatureBase64Url: String,
         val certificateChainPem: String = "",
         val certificateChainSha256: String = "",
         val certificateFingerprint: String = "",
@@ -758,8 +740,12 @@ internal class ConnectedPlatformSecurityAndroid(
                         DIGEST.matches(certificateChainSha256) &&
                         DIGEST.matches(certificateFingerprint) && DIGEST.matches(bundleDigest) &&
                         TOKEN.matches(issuerKeyId) &&
-                        Instant.parse(enrollmentIssuedAt) != null &&
-                        Instant.parse(enrollmentExpiresAt).isAfter(Instant.parse(enrollmentIssuedAt))
+                        canonicalInstant(enrollmentExpiresAt).isAfter(
+                            canonicalInstant(enrollmentIssuedAt),
+                        ) &&
+                        enrollmentSignatureAlgorithm == "ed25519" &&
+                        BASE64_URL.matches(issuerSignatureBase64Url) &&
+                        decodeBase64Url(issuerSignatureBase64Url, 64).size == 64
                     else -> encryptedTlsPrivate.isEmpty() && encryptedTlsIv.isEmpty() &&
                         cleanupEvidenceJson.isNotEmpty()
                 }
@@ -791,6 +777,8 @@ internal class ConnectedPlatformSecurityAndroid(
             put("issuerKeyId", issuerKeyId)
             put("enrollmentIssuedAt", enrollmentIssuedAt)
             put("enrollmentExpiresAt", enrollmentExpiresAt)
+            put("enrollmentSignatureAlgorithm", enrollmentSignatureAlgorithm)
+            put("issuerSignatureBase64Url", issuerSignatureBase64Url)
             put("certificateChainPem", certificateChainPem)
             put("certificateChainSha256", certificateChainSha256)
             put("certificateFingerprint", certificateFingerprint)
@@ -811,6 +799,7 @@ internal class ConnectedPlatformSecurityAndroid(
                     "signingKeyId", "signingPublicKey", "signingFingerprint", "tlsPublicSpki",
                     "tlsFingerprint", "tlsKeyId", "sealedTlsMaterialId", "nonceBase64Url", "encryptedTlsPrivate",
                     "encryptedTlsIv", "issuerKeyId", "enrollmentIssuedAt", "enrollmentExpiresAt",
+                    "enrollmentSignatureAlgorithm", "issuerSignatureBase64Url",
                     "certificateChainPem", "certificateChainSha256",
                     "certificateFingerprint", "bundleDigest",
                     "cleanupEvidenceJson",
@@ -841,6 +830,8 @@ internal class ConnectedPlatformSecurityAndroid(
                     issuerKeyId = json.optString("issuerKeyId"),
                     enrollmentIssuedAt = json.optString("enrollmentIssuedAt"),
                     enrollmentExpiresAt = json.optString("enrollmentExpiresAt"),
+                    enrollmentSignatureAlgorithm = json.optString("enrollmentSignatureAlgorithm"),
+                    issuerSignatureBase64Url = json.optString("issuerSignatureBase64Url"),
                     certificateChainPem = json.optString("certificateChainPem"),
                     certificateChainSha256 = json.optString("certificateChainSha256"),
                     certificateFingerprint = json.optString("certificateFingerprint"),
@@ -887,14 +878,71 @@ internal class ConnectedPlatformSecurityAndroid(
                     record.sealedTlsMaterialId != sealedTlsMaterialIdFor(alias)) {
                     return "identity_custody_invalid"
                 }
-                val enrollmentIssuedAt = Instant.parse(record.enrollmentIssuedAt)
-                val enrollmentExpiresAt = Instant.parse(record.enrollmentExpiresAt)
+                val enrollmentIssuedAt = canonicalInstant(record.enrollmentIssuedAt)
+                val enrollmentExpiresAt = canonicalInstant(record.enrollmentExpiresAt)
+                val pendingExpiresAt = canonicalInstant(record.pendingExpiresAt)
                 if (enrollmentIssuedAt.isAfter(currentTime.plusSeconds(CLOCK_SKEW_SECONDS)) ||
-                    !enrollmentExpiresAt.isAfter(currentTime)) {
+                    !enrollmentExpiresAt.isAfter(currentTime) ||
+                    enrollmentExpiresAt.isBefore(pendingExpiresAt)) {
                     return "identity_enrollment_expired"
                 }
                 val trust = APPROVED_ISSUERS[record.issuerKeyId]
                     ?: return "issuer_trust_unavailable"
+                val signedBundlePayload = linkedMapOf<String, Any>(
+                    "schema" to ENROLLMENT_BUNDLE_SCHEMA,
+                    "requestDigest" to record.requestDigest,
+                    "alias" to record.alias,
+                    "workspaceId" to record.workspaceId,
+                    "siteId" to record.siteId,
+                    "deviceId" to record.deviceId,
+                    "sessionGeneration" to record.sessionGeneration,
+                    "signingKeyId" to record.signingKeyId,
+                    "signingPublicKeyFingerprintSha256" to record.signingFingerprint,
+                    "tlsKeyId" to record.tlsKeyId,
+                    "tlsPublicKeyFingerprintSha256" to record.tlsFingerprint,
+                    "sealedTlsMaterialId" to record.sealedTlsMaterialId,
+                    "preparationHandle" to record.preparationHandle,
+                    "nonceBase64Url" to record.nonceBase64Url,
+                    "issuerKeyId" to record.issuerKeyId,
+                    "certificateChainSha256" to record.certificateChainSha256,
+                    "tlsCertificateFingerprintSha256" to record.certificateFingerprint,
+                    "issuedAt" to record.enrollmentIssuedAt,
+                    "expiresAt" to record.enrollmentExpiresAt,
+                    "pendingExpiresAt" to record.pendingExpiresAt,
+                    "signatureAlgorithm" to record.enrollmentSignatureAlgorithm,
+                )
+                val reconstructedBundleDigest = digestCanonical(
+                    signedBundlePayload +
+                        ("issuerSignatureBase64Url" to record.issuerSignatureBase64Url),
+                )
+                if (reconstructedBundleDigest != record.bundleDigest) {
+                    return "identity_custody_invalid"
+                }
+                val issuerSignature = decodeBase64Url(record.issuerSignatureBase64Url, 64)
+                try {
+                    val issuerPublicKey = KeyFactory.getInstance("Ed25519").generatePublic(
+                        X509EncodedKeySpec(
+                            Base64.decode(
+                                trust.enrollmentKeySpkiBase64,
+                                Base64.DEFAULT,
+                            ),
+                        ),
+                    )
+                    val signedBytes = canonicalJson(signedBundlePayload)
+                        .toByteArray(StandardCharsets.UTF_8)
+                    try {
+                        val verified = Signature.getInstance("Ed25519").run {
+                            initVerify(issuerPublicKey)
+                            update(signedBytes)
+                            verify(issuerSignature)
+                        }
+                        if (!verified) return "identity_custody_invalid"
+                    } finally {
+                        signedBytes.fill(0)
+                    }
+                } finally {
+                    issuerSignature.fill(0)
+                }
                 val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply {
                     load(null)
                 }
@@ -948,7 +996,10 @@ internal class ConnectedPlatformSecurityAndroid(
                     )
                     val leaf = certificates.first()
                     if (sha256(leaf.encoded) != record.certificateFingerprint ||
-                        sha256(leaf.publicKey.encoded) != record.tlsFingerprint) {
+                        sha256(leaf.publicKey.encoded) != record.tlsFingerprint ||
+                        leaf.notBefore.toInstant().isAfter(enrollmentIssuedAt) ||
+                        leaf.notAfter.toInstant().isBefore(enrollmentExpiresAt) ||
+                        leaf.notAfter.toInstant().isBefore(pendingExpiresAt)) {
                         return "identity_custody_invalid"
                     }
                 } finally {
@@ -1089,6 +1140,34 @@ internal class ConnectedPlatformSecurityAndroid(
             return usage.size > KEY_CERT_SIGN_INDEX && usage[KEY_CERT_SIGN_INDEX]
         }
 
+        private fun canonicalInstant(value: String): Instant {
+            val parsed = Instant.parse(value)
+            if (parsed.toString() != value) throw PlatformSecurityError(OPERATION_FAILED)
+            return parsed
+        }
+
+        private fun digestCanonical(value: Map<String, Any>): String = sha256(
+            canonicalJson(value).toByteArray(StandardCharsets.UTF_8),
+        )
+
+        private fun canonicalJson(value: Any?): String = when (value) {
+            null -> "null"
+            is String -> JSONObject.quote(value)
+            is Boolean, is Int, is Long -> value.toString()
+            is Map<*, *> -> value.entries
+                .map { (key, item) ->
+                    (key as? String ?: throw PlatformSecurityError(OPERATION_FAILED)) to item
+                }
+                .sortedBy { it.first }
+                .joinToString(prefix = "{", postfix = "}") { (key, item) ->
+                    "${JSONObject.quote(key)}:${canonicalJson(item)}"
+                }
+            is List<*> -> value.joinToString(prefix = "[", postfix = "]") {
+                canonicalJson(it)
+            }
+            else -> throw PlatformSecurityError(OPERATION_FAILED)
+        }
+
         private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
             .digest(bytes)
             .joinToString("") { "%02x".format(it) }
@@ -1098,6 +1177,23 @@ internal class ConnectedPlatformSecurityAndroid(
 
         private fun decodeBase64(value: String): ByteArray =
             Base64.decode(value, Base64.NO_WRAP)
+
+        private fun decodeBase64Url(value: String, length: Int): ByteArray {
+            if (!BASE64_URL.matches(value)) throw PlatformSecurityError(OPERATION_FAILED)
+            val decoded = Base64.decode(
+                value,
+                Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE,
+            )
+            val canonical = Base64.encodeToString(
+                decoded,
+                Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE,
+            )
+            if (decoded.size != length || canonical != value) {
+                decoded.fill(0)
+                throw PlatformSecurityError(OPERATION_FAILED)
+            }
+            return decoded
+        }
 
         private fun decrypt(
             key: SecretKey,
