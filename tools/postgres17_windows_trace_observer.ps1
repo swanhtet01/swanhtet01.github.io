@@ -200,8 +200,8 @@ try {
     -or $correlation.stableProcessKeyObserved -ne $true) {
     Fail 'observer_probe_trace_correlation_failed'
   }
-  $processObserved = $correlation.ProcessObserved
-  $imageObserved = $correlation.ImageObserved
+  $processObserved = $correlation.processEventObserved
+  $imageObserved = $correlation.imageEventObserved
   if (-not $processObserved -or -not $imageObserved) { Fail 'observer_probe_trace_coverage_incomplete' }
 } finally {
   $cancelFailed = $false

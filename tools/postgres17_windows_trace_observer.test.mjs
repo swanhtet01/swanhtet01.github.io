@@ -153,6 +153,17 @@ test('production parser accepts one stable start, image, and end lifetime', () =
   })
 })
 
+test('PowerShell bridge reads the exact production parser property names', async () => {
+  const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url),
+    'utf8')
+  assert.match(source, /\$processObserved = \$correlation\.processEventObserved/)
+  assert.match(source, /\$imageObserved = \$correlation\.imageEventObserved/)
+  assert.doesNotMatch(source, /\$correlation\.(?:ProcessObserved|ImageObserved)/)
+  const parsed = correlateTraceXml(validTrace(), probeImage)
+  assert.equal(parsed.processEventObserved, true)
+  assert.equal(parsed.imageEventObserved, true)
+})
+
 test('production parser rejects process-only and image-only evidence', () => {
   assert.throws(() => correlateTraceXml(`<Events>${traceEvent({
     task: 'Process', opcode: 'Start', pid: 41,
