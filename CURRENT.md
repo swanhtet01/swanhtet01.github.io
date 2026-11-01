@@ -21,9 +21,15 @@
   registry metadata still exposes no compatible upstream range.
 - Native run `41338377466` has exact-current isolated Android, iOS and Windows
   QA plus unsigned iPad/iOS jobs **PASS**. The full Android job is **FAIL** at
-  its isolated shard step and Windows PC remains running at last readback;
-  provider logs for the completed Android job are unavailable until the whole
-  workflow terminates, so the new failure is not yet classified.
+  its isolated shard step; Windows PC subsequently passed. Terminal logs show
+  no assertion failure: healthy behavior, persistence and connected shards
+  were terminated at 4:48 solely by the 300-second aggregate guard. Local
+  successor `adfaca5172d482b3e656d11064a9e603e84c0140`, tree
+  `9366a0ee4dced9a249e33d810a9a80d2ed58100b`, raises only that fail-closed
+  orchestration bound to an evidence-backed 480 seconds. Per-test two-minute
+  limits, per-shard timeouts, isolation, exit-status checks and elapsed guard
+  remain unchanged. Native CI contract **21/21 PASS**, verifier **PASS**, diff
+  check **PASS**, independent review **ACCEPT**.
 - The separately authorized non-authoritative Windows observer probe could not
   dispatch: GitHub returned HTTP 404 because the manual workflow is not
   registered on the default branch. No bypass, alternate transfer, installer,
