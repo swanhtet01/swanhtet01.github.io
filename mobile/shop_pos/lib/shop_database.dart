@@ -2426,6 +2426,18 @@ bool shopConnectedAuthorityPayloadRowsValidV30({
   required Iterable<Map<String, Object?>> deltas,
 }) {
   try {
+    bool exactKeys(Object? value, Set<String> keys) =>
+        value is Map &&
+        value.keys.length == keys.length &&
+        value.keys.every((key) => key is String && keys.contains(key));
+    bool identifier(Object? value, {int max = 128}) =>
+        value is String &&
+        value.isNotEmpty &&
+        value.length <= max &&
+        value.trim() == value &&
+        RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:@/-]*$').hasMatch(value);
+    bool validDigest(Object? value) =>
+        value is String && RegExp(r'^[0-9a-f]{64}$').hasMatch(value);
     final payloadList = payloads.toList(growable: false);
     final deltaByKey = <String, Map<String, Object?>>{
       for (final row in deltas)
@@ -2448,17 +2460,44 @@ bool shopConnectedAuthorityPayloadRowsValidV30({
     final payloadKeys = <String>{};
     for (final row in payloadList) {
       final bytes = row['payload_bytes'];
-      final digest = row['payload_digest'];
+      final payloadDigest = row['payload_digest'];
+      final signature = row['signature'];
       if (bytes is! String ||
-          digest is! String ||
+          payloadDigest is! String ||
+          signature is! String ||
+          signature.length < 32 ||
+          signature.length > 4096 ||
           canonicalConnectedSiteJson(jsonDecode(bytes)) != bytes ||
-          crypto.sha256.convert(utf8.encode(bytes)).toString() != digest) {
+          crypto.sha256.convert(utf8.encode(bytes)).toString() !=
+              payloadDigest) {
         return false;
       }
       final decoded = jsonDecode(bytes);
-      if (decoded is! Map ||
+      if (!exactKeys(decoded, const {
+            'schemaId',
+            'protocolVersion',
+            'authorityEventId',
+            'authoritySequence',
+            'previousAuthorityDigest',
+            'workspaceId',
+            'siteId',
+            'issuedAtMillis',
+            'issuerKeyId',
+            'membershipSnapshot',
+            'configurationSnapshot',
+            'payloadDigest',
+          }) ||
           decoded['schemaId'] != 'ConnectedSiteAuthorityPayloadV1' ||
           decoded['protocolVersion'] != 1 ||
+          !identifier(decoded['authorityEventId']) ||
+          !identifier(decoded['workspaceId']) ||
+          !identifier(decoded['siteId']) ||
+          !identifier(decoded['issuerKeyId']) ||
+          !validDigest(decoded['payloadDigest']) ||
+          decoded['authoritySequence'] is! int ||
+          (decoded['authoritySequence'] as int) < 1 ||
+          decoded['issuedAtMillis'] is! int ||
+          (decoded['issuedAtMillis'] as int) < 1 ||
           decoded['authorityEventId'] != row['authority_event_id'] ||
           decoded['authoritySequence'] != row['authority_sequence'] ||
           decoded['previousAuthorityDigest'] !=
@@ -2469,6 +2508,12 @@ bool shopConnectedAuthorityPayloadRowsValidV30({
           decoded['issuerKeyId'] != row['issuer_key_id'] ||
           decoded['membershipSnapshot'] is! Map ||
           decoded['configurationSnapshot'] is! Map) {
+        return false;
+      }
+      final authoritySequence = decoded['authoritySequence'] as int;
+      final previousAuthorityDigest = decoded['previousAuthorityDigest'];
+      if ((authoritySequence == 1 && previousAuthorityDigest != null) ||
+          (authoritySequence > 1 && !validDigest(previousAuthorityDigest))) {
         return false;
       }
       final unsigned = Map<String, Object?>.from(decoded)
@@ -2482,7 +2527,17 @@ bool shopConnectedAuthorityPayloadRowsValidV30({
       final configuration = Map<String, Object?>.from(
         decoded['configurationSnapshot'] as Map,
       );
-      if (connectedSiteSha256(membership) != row['membership_digest'] ||
+      if (!exactKeys(membership, const {'revocationGeneration', 'members'}) ||
+          !exactKeys(configuration, const {
+            'configurationVersion',
+            'businessProfile',
+            'catalogReference',
+          }) ||
+          membership['revocationGeneration'] is! int ||
+          (membership['revocationGeneration'] as int) < 0 ||
+          configuration['configurationVersion'] is! int ||
+          (configuration['configurationVersion'] as int) < 0 ||
+          connectedSiteSha256(membership) != row['membership_digest'] ||
           connectedSiteSha256(configuration) != row['configuration_digest'] ||
           membership['revocationGeneration'] != row['revocation_generation'] ||
           configuration['configurationVersion'] !=
@@ -2495,15 +2550,50 @@ bool shopConnectedAuthorityPayloadRowsValidV30({
       final projectedMembers = membersByKey[key] ?? const [];
       final sourceMembers = membership['members'];
       if (sourceMembers is! List ||
+          sourceMembers.isEmpty ||
+          sourceMembers.length > 128 ||
           sourceMembers.length != projectedMembers.length) {
         return false;
       }
       final byActor = {
         for (final item in projectedMembers) item['actor_id']: item,
       };
+      var previousActor = '';
       for (final item in sourceMembers) {
-        if (item is! Map) {
+        if (!exactKeys(item, const {
+              'actorId',
+              'role',
+              'capabilities',
+              'sessionGeneration',
+            }) ||
+            !identifier(item['actorId']) ||
+            item['actorId']!.toString().compareTo(previousActor) <= 0 ||
+            item['role'] is! String ||
+            item['sessionGeneration'] is! int ||
+            (item['sessionGeneration'] as int) < 1 ||
+            item['capabilities'] is! List ||
+            (item['capabilities'] as List).isEmpty) {
           return false;
+        }
+        previousActor = item['actorId']! as String;
+        final role = ShopStaffRole.values
+            .where((value) => value.name == item['role'])
+            .firstOrNull;
+        if (role == null) {
+          return false;
+        }
+        final sourceCapabilities = item['capabilities']! as List;
+        var previousCapability = '';
+        for (final rawCapability in sourceCapabilities) {
+          final capability = ShopStaffCapability.values
+              .where((value) => value.name == rawCapability)
+              .firstOrNull;
+          if (capability == null ||
+              capability.name.compareTo(previousCapability) <= 0 ||
+              !ShopStaffRolePolicy.allows(role, capability)) {
+            return false;
+          }
+          previousCapability = capability.name;
         }
         final projected = byActor[item['actorId']];
         if (projected == null ||
@@ -2516,6 +2606,26 @@ bool shopConnectedAuthorityPayloadRowsValidV30({
       }
       final projectedConfigs = configsByKey[key] ?? const [];
       if (projectedConfigs.length != 1) {
+        return false;
+      }
+      final business = configuration['businessProfile'];
+      final catalog = configuration['catalogReference'];
+      if (business is! Map || catalog is! Map) {
+        return false;
+      }
+      if (!exactKeys(business, const {
+            'schemaId',
+            'templateId',
+            'templateVersion',
+          }) ||
+          !identifier(business['schemaId']) ||
+          !identifier(business['templateId']) ||
+          business['templateVersion'] is! int ||
+          (business['templateVersion'] as int) < 1 ||
+          !exactKeys(catalog, const {'catalogVersion', 'catalogDigest'}) ||
+          catalog['catalogVersion'] is! int ||
+          (catalog['catalogVersion'] as int) < 1 ||
+          !validDigest(catalog['catalogDigest'])) {
         return false;
       }
       final projectedConfig = projectedConfigs.single;

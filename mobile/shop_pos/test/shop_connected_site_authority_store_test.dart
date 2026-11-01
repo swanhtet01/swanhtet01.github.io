@@ -785,7 +785,7 @@ void main() {
       } finally {
         raw.close();
       }
-      ShopBackup.verifySnapshot(file);
+      expect(() => ShopBackup.verifySnapshot(file), throwsFormatException);
       database = ShopDatabase(NativeDatabase(file));
       final verifier = _RecordingAuthorityVerifier();
       await expectLater(
@@ -794,7 +794,7 @@ void main() {
           nowMillis: () => _now,
           verifier: verifier,
         ).reverifyRetainedPayloads(),
-        _throwsCode('connected_site_authority_payload_shape'),
+        throwsStateError,
       );
       expect(verifier.calls, 0);
     } finally {
