@@ -1,3 +1,5 @@
+import java.time.Instant
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -216,7 +218,8 @@ val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
             "enrollmentIssuedAt.isAfter(currentTime.plusSeconds(CLOCK_SKEW_SECONDS))",
             "!enrollmentExpiresAt.isAfter(currentTime)",
             "enrollmentExpiresAt.isBefore(pendingExpiresAt)",
-            "parsed.toString() != value",
+            "CANONICAL_UTC_TIMESTAMP.matches(value)",
+            "(?:\\.\\d{3,6})?Z$",
             "signedBundlePayload +",
             "reconstructedBundleDigest != record.bundleDigest",
             "initVerify(issuerPublicKey)",
@@ -243,6 +246,33 @@ val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
         }
         check(!text.contains("ServerSocket") && !text.contains("DatagramSocket")) {
             "connected_coordinator_listener_forbidden"
+        }
+        val timestampGrammar = Regex(
+            """^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3,6})?Z$""",
+        )
+        val acceptedTimestamps = listOf(
+            "2026-11-01T12:34:56Z",
+            "2026-11-01T12:34:56.000Z",
+            "2026-11-01T12:34:56.123Z",
+            "2026-11-01T12:34:56.123456Z",
+        )
+        check(acceptedTimestamps.all {
+            timestampGrammar.matches(it) && runCatching { Instant.parse(it) }.isSuccess
+        }) {
+            "connected_coordinator_timestamp_compatibility_fixture_rejected"
+        }
+        val rejectedTimestamps = listOf(
+            "2026-11-01T12:34:56z",
+            "2026-11-01T12:34:56+00:00",
+            "2026-11-01T12:34:56.1Z",
+            "2026-11-01T12:34:56.12Z",
+            "2026-11-01T12:34:56.1234567Z",
+            "2026-13-01T12:34:56.000Z",
+        )
+        check(rejectedTimestamps.none {
+            timestampGrammar.matches(it) && runCatching { Instant.parse(it) }.isSuccess
+        }) {
+            "connected_coordinator_timestamp_compatibility_fixture_accepted"
         }
         check(!text.contains("hasCommittedIdentity")) {
             "connected_coordinator_shallow_identity_check_forbidden"

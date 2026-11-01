@@ -1141,9 +1141,10 @@ internal class ConnectedPlatformSecurityAndroid(
         }
 
         private fun canonicalInstant(value: String): Instant {
-            val parsed = Instant.parse(value)
-            if (parsed.toString() != value) throw PlatformSecurityError(OPERATION_FAILED)
-            return parsed
+            if (!CANONICAL_UTC_TIMESTAMP.matches(value)) {
+                throw PlatformSecurityError(OPERATION_FAILED)
+            }
+            return Instant.parse(value)
         }
 
         private fun digestCanonical(value: Map<String, Any>): String = sha256(
@@ -1242,6 +1243,9 @@ internal class ConnectedPlatformSecurityAndroid(
         val TOKEN = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
         val DIGEST = Regex("^[0-9a-f]{64}$")
         val BASE64_URL = Regex("^[A-Za-z0-9_-]+$")
+        val CANONICAL_UTC_TIMESTAMP = Regex(
+            """^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3,6})?Z$""",
+        )
 
         // Deliberately empty. Adding a key requires independent source review;
         // runtime input, preferences, QR data, and URLs can never populate it.
