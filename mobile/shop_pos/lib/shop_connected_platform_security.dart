@@ -137,20 +137,24 @@ class ConnectedPlatformIdentity {
 /// TLS termination into a native non-exportable-key implementation.
 class ConnectedEphemeralTlsIdentity {
   ConnectedEphemeralTlsIdentity({
-    required Uint8List certificatePem,
-    required Uint8List privateKeyPem,
+    required this.certificatePem,
+    required this.privateKeyPem,
     required this.certificateFingerprintSha256,
-  }) : certificatePem = Uint8List.fromList(certificatePem),
-       privateKeyPem = Uint8List.fromList(privateKeyPem) {
-    if (this.certificatePem.isEmpty || this.privateKeyPem.isEmpty) {
-      throw const ConnectedPlatformSecurityException(
-        'platform_tls_material_invalid',
+  }) {
+    try {
+      if (certificatePem.isEmpty || privateKeyPem.isEmpty) {
+        throw const ConnectedPlatformSecurityException(
+          'platform_tls_material_invalid',
+        );
+      }
+      _validateDigest(
+        certificateFingerprintSha256,
+        'tls_certificate_fingerprint_sha256',
       );
+    } catch (_) {
+      dispose();
+      rethrow;
     }
-    _validateDigest(
-      certificateFingerprintSha256,
-      'tls_certificate_fingerprint_sha256',
-    );
   }
 
   final Uint8List certificatePem;
@@ -298,34 +302,7 @@ class MethodChannelConnectedPlatformSecurity
         'alias': alias,
         'sealedTlsMaterialId': sealedTlsMaterialId,
       });
-      if (value is! Map) {
-        throw const ConnectedPlatformSecurityException(
-          'platform_tls_material_invalid',
-        );
-      }
-      final map = value.map((key, item) => MapEntry(key.toString(), item));
-      const keys = <String>{
-        'schema',
-        'certificatePem',
-        'privateKeyPem',
-        'certificateFingerprintSha256',
-      };
-      if (map.keys.toSet().difference(keys).isNotEmpty ||
-          keys.difference(map.keys.toSet()).isNotEmpty ||
-          map['schema'] != 'supermega.connected-platform-tls-identity.v1' ||
-          map['certificatePem'] is! Uint8List ||
-          map['privateKeyPem'] is! Uint8List ||
-          map['certificateFingerprintSha256'] is! String) {
-        throw const ConnectedPlatformSecurityException(
-          'platform_tls_material_invalid',
-        );
-      }
-      return ConnectedEphemeralTlsIdentity(
-        certificatePem: map['certificatePem']! as Uint8List,
-        privateKeyPem: map['privateKeyPem']! as Uint8List,
-        certificateFingerprintSha256:
-            map['certificateFingerprintSha256']! as String,
-      );
+      return parseConnectedPlatformTlsIdentity(value);
     } on ConnectedPlatformSecurityException {
       rethrow;
     } on PlatformException {
@@ -366,6 +343,41 @@ class MethodChannelConnectedPlatformSecurity
   }
 }
 
+ConnectedEphemeralTlsIdentity parseConnectedPlatformTlsIdentity(Object? value) {
+  if (value is! Map) {
+    throw const ConnectedPlatformSecurityException(
+      'platform_tls_material_invalid',
+    );
+  }
+  final map = value.map((key, item) => MapEntry(key.toString(), item));
+  const keys = <String>{
+    'schema',
+    'certificatePem',
+    'privateKeyPem',
+    'certificateFingerprintSha256',
+  };
+  final certificatePem = map['certificatePem'];
+  final privateKeyPem = map['privateKeyPem'];
+  if (map.keys.toSet().difference(keys).isNotEmpty ||
+      keys.difference(map.keys.toSet()).isNotEmpty ||
+      map['schema'] != 'supermega.connected-platform-tls-identity.v1' ||
+      certificatePem is! Uint8List ||
+      privateKeyPem is! Uint8List ||
+      map['certificateFingerprintSha256'] is! String) {
+    _zeroIfBytes(certificatePem);
+    _zeroIfBytes(privateKeyPem);
+    throw const ConnectedPlatformSecurityException(
+      'platform_tls_material_invalid',
+    );
+  }
+  return ConnectedEphemeralTlsIdentity(
+    certificatePem: certificatePem,
+    privateKeyPem: privateKeyPem,
+    certificateFingerprintSha256:
+        map['certificateFingerprintSha256']! as String,
+  );
+}
+
 void _validateToken(String value, String field) {
   if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$').hasMatch(value)) {
     throw ConnectedPlatformSecurityException('platform_${field}_invalid');
@@ -388,4 +400,8 @@ Uint8List _decodeBase64(String value, String field) {
   } on FormatException {
     throw ConnectedPlatformSecurityException('platform_${field}_invalid');
   }
+}
+
+void _zeroIfBytes(Object? value) {
+  if (value is Uint8List) value.fillRange(0, value.length, 0);
 }

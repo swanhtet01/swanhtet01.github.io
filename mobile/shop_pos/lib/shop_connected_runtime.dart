@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'shop_connected_platform_security.dart';
+import 'shop_runtime_profile.dart';
 
 enum ConnectedRuntimeState {
   stopped,
@@ -24,7 +25,7 @@ class ConnectedRuntimeException implements Exception {
 
 class ConnectedRuntimeStartRequest {
   const ConnectedRuntimeStartRequest({
-    required this.connectedSiteCapability,
+    required this.capabilities,
     required this.bindAddress,
     required this.workspaceId,
     required this.siteId,
@@ -33,7 +34,7 @@ class ConnectedRuntimeStartRequest {
     required this.expectedIdentity,
   });
 
-  final bool connectedSiteCapability;
+  final ShopRuntimeCapabilities capabilities;
   final String bindAddress;
   final String workspaceId;
   final String siteId;
@@ -49,7 +50,7 @@ abstract interface class ConnectedRuntimeReadiness {
     required String workspaceId,
     required String siteId,
     required String coordinatorDeviceId,
-    required String keyId,
+    required ConnectedPlatformIdentity identity,
   });
 
   Future<ConnectedRuntimeAuthorityState> authorityState({
@@ -92,11 +93,15 @@ class ShopConnectedRuntime {
   ConnectedRuntimeStartRequest? _request;
   ConnectedEphemeralTlsIdentity? _tlsIdentity;
   String? _pauseReason;
+  Future<void> _operationTail = Future<void>.value();
 
   ConnectedRuntimeState get state => _state;
   String? get pauseReason => _pauseReason;
 
-  Future<void> start(ConnectedRuntimeStartRequest request) async {
+  Future<void> start(ConnectedRuntimeStartRequest request) =>
+      _serialize(() => _start(request));
+
+  Future<void> _start(ConnectedRuntimeStartRequest request) async {
     if (_state != ConnectedRuntimeState.stopped) {
       throw const ConnectedRuntimeException(
         'connected_runtime_already_started',
@@ -105,13 +110,23 @@ class ShopConnectedRuntime {
     _state = ConnectedRuntimeState.starting;
     await sharedWrites.pause('connected_runtime_starting');
     try {
-      await _verify(request);
+      await _verifyPreIdentity(request);
       final identity = await platformSecurity.loadIdentity(
         alias: request.identityAlias,
       );
       if (!identity.matches(request.expectedIdentity)) {
         throw const ConnectedRuntimeException(
           'connected_runtime_identity_mismatch',
+        );
+      }
+      if (!await readiness.enrollmentApproved(
+        workspaceId: request.workspaceId,
+        siteId: request.siteId,
+        coordinatorDeviceId: request.coordinatorDeviceId,
+        identity: identity,
+      )) {
+        throw const ConnectedRuntimeException(
+          'connected_runtime_enrollment_unapproved',
         );
       }
       final tlsIdentity = await platformSecurity.openTlsIdentity(
@@ -136,21 +151,27 @@ class ShopConnectedRuntime {
       _state = ConnectedRuntimeState.running;
       await sharedWrites.resume();
     } catch (error) {
+      var failureCode = _errorCode(error);
       if (_tlsIdentity != null) {
         try {
           await coordinator.stop();
         } catch (_) {
           // Startup remains failed and writes remain paused. The inability to
           // confirm host stop is reported instead of claiming a clean stop.
-          _pauseReason = 'connected_runtime_stop_unconfirmed';
+          failureCode = 'connected_runtime_stop_unconfirmed';
         }
       }
       _tlsIdentity?.dispose();
       _tlsIdentity = null;
       _request = null;
       _state = ConnectedRuntimeState.failed;
-      _pauseReason = _errorCode(error);
+      _pauseReason = failureCode;
       await sharedWrites.pause(_pauseReason!);
+      if (failureCode == 'connected_runtime_stop_unconfirmed') {
+        throw const ConnectedRuntimeException(
+          'connected_runtime_stop_unconfirmed',
+        );
+      }
       if (error is ConnectedRuntimeException ||
           error is ConnectedPlatformSecurityException) {
         rethrow;
@@ -159,19 +180,31 @@ class ShopConnectedRuntime {
     }
   }
 
-  Future<void> revalidate() async {
+  Future<void> revalidate() => _serialize(_revalidate);
+
+  Future<void> _revalidate() async {
     final request = _request;
     if (_state != ConnectedRuntimeState.running || request == null) {
       throw const ConnectedRuntimeException('connected_runtime_not_running');
     }
     try {
-      await _verify(request);
+      await _verifyPreIdentity(request);
       final identity = await platformSecurity.loadIdentity(
         alias: request.identityAlias,
       );
       if (!identity.matches(request.expectedIdentity)) {
         throw const ConnectedRuntimeException(
           'connected_runtime_identity_mismatch',
+        );
+      }
+      if (!await readiness.enrollmentApproved(
+        workspaceId: request.workspaceId,
+        siteId: request.siteId,
+        coordinatorDeviceId: request.coordinatorDeviceId,
+        identity: identity,
+      )) {
+        throw const ConnectedRuntimeException(
+          'connected_runtime_enrollment_unapproved',
         );
       }
     } catch (error) {
@@ -201,7 +234,9 @@ class ShopConnectedRuntime {
     }
   }
 
-  Future<void> stop() async {
+  Future<void> stop() => _serialize(_stop);
+
+  Future<void> _stop() async {
     if (_state == ConnectedRuntimeState.stopped) return;
     _state = ConnectedRuntimeState.stopping;
     await sharedWrites.pause('connected_runtime_stopped');
@@ -225,8 +260,8 @@ class ShopConnectedRuntime {
     }
   }
 
-  Future<void> _verify(ConnectedRuntimeStartRequest request) async {
-    if (!request.connectedSiteCapability) {
+  Future<void> _verifyPreIdentity(ConnectedRuntimeStartRequest request) async {
+    if (!request.capabilities.connectedSite) {
       throw const ConnectedRuntimeException(
         'connected_runtime_capability_disabled',
       );
@@ -241,16 +276,6 @@ class ShopConnectedRuntime {
         'connected_runtime_database_unready',
       );
     }
-    if (!await readiness.enrollmentApproved(
-      workspaceId: request.workspaceId,
-      siteId: request.siteId,
-      coordinatorDeviceId: request.coordinatorDeviceId,
-      keyId: request.expectedIdentity.keyId,
-    )) {
-      throw const ConnectedRuntimeException(
-        'connected_runtime_enrollment_unapproved',
-      );
-    }
     final authority = await readiness.authorityState(
       workspaceId: request.workspaceId,
       siteId: request.siteId,
@@ -261,6 +286,18 @@ class ShopConnectedRuntime {
         'connected_runtime_authority_${authority.name}',
       );
     }
+  }
+
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _operationTail = _operationTail.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
   }
 }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -5,6 +6,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_platform_security.dart';
 import 'package:supermega_shop/shop_connected_runtime.dart';
+import 'package:supermega_shop/shop_runtime_profile.dart';
 
 void main() {
   late _Security security;
@@ -191,6 +193,24 @@ void main() {
       expect(security.lastTls!.isDisposed, isTrue);
     },
   );
+
+  test(
+    'stop queued during start cannot be overtaken by late startup',
+    () async {
+      security.loadBarrier = Completer<void>();
+      final starting = runtime.start(_request());
+      await security.loadEntered.future;
+      final stopping = runtime.stop();
+      security.loadBarrier!.complete();
+      await starting;
+      await stopping;
+      expect(runtime.state, ConnectedRuntimeState.stopped);
+      expect(writes.paused, isTrue);
+      expect(writes.reasons.last, 'connected_runtime_stopped');
+      expect(coordinator.starts, 1);
+      expect(coordinator.stops, 1);
+    },
+  );
 }
 
 ShopConnectedRuntime _newRuntime(
@@ -209,7 +229,7 @@ ConnectedRuntimeStartRequest _request({
   bool enabled = true,
   String address = '192.168.10.4',
 }) => ConnectedRuntimeStartRequest(
-  connectedSiteCapability: enabled,
+  capabilities: _capabilities(connectedSite: enabled),
   bindAddress: address,
   workspaceId: 'workspace-1',
   siteId: 'site-1',
@@ -217,6 +237,22 @@ ConnectedRuntimeStartRequest _request({
   identityAlias: 'coordinator-1',
   expectedIdentity: _identity(),
 );
+
+ShopRuntimeCapabilities _capabilities({required bool connectedSite}) =>
+    ShopRuntimeCapabilities(
+      managedAuth: false,
+      correctionAuthorization: false,
+      cashMovementAuthorization: false,
+      connectedOrders: false,
+      connectedSite: connectedSite,
+      networkPrinter: false,
+      camera: false,
+      gallery: false,
+      remoteImport: false,
+      externalFileSaving: false,
+      syntheticEvidence: true,
+      loopbackPrinter: false,
+    );
 
 ConnectedPlatformIdentity _identity({String keyId = 'key-1'}) {
   final publicKey = Uint8List.fromList(List<int>.generate(32, (i) => i));
@@ -236,12 +272,16 @@ class _Security implements ConnectedPlatformSecurity {
   String tlsFingerprint = 'b' * 64;
   int loads = 0;
   ConnectedEphemeralTlsIdentity? lastTls;
+  Completer<void> loadEntered = Completer<void>();
+  Completer<void>? loadBarrier;
 
   @override
   Future<ConnectedPlatformIdentity> loadIdentity({
     required String alias,
   }) async {
     loads += 1;
+    if (!loadEntered.isCompleted) loadEntered.complete();
+    await loadBarrier?.future;
     return identity;
   }
 
@@ -288,8 +328,8 @@ class _Readiness implements ConnectedRuntimeReadiness {
     required String workspaceId,
     required String siteId,
     required String coordinatorDeviceId,
-    required String keyId,
-  }) async => enrollment && keyId == 'key-1';
+    required ConnectedPlatformIdentity identity,
+  }) async => enrollment && identity.matches(_identity());
 }
 
 class _Writes implements ConnectedSharedWriteGate {

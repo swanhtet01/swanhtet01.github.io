@@ -99,12 +99,16 @@ void main() {
   });
 
   test('ephemeral TLS bytes are redacted and zeroized on disposal', () async {
+    late Uint8List certificateBytes;
+    late Uint8List privateKeyBytes;
     messenger.setMockMethodCallHandler(channel, (call) async {
       expect(call.method, 'openTlsIdentity');
+      certificateBytes = Uint8List.fromList(utf8.encode('CERTIFICATE'));
+      privateKeyBytes = Uint8List.fromList(utf8.encode('PRIVATE-KEY'));
       return {
         'schema': 'supermega.connected-platform-tls-identity.v1',
-        'certificatePem': Uint8List.fromList(utf8.encode('CERTIFICATE')),
-        'privateKeyPem': Uint8List.fromList(utf8.encode('PRIVATE-KEY')),
+        'certificatePem': certificateBytes,
+        'privateKeyPem': privateKeyBytes,
         'certificateFingerprintSha256': 'b' * 64,
       };
     });
@@ -119,6 +123,35 @@ void main() {
     expect(tls.isDisposed, isTrue);
     expect(tls.privateKeyPem, everyElement(0));
     expect(tls.certificatePem, everyElement(0));
+    // StandardMethodCodec can copy typed data. Assert buffer ownership at the
+    // parser boundary as well as zeroization of the decoded channel value.
+    final ownedCertificate = Uint8List.fromList(certificateBytes);
+    final ownedPrivateKey = Uint8List.fromList(privateKeyBytes);
+    final owned = parseConnectedPlatformTlsIdentity({
+      'schema': 'supermega.connected-platform-tls-identity.v1',
+      'certificatePem': ownedCertificate,
+      'privateKeyPem': ownedPrivateKey,
+      'certificateFingerprintSha256': 'b' * 64,
+    });
+    owned.dispose();
+    expect(ownedPrivateKey, everyElement(0));
+    expect(ownedCertificate, everyElement(0));
+  });
+
+  test('malformed TLS response zeroizes returned secret buffers', () async {
+    final certificateBytes = Uint8List.fromList(utf8.encode('CERTIFICATE'));
+    final privateKeyBytes = Uint8List.fromList(utf8.encode('PRIVATE-KEY'));
+    expect(
+      () => parseConnectedPlatformTlsIdentity({
+        'schema': 'wrong-schema',
+        'certificatePem': certificateBytes,
+        'privateKeyPem': privateKeyBytes,
+        'certificateFingerprintSha256': 'b' * 64,
+      }),
+      throwsA(_securityCode('platform_tls_material_invalid')),
+    );
+    expect(privateKeyBytes, everyElement(0));
+    expect(certificateBytes, everyElement(0));
   });
 }
 
