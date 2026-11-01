@@ -31,10 +31,22 @@ foreach ($name in @(
   'connected_security_store.h'
 )) {
   $source = Join-Path $overlayRoot $name
+  $destination = Join-Path $runnerRoot $name
   if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
     throw 'windows_security_overlay_source_missing'
   }
-  Copy-Item -LiteralPath $source -Destination (Join-Path $runnerRoot $name)
+  if (Test-Path -LiteralPath $destination) {
+    throw 'windows_security_overlay_destination_exists'
+  }
+}
+foreach ($name in @(
+  'connected_security_bridge.cpp',
+  'connected_security_bridge.h',
+  'connected_security_store.cpp',
+  'connected_security_store.h'
+)) {
+  Copy-Item -LiteralPath (Join-Path $overlayRoot $name) `
+    -Destination (Join-Path $runnerRoot $name)
 }
 
 $window = Get-Content -LiteralPath $windowPath -Raw
@@ -58,7 +70,7 @@ $cmake = Replace-ExactOnce `
 $cmake = Replace-ExactOnce `
   $cmake `
   'target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")' `
-  "target_link_libraries(`${BINARY_NAME} PRIVATE `"dwmapi.lib`")`ntarget_link_libraries(`${BINARY_NAME} PRIVATE `"advapi32.lib`" `"crypt32.lib`" `"ole32.lib`" `"shell32.lib`")" `
+  "target_link_libraries(`${BINARY_NAME} PRIVATE `"dwmapi.lib`")`ntarget_link_libraries(`${BINARY_NAME} PRIVATE `"advapi32.lib`" `"bcrypt.lib`" `"crypt32.lib`" `"ole32.lib`" `"shell32.lib`")" `
   'windows_security_overlay_cmake_library_anchor_invalid'
 
 Set-Content -LiteralPath $windowPath -Value $window -Encoding utf8NoBOM

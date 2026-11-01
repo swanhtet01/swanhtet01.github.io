@@ -1,12 +1,14 @@
 #include "connected_security_store.h"
 
 #include <aclapi.h>
+#include <bcrypt.h>
 #include <dpapi.h>
 #include <knownfolders.h>
 #include <sddl.h>
 #include <shlobj.h>
 
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <limits>
 #include <memory>
@@ -18,6 +20,7 @@ namespace {
 
 constexpr size_t kMaximumTlsMaterialBytes = 1024 * 1024;
 constexpr size_t kMaximumSealedBytes = 2 * 1024 * 1024;
+constexpr size_t kSha256Bytes = 32;
 
 struct LocalFreeDeleter {
   void operator()(void* value) const {
@@ -41,6 +44,81 @@ bool IsToken(const std::string& value) {
   return (first >= 'a' && first <= 'z') ||
          (first >= 'A' && first <= 'Z') ||
          (first >= '0' && first <= '9');
+}
+
+void AppendLengthDelimited(std::vector<uint8_t>* target,
+                           const std::string& value) {
+  const uint32_t length = static_cast<uint32_t>(value.size());
+  target->push_back(static_cast<uint8_t>((length >> 24) & 0xff));
+  target->push_back(static_cast<uint8_t>((length >> 16) & 0xff));
+  target->push_back(static_cast<uint8_t>((length >> 8) & 0xff));
+  target->push_back(static_cast<uint8_t>(length & 0xff));
+  target->insert(target->end(), value.begin(), value.end());
+}
+
+std::optional<std::array<uint8_t, kSha256Bytes>> Sha256(
+    const std::vector<uint8_t>& source) {
+  BCRYPT_ALG_HANDLE algorithm = nullptr;
+  BCRYPT_HASH_HANDLE hash = nullptr;
+  DWORD object_bytes = 0;
+  DWORD hash_bytes = 0;
+  DWORD copied = 0;
+  std::vector<uint8_t> object;
+  std::array<uint8_t, kSha256Bytes> digest{};
+  bool ok = false;
+  if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr,
+                                  0) < 0 ||
+      BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH,
+                        reinterpret_cast<PUCHAR>(&object_bytes),
+                        sizeof(object_bytes), &copied, 0) < 0 ||
+      copied != sizeof(object_bytes) || object_bytes == 0 ||
+      BCryptGetProperty(algorithm, BCRYPT_HASH_LENGTH,
+                        reinterpret_cast<PUCHAR>(&hash_bytes),
+                        sizeof(hash_bytes), &copied, 0) < 0 ||
+      copied != sizeof(hash_bytes) || hash_bytes != digest.size()) {
+    goto cleanup;
+  }
+  object.resize(object_bytes);
+  if (BCryptCreateHash(algorithm, &hash, object.data(), object_bytes, nullptr,
+                       0, 0) < 0 ||
+      source.size() > std::numeric_limits<ULONG>::max() ||
+      BCryptHashData(hash, const_cast<PUCHAR>(source.data()),
+                     static_cast<ULONG>(source.size()), 0) < 0 ||
+      BCryptFinishHash(hash, digest.data(),
+                       static_cast<ULONG>(digest.size()), 0) < 0) {
+    goto cleanup;
+  }
+  ok = true;
+
+cleanup:
+  if (hash != nullptr) BCryptDestroyHash(hash);
+  if (algorithm != nullptr) BCryptCloseAlgorithmProvider(algorithm, 0);
+  if (!object.empty()) SecureZeroMemory(object.data(), object.size());
+  if (!ok) {
+    SecureZeroMemory(digest.data(), digest.size());
+    return std::nullopt;
+  }
+  return digest;
+}
+
+std::optional<std::wstring> MaterialFileName(const std::string& alias,
+                                             const std::string& material_id) {
+  if (!IsToken(alias) || !IsToken(material_id)) return std::nullopt;
+  std::vector<uint8_t> identity{'S', 'M', 'C', 'S', '1'};
+  AppendLengthDelimited(&identity, alias);
+  AppendLengthDelimited(&identity, material_id);
+  const auto digest = Sha256(identity);
+  SecureZeroMemory(identity.data(), identity.size());
+  if (!digest.has_value()) return std::nullopt;
+  constexpr wchar_t kHex[] = L"0123456789abcdef";
+  std::wstring name;
+  name.reserve(kSha256Bytes * 2 + 6);
+  for (const uint8_t value : digest.value()) {
+    name.push_back(kHex[value >> 4]);
+    name.push_back(kHex[value & 0x0f]);
+  }
+  name.append(L".dpapi");
+  return name;
 }
 
 bool IsOrdinaryDirectory(const std::filesystem::path& path) {
@@ -220,11 +298,11 @@ std::optional<DpapiCurrentUserStore> DpapiCurrentUserStore::Open() {
 
 std::optional<std::filesystem::path> DpapiCurrentUserStore::MaterialPath(
     const std::string& alias, const std::string& material_id) const {
-  if (!IsToken(alias) || !IsToken(material_id) || !IsOrdinaryDirectory(root_)) {
+  const auto file_name = MaterialFileName(alias, material_id);
+  if (!file_name.has_value() || !IsOrdinaryDirectory(root_)) {
     return std::nullopt;
   }
-  const std::filesystem::path path =
-      root_ / std::filesystem::path(alias + "--" + material_id + ".dpapi");
+  const std::filesystem::path path = root_ / file_name.value();
   if (path.parent_path() != root_) return std::nullopt;
   return path;
 }

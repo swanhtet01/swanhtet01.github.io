@@ -3,6 +3,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
@@ -27,6 +28,20 @@ const windowsSecurityStoreHeader = await readFile(
 const actualTestPaths = (await readdir('mobile/shop_pos/test', { withFileTypes: true }))
   .filter(entry => entry.isFile() && entry.name.endsWith('_test.dart'))
   .map(entry => `test/${entry.name}`)
+
+function windowsMaterialFileName(alias, materialId) {
+  const token = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+  if (!token.test(alias) || !token.test(materialId)) return null
+  const field = value => {
+    const bytes = Buffer.from(value, 'utf8')
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(bytes.length)
+    return Buffer.concat([length, bytes])
+  }
+  return `${createHash('sha256')
+    .update(Buffer.concat([Buffer.from('SMCS1'), field(alias), field(materialId)]))
+    .digest('hex')}.dpapi`
+}
 
 test('Android QA source declares the exact fail-closed recovery capability tuple', () => {
   for (const token of [
@@ -102,7 +117,9 @@ test('both generated Windows runners apply the fail-closed security overlay', ()
     'connected_security_store.cpp',
     'windows_security_overlay_registration_anchor_invalid',
     'advapi32.lib',
+    'bcrypt.lib',
     'crypt32.lib',
+    'windows_security_overlay_destination_exists',
   ]) {
     assert.ok(windowsOverlayScript.includes(token), token)
   }
@@ -110,9 +127,27 @@ test('both generated Windows runners apply the fail-closed security overlay', ()
   assert.ok(windowsSecurityBridge.includes('SupportsPersistentNonExportableEd25519'))
   assert.ok(windowsSecurityStore.includes('CRYPTPROTECT_UI_FORBIDDEN'))
   assert.ok(windowsSecurityStore.includes('PROTECTED_DACL_SECURITY_INFORMATION'))
+  assert.ok(windowsSecurityStore.includes("std::vector<uint8_t> identity{'S', 'M', 'C', 'S', '1'}"))
+  assert.ok(windowsSecurityStore.includes('BCryptHashData'))
   assert.ok(windowsSecurityStore.includes('SupportsPersistentNonExportableEd25519() { return false; }'))
   assert.ok(windowsSecurityStoreHeader.includes('class IdentityMetadataStore'))
   assert.ok(windowsSecurityStoreHeader.includes('class PersistentEd25519KeyStore'))
+})
+
+test('Windows sealed-state filenames are digest-only and collision resistant', () => {
+  const colon = windowsMaterialFileName('shop:counter', 'tls:stream')
+  const upper = windowsMaterialFileName('Foo', 'tls')
+  const lower = windowsMaterialFileName('foo', 'tls')
+  const reserved = windowsMaterialFileName('CON', 'NUL')
+  for (const name of [colon, upper, lower, reserved]) {
+    assert.match(name, /^[0-9a-f]{64}\.dpapi$/)
+    assert.equal(name.includes(':'), false)
+  }
+  assert.notEqual(upper, lower)
+  assert.equal(windowsMaterialFileName('../escape', 'tls'), null)
+  assert.equal(windowsMaterialFileName('alias', '..\\escape'), null)
+  assert.equal(windowsMaterialFileName('a'.repeat(129), 'tls'), null)
+  assert.equal(windowsMaterialFileName('alias', 'm'.repeat(129)), null)
 })
 
 test('native CI retains exactly the contracted 18-file public gallery artifact', () => {
