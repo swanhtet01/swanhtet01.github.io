@@ -72,6 +72,10 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -90,6 +94,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        buildConfigField("boolean", "CONNECTED_SITE_PLATFORM_SECURITY_ENABLED", "false")
     }
 
     flavorDimensions += "runtimeProfile"
@@ -131,4 +136,37 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
+    val source = file("src/main/kotlin/dev/supermega/supermega_shop/MainActivity.kt")
+    inputs.file(source)
+    doLast {
+        val text = source.readText()
+        val required = listOf(
+            "BuildConfig.CONNECTED_SITE_PLATFORM_SECURITY_ENABLED",
+            "Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU",
+            "ED25519_ALGORITHM = \"Ed25519\"",
+            "KeyProperties.KEY_ALGORITHM_AES",
+            "setRandomizedEncryptionRequired(true)",
+            "platform_identity_pending_conflict",
+            "platform_identity_bundle_conflict",
+            "incomplete-only",
+            "APPROVED_ISSUER_ED25519_SPKI: Map<String, String> = emptyMap()",
+            "certificateChainSha256",
+            "leaf.checkValidity",
+            "expectedBundleDigest",
+            "expectedIdentity",
+            "PENDING_TTL_MINUTES = 10L",
+        )
+        check(required.all(text::contains)) {
+            "connected_platform_security_source_contract_missing"
+        }
+        check(!text.contains("BEGIN PRIVATE KEY")) {
+            "connected_platform_security_embedded_private_key_forbidden"
+        }
+        check(!text.contains("CONNECTED_SITE_PLATFORM_SECURITY_ENABLED\", \"true")) {
+            "connected_platform_security_must_remain_default_off"
+        }
+    }
 }
