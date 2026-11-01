@@ -7,6 +7,9 @@ import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supermega_shop/shop_cafe_kitchen_entitlement.dart';
+import 'package:supermega_shop/shop_cafe_order_contract.dart';
+import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_database_adapter.dart';
 import 'package:supermega_shop/shop_connected_stock_reservation.dart';
@@ -23,7 +26,7 @@ final _fingerprint = _digest('adapter-device-key');
 final _leaseDigest = _digest('adapter-lease');
 
 void main() {
-  test('resolver exposes only the reviewed stock command vocabulary', () {
+  test('resolver exposes only the reviewed connected command vocabulary', () {
     const resolver = ShopConnectedSiteDatabaseCapabilityResolver();
     expect(
       resolver.requiredCapability(_reserveCommand('retail-resolve')),
@@ -32,6 +35,16 @@ void main() {
     expect(
       resolver.requiredCapability(_reserveCommand('cafe-resolve', cafe: true)),
       ShopStaffCapability.cafeOrderWrite,
+    );
+    expect(
+      resolver.requiredCapability(_cafePutCommand('cafe-put-resolve')),
+      ShopStaffCapability.cafeOrderWrite,
+    );
+    expect(
+      resolver.requiredCapability(
+        _cafeKitchenCommand('cafe-kitchen-resolve', expectedVersion: 1),
+      ),
+      ShopStaffCapability.cafeKitchenStatus,
     );
     expect(
       resolver.requiredCapability(
@@ -63,6 +76,10 @@ void main() {
       );
       await expectLater(
         enabled.handle(_digest('another-device'), _reserveCommand('wrong-key')),
+        throwsStateError,
+      );
+      await expectLater(
+        enabled.handle(_fingerprint, _cafePutCommand('missing-projector')),
         throwsStateError,
       );
       expect(await database.countSales(), 0);
@@ -244,6 +261,234 @@ void main() {
       }
     },
   );
+
+  test('connected cafe commands atomically project order kitchen state and cancellation', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seed(database);
+      final store = ShopCafeOrderStore(
+        database,
+        clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+        kitchenEntitlement: const _AllowKitchenEntitlement(),
+      );
+      final handler = ShopConnectedSiteDatabaseCommandHandler(
+        database: database,
+        timeAuthority: const _FixedTime(_now),
+        cafeStore: store,
+        connectedSiteEnabled: true,
+      );
+      final put = _cafePutCommand('cafe-put');
+      final putAck = await handler.handle(_fingerprint, put);
+      expect(putAck.state, SiteCommandAckState.accepted);
+      expect(putAck.canonicalVersion, 1);
+      var order = await store.read('connected-cafe-ticket');
+      expect(order, isNotNull);
+      expect(order!.state, 'open');
+      expect(order.ticket.version, 1);
+      expect(order.kitchenStatusByLine['connected-cafe-line'], 'pending_local');
+      expect(await database.countSales(), 0);
+
+      final state = _cafeStateCommand('cafe-hold', expectedVersion: 1);
+      expect(
+        (await handler.handle(_fingerprint, state)).state,
+        SiteCommandAckState.accepted,
+      );
+      order = await store.read('connected-cafe-ticket');
+      expect(order!.state, 'held');
+      expect(order.stateRevision, 1);
+
+      final kitchen = _cafeKitchenCommand('cafe-kitchen', expectedVersion: 2);
+      expect(
+        (await handler.handle(_fingerprint, kitchen)).state,
+        SiteCommandAckState.accepted,
+      );
+      order = await store.read('connected-cafe-ticket');
+      expect(
+        order!.kitchenStatusByLine['connected-cafe-line'],
+        'preparing_local',
+      );
+
+      final cancel = _cafeCancelCommand('cafe-cancel', expectedVersion: 3);
+      expect(
+        (await handler.handle(_fingerprint, cancel)).state,
+        SiteCommandAckState.accepted,
+      );
+      order = await store.read('connected-cafe-ticket');
+      expect(order!.state, 'cancelled');
+      expect(
+        order.kitchenStatusByLine['connected-cafe-line'],
+        'preparing_local',
+      );
+      expect(await database.countSales(), 0);
+      final cancellationIntent = await database
+          .customSelect(
+            'SELECT state FROM shop_sync_outbox '
+            "WHERE event_type = 'shop.cafe_order.cancelled.v1'",
+          )
+          .getSingle();
+      expect(cancellationIntent.read<String>('state'), 'pending');
+      final audit = await database
+          .customSelect(
+            'SELECT actor_id, action FROM shop_site_audit ORDER BY rowid',
+          )
+          .get();
+      expect(audit.map((row) => row.read<String>('actor_id')).toSet(), {
+        _actor,
+      });
+      expect(audit.map((row) => row.read<String>('action')).toList(), [
+        'shop.cafe_order.put',
+        'shop.cafe_order.state',
+        'shop.cafe_kitchen.status',
+        'shop.cafe_order.cancel',
+      ]);
+      for (final table in const [
+        'shop_site_commands',
+        'shop_site_events',
+        'shop_site_command_acks',
+        'shop_site_audit',
+      ]) {
+        expect(
+          (await database
+                  .customSelect('SELECT COUNT(*) AS total FROM $table')
+                  .getSingle())
+              .read<int>('total'),
+          4,
+          reason: table,
+        );
+      }
+      expect(
+        (await handler.handle(_fingerprint, cancel)).state,
+        SiteCommandAckState.replayed,
+      );
+      final alteredCancelPayload = Map<String, Object?>.from(cancel.payload)
+        ..['unexpected'] = true;
+      await expectLater(
+        handler.handle(
+          _fingerprint,
+          _cafeSiteCommand(
+            id: cancel.commandId,
+            expectedVersion: cancel.expectedVersion,
+            commandType: cancel.commandType,
+            payload: alteredCancelPayload,
+          ),
+        ),
+        throwsStateError,
+      );
+      final changedReplayPayload = Map<String, Object?>.from(cancel.payload)
+        ..['expectedStateRevision'] = 2;
+      await expectLater(
+        handler.handle(
+          _fingerprint,
+          _cafeSiteCommand(
+            id: cancel.commandId,
+            expectedVersion: cancel.expectedVersion,
+            commandType: cancel.commandType,
+            payload: changedReplayPayload,
+          ),
+        ),
+        throwsStateError,
+      );
+      expect(await _siteCommandCount(database), 4);
+      expect(await database.countSales(), 0);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test(
+    'connected cafe projection failure rolls back every outer write',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seed(database);
+        final store = ShopCafeOrderStore(
+          database,
+          clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+          kitchenEntitlement: const _AllowKitchenEntitlement(),
+        );
+        final handler = ShopConnectedSiteDatabaseCommandHandler(
+          database: database,
+          timeAuthority: const _FixedTime(_now),
+          cafeStore: store,
+          connectedSiteEnabled: true,
+        );
+        await handler.handle(_fingerprint, _cafePutCommand('rollback-put'));
+        await handler.handle(
+          _fingerprint,
+          _cafeKitchenCommand('rollback-kitchen', expectedVersion: 1),
+        );
+        final beforeCommands = await _siteCommandCount(database);
+        final beforeEvents =
+            (await database
+                    .customSelect(
+                      'SELECT COUNT(*) AS total FROM shop_site_events',
+                    )
+                    .getSingle())
+                .read<int>('total');
+        await expectLater(
+          handler.handle(
+            _fingerprint,
+            _cafePutCommand(
+              'rollback-change',
+              expectedVersion: 2,
+              ticketExpectedVersion: 1,
+              quantity: 2,
+            ),
+          ),
+          throwsA(isA<ShopCafeStartedKitchenLineException>()),
+        );
+        expect(await _siteCommandCount(database), beforeCommands);
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS total FROM shop_site_events',
+                  )
+                  .getSingle())
+              .read<int>('total'),
+          beforeEvents,
+        );
+        final order = await store.read('connected-cafe-ticket');
+        expect(order!.ticket.lines.single.quantity, 1);
+        expect(
+          order.kitchenStatusByLine['connected-cafe-line'],
+          'preparing_local',
+        );
+        expect(await database.countSales(), 0);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test('connected kitchen command requires its lease capability', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seed(database, includeKitchenCapability: false);
+      final store = ShopCafeOrderStore(
+        database,
+        clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+        kitchenEntitlement: const _AllowKitchenEntitlement(),
+      );
+      final handler = ShopConnectedSiteDatabaseCommandHandler(
+        database: database,
+        timeAuthority: const _FixedTime(_now),
+        cafeStore: store,
+        connectedSiteEnabled: true,
+      );
+      await handler.handle(_fingerprint, _cafePutCommand('capability-put'));
+      await expectLater(
+        handler.handle(
+          _fingerprint,
+          _cafeKitchenCommand('capability-kitchen', expectedVersion: 1),
+        ),
+        throwsStateError,
+      );
+      expect(await _siteCommandCount(database), 1);
+      expect(await database.countSales(), 0);
+    } finally {
+      await database.close();
+    }
+  });
 
   test(
     'real signed coordinator requests authorize before database mutation',
@@ -460,7 +705,11 @@ Future<void> _expectNoConnectedMutation(ShopDatabase database) async {
   expect(await database.readReservedStockQuantity('adapter-item'), 0);
 }
 
-Future<void> _seed(ShopDatabase database, {String? clientFingerprint}) async {
+Future<void> _seed(
+  ShopDatabase database, {
+  String? clientFingerprint,
+  bool includeKitchenCapability = true,
+}) async {
   await database.addProduct(
     id: 'adapter-item',
     name: 'Adapter item',
@@ -502,7 +751,13 @@ Future<void> _seed(ShopDatabase database, {String? clientFingerprint}) async {
       const Variable<String>(_workspace),
       const Variable<String>(_site),
       const Variable<String>(_actor),
-      Variable<String>(jsonEncode(const ['counterSale', 'cafeOrderWrite'])),
+      Variable<String>(
+        jsonEncode([
+          'counterSale',
+          'cafeOrderWrite',
+          if (includeKitchenCapability) 'cafeKitchenStatus',
+        ]),
+      ),
       const Variable<String>(_device),
       const Variable<int>(_now - 1000),
       const Variable<int>(_now + 60000),
@@ -618,6 +873,120 @@ SiteCommandV1 _releaseCommand(
     signatureAlgorithm: 'ed25519',
     signature: List.filled(64, 's').join(),
   );
+}
+
+SiteCommandV1 _cafePutCommand(
+  String id, {
+  int expectedVersion = 0,
+  int ticketExpectedVersion = 0,
+  int quantity = 1,
+}) {
+  final command = CafeOrderCommand(
+    id: id,
+    ticketId: 'connected-cafe-ticket',
+    expectedVersion: ticketExpectedVersion,
+    lines: [
+      CafeOrderLine(
+        id: 'connected-cafe-line',
+        productId: 'adapter-item',
+        productName: 'Adapter item',
+        quantity: quantity,
+        baseUnitPriceMmk: 1000,
+        remark: '',
+        modifiers: const [],
+        preparationStation: 'kitchen',
+      ),
+    ],
+  );
+  return _cafeSiteCommand(
+    id: id,
+    expectedVersion: expectedVersion,
+    commandType: shopCafeOrderPutCommandType,
+    payload: {
+      'contract': 'supermega.shop.connected-cafe-order-put.v1',
+      'command': command.toJson(),
+    },
+  );
+}
+
+SiteCommandV1 _cafeStateCommand(String id, {required int expectedVersion}) =>
+    _cafeSiteCommand(
+      id: id,
+      expectedVersion: expectedVersion,
+      commandType: shopCafeOrderStateCommandType,
+      payload: {
+        'contract': 'supermega.shop.connected-cafe-order-state.v1',
+        'orderId': 'connected-cafe-ticket',
+        'operationId': id,
+        'expectedStateRevision': 0,
+        'fromState': 'open',
+        'toState': 'held',
+      },
+    );
+
+SiteCommandV1 _cafeKitchenCommand(String id, {required int expectedVersion}) =>
+    _cafeSiteCommand(
+      id: id,
+      expectedVersion: expectedVersion,
+      commandType: shopCafeKitchenStatusCommandType,
+      payload: {
+        'contract': 'supermega.shop.connected-cafe-kitchen-status.v1',
+        'orderId': 'connected-cafe-ticket',
+        'lineId': 'connected-cafe-line',
+        'operationId': id,
+        'expectedTicketVersion': 1,
+        'expectedStatus': 'pending_local',
+      },
+    );
+
+SiteCommandV1 _cafeCancelCommand(String id, {required int expectedVersion}) =>
+    _cafeSiteCommand(
+      id: id,
+      expectedVersion: expectedVersion,
+      commandType: shopCafeOrderCancelCommandType,
+      payload: {
+        'contract': 'supermega.shop.connected-cafe-order-cancel.v1',
+        'orderId': 'connected-cafe-ticket',
+        'operationId': id,
+        'expectedStateRevision': 1,
+      },
+    );
+
+SiteCommandV1 _cafeSiteCommand({
+  required String id,
+  required int expectedVersion,
+  required String commandType,
+  required Map<String, Object?> payload,
+}) => SiteCommandV1(
+  commandId: id,
+  workspaceId: _workspace,
+  siteId: _site,
+  actorId: _actor,
+  deviceId: _device,
+  aggregateType: 'cafeOrder',
+  aggregateId: 'connected-cafe-ticket',
+  expectedVersion: expectedVersion,
+  commandType: commandType,
+  payload: payload,
+  payloadDigest: connectedSiteSha256(payload),
+  leaseDigest: _leaseDigest,
+  issuedAt: '2033-05-18T03:33:20.000Z',
+  signingKeyId: 'test-key',
+  signatureAlgorithm: 'ed25519',
+  signature: List.filled(64, 's').join(),
+);
+
+class _AllowKitchenEntitlement implements ShopCafeKitchenEntitlement {
+  const _AllowKitchenEntitlement();
+
+  @override
+  bool get allowsKitchenDispatch => true;
+
+  @override
+  void requireKitchenDispatch({
+    required String orderId,
+    required String commandId,
+  }) {}
 }
 
 class _FixedTime implements ShopConnectedSiteCoordinatorTimeAuthority {

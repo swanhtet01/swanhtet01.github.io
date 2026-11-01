@@ -5020,6 +5020,7 @@ class ShopConnectedSiteCommandInput {
     this.reservationExpiresAtMillis,
     this.stockReservation,
     this.stockReservationLifecycle,
+    this.acceptedProjection,
   });
 
   final String commandId;
@@ -5048,6 +5049,7 @@ class ShopConnectedSiteCommandInput {
   final int? reservationExpiresAtMillis;
   final ConnectedStockReservationV1? stockReservation;
   final ShopConnectedStockReservationLifecycleInput? stockReservationLifecycle;
+  final Future<void> Function()? acceptedProjection;
 }
 
 class _ShopCorrectionReconciliationRequired implements Exception {
@@ -10134,6 +10136,7 @@ class ShopDatabase extends _$ShopDatabase {
           saleId: null,
         );
       }
+      await input.acceptedProjection?.call();
       await customInsert(
         'INSERT INTO shop_site_audit '
         '(audit_id, command_id, actor_id, action, metadata_digest, '

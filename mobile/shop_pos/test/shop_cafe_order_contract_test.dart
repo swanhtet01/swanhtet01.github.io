@@ -21,6 +21,28 @@ void main() {
     modifiers: const [soy],
   );
   final catalog = {soy.key: soy};
+  test('order command bytes round trip strictly for connected projection', () {
+    final command = CafeOrderCommand(
+      id: 'connected-command',
+      ticketId: 'connected-ticket',
+      expectedVersion: 0,
+      lines: [line('connected-line')],
+      serviceContext: const CafeServiceContext(
+        areaLabel: 'Front',
+        tableLabel: 'T1',
+      ),
+    );
+    final restored = CafeOrderCommand.fromJson(
+      jsonDecode(jsonEncode(command.toJson())),
+    );
+    expect(restored.fingerprint, command.fingerprint);
+    expect(restored.serviceContext!.tableLabel, 'T1');
+    final extra = Map<String, Object>.from(command.toJson())..['extra'] = true;
+    expect(() => CafeOrderCommand.fromJson(extra), throwsFormatException);
+    final malformed = Map<String, Object>.from(command.toJson())
+      ..['expectedVersion'] = -1;
+    expect(() => CafeOrderCommand.fromJson(malformed), throwsFormatException);
+  });
   test('distinct same-product lines round trip with immutable snapshots', () {
     final command = CafeOrderCommand(
       id: 'cmd-1',

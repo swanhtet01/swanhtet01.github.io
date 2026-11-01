@@ -66,6 +66,28 @@ class ShopCafeStartedKitchenLineException implements Exception {
   const ShopCafeStartedKitchenLineException();
 }
 
+class ShopConnectedCafeProjectionContext {
+  const ShopConnectedCafeProjectionContext({
+    required this.commandId,
+    required this.tenantId,
+    required this.siteId,
+    required this.actorId,
+    required this.deviceId,
+    required this.aggregateId,
+    required this.capability,
+    required this.commandDigest,
+  });
+
+  final String commandId;
+  final String tenantId;
+  final String siteId;
+  final String actorId;
+  final String deviceId;
+  final String aggregateId;
+  final ShopStaffCapability capability;
+  final String commandDigest;
+}
+
 /// Device-local café persistence and cash completion.
 ///
 /// This is not a split-tender, printer, or cross-device contract.
@@ -130,14 +152,36 @@ class ShopCafeOrderStore {
   Future<StoredCafeOrder> applyCommand(
     CafeOrderCommand command,
     Map<String, CafeModifierSnapshot> modifierCatalog,
-  ) => database.transaction(() async {
-    await database.authorizeManagedStaffCommand(
-      authorizer: staffAuthorizer,
-      capability: ShopStaffCapability.cafeOrderWrite,
-      commandId: command.id,
-      expectedVersion: command.expectedVersion,
-      claimedActorId: staffActorId,
-    );
+  ) => _applyCommand(command, modifierCatalog, authorizeLocal: true);
+
+  Future<StoredCafeOrder> applyConnectedCommandProjection(
+    CafeOrderCommand command,
+    Map<String, CafeModifierSnapshot> modifierCatalog,
+    ShopConnectedCafeProjectionContext context,
+  ) async {
+    await _requireConnectedProjection(context);
+    if (context.capability != ShopStaffCapability.cafeOrderWrite ||
+        command.id != context.commandId ||
+        command.ticketId != context.aggregateId) {
+      throw StateError('Connected café order projection is not authorized.');
+    }
+    return _applyCommand(command, modifierCatalog, authorizeLocal: false);
+  }
+
+  Future<StoredCafeOrder> _applyCommand(
+    CafeOrderCommand command,
+    Map<String, CafeModifierSnapshot> modifierCatalog, {
+    required bool authorizeLocal,
+  }) => database.transaction(() async {
+    if (authorizeLocal) {
+      await database.authorizeManagedStaffCommand(
+        authorizer: staffAuthorizer,
+        capability: ShopStaffCapability.cafeOrderWrite,
+        commandId: command.id,
+        expectedVersion: command.expectedVersion,
+        claimedActorId: staffActorId,
+      );
+    }
     if (command.lines.any((line) => line.hasPreparationRoute)) {
       kitchenEntitlement.requireKitchenDispatch(
         orderId: command.ticketId,
@@ -267,19 +311,29 @@ class ShopCafeOrderStore {
     required int expectedStateRevision,
     required String fromState,
     required String toState,
+    ShopConnectedCafeProjectionContext? connectedContext,
   }) => database.transaction(() async {
     final cleanOrderId = _operationId(orderId, 'order');
     final cleanOperationId = _operationId(operationId, 'operation');
     if (expectedStateRevision < 0) {
       throw ArgumentError('Café order revision is invalid.');
     }
-    await database.authorizeManagedStaffCommand(
-      authorizer: staffAuthorizer,
-      capability: ShopStaffCapability.cafeOrderWrite,
-      commandId: cleanOperationId,
-      expectedVersion: expectedStateRevision,
-      claimedActorId: staffActorId,
-    );
+    if (connectedContext == null) {
+      await database.authorizeManagedStaffCommand(
+        authorizer: staffAuthorizer,
+        capability: ShopStaffCapability.cafeOrderWrite,
+        commandId: cleanOperationId,
+        expectedVersion: expectedStateRevision,
+        claimedActorId: staffActorId,
+      );
+    } else {
+      await _requireConnectedProjection(connectedContext);
+      if (connectedContext.capability != ShopStaffCapability.cafeOrderWrite ||
+          connectedContext.commandId != cleanOperationId ||
+          connectedContext.aggregateId != cleanOrderId) {
+        throw StateError('Connected café state projection is not authorized.');
+      }
+    }
     final fingerprint = cafeOrderStateFingerprint(
       operationId: cleanOperationId,
       orderId: cleanOrderId,
@@ -338,6 +392,22 @@ class ShopCafeOrderStore {
     return (await read(cleanOrderId))!;
   });
 
+  Future<StoredCafeOrder> transitionConnected({
+    required String orderId,
+    required String operationId,
+    required int expectedStateRevision,
+    required String fromState,
+    required String toState,
+    required ShopConnectedCafeProjectionContext context,
+  }) => _transition(
+    orderId: orderId,
+    operationId: operationId,
+    expectedStateRevision: expectedStateRevision,
+    fromState: fromState,
+    toState: toState,
+    connectedContext: context,
+  );
+
   /// Cancels an unpaid device-local order while preserving its ticket and
   /// kitchen dispatch history as immutable audit evidence.
   ///
@@ -346,19 +416,53 @@ class ShopCafeOrderStore {
     required String orderId,
     required String operationId,
     required int expectedStateRevision,
+  }) => _cancel(
+    orderId: orderId,
+    operationId: operationId,
+    expectedStateRevision: expectedStateRevision,
+  );
+
+  Future<StoredCafeOrder> cancelConnected({
+    required String orderId,
+    required String operationId,
+    required int expectedStateRevision,
+    required ShopConnectedCafeProjectionContext context,
+  }) => _cancel(
+    orderId: orderId,
+    operationId: operationId,
+    expectedStateRevision: expectedStateRevision,
+    connectedContext: context,
+  );
+
+  Future<StoredCafeOrder> _cancel({
+    required String orderId,
+    required String operationId,
+    required int expectedStateRevision,
+    ShopConnectedCafeProjectionContext? connectedContext,
   }) => database.transaction(() async {
     final cleanOrderId = _operationId(orderId, 'order');
     final cleanOperationId = _operationId(operationId, 'operation');
     if (expectedStateRevision < 0) {
       throw ArgumentError('Café order revision is invalid.');
     }
-    await database.authorizeManagedStaffCommand(
-      authorizer: staffAuthorizer,
-      capability: ShopStaffCapability.cafeOrderWrite,
-      commandId: cleanOperationId,
-      expectedVersion: expectedStateRevision,
-      claimedActorId: staffActorId,
-    );
+    if (connectedContext == null) {
+      await database.authorizeManagedStaffCommand(
+        authorizer: staffAuthorizer,
+        capability: ShopStaffCapability.cafeOrderWrite,
+        commandId: cleanOperationId,
+        expectedVersion: expectedStateRevision,
+        claimedActorId: staffActorId,
+      );
+    } else {
+      await _requireConnectedProjection(connectedContext);
+      if (connectedContext.capability != ShopStaffCapability.cafeOrderWrite ||
+          connectedContext.commandId != cleanOperationId ||
+          connectedContext.aggregateId != cleanOrderId) {
+        throw StateError(
+          'Connected café cancellation projection is not authorized.',
+        );
+      }
+    }
     final orderRow = await database
         .customSelect(
           'SELECT * FROM shop_cafe_orders WHERE id = ?',
@@ -459,6 +563,37 @@ class ShopCafeOrderStore {
     required String operationId,
     required int expectedTicketVersion,
     required String expectedStatus,
+  }) => _advanceKitchenStatus(
+    orderId: orderId,
+    lineId: lineId,
+    operationId: operationId,
+    expectedTicketVersion: expectedTicketVersion,
+    expectedStatus: expectedStatus,
+  );
+
+  Future<StoredCafeOrder> advanceKitchenStatusConnected({
+    required String orderId,
+    required String lineId,
+    required String operationId,
+    required int expectedTicketVersion,
+    required String expectedStatus,
+    required ShopConnectedCafeProjectionContext context,
+  }) => _advanceKitchenStatus(
+    orderId: orderId,
+    lineId: lineId,
+    operationId: operationId,
+    expectedTicketVersion: expectedTicketVersion,
+    expectedStatus: expectedStatus,
+    connectedContext: context,
+  );
+
+  Future<StoredCafeOrder> _advanceKitchenStatus({
+    required String orderId,
+    required String lineId,
+    required String operationId,
+    required int expectedTicketVersion,
+    required String expectedStatus,
+    ShopConnectedCafeProjectionContext? connectedContext,
   }) => database.transaction(() async {
     final cleanOrderId = _operationId(orderId, 'order');
     final cleanLineId = _operationId(lineId, 'line');
@@ -467,13 +602,25 @@ class ShopCafeOrderStore {
     if (targetStatus == null) {
       throw StateError('This kitchen ticket is already served.');
     }
-    await database.authorizeManagedStaffCommand(
-      authorizer: staffAuthorizer,
-      capability: ShopStaffCapability.cafeKitchenStatus,
-      commandId: cleanOperationId,
-      expectedVersion: expectedTicketVersion,
-      claimedActorId: staffActorId,
-    );
+    if (connectedContext == null) {
+      await database.authorizeManagedStaffCommand(
+        authorizer: staffAuthorizer,
+        capability: ShopStaffCapability.cafeKitchenStatus,
+        commandId: cleanOperationId,
+        expectedVersion: expectedTicketVersion,
+        claimedActorId: staffActorId,
+      );
+    } else {
+      await _requireConnectedProjection(connectedContext);
+      if (connectedContext.capability !=
+              ShopStaffCapability.cafeKitchenStatus ||
+          connectedContext.commandId != cleanOperationId ||
+          connectedContext.aggregateId != cleanOrderId) {
+        throw StateError(
+          'Connected café kitchen projection is not authorized.',
+        );
+      }
+    }
     final replayRow = await database
         .customSelect(
           'SELECT event_type, payload_json FROM shop_sync_outbox '
@@ -1708,6 +1855,33 @@ class ShopCafeOrderStore {
       throw StateError('Café receipt detail is too long.');
     }
     return name;
+  }
+
+  Future<void> _requireConnectedProjection(
+    ShopConnectedCafeProjectionContext context,
+  ) async {
+    final row = await database
+        .customSelect(
+          'SELECT 1 FROM shop_site_commands WHERE command_id = ? '
+          "AND state = 'accepted' AND tenant_id = ? AND site_id = ? "
+          'AND actor_id = ? AND device_id = ? '
+          "AND aggregate_type = 'cafeOrder' AND aggregate_id = ? "
+          'AND capability = ? AND command_digest = ?',
+          variables: [
+            Variable<String>(context.commandId),
+            Variable<String>(context.tenantId),
+            Variable<String>(context.siteId),
+            Variable<String>(context.actorId),
+            Variable<String>(context.deviceId),
+            Variable<String>(context.aggregateId),
+            Variable<String>(context.capability.name),
+            Variable<String>(context.commandDigest),
+          ],
+        )
+        .getSingleOrNull();
+    if (row == null) {
+      throw StateError('Connected café projection authority is absent.');
+    }
   }
 
   String _operationId(String value, String label) {

@@ -257,6 +257,39 @@ class CafeOrderCommand {
     'lines': lines.map((e) => e.toJson()).toList(),
     if (serviceContext != null) 'serviceContext': serviceContext!.toJson(),
   };
+  Map<String, Object> toJson() => _body();
+  factory CafeOrderCommand.fromJson(Object? value) {
+    if (value is! Map ||
+        value['contract'] != cafeOrderContract ||
+        value['lines'] is! List ||
+        value.keys.toSet().difference({
+          'contract',
+          'id',
+          'ticketId',
+          'expectedVersion',
+          'lines',
+          'serviceContext',
+        }).isNotEmpty ||
+        (value.length != 5 && value.length != 6)) {
+      _invalid('command_shape');
+    }
+    return CafeOrderCommand(
+      id: _text(value['id'], 'command_id', 120),
+      ticketId: _text(value['ticketId'], 'ticket_id', 120),
+      expectedVersion: _integer(
+        value['expectedVersion'],
+        'expected_version',
+        0,
+        1000000000,
+      ),
+      lines: (value['lines'] as List)
+          .map(CafeOrderLine.fromJson)
+          .toList(growable: false),
+      serviceContext: value.containsKey('serviceContext')
+          ? CafeServiceContext.fromJson(value['serviceContext'])
+          : null,
+    );
+  }
   String get fingerprint =>
       sha256.convert(utf8.encode(jsonEncode(_body()))).toString();
 }

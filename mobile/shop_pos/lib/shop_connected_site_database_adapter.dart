@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import 'shop_cafe_order_contract.dart';
+import 'shop_cafe_order_store.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_stock_reservation.dart';
 import 'shop_database.dart';
@@ -12,6 +14,19 @@ const shopRetailStockReserveCommandType = 'retail.stock.reserve.v1';
 const shopRetailStockReleaseCommandType = 'retail.stock.release.v1';
 const shopCafeStockReserveCommandType = 'cafe.stock.reserve.v1';
 const shopCafeStockReleaseCommandType = 'cafe.stock.release.v1';
+const shopCafeOrderPutCommandType = 'cafe.order.put.v1';
+const shopCafeOrderStateCommandType = 'cafe.order.state.v1';
+const shopCafeOrderCancelCommandType = 'cafe.order.cancel.v1';
+const shopCafeKitchenStatusCommandType = 'cafe.kitchen.status.v1';
+
+const _shopCafeOrderPutPayloadContract =
+    'supermega.shop.connected-cafe-order-put.v1';
+const _shopCafeOrderStatePayloadContract =
+    'supermega.shop.connected-cafe-order-state.v1';
+const _shopCafeOrderCancelPayloadContract =
+    'supermega.shop.connected-cafe-order-cancel.v1';
+const _shopCafeKitchenStatusPayloadContract =
+    'supermega.shop.connected-cafe-kitchen-status.v1';
 
 /// Strict command vocabulary for the default-off connected stock slice.
 class ShopConnectedSiteDatabaseCapabilityResolver
@@ -24,7 +39,12 @@ class ShopConnectedSiteDatabaseCapabilityResolver
         shopRetailStockReserveCommandType ||
         shopRetailStockReleaseCommandType => ShopStaffCapability.counterSale,
         shopCafeStockReserveCommandType ||
-        shopCafeStockReleaseCommandType => ShopStaffCapability.cafeOrderWrite,
+        shopCafeStockReleaseCommandType ||
+        shopCafeOrderPutCommandType ||
+        shopCafeOrderStateCommandType ||
+        shopCafeOrderCancelCommandType => ShopStaffCapability.cafeOrderWrite,
+        shopCafeKitchenStatusCommandType =>
+          ShopStaffCapability.cafeKitchenStatus,
         _ => null,
       };
 }
@@ -36,11 +56,13 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
   const ShopConnectedSiteDatabaseCommandHandler({
     required this.database,
     required this.timeAuthority,
+    this.cafeStore,
     this.connectedSiteEnabled = false,
   });
 
   final ShopDatabase database;
   final ShopConnectedSiteCoordinatorTimeAuthority timeAuthority;
+  final ShopCafeOrderStore? cafeStore;
   final bool connectedSiteEnabled;
 
   @override
@@ -105,6 +127,7 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
         createdAtMillis: issuedAtMillis,
         stockReservation: mapping.reservation,
         stockReservationLifecycle: mapping.lifecycle,
+        acceptedProjection: mapping.acceptedProjection,
       ),
       connectedSiteEnabled: true,
       timeAuthority: timeAuthority,
@@ -149,6 +172,14 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
   }
 
   Future<_CommandMapping> _mapping(SiteCommandV1 command) async {
+    if ({
+      shopCafeOrderPutCommandType,
+      shopCafeOrderStateCommandType,
+      shopCafeOrderCancelCommandType,
+      shopCafeKitchenStatusCommandType,
+    }.contains(command.commandType)) {
+      return _cafeMapping(command);
+    }
     final isReserve = switch (command.commandType) {
       shopRetailStockReserveCommandType ||
       shopCafeStockReserveCommandType => true,
@@ -250,6 +281,177 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
       ),
     );
   }
+
+  _CommandMapping _cafeMapping(SiteCommandV1 command) {
+    final store = cafeStore;
+    if (store == null) {
+      throw StateError('Connected café projection is unavailable.');
+    }
+    if (command.aggregateType != 'cafeOrder') {
+      throw StateError('Connected café aggregate type is invalid.');
+    }
+    final capability = command.commandType == shopCafeKitchenStatusCommandType
+        ? ShopStaffCapability.cafeKitchenStatus
+        : ShopStaffCapability.cafeOrderWrite;
+    final context = ShopConnectedCafeProjectionContext(
+      commandId: command.commandId,
+      tenantId: command.workspaceId,
+      siteId: command.siteId,
+      actorId: command.actorId,
+      deviceId: command.deviceId,
+      aggregateId: command.aggregateId,
+      capability: capability,
+      commandDigest: command.commandDigest,
+    );
+    switch (command.commandType) {
+      case shopCafeOrderPutCommandType:
+        _requireExactPayload(command.payload, {
+          'contract',
+          'command',
+        }, _shopCafeOrderPutPayloadContract);
+        final cafeCommand = CafeOrderCommand.fromJson(
+          command.payload['command'],
+        );
+        if (cafeCommand.id != command.commandId ||
+            cafeCommand.ticketId != command.aggregateId) {
+          throw StateError('Connected café order payload is invalid.');
+        }
+        final catalog = <String, CafeModifierSnapshot>{};
+        for (final line in cafeCommand.lines) {
+          for (final modifier in line.modifiers) {
+            final prior = catalog[modifier.key];
+            if (prior != null &&
+                canonicalConnectedSiteJson(prior.toJson()) !=
+                    canonicalConnectedSiteJson(modifier.toJson())) {
+              throw StateError('Connected café modifier changed in one order.');
+            }
+            catalog[modifier.key] = modifier;
+          }
+        }
+        return _CommandMapping(
+          capability: capability,
+          eventType: 'shop.cafe_order.put.v1',
+          auditAction: 'shop.cafe_order.put',
+          acceptedProjection: () => store.applyConnectedCommandProjection(
+            cafeCommand,
+            Map.unmodifiable(catalog),
+            context,
+          ),
+        );
+      case shopCafeOrderStateCommandType:
+        _requireExactPayload(command.payload, {
+          'contract',
+          'orderId',
+          'operationId',
+          'expectedStateRevision',
+          'fromState',
+          'toState',
+        }, _shopCafeOrderStatePayloadContract);
+        final orderId = command.payload['orderId'];
+        final operationId = command.payload['operationId'];
+        final revision = command.payload['expectedStateRevision'];
+        final from = command.payload['fromState'];
+        final to = command.payload['toState'];
+        if (orderId != command.aggregateId ||
+            operationId != command.commandId ||
+            revision is! int ||
+            revision < 0 ||
+            !((from == 'open' && to == 'held') ||
+                (from == 'held' && to == 'open'))) {
+          throw StateError('Connected café state payload is invalid.');
+        }
+        return _CommandMapping(
+          capability: capability,
+          eventType: 'shop.cafe_order.state.v1',
+          auditAction: 'shop.cafe_order.state',
+          acceptedProjection: () => store.transitionConnected(
+            orderId: orderId as String,
+            operationId: operationId as String,
+            expectedStateRevision: revision,
+            fromState: from as String,
+            toState: to as String,
+            context: context,
+          ),
+        );
+      case shopCafeOrderCancelCommandType:
+        _requireExactPayload(command.payload, {
+          'contract',
+          'orderId',
+          'operationId',
+          'expectedStateRevision',
+        }, _shopCafeOrderCancelPayloadContract);
+        final orderId = command.payload['orderId'];
+        final operationId = command.payload['operationId'];
+        final revision = command.payload['expectedStateRevision'];
+        if (orderId != command.aggregateId ||
+            operationId != command.commandId ||
+            revision is! int ||
+            revision < 0) {
+          throw StateError('Connected café cancellation payload is invalid.');
+        }
+        return _CommandMapping(
+          capability: capability,
+          eventType: 'shop.cafe_order.cancel.v1',
+          auditAction: 'shop.cafe_order.cancel',
+          acceptedProjection: () => store.cancelConnected(
+            orderId: orderId as String,
+            operationId: operationId as String,
+            expectedStateRevision: revision,
+            context: context,
+          ),
+        );
+      case shopCafeKitchenStatusCommandType:
+        _requireExactPayload(command.payload, {
+          'contract',
+          'orderId',
+          'lineId',
+          'operationId',
+          'expectedTicketVersion',
+          'expectedStatus',
+        }, _shopCafeKitchenStatusPayloadContract);
+        final orderId = command.payload['orderId'];
+        final lineId = command.payload['lineId'];
+        final operationId = command.payload['operationId'];
+        final version = command.payload['expectedTicketVersion'];
+        final status = command.payload['expectedStatus'];
+        if (orderId != command.aggregateId ||
+            operationId != command.commandId ||
+            lineId is! String ||
+            version is! int ||
+            version < 1 ||
+            status is! String) {
+          throw StateError('Connected café kitchen payload is invalid.');
+        }
+        return _CommandMapping(
+          capability: capability,
+          eventType: 'shop.cafe_kitchen.status.v1',
+          auditAction: 'shop.cafe_kitchen.status',
+          acceptedProjection: () => store.advanceKitchenStatusConnected(
+            orderId: orderId as String,
+            lineId: lineId,
+            operationId: operationId as String,
+            expectedTicketVersion: version,
+            expectedStatus: status,
+            context: context,
+          ),
+        );
+      default:
+        throw StateError('Connected café command type is unsupported.');
+    }
+  }
+
+  void _requireExactPayload(
+    Map<String, Object?> payload,
+    Set<String> keys,
+    String contract,
+  ) {
+    if (payload.length != keys.length ||
+        !payload.keys.toSet().containsAll(keys) ||
+        payload.keys.toSet().difference(keys).isNotEmpty ||
+        payload['contract'] != contract) {
+      throw StateError('Connected café payload shape is invalid.');
+    }
+  }
 }
 
 class _CommandMapping {
@@ -259,6 +461,7 @@ class _CommandMapping {
     required this.auditAction,
     this.reservation,
     this.lifecycle,
+    this.acceptedProjection,
   });
 
   final ShopStaffCapability capability;
@@ -266,6 +469,7 @@ class _CommandMapping {
   final String auditAction;
   final ConnectedStockReservationV1? reservation;
   final ShopConnectedStockReservationLifecycleInput? lifecycle;
+  final Future<void> Function()? acceptedProjection;
 }
 
 /// Site-scoped, enrolled-client replication reader over immutable event rows.
