@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.requests import ClientDisconnect
 
 from .connected_site_v15 import (
     ConnectedSiteV15Adapter,
@@ -233,9 +234,7 @@ def create_connected_site_router(
                     raise _error(413, "request_too_large")
             except ValueError:
                 raise _error(400, "content_length_invalid") from None
-        body = await request.body()
-        if not body or len(body) > max_body_bytes:
-            raise _error(413 if body else 400, "request_too_large" if body else "request_body_invalid")
+        body = await _read_bounded_body(request, max_body_bytes=max_body_bytes)
         try:
             parsed = json.loads(body, object_pairs_hook=_unique_object)
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
@@ -259,6 +258,28 @@ def _principal(resolver: PrincipalResolver, request: Request) -> ConnectedSitePr
     if principal is None or not principal.authenticated:
         raise _error(401, "principal_unauthenticated")
     return principal
+
+
+async def _read_bounded_body(request: Request, *, max_body_bytes: int) -> bytes:
+    """Read an ASGI request without ever buffering beyond the configured cap."""
+
+    body = bytearray()
+    try:
+        async for chunk in request.stream():
+            if not isinstance(chunk, bytes):
+                raise _error(400, "request_stream_invalid")
+            if len(body) + len(chunk) > max_body_bytes:
+                raise _error(413, "request_too_large")
+            body.extend(chunk)
+    except HTTPException:
+        raise
+    except ClientDisconnect:
+        raise _error(400, "request_stream_incomplete") from None
+    except Exception:
+        raise _error(400, "request_stream_invalid") from None
+    if not body:
+        raise _error(400, "request_body_invalid")
+    return bytes(body)
 
 
 def _reject_ambient_authority(request: Request) -> None:

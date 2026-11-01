@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import datetime, timezone
 import json
 import unittest
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from supermega_runtime.connected_site_runtime import (
     ConnectedSitePrincipal,
     ConnectedSiteRuntimeService,
     RECONCILE_REQUEST_CONTRACT,
+    _read_bounded_body,
     create_connected_site_router,
 )
 from supermega_runtime.connected_site_v15 import MemoryConnectedSiteRepository, UploadEvent
@@ -224,6 +226,47 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
             headers={"content-type": "application/json"},
         )
         self.assertEqual(oversize.status_code, 413)
+
+    def test_chunked_body_without_declared_length_stops_at_cumulative_cap(self) -> None:
+        messages = [
+            {"type": "http.request", "body": b"x" * 700, "more_body": True},
+            {"type": "http.request", "body": b"y" * 400, "more_body": True},
+            {"type": "http.request", "body": b"must-not-be-read", "more_body": False},
+        ]
+        reads = 0
+
+        async def receive():
+            nonlocal reads
+            reads += 1
+            return messages.pop(0)
+
+        request = Request(
+            {"type": "http", "method": "POST", "path": "/", "headers": []},
+            receive,
+        )
+        with self.assertRaises(HTTPException) as caught:
+            asyncio.run(_read_bounded_body(request, max_body_bytes=1024))
+        self.assertEqual(caught.exception.status_code, 413)
+        self.assertEqual(reads, 2)
+        self.assertEqual(len(messages), 1)
+
+    def test_disconnected_partial_stream_is_rejected_without_returning_prefix(self) -> None:
+        messages = [
+            {"type": "http.request", "body": b'{"partial":', "more_body": True},
+            {"type": "http.disconnect"},
+        ]
+
+        async def receive():
+            return messages.pop(0)
+
+        request = Request(
+            {"type": "http", "method": "POST", "path": "/", "headers": []},
+            receive,
+        )
+        with self.assertRaises(HTTPException) as caught:
+            asyncio.run(_read_bounded_body(request, max_body_bytes=1024))
+        self.assertEqual(caught.exception.status_code, 400)
+        self.assertEqual(caught.exception.detail["error"], "request_stream_incomplete")
 
     def test_authority_refresh_returns_only_public_bound_evidence(self) -> None:
         response = self.client().get(
