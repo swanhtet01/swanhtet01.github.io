@@ -170,11 +170,11 @@ internal class ConnectedPlatformSecurityAndroid(
             "signingAlgorithm" to "ed25519",
             "signingPublicKeyBase64" to base64(signingPublic),
             "signingPublicKeyFingerprintSha256" to sha256(signingPublic),
-            "tlsKeyId" to "tls-$alias",
+            "tlsKeyId" to tlsKeyIdFor(alias),
             "tlsAlgorithm" to "ecdsa-p256",
             "tlsPublicKeySpkiBase64" to base64(tlsSpki),
             "tlsPublicKeyFingerprintSha256" to sha256(tlsSpki),
-            "sealedTlsMaterialId" to "sealed-$alias",
+            "sealedTlsMaterialId" to sealedTlsMaterialIdFor(alias),
             "preparationHandle" to handle,
             "nonceBase64Url" to base64Url(nonce),
             "createdAt" to now.toString(),
@@ -197,12 +197,14 @@ internal class ConnectedPlatformSecurityAndroid(
             signingFingerprint = sha256(signingPublic),
             tlsPublicSpki = base64(tlsSpki),
             tlsFingerprint = sha256(tlsSpki),
-            tlsKeyId = "tls-$alias",
-            sealedTlsMaterialId = "sealed-$alias",
+            tlsKeyId = tlsKeyIdFor(alias),
+            sealedTlsMaterialId = sealedTlsMaterialIdFor(alias),
             nonceBase64Url = base64Url(nonce),
             encryptedTlsPrivate = base64(sealed.ciphertext),
             encryptedTlsIv = base64(sealed.iv),
             issuerKeyId = "",
+            enrollmentIssuedAt = "",
+            enrollmentExpiresAt = "",
             certificateChainSha256 = "",
         )
         if (!writeRecord(record)) {
@@ -348,6 +350,8 @@ internal class ConnectedPlatformSecurityAndroid(
             certificateFingerprint = bundlePayload["tlsCertificateFingerprintSha256"] as String,
             bundleDigest = bundleDigest,
             issuerKeyId = issuerKeyId,
+            enrollmentIssuedAt = bundlePayload["issuedAt"] as String,
+            enrollmentExpiresAt = bundlePayload["expiresAt"] as String,
         )
         if (!writeRecord(committed)) throw PlatformSecurityError(OPERATION_FAILED)
         return completion(committed, replayed = false)
@@ -723,6 +727,8 @@ internal class ConnectedPlatformSecurityAndroid(
         val encryptedTlsPrivate: String,
         val encryptedTlsIv: String,
         val issuerKeyId: String,
+        val enrollmentIssuedAt: String,
+        val enrollmentExpiresAt: String,
         val certificateChainPem: String = "",
         val certificateChainSha256: String = "",
         val certificateFingerprint: String = "",
@@ -737,21 +743,23 @@ internal class ConnectedPlatformSecurityAndroid(
                 Instant.parse(pendingExpiresAt) != null &&
                 TOKEN.matches(workspaceId) && TOKEN.matches(siteId) && TOKEN.matches(deviceId) &&
                 sessionGeneration >= 1 &&
-                TOKEN.matches(signingKeyId) &&
+                signingKeyId == signingAliasFor(alias) &&
                 Base64.decode(signingPublicKey, Base64.NO_WRAP).size == 32 &&
                 sha256Static(Base64.decode(signingPublicKey, Base64.NO_WRAP)) == signingFingerprint &&
                 DIGEST.matches(signingFingerprint) &&
                 sha256Static(Base64.decode(tlsPublicSpki, Base64.NO_WRAP)) == tlsFingerprint &&
                 DIGEST.matches(tlsFingerprint) &&
-                TOKEN.matches(tlsKeyId) &&
-                TOKEN.matches(sealedTlsMaterialId) &&
+                tlsKeyId == tlsKeyIdFor(alias) &&
+                sealedTlsMaterialId == sealedTlsMaterialIdFor(alias) &&
                 BASE64_URL.matches(nonceBase64Url) &&
                 when (state) {
                     STATE_PENDING -> encryptedTlsPrivate.isNotEmpty() && encryptedTlsIv.isNotEmpty()
                     STATE_COMMITTED -> certificateChainPem.isNotEmpty() &&
                         DIGEST.matches(certificateChainSha256) &&
                         DIGEST.matches(certificateFingerprint) && DIGEST.matches(bundleDigest) &&
-                        TOKEN.matches(issuerKeyId)
+                        TOKEN.matches(issuerKeyId) &&
+                        Instant.parse(enrollmentIssuedAt) != null &&
+                        Instant.parse(enrollmentExpiresAt).isAfter(Instant.parse(enrollmentIssuedAt))
                     else -> encryptedTlsPrivate.isEmpty() && encryptedTlsIv.isEmpty() &&
                         cleanupEvidenceJson.isNotEmpty()
                 }
@@ -781,6 +789,8 @@ internal class ConnectedPlatformSecurityAndroid(
             put("encryptedTlsPrivate", encryptedTlsPrivate)
             put("encryptedTlsIv", encryptedTlsIv)
             put("issuerKeyId", issuerKeyId)
+            put("enrollmentIssuedAt", enrollmentIssuedAt)
+            put("enrollmentExpiresAt", enrollmentExpiresAt)
             put("certificateChainPem", certificateChainPem)
             put("certificateChainSha256", certificateChainSha256)
             put("certificateFingerprint", certificateFingerprint)
@@ -800,7 +810,8 @@ internal class ConnectedPlatformSecurityAndroid(
                     "pendingExpiresAt", "workspaceId", "siteId", "deviceId", "sessionGeneration",
                     "signingKeyId", "signingPublicKey", "signingFingerprint", "tlsPublicSpki",
                     "tlsFingerprint", "tlsKeyId", "sealedTlsMaterialId", "nonceBase64Url", "encryptedTlsPrivate",
-                    "encryptedTlsIv", "issuerKeyId", "certificateChainPem", "certificateChainSha256",
+                    "encryptedTlsIv", "issuerKeyId", "enrollmentIssuedAt", "enrollmentExpiresAt",
+                    "certificateChainPem", "certificateChainSha256",
                     "certificateFingerprint", "bundleDigest",
                     "cleanupEvidenceJson",
                 )
@@ -828,6 +839,8 @@ internal class ConnectedPlatformSecurityAndroid(
                     encryptedTlsPrivate = json.optString("encryptedTlsPrivate"),
                     encryptedTlsIv = json.optString("encryptedTlsIv"),
                     issuerKeyId = json.optString("issuerKeyId"),
+                    enrollmentIssuedAt = json.optString("enrollmentIssuedAt"),
+                    enrollmentExpiresAt = json.optString("enrollmentExpiresAt"),
                     certificateChainPem = json.optString("certificateChainPem"),
                     certificateChainSha256 = json.optString("certificateChainSha256"),
                     certificateFingerprint = json.optString("certificateFingerprint"),
@@ -869,6 +882,17 @@ internal class ConnectedPlatformSecurityAndroid(
                 if (record.alias != alias || record.state != STATE_COMMITTED || !record.isValid()) {
                     return "identity_custody_invalid"
                 }
+                if (record.signingKeyId != signingAliasFor(alias) ||
+                    record.tlsKeyId != tlsKeyIdFor(alias) ||
+                    record.sealedTlsMaterialId != sealedTlsMaterialIdFor(alias)) {
+                    return "identity_custody_invalid"
+                }
+                val enrollmentIssuedAt = Instant.parse(record.enrollmentIssuedAt)
+                val enrollmentExpiresAt = Instant.parse(record.enrollmentExpiresAt)
+                if (enrollmentIssuedAt.isAfter(currentTime.plusSeconds(CLOCK_SKEW_SECONDS)) ||
+                    !enrollmentExpiresAt.isAfter(currentTime)) {
+                    return "identity_enrollment_expired"
+                }
                 val trust = APPROVED_ISSUERS[record.issuerKeyId]
                     ?: return "issuer_trust_unavailable"
                 val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply {
@@ -876,6 +900,8 @@ internal class ConnectedPlatformSecurityAndroid(
                 }
                 val signingCertificate = keyStore.getCertificate(signingAliasFor(alias))
                     ?: return "identity_custody_invalid"
+                val signingPrivateKey = keyStore.getKey(signingAliasFor(alias), null)
+                    as? java.security.PrivateKey ?: return "identity_custody_invalid"
                 val signingPublic = rawEd25519PublicKey(signingCertificate.publicKey.encoded)
                 try {
                     if (base64(signingPublic) != record.signingPublicKey ||
@@ -884,6 +910,29 @@ internal class ConnectedPlatformSecurityAndroid(
                     }
                 } finally {
                     signingPublic.fill(0)
+                }
+                val signingChallenge = MessageDigest.getInstance("SHA-256").digest(
+                    "supermega.coordinator-signing-custody.v1:$alias:${record.requestDigest}:${record.bundleDigest}"
+                        .toByteArray(StandardCharsets.UTF_8),
+                )
+                try {
+                    val signingProof = Signature.getInstance("Ed25519").run {
+                        initSign(signingPrivateKey)
+                        update(signingChallenge)
+                        sign()
+                    }
+                    try {
+                        val verified = Signature.getInstance("Ed25519").run {
+                            initVerify(signingCertificate.publicKey)
+                            update(signingChallenge)
+                            verify(signingProof)
+                        }
+                        if (!verified) return "identity_custody_invalid"
+                    } finally {
+                        signingProof.fill(0)
+                    }
+                } finally {
+                    signingChallenge.fill(0)
                 }
 
                 val certificateBytes = decodeBase64(record.certificateChainPem)
@@ -971,6 +1020,8 @@ internal class ConnectedPlatformSecurityAndroid(
 
         private fun signingAliasFor(alias: String) = "supermega-connected-signing-$alias"
         private fun aesAliasFor(alias: String) = "supermega-connected-seal-$alias"
+        private fun tlsKeyIdFor(alias: String) = "tls-$alias"
+        private fun sealedTlsMaterialIdFor(alias: String) = "sealed-$alias"
 
         private fun rawEd25519PublicKey(encoded: ByteArray): ByteArray {
             val prefix = byteArrayOf(
