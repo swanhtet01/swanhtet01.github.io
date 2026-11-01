@@ -34,9 +34,16 @@
   dispatch: GitHub returned HTTP 404 because the manual workflow is not
   registered on the default branch. No bypass, alternate transfer, installer,
   PostgreSQL process or database was attempted.
+- Local PostgreSQL evidence hardening `7e7f02179bb47c03a3ec08cb62b1aced59eaf5fa`,
+  tree `c2be5d037af618ddfbcc4e512bafc4508db2a58a`, now requires both zero lost
+  events and zero lost buffers across the authoritative policy, approval gate,
+  bootstrap validation and retained closure schema. Nonzero buffer loss is
+  adversarially rejected; focused provenance/observer suite **50/50 PASS**,
+  diff check **PASS**, independent review **ACCEPT**. Observer and approval
+  status remain pending with command/hash null, so Stage 2 stays disabled.
 
-- Published draft PR #752 remains at `5c69ebd942e5cbc1260187416cb01a7b975352d6`,
-  tree `4f6d8b52ae3af32373bf967f2f448ff511c947cb`; it is not merged or deployed.
+- Published draft PR #752 is at `27491e680c7767c45b3a8046d3e85cb5e3e36ee1`,
+  tree `f3e0c7b0a05e2eff3775ca23e8d91cbc62fd7edd`; it is not merged or deployed.
 - App CI run `41336319981` passed checks 1--637/668 and now fails only at the
   intended PostgreSQL gate, `database_rehearsal_evidence_stale`; the migration
   inventory repair is verified while the genuine Windows PostgreSQL 17
