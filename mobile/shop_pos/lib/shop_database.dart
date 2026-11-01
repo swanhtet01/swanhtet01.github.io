@@ -2829,6 +2829,17 @@ bool shopHistoricalCloudProofRowsValidV34({
       return source;
     }
 
+    String signedCommandCapability(String commandType) => switch (commandType) {
+      'retail.stock.reserve.v1' || 'retail.stock.release.v1' => 'counterSale',
+      'cafe.stock.reserve.v1' ||
+      'cafe.stock.release.v1' ||
+      'cafe.order.put.v1' ||
+      'cafe.order.state.v1' ||
+      'cafe.order.cancel.v1' => 'cafeOrderWrite',
+      'cafe.kitchen.status.v1' => 'cafeKitchenStatus',
+      _ => throw const FormatException('historical command type'),
+    };
+
     final decodedProofById = <String, Map<String, Object?>>{};
     for (final row in proofById.values) {
       final encoded = row['proof_json'];
@@ -2869,6 +2880,8 @@ bool shopHistoricalCloudProofRowsValidV34({
             command.aggregateId != commandRow['aggregate_id'] ||
             command.expectedVersion != commandRow['expected_version'] ||
             command.payloadDigest != commandRow['payload_digest'] ||
+            signedCommandCapability(command.commandType) !=
+                commandRow['capability'] ||
             DateTime.parse(command.issuedAt).millisecondsSinceEpoch !=
                 commandRow['received_at_millis']) {
           return false;

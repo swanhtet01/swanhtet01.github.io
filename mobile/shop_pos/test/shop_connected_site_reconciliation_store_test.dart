@@ -528,7 +528,12 @@ void main() {
     var database = ShopDatabase(NativeDatabase(file));
     try {
       await _seedAuthority(database);
-      await _appendEvent(database, 'v34-command', 'v34-aggregate');
+      await _appendEvent(
+        database,
+        'v34-command',
+        'v34-aggregate',
+        commandType: 'retail.stock.reserve.v1',
+      );
       final currentProof = await database
           .customSelect(
             "SELECT proof_json FROM shop_site_cloud_proofs WHERE command_id = 'v34-command'",
@@ -627,6 +632,18 @@ void main() {
       expect(
         shopHistoricalCloudProofRowsValidV34(
           commands: [substitutedCommand],
+          requirements: requirements,
+          proofs: proofs,
+          retainedLeases: retainedLeases,
+          leases: leases,
+        ),
+        isFalse,
+      );
+      final substitutedCapability = Map<String, Object?>.from(commands.single)
+        ..['capability'] = 'cafeOrderWrite';
+      expect(
+        shopHistoricalCloudProofRowsValidV34(
+          commands: [substitutedCapability],
           requirements: requirements,
           proofs: proofs,
           retainedLeases: retainedLeases,
@@ -1098,8 +1115,9 @@ Future<({String commandId, String commandDigest, String eventDigest})>
 _appendEvent(
   ShopDatabase database,
   String commandId,
-  String aggregateId,
-) async {
+  String aggregateId, {
+  String commandType = 'retail.synthetic.accept.v1',
+}) async {
   final payload = <String, Object?>{'kind': 'synthetic'};
   final occurredAt = DateTime.fromMillisecondsSinceEpoch(
     _now,
@@ -1125,7 +1143,7 @@ _appendEvent(
     aggregateType: 'retailCart',
     aggregateId: aggregateId,
     expectedVersion: 0,
-    commandType: 'retail.synthetic.accept.v1',
+    commandType: commandType,
     payload: payload,
     payloadDigest: connectedSiteSha256(payload),
     leaseDigest: _leaseDigest,
