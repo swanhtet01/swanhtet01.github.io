@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:cryptography/cryptography.dart';
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
@@ -163,6 +165,27 @@ void main() {
         observedAtMillis: clock
             .subtract(const Duration(minutes: 2))
             .millisecondsSinceEpoch,
+      ),
+      throwsStateError,
+    );
+    await bindingResolver.revoke(
+      ConnectedCoordinatorRevocationV1(
+        targetBindingDigest: approvedBindingDigest,
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientDeviceId: 'device_1',
+        approvalGeneration: 2,
+        issuedAtMillis: observed,
+        authorityKeyId: 'authority_1',
+        authoritySignature: 'A' * 86,
+      ),
+    );
+    await expectLater(
+      valid.applySnapshot(
+        snapshot: _snapshot(),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: observed + 1,
       ),
       throwsStateError,
     );
@@ -595,67 +618,246 @@ void main() {
     await migrated.verifyConnectedReplicaEvidence();
   });
 
-  test(
-    'populated v32 database migrates to verified v33 delivery schema',
-    () async {
-      final directory = await Directory.systemTemp.createTemp('replica-v32-');
-      addTearDown(() => directory.delete(recursive: true));
-      final file = File('${directory.path}/shop.sqlite');
-      final source = ShopDatabase(NativeDatabase(file));
-      final seeded = await _seedApprovedBinding(source, clock);
-      final store = ShopConnectedSiteReplicaStore(
-        database: source,
-        localWorkspaceId: 'workspace_1',
-        localSiteId: 'site_1',
-        localClientDeviceId: 'device_1',
-        localClientFingerprint: seeded.$1,
-        localClientSigningKeyId: 'key_1',
-        approvedBindingDigest: seeded.$2,
-        bindingResolver: seeded.$3,
-        runtimeEnabled: true,
-      );
-      await store.applySnapshot(
-        snapshot: _snapshot(),
-        clientFingerprint: seeded.$1,
-        certificateSha256: certificate,
-        observedAtMillis: observed,
-      );
-      await source.close();
-      final raw = sqlite.sqlite3.open(file.path);
-      try {
-        for (final definition
-            in shopConnectedReplicaSchemaDefinitionsV33().entries
-                .toList()
-                .reversed) {
-          final type = shopSchemaObjectTypeForDefinition(definition.value);
-          raw.execute(
-            'DROP ${type == 'table'
-                ? 'TABLE'
-                : type == 'index'
-                ? 'INDEX'
-                : 'TRIGGER'} IF EXISTS ${definition.key}',
-          );
-        }
-        raw.execute('PRAGMA user_version = 32');
-      } finally {
-        raw.close();
+  test('populated v32 replica rebases empty and encrypted restore preserves local authority', () async {
+    final directory = await Directory.systemTemp.createTemp('replica-v32-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/shop.sqlite');
+    final source = ShopDatabase(NativeDatabase(file));
+    final seeded = await _seedApprovedBinding(source, clock);
+    await source.addProduct(
+      id: 'local-authoritative-product',
+      name: 'Local authoritative product',
+      priceMmk: 2500,
+      openingStock: 7,
+    );
+    final store = ShopConnectedSiteReplicaStore(
+      database: source,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
+      localClientFingerprint: seeded.$1,
+      localClientSigningKeyId: 'key_1',
+      approvedBindingDigest: seeded.$2,
+      bindingResolver: seeded.$3,
+      runtimeEnabled: true,
+    );
+    await store.applySnapshot(
+      snapshot: _snapshot(),
+      clientFingerprint: seeded.$1,
+      certificateSha256: certificate,
+      observedAtMillis: observed,
+    );
+    await store.applyDelta(
+      delta: _delta(),
+      clientFingerprint: seeded.$1,
+      certificateSha256: certificate,
+      observedAtMillis: observed + 1,
+    );
+    await source.close();
+    final raw = sqlite.sqlite3.open(file.path);
+    try {
+      for (final definition
+          in shopConnectedReplicaSchemaDefinitionsV33().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(definition.value);
+        raw.execute(
+          'DROP ${type == 'table'
+              ? 'TABLE'
+              : type == 'index'
+              ? 'INDEX'
+              : 'TRIGGER'} IF EXISTS ${definition.key}',
+        );
       }
-      final migrated = ShopDatabase(NativeDatabase(file));
-      addTearDown(migrated.close);
-      await migrated.verifyReadyForUse();
-      expect(migrated.schemaVersion, 33);
+      final legacyEvent = <String, Object?>{
+        'eventId': 'event_1',
+        'workspaceId': 'workspace_1',
+        'siteId': 'site_1',
+        'aggregateType': 'cafeOrder',
+        'aggregateId': 'order_1',
+        'aggregateVersion': 2,
+        'eventType': 'shop.cafe_order.updated.v1',
+        'occurredAt': '2026-11-01T00:00:00.000Z',
+        'payload': {'orderId': 'order_1', 'state': 'held'},
+      };
+      raw.execute('DROP TRIGGER shop_connected_replica_events_no_update');
+      raw.execute(
+        'UPDATE shop_connected_replica_events SET event_json = ?, event_digest = ? '
+        'WHERE cursor = 1',
+        [
+          canonicalConnectedSiteJson(legacyEvent),
+          connectedSiteSha256(legacyEvent),
+        ],
+      );
+      raw.execute(
+        shopConnectedReplicaSchemaDefinitionsV32()['shop_connected_replica_events_no_update']!,
+      );
+      raw.execute('PRAGMA user_version = 32');
+    } finally {
+      raw.close();
+    }
+    final archive = File('${directory.path}/v32.smbak');
+    await _writeAuthenticatedArchive(
+      archive,
+      await file.readAsBytes(),
+      schemaVersion: 32,
+    );
+    final migrated = ShopDatabase(NativeDatabase(file));
+    addTearDown(migrated.close);
+    await migrated.verifyReadyForUse();
+    expect(migrated.schemaVersion, 33);
+    expect(
+      await migrated
+          .customSelect(
+            "SELECT COUNT(*) AS n FROM shop_products WHERE id = 'local-authoritative-product' AND on_hand = 7",
+          )
+          .getSingle()
+          .then((row) => row.read<int>('n')),
+      1,
+    );
+    expect(
+      await migrated
+          .customSelect(
+            'SELECT COUNT(*) AS n FROM shop_site_coordinator_bindings WHERE binding_digest = ?',
+            variables: [Variable(seeded.$2)],
+          )
+          .getSingle()
+          .then((row) => row.read<int>('n')),
+      1,
+    );
+    for (final table in const [
+      'shop_connected_replica_heads',
+      'shop_connected_replica_events',
+      'shop_connected_replica_projections',
+      'shop_connected_replica_deliveries',
+      'shop_site_replica_event_envelopes',
+    ]) {
       expect(
         await migrated
-            .customSelect(
-              'SELECT COUNT(*) AS n FROM shop_connected_replica_projections',
-            )
+            .customSelect('SELECT COUNT(*) AS n FROM $table')
             .getSingle()
             .then((row) => row.read<int>('n')),
-        3,
+        0,
+        reason: '$table must not relabel lossy v32 evidence',
       );
-      await migrated.verifyConnectedReplicaEvidence();
-    },
+    }
+    await migrated.verifyConnectedReplicaEvidence();
+    final migratedResolver = ShopConnectedSiteAttemptStore(
+      database: migrated,
+      approvalVerifier: const _ReplicaApprovalVerifier(),
+      runtimeEnabled: true,
+      now: () => clock,
+    );
+    final migratedStore = ShopConnectedSiteReplicaStore(
+      database: migrated,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
+      localClientFingerprint: seeded.$1,
+      localClientSigningKeyId: 'key_1',
+      approvedBindingDigest: seeded.$2,
+      bindingResolver: migratedResolver,
+      runtimeEnabled: true,
+    );
+    expect(
+      await migratedStore.sharedWritesPaused(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: seeded.$1,
+      ),
+      isTrue,
+    );
+    expect(
+      await migratedStore.readProjections(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: seeded.$1,
+      ),
+      isEmpty,
+    );
+    await expectLater(
+      migratedStore.applyDelta(
+        delta: _delta(),
+        clientFingerprint: seeded.$1,
+        certificateSha256: certificate,
+        observedAtMillis: observed + 2,
+      ),
+      throwsStateError,
+    );
+
+    final restoredFile = File('${directory.path}/restored/shop.sqlite');
+    await restoredFile.parent.create(recursive: true);
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: restoredFile,
+      password: 'replica-backup-passphrase',
+    );
+    final restored = ShopDatabase(NativeDatabase(restoredFile));
+    addTearDown(restored.close);
+    await restored.verifyConnectedReplicaEvidence();
+    expect(
+      await restored
+          .customSelect(
+            "SELECT COUNT(*) AS n FROM shop_products WHERE id = 'local-authoritative-product' AND on_hand = 7",
+          )
+          .getSingle()
+          .then((row) => row.read<int>('n')),
+      1,
+    );
+    expect(
+      await restored
+          .customSelect(
+            'SELECT COUNT(*) AS n FROM shop_connected_replica_heads',
+          )
+          .getSingle()
+          .then((row) => row.read<int>('n')),
+      0,
+    );
+
+    await migratedStore.applySnapshot(
+      snapshot: _snapshot(),
+      clientFingerprint: seeded.$1,
+      certificateSha256: certificate,
+      observedAtMillis: observed + 3,
+    );
+    expect(
+      await migratedStore.readProjections(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: seeded.$1,
+      ),
+      hasLength(3),
+    );
+  });
+}
+
+Future<void> _writeAuthenticatedArchive(
+  File target,
+  List<int> cleartext, {
+  required int schemaVersion,
+}) async {
+  final salt = List<int>.generate(16, (index) => index + 10);
+  final nonce = List<int>.generate(12, (index) => index + 30);
+  final header = [
+    ...ascii.encode('SMBK'),
+    ShopBackup.formatVersion,
+    schemaVersion,
+    ...salt,
+    ...nonce,
+  ];
+  final key = await Argon2id(
+    memory: 19 * 1024,
+    parallelism: 1,
+    iterations: 2,
+    hashLength: 32,
+  ).deriveKeyFromPassword(password: 'replica-backup-passphrase', nonce: salt);
+  final box = await AesGcm.with256bits().encrypt(
+    cleartext,
+    secretKey: key,
+    nonce: nonce,
+    aad: header,
   );
+  await target.writeAsBytes([...header, ...box.cipherText, ...box.mac.bytes]);
 }
 
 SiteSnapshotV1 _snapshot({String workspaceId = 'workspace_1'}) {

@@ -5428,6 +5428,7 @@ class ShopDatabase extends _$ShopDatabase {
       // be silently relabelled or partially repaired.
       if (from == 32) {
         await _requireUnifiedV32Schema();
+        await _rebaseConnectedReplicaCacheForV33();
         await _createConnectedReplicaDeliverySchemaV33();
         await _requireUnifiedV33Schema();
         return;
@@ -6065,6 +6066,31 @@ class ShopDatabase extends _$ShopDatabase {
         in shopConnectedReplicaSchemaDefinitionsV33().values) {
       await customStatement(definition);
     }
+  }
+
+  /// V32 retained deltas as individually valid events, but did not retain the
+  /// complete delivery bytes needed to reconstruct and authenticate a V33
+  /// projection. After the complete V32 evidence has been verified, discard
+  /// only this read-only cache. Authoritative local and enrollment tables are
+  /// deliberately untouched; a freshly authenticated snapshot is required
+  /// before the replica can expose projections or enable shared writes.
+  Future<void> _rebaseConnectedReplicaCacheForV33() async {
+    await customStatement(
+      'DROP TRIGGER shop_connected_replica_events_no_update',
+    );
+    await customStatement(
+      'DROP TRIGGER shop_connected_replica_events_no_delete',
+    );
+    await customStatement('DELETE FROM shop_connected_replica_projections');
+    await customStatement('DELETE FROM shop_connected_replica_events');
+    await customStatement('DELETE FROM shop_connected_replica_heads');
+    await customStatement(
+      shopConnectedReplicaSchemaDefinitionsV32()['shop_connected_replica_events_no_update']!,
+    );
+    await customStatement(
+      shopConnectedReplicaSchemaDefinitionsV32()['shop_connected_replica_events_no_delete']!,
+    );
+    await _requireUnifiedV32Schema();
   }
 
   Future<void> _backfillConnectedReservationSessionBindingsV31() async {
