@@ -506,8 +506,9 @@ jobs:
           }
           file_lines = [line.strip().lstrip("/") for line in pathlib.Path(sys.argv[2]).read_text().splitlines()]
           library_lines = [line for line in file_lines if line.startswith("lib/")]
-          library_matches = [re.fullmatch(r"lib/([^/]+)/[^/]+\.so", line) for line in library_lines]
-          if not library_lines or any(match is None for match in library_matches):
+          library_files = [line for line in library_lines if not line.endswith("/")]
+          library_matches = [re.fullmatch(r"lib/([^/]+)/[^/]+\.so", line) for line in library_files]
+          if not library_files or any(match is None for match in library_matches):
               raise SystemExit("shop_android_qa_abi_inventory_invalid")
           abis = sorted({match.group(1) for match in library_matches})
           compile_sdk = root.get("platformBuildVersionCode")
@@ -595,8 +596,13 @@ jobs:
           test -z "$(git diff --cached --name-only)"
           changed_paths="$(git diff --name-only)"
           test -z "$changed_paths" || test "$changed_paths" = 'mobile/shop_pos/lib/shop_build_identity.g.dart'
-          test -z "$(git ls-files --others --exclude-standard)"
+          untracked_before_manifest="$(git ls-files --others --exclude-standard | sort)"
+          expected_before_manifest="$(printf '%s\n' app-qa-debug.apk app-qa-debug.apk.identity.json app-qa-debug.apk.sha256 app-qa-debug.apk.signing.json app-qa-debug.apk.toolchain.json | sort)"
+          test "$untracked_before_manifest" = "$expected_before_manifest"
           node tools/write_shop_qa_artifact_manifest.mjs --platform android --artifact app-qa-debug.apk --checksum app-qa-debug.apk.sha256 --toolchain app-qa-debug.apk.toolchain.json --signing app-qa-debug.apk.signing.json --identity app-qa-debug.apk.identity.json --output app-qa-debug.apk.manifest
+          untracked_after_manifest="$(git ls-files --others --exclude-standard | sort)"
+          expected_after_manifest="$(printf '%s\n' app-qa-debug.apk app-qa-debug.apk.identity.json app-qa-debug.apk.manifest app-qa-debug.apk.sha256 app-qa-debug.apk.signing.json app-qa-debug.apk.toolchain.json | sort)"
+          test "$untracked_after_manifest" = "$expected_after_manifest"
 
       - name: Upload promotion-ineligible Android QA artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
