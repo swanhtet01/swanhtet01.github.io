@@ -33,12 +33,20 @@ function closureFixture() {
     allSelectedPortsClosed: true, selectedPorts: [54321], temporaryDataRemoved: true,
     profileId: 'fixture-profile', runtimeClosureEvidenceSha256: digest,
     sourceDigest: digest, bindingDigest: digest, receiptSha256: digest,
-    rawReceiptSha256: digest, processCount: 1, runtimeFileCount: 1,
+    rawReceiptSha256: digest, processCount: 2, runtimeFileCount: 2,
     systemModuleCount: 1,
+    sourceIdentity: { gitBindingId: 'git-binding', gitSourceId: 'git-source',
+      head: 'b'.repeat(40), tree: 'c'.repeat(40), clean: true,
+      headEvidenceSha256: digest, treeEvidenceSha256: digest,
+      statusEvidenceSha256: digest },
     processes: [{ sequence: 0, parentSequence: null, imageBindingId: 'node-binding',
-      sourceId: 'node-source', exitCode: 0 }],
+      sourceId: 'node-source', exitCode: 0 },
+    { sequence: 1, parentSequence: 0, imageBindingId: 'git-binding',
+      sourceId: 'git-source', exitCode: 0 }],
     runtimeFiles: [{ bindingId: 'node-binding', sourceId: 'node-source',
-      relativePath: 'node/node.exe', bytes: 10, sha256: digest, uses: ['executed'] }],
+      relativePath: 'node/node.exe', bytes: 10, sha256: digest, uses: ['executed'] },
+    { bindingId: 'git-binding', sourceId: 'git-source',
+      relativePath: 'git/cmd/git.exe', bytes: 10, sha256: digest, uses: ['executed'] }],
     systemModules: [{ fileName: 'kernel32.dll', bytes: 10, sha256: digest }],
   }
 }
@@ -155,6 +163,7 @@ test('PowerShell bootstrap separates non-executing capture from reviewed full-re
   assert.ok(download > 0 && download < stage2 && stage2 < gate && gate < execute)
   for (const required of [
     'bootstrap_source_head_mismatch', 'bootstrap_source_tree_dirty',
+    'control-plane-only', 'bootstrap_source_tree_invalid',
     'bootstrap_ambient_override_rejected_', 'bootstrap_source_identity_mismatch',
     'bootstrap_authenticode_identity_mismatch', 'captureStartedBeforeSpawn', 'rehearsalObserved',
     'droppedEvents', 'descendantCorrelationComplete', 'runtimeModulesComplete',
@@ -163,6 +172,11 @@ test('PowerShell bootstrap separates non-executing capture from reviewed full-re
     'bootstrap_service_cleanup_failed', 'bootstrap_data_cleanup_failed',
     'bootstrap_stage2_authority_unapproved', 'bootstrap_registry_component_missing_',
     "$rawReceiptPath = $receiptPath + '.raw.json'", 'executionPerformed = $false',
+    'Get-ReviewedBinding', 'Assert-MaterializedBinding', 'Assert-AuthorityRuntimeBinding',
+    'Assert-NoReparsePath', 'bootstrap_runtime_binding_reparse_rejected',
+    "--verified-node', $nodePath", "--verified-git', $gitPath",
+    "'--require-observed-source-identity'", 'bootstrap_observed_source_identity_invalid',
+    'bootstrap_authority_runtime_artifact_missing',
   ]) assert.ok(source.includes(required), required)
   assert.equal(source.includes('Get-Process).Modules'), false)
   assert.equal(source.includes('Get-FileHash'), false)
@@ -687,7 +701,7 @@ test('combined policy digest is domain-separated and length-framed', () => {
 test('sanitized closure schema rejects omissions, wrong types, surplus fields, and rooted paths', () => {
   const valid = closureFixture()
   assert.deepEqual(validateSanitizedClosure(valid, valid.exactSha),
-    { processCount: 1, runtimeFileCount: 1, systemModuleCount: 1 })
+    { processCount: 2, runtimeFileCount: 2, systemModuleCount: 1 })
   const mutations = [
     (value) => { delete value.processes[0].exitCode },
     (value) => { value.processes[0].sequence = '0' },
@@ -703,6 +717,14 @@ test('sanitized closure schema rejects omissions, wrong types, surplus fields, a
     (value) => { value.runtimeFiles[0].relativePath = '\\?\\C:\\node.exe' },
     (value) => { value.runtimeFiles[0].relativePath = 'C:\\node.exe' },
     (value) => { value.runtimeFiles[0].relativePath = '../node.exe' },
+    (value) => { delete value.sourceIdentity },
+    (value) => { value.sourceIdentity.head = 'd'.repeat(40) },
+    (value) => { value.sourceIdentity.tree = 'not-a-tree' },
+    (value) => { value.sourceIdentity.clean = false },
+    (value) => { value.sourceIdentity.gitBindingId = 'other-git' },
+    (value) => { value.sourceIdentity.statusEvidenceSha256 = 'short' },
+    (value) => { value.runtimeFiles[1].uses = ['loaded'] },
+    (value) => { value.processes[1].imageBindingId = 'other-git' },
   ]
   for (const mutate of mutations) {
     const changed = structuredClone(valid); mutate(changed)

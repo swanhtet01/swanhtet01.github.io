@@ -76,7 +76,7 @@ export function validateSanitizedClosure(closure, expectedSha) {
     'processTreeComplete', 'allProcessesExited', 'serviceInventoryUnchanged',
     'allSelectedPortsClosed', 'selectedPorts', 'temporaryDataRemoved', 'profileId',
     'runtimeClosureEvidenceSha256', 'sourceDigest', 'bindingDigest', 'receiptSha256',
-    'rawReceiptSha256', 'processCount', 'runtimeFileCount', 'systemModuleCount',
+    'rawReceiptSha256', 'processCount', 'runtimeFileCount', 'systemModuleCount', 'sourceIdentity',
     'processes', 'runtimeFiles', 'systemModules']
   if (!exact(closure, keys) || closure.contract !== 'supermega.windows-process-image-observer.v1'
     || closure.exactSha !== expectedSha || !EXACT_SHA.test(expectedSha)
@@ -96,7 +96,16 @@ export function validateSanitizedClosure(closure, expectedSha) {
     || new Set(closure.selectedPorts).size !== closure.selectedPorts.length
     || !Array.isArray(closure.processes) || closure.processes.length !== closure.processCount
     || !Array.isArray(closure.runtimeFiles) || closure.runtimeFiles.length !== closure.runtimeFileCount
-    || !Array.isArray(closure.systemModules) || closure.systemModules.length !== closure.systemModuleCount) {
+    || !Array.isArray(closure.systemModules) || closure.systemModules.length !== closure.systemModuleCount
+    || !exact(closure.sourceIdentity, ['gitBindingId', 'gitSourceId', 'head', 'tree', 'clean',
+      'headEvidenceSha256', 'treeEvidenceSha256', 'statusEvidenceSha256'])
+    || !ID.test(closure.sourceIdentity.gitBindingId || '')
+    || !ID.test(closure.sourceIdentity.gitSourceId || '')
+    || closure.sourceIdentity.head !== expectedSha
+    || !EXACT_SHA.test(closure.sourceIdentity.tree || '')
+    || closure.sourceIdentity.clean !== true
+    || ![closure.sourceIdentity.headEvidenceSha256, closure.sourceIdentity.treeEvidenceSha256,
+      closure.sourceIdentity.statusEvidenceSha256].every((value) => SHA256.test(value || ''))) {
     fail('bootstrap_closure_inventory_invalid')
   }
   for (const process of closure.processes) {
@@ -122,6 +131,16 @@ export function validateSanitizedClosure(closure, expectedSha) {
       || !integer(module.bytes, 1, Number.MAX_SAFE_INTEGER) || !SHA256.test(module.sha256 || '')) {
       fail('bootstrap_closure_inventory_invalid')
     }
+  }
+  const gitFiles = closure.runtimeFiles.filter((file) =>
+    file.bindingId === closure.sourceIdentity.gitBindingId
+      && file.sourceId === closure.sourceIdentity.gitSourceId
+      && file.uses.includes('executed'))
+  const gitProcesses = closure.processes.filter((process) =>
+    process.imageBindingId === closure.sourceIdentity.gitBindingId
+      && process.sourceId === closure.sourceIdentity.gitSourceId)
+  if (gitFiles.length !== 1 || gitProcesses.length < 1) {
+    fail('bootstrap_closure_inventory_invalid')
   }
   return { processCount: closure.processCount, runtimeFileCount: closure.runtimeFileCount,
     systemModuleCount: closure.systemModuleCount }

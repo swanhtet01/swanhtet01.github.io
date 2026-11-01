@@ -44,12 +44,19 @@ function Assert-NoAmbientOverrides {
   $env:PATH = 'C:\Windows\System32;C:\Windows'
 }
 function Assert-ExactRepository([string]$Root, [string]$ExpectedSha) {
+  # This runner-provided Git is control-plane-only. It rejects an unexpected
+  # checkout before any authority-bearing work, but its output is never receipt
+  # authority. Stage 2 repeats source identity inside the observer with the
+  # reviewed, materialized Git binding.
   $git = 'C:\Program Files\Git\cmd\git.exe'
   if (-not [System.IO.File]::Exists($git)) { Fail 'bootstrap_git_missing' }
   $head = (& $git -C $Root rev-parse HEAD).Trim()
   if ($LASTEXITCODE -ne 0 -or $head -ne $ExpectedSha) { Fail 'bootstrap_source_head_mismatch' }
+  $tree = (& $git -C $Root rev-parse 'HEAD^{tree}').Trim()
+  if ($LASTEXITCODE -ne 0 -or $tree -notmatch '^[0-9a-f]{40}$') { Fail 'bootstrap_source_tree_invalid' }
   $dirty = @(& $git -C $Root status --porcelain=v1 --untracked-files=all)
   if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { Fail 'bootstrap_source_tree_dirty' }
+  return [pscustomobject]@{ Head = $head; Tree = $tree }
 }
 function Assert-BootstrapPolicy($Policy) {
   if ($Policy.contract -ne 'supermega.postgres17-windows-bootstrap-policy.v1'
@@ -98,11 +105,75 @@ function Assert-Integer($Value, [long]$Minimum, [long]$Maximum) {
     Fail 'bootstrap_closure_inventory_invalid'
   }
 }
+function Get-ReviewedBinding($Profile, [string]$Role) {
+  $matches = @($Profile.bindings | Where-Object { $_.role -eq $Role })
+  if ($matches.Count -ne 1) { Fail "bootstrap_runtime_binding_missing_$Role" }
+  $binding = $matches[0]
+  Assert-BoundedId $binding.bindingId
+  Assert-BoundedId $binding.sourceId
+  if ($binding.relativePath -isnot [string] -or [string]::IsNullOrWhiteSpace($binding.relativePath)
+    -or [System.IO.Path]::IsPathFullyQualified($binding.relativePath)
+    -or $binding.relativePath.StartsWith('/') -or $binding.relativePath.StartsWith('\')
+    -or $binding.relativePath.Contains(':')
+    -or @($binding.relativePath -split '[\\/]' | Where-Object { $_ -in @('', '.', '..') }).Count -ne 0
+    -or $binding.bytes -lt 1 -or $binding.sha256 -notmatch '^[0-9a-f]{64}$'
+    -or @($binding.uses) -notcontains 'executed') {
+    Fail "bootstrap_runtime_binding_invalid_$Role"
+  }
+  return $binding
+}
+function Resolve-RuntimeBindingPath([string]$RuntimeRoot, $Binding) {
+  $rootPath = [System.IO.Path]::GetFullPath($RuntimeRoot)
+  $path = [System.IO.Path]::GetFullPath((Join-Path $rootPath $Binding.relativePath))
+  if (-not $path.StartsWith($rootPath + [System.IO.Path]::DirectorySeparatorChar,
+      [StringComparison]::OrdinalIgnoreCase)) { Fail 'bootstrap_runtime_binding_path_escape' }
+  return $path
+}
+function Assert-NoReparsePath([string]$RuntimeRoot, [string]$Path) {
+  $rootPath = [System.IO.Path]::GetFullPath($RuntimeRoot)
+  $cursor = Get-Item -LiteralPath $Path -Force
+  while ($true) {
+    if ($cursor.LinkType -or ($cursor.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+      Fail 'bootstrap_runtime_binding_reparse_rejected'
+    }
+    if ($cursor.FullName -eq $rootPath) { break }
+    $parent = $cursor.Parent
+    if ($null -eq $parent -or -not $cursor.FullName.StartsWith(
+        $rootPath + [System.IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase)) { Fail 'bootstrap_runtime_binding_path_escape' }
+    $cursor = Get-Item -LiteralPath $parent.FullName -Force
+  }
+}
+function Assert-MaterializedBinding([string]$RuntimeRoot, $Binding) {
+  $path = Resolve-RuntimeBindingPath $RuntimeRoot $Binding
+  if (-not [System.IO.File]::Exists($path)) { Fail 'bootstrap_runtime_binding_not_materialized' }
+  Assert-NoReparsePath $RuntimeRoot $path
+  $item = Get-Item -LiteralPath $path -Force
+  if ($item.LinkType -or $item.PSIsContainer -or $item.Length -ne [int64]$Binding.bytes
+    -or (Get-Sha256 $path) -ne $Binding.sha256) { Fail 'bootstrap_runtime_binding_identity_mismatch' }
+  return $path
+}
+function Assert-AuthorityRuntimeBinding($Closure, $Binding) {
+  $files = @($Closure.runtimeFiles | Where-Object {
+    $_.bindingId -eq $Binding.bindingId -and $_.sourceId -eq $Binding.sourceId
+  })
+  if ($files.Count -ne 1 -or $files[0].relativePath -ne $Binding.relativePath
+    -or $files[0].bytes -ne [int64]$Binding.bytes -or $files[0].sha256 -ne $Binding.sha256
+    -or @($files[0].uses) -notcontains 'executed') {
+    Fail 'bootstrap_authority_runtime_file_unobserved'
+  }
+  $processes = @($Closure.processes | Where-Object {
+    $_.imageBindingId -eq $Binding.bindingId -and $_.sourceId -eq $Binding.sourceId
+  })
+  if ($processes.Count -lt 1 -or @($processes | Where-Object { $_.exitCode -ne 0 }).Count -ne 0) {
+    Fail 'bootstrap_authority_runtime_process_unobserved'
+  }
+}
 
 $root = [System.IO.Path]::GetFullPath($RepositoryRoot)
 $output = [System.IO.Path]::GetFullPath($OutputDirectory)
 Assert-NoAmbientOverrides
-Assert-ExactRepository $root $ExactSha
+$controlPlaneSource = Assert-ExactRepository $root $ExactSha
 $policy = Read-Json (Join-Path $root 'hq\research\postgres17-windows-bootstrap-policy.json')
 Assert-BootstrapPolicy $policy
 $publisherPolicy = Read-Json (Join-Path $root $policy.installer.publisherPolicyPath)
@@ -125,6 +196,7 @@ $receiptPath = Join-Path $output 'postgres17-rehearsal.json'
 $rawReceiptPath = $receiptPath + '.raw.json'
 $serviceBefore = @(); $serviceAfter = @(); $ownedWorkRoot = $false
 $observation = $null; $closure = $null; $closureEvidenceSha256 = $null
+$downloadedArtifacts = @{}
 try {
   if ([System.IO.Directory]::Exists($workRoot) -or [System.IO.File]::Exists($workRoot)) {
     Fail 'bootstrap_workspace_not_fresh'
@@ -182,12 +254,22 @@ try {
         Fail 'bootstrap_registry_source_invalid'
       }
       if ($artifact.authenticationMethod -ne 'authenticated-bundle-member-v1') {
-        Download-Exact $artifactUri (Join-Path $workRoot $artifact.fileName) `
+        $artifactPath = Join-Path $workRoot $artifact.fileName
+        Download-Exact $artifactUri $artifactPath `
           ([int64]$artifact.bytes) $artifact.sha256
+        $downloadedArtifacts[$artifact.sourceId] = $artifactPath
       }
       # Retained registry/authentication evidence is source-controlled and is
       # revalidated by the Node profile verifier. It is not replaced by a fresh
       # network fetch during the authority-bearing rehearsal.
+    }
+    $nodeBinding = Get-ReviewedBinding $profile 'node'
+    $gitBinding = Get-ReviewedBinding $profile 'git'
+    $nodePath = Resolve-RuntimeBindingPath $runtimeRoot $nodeBinding
+    $gitPath = Resolve-RuntimeBindingPath $runtimeRoot $gitBinding
+    if (-not $downloadedArtifacts.ContainsKey($nodeBinding.sourceId)
+      -or -not $downloadedArtifacts.ContainsKey($gitBinding.sourceId)) {
+      Fail 'bootstrap_authority_runtime_artifact_missing'
     }
     $observer = [System.IO.Path]::GetFullPath((Join-Path $root $policy.closureObserver.command))
     if (-not $observer.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar,
@@ -204,6 +286,12 @@ try {
       '--stage', 'rehearsal', '--exact-sha', $ExactSha, '--installer', $downloadPath,
       '--runtime-root', $runtimeRoot, '--source-root', $workRoot,
       '--registry-policy', $registryPolicyPath,
+      '--toolchain-profile', (Join-Path $root 'hq\research\postgres17-toolchain-profile.json'),
+      '--artifact-root', $workRoot,
+      '--verified-node', $nodePath, '--node-artifact', $downloadedArtifacts[$nodeBinding.sourceId],
+      '--verified-git', $gitPath, '--git-artifact', $downloadedArtifacts[$gitBinding.sourceId],
+      '--repository-root', $root, '--expected-source-tree', $controlPlaneSource.Tree,
+      '--require-observed-source-identity',
       '--recorder', (Join-Path $root 'tools\record_postgres17_rehearsal.mjs'),
       '--receipt', $receiptPath, '--', '--extract-only', '1', '--mode', 'unattended',
       '--unattendedmodeui', 'none', '--prefix', $runtimeRoot,
@@ -213,6 +301,9 @@ try {
     if (-not $process.Start()) { Fail 'bootstrap_observer_start_failed' }
     if (-not $process.WaitForExit(900000)) { $process.Kill($true); Fail 'bootstrap_observer_timeout' }
     if ($process.ExitCode -ne 0) { Fail 'bootstrap_observer_failed' }
+    foreach ($binding in @($profile.bindings)) {
+      Assert-MaterializedBinding $runtimeRoot $binding | Out-Null
+    }
     if (-not [System.IO.File]::Exists($observerEvidencePath)) { Fail 'bootstrap_closure_evidence_missing' }
     $closure = Read-Json $observerEvidencePath
     $receipt = Read-Json $receiptPath
@@ -235,6 +326,16 @@ try {
       -or $closure.rawReceiptSha256 -ne (Get-Sha256 $rawReceiptPath)) {
       Fail 'bootstrap_closure_evidence_incomplete'
     }
+    if ($closure.sourceIdentity.head -ne $ExactSha
+      -or $closure.sourceIdentity.tree -ne $controlPlaneSource.Tree
+      -or $closure.sourceIdentity.clean -ne $true
+      -or $closure.sourceIdentity.gitBindingId -ne $gitBinding.bindingId
+      -or $closure.sourceIdentity.gitSourceId -ne $gitBinding.sourceId
+      -or $closure.sourceIdentity.headEvidenceSha256 -notmatch '^[0-9a-f]{64}$'
+      -or $closure.sourceIdentity.treeEvidenceSha256 -notmatch '^[0-9a-f]{64}$'
+      -or $closure.sourceIdentity.statusEvidenceSha256 -notmatch '^[0-9a-f]{64}$') {
+      Fail 'bootstrap_observed_source_identity_invalid'
+    }
     if (@($closure.processes).Count -lt 1 -or @($closure.runtimeFiles).Count -lt 1
       -or @($closure.systemModules).Count -lt 1
       -or @($closure.processes).Count -ne [int]$closure.processCount
@@ -254,8 +355,11 @@ try {
       'temporaryDataRemoved', 'profileId', 'runtimeClosureEvidenceSha256',
       'sourceDigest', 'bindingDigest', 'receiptSha256', 'rawReceiptSha256',
       'processCount', 'runtimeFileCount', 'systemModuleCount',
-      'processes', 'runtimeFiles', 'systemModules')
+      'sourceIdentity', 'processes', 'runtimeFiles', 'systemModules')
     Assert-ExactProperties $closure $allowedClosureKeys
+    Assert-ExactProperties $closure.sourceIdentity @('gitBindingId', 'gitSourceId',
+      'head', 'tree', 'clean', 'headEvidenceSha256', 'treeEvidenceSha256',
+      'statusEvidenceSha256')
     Assert-Integer $closure.processCount 1 10000
     Assert-Integer $closure.runtimeFileCount 1 10000
     Assert-Integer $closure.systemModuleCount 1 10000
@@ -297,6 +401,8 @@ try {
         Fail 'bootstrap_closure_inventory_invalid'
       }
     }
+    Assert-AuthorityRuntimeBinding $closure $nodeBinding
+    Assert-AuthorityRuntimeBinding $closure $gitBinding
     Assert-SanitizedJson $receiptPath; Assert-SanitizedJson $rawReceiptPath
     Copy-Item -LiteralPath $observerEvidencePath -Destination $closureOutputPath
     Assert-SanitizedJson $closureOutputPath
