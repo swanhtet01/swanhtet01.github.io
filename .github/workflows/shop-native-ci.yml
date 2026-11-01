@@ -92,8 +92,8 @@ jobs:
           test/shop_connected_site_database_adapter_test.dart
           test/shop_connected_site_enrollment_store_test.dart
           test/shop_connected_site_persistence_test.dart
-          test/shop_connected_site_reconciliation_test.dart
           test/shop_connected_site_reconciliation_store_test.dart
+          test/shop_connected_site_reconciliation_test.dart
           test/shop_connected_site_replica_store_test.dart
           test/shop_connected_stock_reservation_test.dart
           test/shop_core_internal_acceptance_test.dart
@@ -113,10 +113,10 @@ jobs:
           test/shop_responsiveness_test.dart
           test/shop_runtime_profile_test.dart
           test/shop_runtime_scope_test.dart
-          test/shop_startup_cleanup_test.dart
           test/shop_site_coordinator_test.dart
           test/shop_sqlite_full_recovery_test.dart
           test/shop_staff_authorization_test.dart
+          test/shop_startup_cleanup_test.dart
           test/shop_stock_activity_test.dart
           test/visual_capture_test.dart
           test/widget_checkout_test.dart
