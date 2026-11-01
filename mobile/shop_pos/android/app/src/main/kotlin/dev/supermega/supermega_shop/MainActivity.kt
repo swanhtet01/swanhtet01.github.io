@@ -11,6 +11,7 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -47,6 +48,9 @@ class MainActivity : FlutterActivity() {
 internal class ConnectedPlatformSecurityAndroid(
     context: Context,
     messenger: BinaryMessenger,
+    private val clock: () -> Instant = {
+        Instant.now().truncatedTo(ChronoUnit.MILLIS)
+    },
 ) {
     private val appContext = context.applicationContext
     private val channel = MethodChannel(messenger, CHANNEL)
@@ -78,6 +82,12 @@ internal class ConnectedPlatformSecurityAndroid(
                 }
             }
             result.success(value)
+            if (call.method == "openTlsIdentity" && value is Map<*, *>) {
+                // StandardMethodCodec has copied the response synchronously by
+                // this point. The Dart copy is the documented in-process
+                // HttpServer boundary; wipe the native response buffer now.
+                (value["privateKeyPem"] as? ByteArray)?.fill(0)
+            }
         } catch (error: PlatformSecurityError) {
             result.error(error.code, null, null)
         } catch (_: Throwable) {
@@ -235,7 +245,7 @@ internal class ConnectedPlatformSecurityAndroid(
         }
 
         val issuerKeyId = token(args, "issuerKeyId")
-        val issuerSpki = APPROVED_ISSUER_ED25519_SPKI[issuerKeyId]
+        val issuerTrust = APPROVED_ISSUERS[issuerKeyId]
             ?: throw PlatformSecurityError(UNAVAILABLE)
         val bundlePayload = linkedMapOf<String, Any>(
             "schema" to ENROLLMENT_BUNDLE_SCHEMA,
@@ -277,7 +287,12 @@ internal class ConnectedPlatformSecurityAndroid(
         val signatureText = boundedText(args, "issuerSignatureBase64Url", 128)
         val signature = decodeBase64Url(signatureText, 64)
         val publicKey = KeyFactory.getInstance("Ed25519").generatePublic(
-            X509EncodedKeySpec(Base64.decode(issuerSpki, Base64.DEFAULT)),
+            X509EncodedKeySpec(
+                Base64.decode(
+                    issuerTrust.enrollmentKeySpkiBase64,
+                    Base64.DEFAULT,
+                ),
+            ),
         )
         val signatureValid = Signature.getInstance("Ed25519").run {
             initVerify(publicKey)
@@ -297,8 +312,14 @@ internal class ConnectedPlatformSecurityAndroid(
             sha256(certificateBytes) != bundlePayload["certificateChainSha256"]) {
             throw PlatformSecurityError("platform_certificate_chain_invalid")
         }
-        val leaf = parseLeafCertificate(certificateBytes)
+        val certificates = parseCertificateChain(certificateBytes)
         val now = now()
+        validateCertificateChain(
+            certificates,
+            now,
+            issuerTrust.rootCertificateDerSha256,
+        )
+        val leaf = certificates.first()
         val issuedAt = Instant.parse(bundlePayload["issuedAt"] as String)
         val expiresAt = Instant.parse(bundlePayload["expiresAt"] as String)
         val pendingExpiresAt = Instant.parse(record.pendingExpiresAt)
@@ -306,7 +327,6 @@ internal class ConnectedPlatformSecurityAndroid(
             !expiresAt.isAfter(now) || expiresAt.isBefore(pendingExpiresAt)) {
             throw PlatformSecurityError("platform_enrollment_bundle_stale")
         }
-        leaf.checkValidity(Date.from(now))
         if (leaf.notBefore.toInstant().isAfter(issuedAt) ||
             leaf.notAfter.toInstant().isBefore(expiresAt) ||
             leaf.notAfter.toInstant().isBefore(pendingExpiresAt)) {
@@ -591,11 +611,58 @@ internal class ConnectedPlatformSecurityAndroid(
         return encoded.copyOfRange(prefix.size, encoded.size)
     }
 
-    private fun parseLeafCertificate(bytes: ByteArray): X509Certificate {
+    private fun parseCertificateChain(bytes: ByteArray): List<X509Certificate> {
         val certificates = CertificateFactory.getInstance("X.509")
             .generateCertificates(ByteArrayInputStream(bytes))
-        return certificates.firstOrNull() as? X509Certificate
-            ?: throw PlatformSecurityError("platform_certificate_chain_invalid")
+            .mapNotNull { it as? X509Certificate }
+        if (certificates.size < 2) {
+            throw PlatformSecurityError("platform_certificate_chain_invalid")
+        }
+        return certificates
+    }
+
+    private fun validateCertificateChain(
+        certificates: List<X509Certificate>,
+        currentTime: Instant,
+        expectedRootDerSha256: String,
+    ) {
+        if (!DIGEST.matches(expectedRootDerSha256)) {
+            throw PlatformSecurityError(UNAVAILABLE)
+        }
+        val validationDate = Date.from(currentTime)
+        try {
+            certificates.forEach { it.checkValidity(validationDate) }
+            if (certificates.first().basicConstraints >= 0) {
+                throw PlatformSecurityError("platform_certificate_chain_invalid")
+            }
+            for (index in 0 until certificates.lastIndex) {
+                val certificate = certificates[index]
+                val issuer = certificates[index + 1]
+                if (certificate.issuerX500Principal != issuer.subjectX500Principal ||
+                    issuer.basicConstraints < 0 || !canSignCertificates(issuer)) {
+                    throw PlatformSecurityError("platform_certificate_chain_invalid")
+                }
+                certificate.verify(issuer.publicKey)
+            }
+            val root = certificates.last()
+            if (root.subjectX500Principal != root.issuerX500Principal ||
+                root.basicConstraints < 0 || !canSignCertificates(root)) {
+                throw PlatformSecurityError("platform_certificate_chain_invalid")
+            }
+            root.verify(root.publicKey)
+            if (sha256(root.encoded) != expectedRootDerSha256) {
+                throw PlatformSecurityError("platform_certificate_root_mismatch")
+            }
+        } catch (error: PlatformSecurityError) {
+            throw error
+        } catch (_: Throwable) {
+            throw PlatformSecurityError("platform_certificate_chain_invalid")
+        }
+    }
+
+    private fun canSignCertificates(certificate: X509Certificate): Boolean {
+        val usage = certificate.keyUsage ?: return false
+        return usage.size > KEY_CERT_SIGN_INDEX && usage[KEY_CERT_SIGN_INDEX]
     }
 
     private fun digestCanonical(value: Map<String, Any>): String = sha256(
@@ -649,9 +716,23 @@ internal class ConnectedPlatformSecurityAndroid(
         return decoded
     }
     private fun pem(label: String, bytes: ByteArray): ByteArray {
-        val body = base64(bytes).chunked(64).joinToString("\n")
-        return "-----BEGIN $label-----\n$body\n-----END $label-----\n"
-            .toByteArray(StandardCharsets.US_ASCII)
+        val encoded = Base64.encode(bytes, Base64.NO_WRAP)
+        return try {
+            ByteArrayOutputStream(encoded.size + 96).use { output ->
+                output.write("-----BEGIN $label-----\n".toByteArray(StandardCharsets.US_ASCII))
+                var offset = 0
+                while (offset < encoded.size) {
+                    val length = minOf(64, encoded.size - offset)
+                    output.write(encoded, offset, length)
+                    output.write('\n'.code)
+                    offset += length
+                }
+                output.write("-----END $label-----\n".toByteArray(StandardCharsets.US_ASCII))
+                output.toByteArray()
+            }
+        } finally {
+            encoded.fill(0)
+        }
     }
     private fun jsonMap(value: String): Map<String, Any?> {
         val json = JSONObject(value)
@@ -659,7 +740,7 @@ internal class ConnectedPlatformSecurityAndroid(
     }
     private fun mapsEqualStringKeys(left: Map<*, *>, right: Map<String, Any>): Boolean =
         left.keys.all { it is String } && left.size == right.size && right.all { left[it.key] == it.value }
-    private fun now() = Instant.now().truncatedTo(ChronoUnit.MILLIS)
+    private fun now() = clock().truncatedTo(ChronoUnit.MILLIS)
     private fun signingAlias(alias: String) = "supermega-connected-signing-$alias"
     private fun aesAlias(alias: String) = "supermega-connected-seal-$alias"
     private fun recordKey(alias: String) = "$RECORD_PREFIX$alias"
@@ -669,6 +750,11 @@ internal class ConnectedPlatformSecurityAndroid(
     }
 
     private data class SealedBytes(val iv: ByteArray, val ciphertext: ByteArray)
+
+    private data class IssuerTrust(
+        val enrollmentKeySpkiBase64: String,
+        val rootCertificateDerSha256: String,
+    )
 
     private data class IdentityRecord(
         val alias: String,
@@ -829,6 +915,7 @@ internal class ConnectedPlatformSecurityAndroid(
         const val CLOCK_SKEW_SECONDS = 30L
         const val MAX_CERTIFICATE_BYTES = 64 * 1024
         const val MAX_SIGNING_BYTES = 1024 * 1024
+        const val KEY_CERT_SIGN_INDEX = 5
         const val UNAVAILABLE = "platform_security_unavailable"
         const val OPERATION_FAILED = "platform_security_operation_failed"
         val TOKEN = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -837,7 +924,7 @@ internal class ConnectedPlatformSecurityAndroid(
 
         // Deliberately empty. Adding a key requires independent source review;
         // runtime input, preferences, QR data, and URLs can never populate it.
-        val APPROVED_ISSUER_ED25519_SPKI: Map<String, String> = emptyMap()
+        val APPROVED_ISSUERS: Map<String, IssuerTrust> = emptyMap()
 
         val COMPLETE_KEYS = setOf(
             "schema", "enrollmentSchema", "requestDigest", "alias", "workspaceId", "siteId",
