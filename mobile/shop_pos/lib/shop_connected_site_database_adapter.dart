@@ -641,12 +641,12 @@ class ShopConnectedSiteDatabaseReplicationReader
         .get();
     final replicaEvents = <Map<String, Object?>>[];
     for (final row in rows) {
-      replicaEvents.add({
-        'cursor': row.read<int>('replica_sequence'),
-        'event': (jsonDecode(row.read<String>('event_json')) as Map)
-            .cast<String, Object?>(),
-        'eventDigest': row.read<String>('event_digest'),
-      });
+      final envelope = (jsonDecode(row.read<String>('event_json')) as Map)
+          .cast<String, Object?>();
+      if (envelope['cursor'] != row.read<int>('replica_sequence')) {
+        throw StateError('Connected replica cursor evidence is invalid.');
+      }
+      replicaEvents.add(envelope);
     }
     return SiteDeltaV1(
       workspaceId: workspaceId,

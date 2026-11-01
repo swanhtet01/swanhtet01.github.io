@@ -5741,12 +5741,35 @@ class ShopDatabase extends _$ShopDatabase {
       'ORDER BY aggregate_type, aggregate_id',
       variables: [Variable(tenantId), Variable(siteId)],
     ).get();
+    const connectedCafeIds =
+        'SELECT DISTINCT command.aggregate_id FROM shop_site_commands command '
+        'JOIN shop_site_events event ON event.command_id = command.command_id '
+        "WHERE command.state = 'accepted' AND command.tenant_id = ? "
+        'AND command.site_id = ? AND command.aggregate_type = ? '
+        'AND event.tenant_id = command.tenant_id AND event.site_id = command.site_id '
+        'AND event.aggregate_id = command.aggregate_id AND event.event_type = ?';
     final cafeRows = await customSelect(
-      "SELECT id, state, state_revision, ticket_version, ticket_json FROM shop_cafe_orders WHERE state != 'completed' ORDER BY id",
+      'SELECT id, state, state_revision, ticket_version, ticket_json '
+      "FROM shop_cafe_orders WHERE state != 'completed' AND id IN ($connectedCafeIds) "
+      'ORDER BY id',
+      variables: [
+        Variable(tenantId),
+        Variable(siteId),
+        const Variable('cafeOrder'),
+        const Variable('shop.cafe_order.put.v1'),
+      ],
     ).get();
     final kitchenRows = await customSelect(
-      'SELECT payload_json FROM shop_sync_outbox WHERE event_type = ? ORDER BY created_at_millis, operation_id',
-      variables: [const Variable(cafeKitchenStatusEventType)],
+      'SELECT payload_json FROM shop_sync_outbox WHERE event_type = ? '
+      "AND json_extract(payload_json, '\$.orderId') IN ($connectedCafeIds) "
+      'ORDER BY created_at_millis, operation_id',
+      variables: [
+        const Variable(cafeKitchenStatusEventType),
+        Variable(tenantId),
+        Variable(siteId),
+        const Variable('cafeOrder'),
+        const Variable('shop.cafe_order.put.v1'),
+      ],
     ).get();
     final kitchenByOrder = <String, List<Object?>>{};
     for (final row in kitchenRows) {
@@ -8511,16 +8534,30 @@ class ShopDatabase extends _$ShopDatabase {
       final envelopes = await customSelect(
         'SELECT * FROM shop_site_replica_event_envelopes ORDER BY tenant_id, site_id, replica_sequence',
       ).get();
+      final nextSequenceByScope = <String, int>{};
       for (final row in envelopes) {
         final decoded = jsonDecode(row.read<String>('event_json'));
+        final tenantId = row.read<String>('tenant_id');
+        final siteId = row.read<String>('site_id');
+        final sequence = row.read<int>('replica_sequence');
+        final scope = '$tenantId\u0000$siteId';
+        final expectedSequence = nextSequenceByScope[scope] ?? 1;
         if (decoded is! Map ||
             canonicalConnectedSiteJson(decoded) !=
                 row.read<String>('event_json') ||
             connectedSiteSha256(decoded) != row.read<String>('event_digest') ||
-            decoded['workspaceId'] != row.read<String>('tenant_id') ||
-            decoded['siteId'] != row.read<String>('site_id')) {
+            decoded['cursor'] != sequence ||
+            sequence != expectedSequence) {
           return false;
         }
+        SiteDeltaV1(
+          workspaceId: tenantId,
+          siteId: siteId,
+          afterCursor: sequence - 1,
+          nextCursor: sequence,
+          events: [decoded.cast<String, Object?>()],
+        );
+        nextSequenceByScope[scope] = sequence + 1;
       }
       final deliveries = await customSelect(
         'SELECT * FROM shop_connected_replica_deliveries ORDER BY workspace_id, site_id, client_fingerprint, after_cursor',
@@ -10857,6 +10894,11 @@ class ShopDatabase extends _$ShopDatabase {
         'projections': projections,
       },
     };
+    final envelope = <String, Object?>{
+      'cursor': replicaSequence,
+      'event': event,
+      'eventDigest': connectedSiteSha256(event),
+    };
     await customStatement(
       'INSERT INTO shop_site_replica_event_envelopes '
       '(source_event_row_id, tenant_id, site_id, replica_sequence, event_json, event_digest, created_at_millis) '
@@ -10866,8 +10908,8 @@ class ShopDatabase extends _$ShopDatabase {
         tenantId,
         siteId,
         replicaSequence,
-        canonicalConnectedSiteJson(event),
-        connectedSiteSha256(event),
+        canonicalConnectedSiteJson(envelope),
+        connectedSiteSha256(envelope),
         occurredAtMillis,
       ],
     );

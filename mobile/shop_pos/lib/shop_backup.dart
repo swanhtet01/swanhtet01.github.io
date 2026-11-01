@@ -3579,15 +3579,32 @@ abstract final class ShopBackup {
 
   static bool _v33ConnectedReplicaDeliveryRowsValid(Database connection) {
     try {
+      final nextSequenceByScope = <String, int>{};
       for (final row in connection.select(
-        'SELECT * FROM shop_site_replica_event_envelopes',
+        'SELECT * FROM shop_site_replica_event_envelopes '
+        'ORDER BY tenant_id, site_id, replica_sequence',
       )) {
-        final event = jsonDecode(row['event_json'] as String);
-        if (event is! Map ||
-            canonicalConnectedSiteJson(event) != row['event_json'] ||
-            connectedSiteSha256(event) != row['event_digest']) {
+        final envelope = jsonDecode(row['event_json'] as String);
+        final tenantId = row['tenant_id'] as String;
+        final siteId = row['site_id'] as String;
+        final sequence = row['replica_sequence'] as int;
+        final scope = '$tenantId\u0000$siteId';
+        final expectedSequence = nextSequenceByScope[scope] ?? 1;
+        if (envelope is! Map ||
+            canonicalConnectedSiteJson(envelope) != row['event_json'] ||
+            connectedSiteSha256(envelope) != row['event_digest'] ||
+            envelope['cursor'] != sequence ||
+            sequence != expectedSequence) {
           return false;
         }
+        SiteDeltaV1(
+          workspaceId: tenantId,
+          siteId: siteId,
+          afterCursor: sequence - 1,
+          nextCursor: sequence,
+          events: [envelope.cast<String, Object?>()],
+        );
+        nextSequenceByScope[scope] = sequence + 1;
       }
       for (final row in connection.select(
         'SELECT * FROM shop_connected_replica_deliveries',
@@ -3595,7 +3612,11 @@ abstract final class ShopBackup {
         final decoded = jsonDecode(row['delta_json'] as String);
         if (decoded is! Map ||
             canonicalConnectedSiteJson(decoded) != row['delta_json'] ||
-            connectedSiteSha256(decoded) != row['delta_digest']) {
+            connectedSiteSha256(decoded) != row['delta_digest'] ||
+            decoded['workspaceId'] != row['workspace_id'] ||
+            decoded['siteId'] != row['site_id'] ||
+            decoded['afterCursor'] != row['after_cursor'] ||
+            decoded['nextCursor'] != row['next_cursor']) {
           return false;
         }
         final delta = SiteDeltaV1.fromJson(decoded.cast<String, Object?>());

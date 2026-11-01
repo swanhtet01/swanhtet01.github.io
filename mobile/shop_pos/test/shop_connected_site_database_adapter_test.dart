@@ -7,6 +7,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
+import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_cafe_kitchen_entitlement.dart';
 import 'package:supermega_shop/shop_cafe_order_contract.dart';
 import 'package:supermega_shop/shop_cafe_order_store.dart';
@@ -224,7 +226,8 @@ void main() {
           'shop.connected_replica.state.v1',
         );
         expect(
-          ((delta.events.single['event']! as Map)['payload']! as Map)['contract'],
+          ((delta.events.single['event']! as Map)['payload']!
+              as Map)['contract'],
           'supermega.shop.connected-site-replica-state.v1',
         );
         final snapshot = await reader.readSnapshot(_fingerprint);
@@ -355,6 +358,128 @@ void main() {
       }
     },
   );
+
+  test(
+    'snapshot excludes unmanaged and foreign-site café projections',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seed(database);
+        final store = ShopCafeOrderStore(
+          database,
+          clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+        );
+        for (final entry in const [
+          ('local-only-put', 'local-only-cafe-ticket', 'local-only-line'),
+          ('foreign-site-put', 'foreign-site-cafe-ticket', 'foreign-site-line'),
+        ]) {
+          await store.applyCommand(
+            CafeOrderCommand(
+              id: entry.$1,
+              ticketId: entry.$2,
+              expectedVersion: 0,
+              lines: [
+                CafeOrderLine.local(
+                  id: entry.$3,
+                  productId: 'adapter-item',
+                  quantity: 1,
+                  baseUnitPriceMmk: 1000,
+                  remark: '',
+                  modifiers: const [],
+                ),
+              ],
+            ),
+            const {},
+          );
+        }
+        await _seedForeignAcceptedCafeMarker(
+          database,
+          orderId: 'foreign-site-cafe-ticket',
+        );
+        await database.customStatement(
+          'INSERT INTO shop_sync_outbox '
+          '(operation_id, event_type, payload_json, state, created_at_millis) '
+          "VALUES (?, ?, ?, 'pending', ?)",
+          [
+            'local-only-kitchen-status',
+            cafeKitchenStatusEventType,
+            canonicalConnectedSiteJson({
+              'orderId': 'local-only-cafe-ticket',
+              'lineId': 'local-only-line',
+              'status': 'preparing_local',
+            }),
+            _now,
+          ],
+        );
+        final snapshot = await ShopConnectedSiteDatabaseReplicationReader(
+          database: database,
+          workspaceId: _workspace,
+          siteId: _site,
+        ).readSnapshot(_fingerprint);
+        expect(snapshot.projections['cafeOrders'], isEmpty);
+        expect(
+          canonicalConnectedSiteJson(snapshot.projections),
+          isNot(contains('local-only-cafe-ticket')),
+        );
+        expect(
+          canonicalConnectedSiteJson(snapshot.projections),
+          isNot(contains('foreign-site-cafe-ticket')),
+        );
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test('backup validator binds replica envelope scope and sequence', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    final root = await Directory.systemTemp.createTemp('replica-envelope-');
+    addTearDown(() => root.delete(recursive: true));
+    try {
+      await _seed(database, openingStock: 2);
+      final handler = ShopConnectedSiteDatabaseCommandHandler(
+        database: database,
+        timeAuthority: const _FixedTime(_now),
+        connectedSiteEnabled: true,
+      );
+      await handler.handle(_fingerprint, _reserveCommand('envelope-one'));
+      await handler.handle(_fingerprint, _reserveCommand('envelope-two'));
+      final scopeTampered = File('${root.path}/scope.sqlite');
+      final gapTampered = File('${root.path}/gap.sqlite');
+      await database.exportVerifiedLocalSnapshot(scopeTampered);
+      await scopeTampered.copy(gapTampered.path);
+      var raw = sqlite.sqlite3.open(scopeTampered.path);
+      try {
+        raw.execute('DROP TRIGGER shop_site_replica_event_envelopes_no_update');
+        raw.execute(
+          "UPDATE shop_site_replica_event_envelopes SET tenant_id = 'foreign-workspace' "
+          'WHERE replica_sequence = 1',
+        );
+      } finally {
+        raw.close();
+      }
+      expect(
+        () =>
+            ShopBackup.verifySnapshot(scopeTampered, expectedSchemaVersion: 33),
+        throwsFormatException,
+      );
+      raw = sqlite.sqlite3.open(gapTampered.path);
+      try {
+        raw.execute('DROP TRIGGER shop_site_replica_event_envelopes_no_delete');
+        raw.execute(
+          'DELETE FROM shop_site_replica_event_envelopes WHERE replica_sequence = 1',
+        );
+      } finally {
+        raw.close();
+      }
+      expect(
+        () => ShopBackup.verifySnapshot(gapTampered, expectedSchemaVersion: 33),
+        throwsFormatException,
+      );
+    } finally {
+      await database.close();
+    }
+  });
 
   test('connected cafe commands atomically project order kitchen state and cancellation', () async {
     final database = ShopDatabase(NativeDatabase.memory());
@@ -1518,6 +1643,118 @@ Future<void> _expectNoConnectedMutation(ShopDatabase database) async {
     expect(count, 0, reason: table);
   }
   expect(await database.readReservedStockQuantity('adapter-item'), 0);
+}
+
+Future<void> _seedForeignAcceptedCafeMarker(
+  ShopDatabase database, {
+  required String orderId,
+}) async {
+  const foreignSite = 'site-foreign';
+  const foreignDevice = 'device-foreign';
+  const foreignActor = 'actor-foreign';
+  final fingerprint = _digest('foreign-device-key');
+  final leaseDigest = _digest('foreign-lease');
+  await database.customStatement(
+    'INSERT INTO shop_site_devices (device_id, tenant_id, site_id, '
+    'public_key_fingerprint, session_generation, state, enrolled_at_millis) '
+    "VALUES (?, ?, ?, ?, 1, 'active', ?)",
+    [foreignDevice, _workspace, foreignSite, fingerprint, _now - 1000],
+  );
+  await database.customStatement(
+    'INSERT INTO shop_site_revocation_observations '
+    '(tenant_id, site_id, generation, observed_at_millis, source_digest) '
+    'VALUES (?, ?, 1, ?, ?)',
+    [_workspace, foreignSite, _now - 1000, _digest('foreign-revocation')],
+  );
+  await database.customStatement(
+    'INSERT INTO shop_site_offline_leases '
+    '(lease_id, tenant_id, site_id, actor_id, actor_role, capabilities_json, '
+    'device_id, session_generation, revocation_generation, issued_at_millis, '
+    'expires_at_millis, key_id, payload_digest, signature) '
+        "VALUES (?, ?, ?, ?, 'cafeWaiter', ?, ?, 1, 1, ?, ?, 'foreign-key', ?, ?)",
+    [
+      'foreign-lease',
+      _workspace,
+      foreignSite,
+      foreignActor,
+      jsonEncode(['cafeOrderWrite']),
+      foreignDevice,
+      _now - 1000,
+      _now + 60000,
+      leaseDigest,
+      List.filled(64, 's').join(),
+    ],
+  );
+  final payload = <String, Object?>{'contract': 'foreign-cafe-marker.v1'};
+  final event = <String, Object?>{
+    'eventId': 'foreign-cafe-event',
+    'workspaceId': _workspace,
+    'siteId': foreignSite,
+    'aggregateType': 'cafeOrder',
+    'aggregateId': orderId,
+    'aggregateVersion': 1,
+    'eventType': 'shop.cafe_order.put.v1',
+    'occurredAt': DateTime.fromMillisecondsSinceEpoch(
+      _now,
+      isUtc: true,
+    ).toIso8601String(),
+    'payload': payload,
+  };
+  await database.transaction(() async {
+    await database.customStatement(
+      'INSERT INTO shop_site_commands '
+      '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+      'aggregate_type, capability, expected_version, payload_digest, lease_digest, '
+      "command_digest, state, received_at_millis) VALUES (?, ?, ?, ?, ?, ?, 'cafeOrder', "
+      "'cafeOrderWrite', 0, ?, ?, ?, 'accepted', ?)",
+      [
+        'foreign-cafe-command',
+        _workspace,
+        foreignSite,
+        foreignActor,
+        foreignDevice,
+        orderId,
+        connectedSiteSha256(payload),
+        leaseDigest,
+        _digest('foreign-command'),
+        _now,
+      ],
+    );
+    final eventRowId = await database.customInsert(
+      'INSERT INTO shop_site_events '
+      '(site_sequence, event_id, command_id, tenant_id, site_id, aggregate_type, '
+      'aggregate_id, aggregate_version, event_type, payload_json, event_digest, created_at_millis) '
+      "VALUES (1, ?, 'foreign-cafe-command', ?, ?, 'cafeOrder', ?, 1, "
+      "'shop.cafe_order.put.v1', ?, ?, ?)",
+      variables: [
+        const Variable('foreign-cafe-event'),
+        const Variable(_workspace),
+        const Variable(foreignSite),
+        Variable(orderId),
+        Variable(canonicalConnectedSiteJson(payload)),
+        Variable(connectedSiteSha256(event)),
+        const Variable(_now),
+      ],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_aggregate_versions '
+      '(tenant_id, site_id, aggregate_type, aggregate_id, version, last_event_row_id, '
+      "last_site_sequence, updated_at_millis) VALUES (?, ?, 'cafeOrder', ?, 1, ?, 1, ?)",
+      [_workspace, foreignSite, orderId, eventRowId, _now],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_command_acks '
+      '(command_id, status, event_row_id, site_sequence, canonical_version, ack_digest, created_at_millis) '
+      "VALUES ('foreign-cafe-command', 'accepted', ?, 1, 1, ?, ?)",
+      [eventRowId, _digest('foreign-ack'), _now],
+    );
+    await database.customStatement(
+      'INSERT INTO shop_site_audit '
+      '(audit_id, command_id, actor_id, action, metadata_digest, created_at_millis) '
+      "VALUES ('foreign-cafe-audit', 'foreign-cafe-command', ?, 'shop.cafe_order.put', ?, ?)",
+      [foreignActor, _digest('foreign-audit'), _now],
+    );
+  });
 }
 
 Future<void> _seed(

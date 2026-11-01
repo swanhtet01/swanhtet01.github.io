@@ -15,15 +15,18 @@ void main() {
   late ShopDatabase database;
   late String client;
   late String approvedBindingDigest;
+  late ShopConnectedSiteAttemptStore bindingResolver;
   const certificate =
       '4444444444444444444444444444444444444444444444444444444444444444';
   final clock = DateTime.utc(2026, 11, 1, 12);
+  late final observed = clock.millisecondsSinceEpoch;
 
   setUp(() async {
     database = ShopDatabase(NativeDatabase.memory());
     final approval = await _seedApprovedBinding(database, clock);
     client = approval.$1;
     approvedBindingDigest = approval.$2;
+    bindingResolver = approval.$3;
   });
   tearDown(() => database.close());
 
@@ -35,13 +38,16 @@ void main() {
           database: database,
           localWorkspaceId: 'workspace_1',
           localSiteId: 'site_1',
+          localClientDeviceId: 'device_1',
           localClientFingerprint: client,
+          localClientSigningKeyId: 'key_1',
           approvedBindingDigest: approvedBindingDigest,
+          bindingResolver: bindingResolver,
         ).applySnapshot(
           snapshot: _snapshot(),
           clientFingerprint: client,
           certificateSha256: certificate,
-          observedAtMillis: 1,
+          observedAtMillis: observed,
         ),
         throwsStateError,
       );
@@ -49,8 +55,11 @@ void main() {
         database: database,
         localWorkspaceId: 'workspace_1',
         localSiteId: 'site_1',
+        localClientDeviceId: 'device_1',
         localClientFingerprint: client,
+        localClientSigningKeyId: 'key_1',
         approvedBindingDigest: approvedBindingDigest,
+        bindingResolver: bindingResolver,
         runtimeEnabled: true,
       );
       await expectLater(
@@ -58,7 +67,7 @@ void main() {
           snapshot: _snapshot(),
           clientFingerprint: client,
           certificateSha256: 'c' * 64,
-          observedAtMillis: 1,
+          observedAtMillis: observed,
         ),
         throwsStateError,
       );
@@ -75,7 +84,7 @@ void main() {
         snapshot: _snapshot(),
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 1,
+        observedAtMillis: observed,
       );
       await expectLater(
         store.markCoordinatorUnavailable(
@@ -83,7 +92,7 @@ void main() {
           siteId: 'site_1',
           clientFingerprint: client,
           certificateSha256: 'c' * 64,
-          observedAtMillis: 2,
+          observedAtMillis: observed + 1,
         ),
         throwsStateError,
       );
@@ -92,7 +101,7 @@ void main() {
           snapshot: _snapshot(),
           clientFingerprint: 'f' * 64,
           certificateSha256: certificate,
-          observedAtMillis: 2,
+          observedAtMillis: observed + 1,
         ),
         throwsStateError,
       );
@@ -101,12 +110,63 @@ void main() {
           snapshot: _snapshot(workspaceId: 'workspace_other'),
           clientFingerprint: client,
           certificateSha256: certificate,
-          observedAtMillis: 2,
+          observedAtMillis: observed + 1,
         ),
         throwsStateError,
       );
     },
   );
+
+  test('binding signature and observation freshness are reverified', () async {
+    final rejectedResolver = ShopConnectedSiteAttemptStore(
+      database: database,
+      approvalVerifier: const _RejectApprovalVerifier(),
+      runtimeEnabled: true,
+      now: () => clock,
+    );
+    final rejected = ShopConnectedSiteReplicaStore(
+      database: database,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
+      localClientFingerprint: client,
+      localClientSigningKeyId: 'key_1',
+      approvedBindingDigest: approvedBindingDigest,
+      bindingResolver: rejectedResolver,
+      runtimeEnabled: true,
+    );
+    await expectLater(
+      rejected.applySnapshot(
+        snapshot: _snapshot(),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: observed,
+      ),
+      throwsStateError,
+    );
+    final valid = ShopConnectedSiteReplicaStore(
+      database: database,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
+      localClientFingerprint: client,
+      localClientSigningKeyId: 'key_1',
+      approvedBindingDigest: approvedBindingDigest,
+      bindingResolver: bindingResolver,
+      runtimeEnabled: true,
+    );
+    await expectLater(
+      valid.applySnapshot(
+        snapshot: _snapshot(),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: clock
+            .subtract(const Duration(minutes: 2))
+            .millisecondsSinceEpoch,
+      ),
+      throwsStateError,
+    );
+  });
 
   test(
     'snapshot and ordered delta persist atomically and replay exactly',
@@ -115,28 +175,31 @@ void main() {
         database: database,
         localWorkspaceId: 'workspace_1',
         localSiteId: 'site_1',
+        localClientDeviceId: 'device_1',
         localClientFingerprint: client,
+        localClientSigningKeyId: 'key_1',
         approvedBindingDigest: approvedBindingDigest,
+        bindingResolver: bindingResolver,
         runtimeEnabled: true,
       );
       await store.applySnapshot(
         snapshot: _snapshot(),
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 1,
+        observedAtMillis: observed,
       );
       final delta = _delta();
       await store.applyDelta(
         delta: delta,
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 2,
+        observedAtMillis: observed + 1,
       );
       await store.applyDelta(
         delta: delta,
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 3,
+        observedAtMillis: observed + 2,
       );
       final rows = await store.readProjections(
         workspaceId: 'workspace_1',
@@ -148,7 +211,7 @@ void main() {
         snapshot: _snapshotAfterDelta(),
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 4,
+        observedAtMillis: observed + 3,
       );
       expect(
         await store.readProjections(
@@ -188,15 +251,18 @@ void main() {
       database: database,
       localWorkspaceId: 'workspace_1',
       localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
       localClientFingerprint: client,
+      localClientSigningKeyId: 'key_1',
       approvedBindingDigest: approvedBindingDigest,
+      bindingResolver: bindingResolver,
       runtimeEnabled: true,
     );
     await store.applySnapshot(
       snapshot: _snapshot(),
       clientFingerprint: client,
       certificateSha256: certificate,
-      observedAtMillis: 1,
+      observedAtMillis: observed,
     );
     final missing = SiteDeltaV1(
       workspaceId: 'workspace_1',
@@ -210,7 +276,7 @@ void main() {
         delta: missing,
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 2,
+        observedAtMillis: observed + 1,
       ),
       throwsStateError,
     );
@@ -218,7 +284,7 @@ void main() {
       delta: _delta(),
       clientFingerprint: client,
       certificateSha256: certificate,
-      observedAtMillis: 2,
+      observedAtMillis: observed + 1,
     );
     await database.customStatement(
       'DROP TRIGGER shop_connected_replica_events_no_update',
@@ -238,15 +304,18 @@ void main() {
       database: database,
       localWorkspaceId: 'workspace_1',
       localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
       localClientFingerprint: client,
+      localClientSigningKeyId: 'key_1',
       approvedBindingDigest: approvedBindingDigest,
+      bindingResolver: bindingResolver,
       runtimeEnabled: true,
     );
     await store.applySnapshot(
       snapshot: _snapshot(),
       clientFingerprint: client,
       certificateSha256: certificate,
-      observedAtMillis: 1,
+      observedAtMillis: observed,
     );
     final full = SiteDeltaV1(
       workspaceId: 'workspace_1',
@@ -259,7 +328,7 @@ void main() {
       delta: full,
       clientFingerprint: client,
       certificateSha256: certificate,
-      observedAtMillis: 2,
+      observedAtMillis: observed + 1,
     );
     await expectLater(
       store.applyDelta(
@@ -272,7 +341,7 @@ void main() {
         ),
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 3,
+        observedAtMillis: observed + 2,
       ),
       throwsStateError,
     );
@@ -285,15 +354,18 @@ void main() {
         database: database,
         localWorkspaceId: 'workspace_1',
         localSiteId: 'site_1',
+        localClientDeviceId: 'device_1',
         localClientFingerprint: client,
+        localClientSigningKeyId: 'key_1',
         approvedBindingDigest: approvedBindingDigest,
+        bindingResolver: bindingResolver,
         runtimeEnabled: true,
       );
       await store.applySnapshot(
         snapshot: _snapshot(),
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 1,
+        observedAtMillis: observed,
       );
       final tampered = <String, Object?>{
         'orderId': 'order_1',
@@ -314,6 +386,51 @@ void main() {
     },
   );
 
+  test('backup validator binds delivery scope and cursor columns', () async {
+    final store = ShopConnectedSiteReplicaStore(
+      database: database,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
+      localClientFingerprint: client,
+      localClientSigningKeyId: 'key_1',
+      approvedBindingDigest: approvedBindingDigest,
+      bindingResolver: bindingResolver,
+      runtimeEnabled: true,
+    );
+    await store.applySnapshot(
+      snapshot: _snapshot(),
+      clientFingerprint: client,
+      certificateSha256: certificate,
+      observedAtMillis: observed,
+    );
+    await store.applyDelta(
+      delta: _delta(),
+      clientFingerprint: client,
+      certificateSha256: certificate,
+      observedAtMillis: observed + 1,
+    );
+    final directory = await Directory.systemTemp.createTemp(
+      'replica-delivery-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/tampered.sqlite');
+    await database.exportVerifiedLocalSnapshot(file);
+    final raw = sqlite.sqlite3.open(file.path);
+    try {
+      raw.execute('DROP TRIGGER shop_connected_replica_deliveries_no_update');
+      raw.execute(
+        "UPDATE shop_connected_replica_deliveries SET workspace_id = 'foreign-workspace'",
+      );
+    } finally {
+      raw.close();
+    }
+    expect(
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 33),
+      throwsFormatException,
+    );
+  });
+
   test(
     'crash between event work and cursor commit leaves no partial evidence',
     () async {
@@ -321,15 +438,18 @@ void main() {
         database: database,
         localWorkspaceId: 'workspace_1',
         localSiteId: 'site_1',
+        localClientDeviceId: 'device_1',
         localClientFingerprint: client,
+        localClientSigningKeyId: 'key_1',
         approvedBindingDigest: approvedBindingDigest,
+        bindingResolver: bindingResolver,
         runtimeEnabled: true,
       );
       await store.applySnapshot(
         snapshot: _snapshot(),
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: 1,
+        observedAtMillis: observed,
       );
       await database.customStatement('''
       CREATE TRIGGER replica_test_abort_head BEFORE UPDATE ON shop_connected_replica_heads
@@ -340,7 +460,7 @@ void main() {
           delta: _delta(),
           clientFingerprint: client,
           certificateSha256: certificate,
-          observedAtMillis: 2,
+          observedAtMillis: observed + 1,
         ),
         throwsA(anything),
       );
@@ -363,22 +483,25 @@ void main() {
       database: database,
       localWorkspaceId: 'workspace_1',
       localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
       localClientFingerprint: client,
+      localClientSigningKeyId: 'key_1',
       approvedBindingDigest: approvedBindingDigest,
+      bindingResolver: bindingResolver,
       runtimeEnabled: true,
     );
     await store.applySnapshot(
       snapshot: _snapshot(),
       clientFingerprint: client,
       certificateSha256: certificate,
-      observedAtMillis: 1,
+      observedAtMillis: observed,
     );
     await store.markCoordinatorUnavailable(
       workspaceId: 'workspace_1',
       siteId: 'site_1',
       clientFingerprint: client,
       certificateSha256: certificate,
-      observedAtMillis: 2,
+      observedAtMillis: observed + 1,
     );
     expect(
       await store.readProjections(
@@ -471,6 +594,68 @@ void main() {
     expect(migrated.schemaVersion, 33);
     await migrated.verifyConnectedReplicaEvidence();
   });
+
+  test(
+    'populated v32 database migrates to verified v33 delivery schema',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('replica-v32-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/shop.sqlite');
+      final source = ShopDatabase(NativeDatabase(file));
+      final seeded = await _seedApprovedBinding(source, clock);
+      final store = ShopConnectedSiteReplicaStore(
+        database: source,
+        localWorkspaceId: 'workspace_1',
+        localSiteId: 'site_1',
+        localClientDeviceId: 'device_1',
+        localClientFingerprint: seeded.$1,
+        localClientSigningKeyId: 'key_1',
+        approvedBindingDigest: seeded.$2,
+        bindingResolver: seeded.$3,
+        runtimeEnabled: true,
+      );
+      await store.applySnapshot(
+        snapshot: _snapshot(),
+        clientFingerprint: seeded.$1,
+        certificateSha256: certificate,
+        observedAtMillis: observed,
+      );
+      await source.close();
+      final raw = sqlite.sqlite3.open(file.path);
+      try {
+        for (final definition
+            in shopConnectedReplicaSchemaDefinitionsV33().entries
+                .toList()
+                .reversed) {
+          final type = shopSchemaObjectTypeForDefinition(definition.value);
+          raw.execute(
+            'DROP ${type == 'table'
+                ? 'TABLE'
+                : type == 'index'
+                ? 'INDEX'
+                : 'TRIGGER'} IF EXISTS ${definition.key}',
+          );
+        }
+        raw.execute('PRAGMA user_version = 32');
+      } finally {
+        raw.close();
+      }
+      final migrated = ShopDatabase(NativeDatabase(file));
+      addTearDown(migrated.close);
+      await migrated.verifyReadyForUse();
+      expect(migrated.schemaVersion, 33);
+      expect(
+        await migrated
+            .customSelect(
+              'SELECT COUNT(*) AS n FROM shop_connected_replica_projections',
+            )
+            .getSingle()
+            .then((row) => row.read<int>('n')),
+        3,
+      );
+      await migrated.verifyConnectedReplicaEvidence();
+    },
+  );
 }
 
 SiteSnapshotV1 _snapshot({String workspaceId = 'workspace_1'}) {
@@ -592,7 +777,7 @@ Map<String, Object?> _projectionsAfterDelta() => <String, Object?>{
   'conflicts': <Object?>[],
 };
 
-Future<(String, String)> _seedApprovedBinding(
+Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
   ShopDatabase database,
   DateTime now,
 ) async {
@@ -699,7 +884,7 @@ Future<(String, String)> _seedApprovedBinding(
     runtimeEnabled: true,
     now: () => now,
   );
-  return (fingerprint, await store.importApproval(approval));
+  return (fingerprint, await store.importApproval(approval), store);
 }
 
 class _ReplicaApprovalVerifier implements ConnectedCoordinatorApprovalVerifier {
@@ -714,4 +899,15 @@ class _ReplicaApprovalVerifier implements ConnectedCoordinatorApprovalVerifier {
       authorityKeyId == 'authority_1' &&
       signature == 'A' * 86 &&
       crypto.sha256.convert(utf8.encode(canonicalEvidence)).bytes.isNotEmpty;
+}
+
+class _RejectApprovalVerifier implements ConnectedCoordinatorApprovalVerifier {
+  const _RejectApprovalVerifier();
+
+  @override
+  Future<bool> verify({
+    required String authorityKeyId,
+    required String canonicalEvidence,
+    required String signature,
+  }) async => false;
 }

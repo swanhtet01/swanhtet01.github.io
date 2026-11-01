@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import 'shop_connected_site_attempt_store.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_database.dart';
 
@@ -12,16 +13,22 @@ class ShopConnectedSiteReplicaStore {
     required this.database,
     required this.localWorkspaceId,
     required this.localSiteId,
+    required this.localClientDeviceId,
     required this.localClientFingerprint,
+    required this.localClientSigningKeyId,
     required this.approvedBindingDigest,
+    required this.bindingResolver,
     this.runtimeEnabled = false,
   });
 
   final ShopDatabase database;
   final String localWorkspaceId;
   final String localSiteId;
+  final String localClientDeviceId;
   final String localClientFingerprint;
+  final String localClientSigningKeyId;
   final String approvedBindingDigest;
+  final ConnectedSiteCommandAttemptStore bindingResolver;
   final bool runtimeEnabled;
 
   Future<void> applySnapshot({
@@ -321,38 +328,39 @@ class ShopConnectedSiteReplicaStore {
     String observedCertificateSha256,
     int observedAtMillis,
   ) async {
-    final binding = await database
+    final binding = await bindingResolver.resolveActiveBinding(
+      bindingDigest: approvedBindingDigest,
+      workspaceId: localWorkspaceId,
+      siteId: localSiteId,
+      clientDeviceId: localClientDeviceId,
+      clientFingerprint: localClientFingerprint,
+      clientSigningKeyId: localClientSigningKeyId,
+    );
+    final retained = await database
         .customSelect(
-          'SELECT binding.certificate_sha256, binding.expires_at_millis, '
-          'binding.client_device_id, binding.enrollment_evidence_digest '
-          'FROM shop_site_coordinator_bindings binding '
-          'JOIN shop_site_enrollment_evidence evidence '
-          'ON evidence.evidence_digest = binding.enrollment_evidence_digest '
-          'JOIN shop_site_devices device ON device.device_id = binding.client_device_id '
-          'WHERE binding.binding_digest = ? AND binding.workspace_id = ? '
-          'AND binding.site_id = ? AND binding.client_fingerprint = ? '
-          "AND evidence.action = 'approve' AND evidence.tenant_id = binding.workspace_id "
-          'AND evidence.site_id = binding.site_id '
-          'AND evidence.device_id = binding.client_device_id '
-          'AND evidence.client_fingerprint = binding.client_fingerprint '
-          "AND device.state = 'active' AND device.tenant_id = binding.workspace_id "
-          'AND device.site_id = binding.site_id '
-          'AND device.public_key_fingerprint = binding.client_fingerprint '
-          'AND NOT EXISTS (SELECT 1 FROM shop_site_coordinator_binding_revocations revocation '
-          'WHERE revocation.target_binding_digest = binding.binding_digest '
-          'AND revocation.approval_generation >= binding.approval_generation) LIMIT 1',
+          'SELECT issued_at_millis, expires_at_millis FROM shop_site_coordinator_bindings '
+          'WHERE binding_digest = ? AND workspace_id = ? AND site_id = ? '
+          'AND client_device_id = ? AND client_fingerprint = ? AND client_signing_key_id = ?',
           variables: [
             Variable(approvedBindingDigest),
             Variable(localWorkspaceId),
             Variable(localSiteId),
+            Variable(localClientDeviceId),
             Variable(localClientFingerprint),
+            Variable(localClientSigningKeyId),
           ],
         )
         .getSingleOrNull();
-    if (binding == null ||
-        binding.read<int>('expires_at_millis') <= observedAtMillis ||
-        binding.read<String>('certificate_sha256') !=
-            observedCertificateSha256) {
+    if (binding.bindingDigest != approvedBindingDigest ||
+        binding.workspaceId != localWorkspaceId ||
+        binding.siteId != localSiteId ||
+        binding.clientDeviceId != localClientDeviceId ||
+        binding.clientFingerprint != localClientFingerprint ||
+        binding.clientSigningKeyId != localClientSigningKeyId ||
+        binding.certificateSha256 != observedCertificateSha256 ||
+        retained == null ||
+        retained.read<int>('issued_at_millis') > observedAtMillis ||
+        retained.read<int>('expires_at_millis') <= observedAtMillis) {
       throw StateError('connected_replica_approval_rejected');
     }
   }
