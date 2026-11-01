@@ -94,6 +94,14 @@
   #752 evidence already showed these four advisories clear, but minimatch
   remains deliberately unchanged and **BLOCKED**. This dependency candidate
   is unpublished and is not part of PR #753.
+- Publication preflight for that dependency candidate is **PASS / NOT
+  AUTHORIZED**: remote `main` remains exact base `5479c5d1`, `92733fba` is a
+  clean three-commit descendant, its binary patch SHA-256 is
+  `daf17609553a2e30907443c463dab8647b45e7695eb2d68ac080b45abe8d8e82`,
+  and no overlapping open PR was found. A future publication must be one new
+  draft main-based PR containing only those five files and automatic checks;
+  this receipt authorizes neither publication nor merge and does not clear
+  minimatch.
 - A fresh security-boundary investigation confirms no safe minimatch repair can
   be built from existing trusted bytes. Modern ESLint/config-array and
   typescript-estree consumers require the v10 class/named APIs, while
