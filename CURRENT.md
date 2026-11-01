@@ -5,6 +5,47 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-01 native full-suite successor checkpoint
+
+- Local implementation `b696cff4da4c30372a1b0435242987bfb10d6f29`, tree
+  `895acaf976023b0afc6650a720048757eae905f6`, is a clean unpublished
+  successor of migration-fixture repair
+  `f0e67950b0ed3990dc9b8968232f9f03cc03992c` and locked-resolution
+  predecessor `484dd12bbf9171cba11267082db11138b3ae35bc`. Published draft PR #752
+  remains separately at `27491e680c7767c45b3a8046d3e85cb5e3e36ee1`; this checkpoint is not
+  merged, deployed, signed or distributed.
+- Two legacy-database tests now remove all post-version schema groups before
+  presenting fabricated v19/v18 stores. Production schema classification and
+  backup verification remain fail closed. The complete café order-store file
+  is **25/25 PASS** and the complete cash-movement file is **6/6 PASS**;
+  focused formerly failing cases, analyzer and formatting are **PASS**.
+- Native CI now retains all 52 unique Flutter test files in seven strictly
+  serial, isolated shards: behavior core 14, shell 1, checkout 1, backup 1,
+  persistence A 7, persistence B 9 and connected 19. Every shard uses locked
+  dependencies (`--no-pub`), concurrency 1, a two-minute per-test timeout, a
+  600-second ceiling, explicit status/elapsed checks and complete temporary
+  cleanup. Before every shard, its timeout is reduced to the remaining
+  aggregate budget and fails closed when none remains.
+- The exact final seven-shard workflow block is **PASS / exit 0**. Recorded
+  shard terminals include behavior core **212 PASS**, shell **74 PASS**,
+  checkout **80 PASS**, the complete split persistence coverage **PASS**, and
+  connected **249 PASS**. The prior measured run also passed every test but
+  exited 124 only at its old 2,100-second aggregate guard; the evidence-backed
+  final bound is 2,400 seconds inside a hard 60-minute Android job. This leaves
+  20 minutes gross for all setup and post-shard work, not a guaranteed
+  post-test reserve.
+- Real process-interruption scenarios are **PASS / exit 0**; full Flutter
+  analysis reports no issues; formatting and diff checks are **PASS**. Native
+  CI contract tests are **21/21 PASS**, the contract verifier is **PASS**, and
+  extracted shell syntax is **PASS**. Independent source review and final
+  budget/control review both **ACCEPT** with no findings.
+- Release remains **BLOCKED**: PostgreSQL 17 evidence is stale and the genuine
+  Windows rehearsal is **NOT RUN**; dependency security remains red on the
+  unsupported upstream minimatch range; exact-current hosted CI, signed
+  artifacts, installed recovery, physical hardware, bilingual paper receipts,
+  merchant acceptance and joint go/no-go are **NOT RUN**. Connected mode stays
+  default-off and no gate is waived by this source checkpoint.
+
 ## 2026-11-02 exact-head CI repair checkpoint
 
 - Swan authorized and Cloud completed a guarded plain fast-forward of draft PR
