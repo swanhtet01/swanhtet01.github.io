@@ -43,6 +43,7 @@ void main() {
       adapter.abortIdentityPreparation(
         alias: 'coordinator-1',
         preparationHandle: 'prep-1',
+        requestDigest: 'a' * 64,
       ),
       throwsA(_securityCode('platform_security_unavailable')),
     );
@@ -50,6 +51,8 @@ void main() {
       adapter.reconcileIdentity(
         alias: 'coordinator-1',
         requestDigest: 'a' * 64,
+        expectedBundleDigest: null,
+        expectedIdentity: null,
       ),
       throwsA(_securityCode('platform_security_unavailable')),
     );
@@ -80,9 +83,9 @@ void main() {
       final calls = <MethodCall>[];
       messenger.setMockMethodCallHandler(channel, (call) async {
         calls.add(call);
-        return _enrollmentRequestJson();
+        return _prepareEnvelope();
       });
-      final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+      final adapter = _adapter(channel);
       final request = await adapter.prepareIdentity(
         alias: 'coordinator-1',
         workspaceId: 'workspace-1',
@@ -111,10 +114,13 @@ void main() {
   test(
     'prepare identity rejects altered digest and substituted device',
     () async {
-      final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+      final adapter = _adapter(channel);
       messenger.setMockMethodCallHandler(channel, (call) async {
         if (call.method == 'abortIdentityPreparation') return true;
-        return {..._enrollmentRequestJson(), 'requestDigest': '0' * 64};
+        return _prepareEnvelope(
+          request: {..._enrollmentRequestJson(), 'requestDigest': '0' * 64},
+          requestDigest: _enrollmentRequestJson()['requestDigest']! as String,
+        );
       });
       await expectLater(
         adapter.prepareIdentity(
@@ -130,7 +136,7 @@ void main() {
       messenger.setMockMethodCallHandler(channel, (call) async {
         if (call.method == 'abortIdentityPreparation') return true;
         final value = _enrollmentRequestJson(deviceId: 'device-2');
-        return value;
+        return _prepareEnvelope(request: value);
       });
       await expectLater(
         adapter.prepareIdentity(
@@ -164,6 +170,47 @@ void main() {
     );
   });
 
+  test(
+    'prepare rejects stale native request and pending alias conflict',
+    () async {
+      final stale = _enrollmentRequestJson()
+        ..['createdAt'] = '2026-10-31T23:55:00.000Z'
+        ..['pendingExpiresAt'] = '2026-11-01T00:05:00.000Z';
+      stale['requestDigest'] = connectedSiteSha256(
+        Map<String, Object>.from(stale)..remove('requestDigest'),
+      );
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'abortIdentityPreparation') return true;
+        return _prepareEnvelope(request: stale);
+      });
+      final adapter = _adapter(channel);
+      await expectLater(
+        adapter.prepareIdentity(
+          alias: 'coordinator-1',
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          deviceId: 'device-1',
+          sessionGeneration: 7,
+        ),
+        throwsA(_securityCode('platform_enrollment_request_stale')),
+      );
+
+      messenger.setMockMethodCallHandler(channel, (_) async {
+        throw PlatformException(code: 'platform_identity_pending_conflict');
+      });
+      await expectLater(
+        adapter.prepareIdentity(
+          alias: 'coordinator-1',
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          deviceId: 'device-1',
+          sessionGeneration: 7,
+        ),
+        throwsA(_securityCode('platform_identity_pending_conflict')),
+      );
+    },
+  );
+
   test('complete identity consumes bundle and binds native identity', () async {
     final bundle = _enrollmentBundle();
     late Uint8List channelCertificate;
@@ -184,7 +231,7 @@ void main() {
       return _completionJson(bundle);
     });
     final originalCertificate = bundle.certificateChainPem;
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     final identity = await adapter.completeIdentityEnrollment(bundle: bundle);
     expect(identity.alias, 'coordinator-1');
     expect(bundle.isDisposed, isTrue);
@@ -196,7 +243,7 @@ void main() {
   test(
     'complete identity wipes certificate bundle on every failure path',
     () async {
-      final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+      final adapter = _adapter(channel);
       final mismatch = _enrollmentBundle();
       messenger.setMockMethodCallHandler(channel, (_) async {
         return _completionJson(mismatch)
@@ -267,13 +314,27 @@ void main() {
     expect(validityBytes, everyElement(0));
   });
 
+  test('completion rejects a stale but structurally valid bundle', () async {
+    final staleJson = _enrollmentBundleJson()
+      ..['issuedAt'] = '2026-10-30T00:00:00.000Z'
+      ..['pendingExpiresAt'] = '2026-10-30T00:10:00.000Z'
+      ..['expiresAt'] = '2026-10-31T00:00:00.000Z';
+    final stale = ConnectedPlatformEnrollmentBundle.fromJson(staleJson);
+    final adapter = _adapter(channel);
+    await expectLater(
+      adapter.completeIdentityEnrollment(bundle: stale),
+      throwsA(_securityCode('platform_enrollment_bundle_stale')),
+    );
+    expect(stale.isDisposed, isTrue);
+  });
+
   test('abort identity requires native cleanup confirmation', () async {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       return true;
     });
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     await adapter.abortIdentity(
       alias: 'coordinator-1',
       requestDigest: 'a' * 64,
@@ -291,9 +352,12 @@ void main() {
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       if (call.method == 'abortIdentityPreparation') return true;
-      return {..._enrollmentRequestJson(), 'requestDigest': '0' * 64};
+      return _prepareEnvelope(
+        request: {..._enrollmentRequestJson(), 'requestDigest': '0' * 64},
+        requestDigest: _enrollmentRequestJson()['requestDigest']! as String,
+      );
     });
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     await expectLater(
       adapter.prepareIdentity(
         alias: 'coordinator-1',
@@ -313,32 +377,40 @@ void main() {
       'alias': 'coordinator-1',
       'scope': 'incomplete-only',
       'preparationHandle': 'prep-1',
+      'requestDigest': _enrollmentRequestJson()['requestDigest'],
     });
   });
 
-  test(
-    'abort preparation is fail closed and supports alias-only cleanup',
-    () async {
-      final calls = <MethodCall>[];
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        return true;
-      });
-      final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
-      await adapter.abortIdentityPreparation(alias: 'coordinator-1');
-      expect(calls.single.arguments, {
-        'schema': 'supermega.connected-platform-abort-preparation.v1',
-        'alias': 'coordinator-1',
-        'scope': 'incomplete-only',
-      });
+  test('abort preparation requires exact handle and request digest', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return true;
+    });
+    final adapter = _adapter(channel);
+    await adapter.abortIdentityPreparation(
+      alias: 'coordinator-1',
+      preparationHandle: 'prep-1',
+      requestDigest: 'a' * 64,
+    );
+    expect(calls.single.arguments, {
+      'schema': 'supermega.connected-platform-abort-preparation.v1',
+      'alias': 'coordinator-1',
+      'scope': 'incomplete-only',
+      'preparationHandle': 'prep-1',
+      'requestDigest': 'a' * 64,
+    });
 
-      messenger.setMockMethodCallHandler(channel, (_) async => false);
-      await expectLater(
-        adapter.abortIdentityPreparation(alias: 'coordinator-1'),
-        throwsA(_securityCode('platform_preparation_cleanup_unconfirmed')),
-      );
-    },
-  );
+    messenger.setMockMethodCallHandler(channel, (_) async => false);
+    await expectLater(
+      adapter.abortIdentityPreparation(
+        alias: 'coordinator-1',
+        preparationHandle: 'prep-1',
+        requestDigest: 'a' * 64,
+      ),
+      throwsA(_securityCode('platform_preparation_cleanup_unconfirmed')),
+    );
+  });
 
   test('lost completion response reconciles pending before commit', () async {
     final bundle = _enrollmentBundle();
@@ -349,7 +421,7 @@ void main() {
       }
       return _statusJson(state: 'pending', requestDigest: requestDigest);
     });
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     await expectLater(
       adapter.completeIdentityEnrollment(bundle: bundle),
       throwsA(_securityCode('platform_security_operation_failed')),
@@ -357,6 +429,8 @@ void main() {
     final status = await adapter.reconcileIdentity(
       alias: 'coordinator-1',
       requestDigest: requestDigest,
+      expectedBundleDigest: null,
+      expectedIdentity: null,
     );
     expect(status.state, ConnectedPlatformPreparationState.pending);
     expect(status.identity, isNull);
@@ -377,7 +451,7 @@ void main() {
         identity: _identityJson(),
       );
     });
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     await expectLater(
       adapter.completeIdentityEnrollment(bundle: bundle),
       throwsA(_securityCode('platform_security_operation_failed')),
@@ -385,11 +459,56 @@ void main() {
     final status = await adapter.reconcileIdentity(
       alias: 'coordinator-1',
       requestDigest: requestDigest,
+      expectedBundleDigest: bundleDigest,
+      expectedIdentity: ConnectedPlatformIdentity.fromJson(_identityJson()),
     );
     expect(status.state, ConnectedPlatformPreparationState.completed);
     expect(status.committedBundleDigest, bundleDigest);
     expect(status.identity!.alias, 'coordinator-1');
   });
+
+  test(
+    'completed reconciliation rejects wrong digest and identity binding',
+    () async {
+      final requestDigest =
+          _enrollmentRequestJson()['requestDigest']! as String;
+      final committedDigest = 'c' * 64;
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => _statusJson(
+          state: 'completed',
+          requestDigest: requestDigest,
+          committedBundleDigest: committedDigest,
+          identity: _identityJson(),
+        ),
+      );
+      final adapter = _adapter(channel);
+      final identity = ConnectedPlatformIdentity.fromJson(_identityJson());
+      await expectLater(
+        adapter.reconcileIdentity(
+          alias: 'coordinator-1',
+          requestDigest: requestDigest,
+          expectedBundleDigest: 'd' * 64,
+          expectedIdentity: identity,
+        ),
+        throwsA(_securityCode('platform_preparation_recovery_mismatch')),
+      );
+
+      final wrongIdentity = ConnectedPlatformIdentity.fromJson({
+        ..._identityJson(),
+        'keyId': 'key-other',
+      });
+      await expectLater(
+        adapter.reconcileIdentity(
+          alias: 'coordinator-1',
+          requestDigest: requestDigest,
+          expectedBundleDigest: committedDigest,
+          expectedIdentity: wrongIdentity,
+        ),
+        throwsA(_securityCode('platform_preparation_recovery_mismatch')),
+      );
+    },
+  );
 
   test(
     'completion retry accepts same bundle and rejects altered bundle',
@@ -399,7 +518,7 @@ void main() {
         channel,
         (_) async => _completionJson(first),
       );
-      final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+      final adapter = _adapter(channel);
       await adapter.completeIdentityEnrollment(bundle: first);
 
       final retry = _enrollmentBundle();
@@ -435,10 +554,12 @@ void main() {
         cleanupEvidence: _cleanupEvidenceJson(requestDigest: requestDigest),
       );
     });
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     final status = await adapter.reconcileIdentity(
       alias: 'coordinator-1',
       requestDigest: requestDigest,
+      expectedBundleDigest: null,
+      expectedIdentity: null,
     );
     expect(status.state, ConnectedPlatformPreparationState.expired);
     expect(status.cleanupEvidence!.signingKeyDeleted, isTrue);
@@ -458,6 +579,8 @@ void main() {
       adapter.reconcileIdentity(
         alias: 'coordinator-1',
         requestDigest: requestDigest,
+        expectedBundleDigest: null,
+        expectedIdentity: null,
       ),
       throwsA(_securityCode('platform_cleanup_evidence_invalid')),
     );
@@ -494,7 +617,7 @@ void main() {
       calls.add(call);
       return _identityJson();
     });
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     final identity = await adapter.loadIdentity(alias: 'coordinator-1');
     expect(identity.keyId, 'key-1');
     expect(calls.single.method, 'loadIdentity');
@@ -506,7 +629,7 @@ void main() {
   });
 
   test('channel rejects malformed signatures and confirms deletion', () async {
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     messenger.setMockMethodCallHandler(channel, (call) async {
       if (call.method == 'sign') return Uint8List(63);
       if (call.method == 'deleteIdentity') return false;
@@ -536,7 +659,7 @@ void main() {
         'certificateFingerprintSha256': 'b' * 64,
       };
     });
-    final adapter = MethodChannelConnectedPlatformSecurity(channel: channel);
+    final adapter = _adapter(channel);
     final tls = await adapter.openTlsIdentity(
       alias: 'coordinator-1',
       sealedTlsMaterialId: 'tls-1',
@@ -622,6 +745,25 @@ Map<String, Object> _enrollmentRequestJson({String deviceId = 'device-1'}) {
   return {...payload, 'requestDigest': connectedSiteSha256(payload)};
 }
 
+Map<String, Object?> _prepareEnvelope({
+  Map<String, Object>? request,
+  String? requestDigest,
+}) {
+  final enrollmentRequest = request ?? _enrollmentRequestJson();
+  return <String, Object?>{
+    'schema': 'supermega.connected-platform-prepare-response.v1',
+    'preparationHandle': 'prep-1',
+    'requestDigest': requestDigest ?? enrollmentRequest['requestDigest'],
+    'request': enrollmentRequest,
+  };
+}
+
+MethodChannelConnectedPlatformSecurity _adapter(MethodChannel channel) =>
+    MethodChannelConnectedPlatformSecurity(
+      channel: channel,
+      now: () => DateTime.parse('2026-11-01T00:01:00.000Z'),
+    );
+
 ConnectedPlatformEnrollmentBundle _enrollmentBundle() =>
     ConnectedPlatformEnrollmentBundle.fromJson(_enrollmentBundleJson());
 
@@ -654,6 +796,7 @@ Map<String, Object> _enrollmentBundleJson() {
     'tlsCertificateFingerprintSha256': 'b' * 64,
     'issuedAt': '2026-11-01T00:00:00.000Z',
     'expiresAt': '2027-01-01T00:00:00.000Z',
+    'pendingExpiresAt': '2026-11-01T00:10:00.000Z',
     'signatureAlgorithm': 'ed25519',
     'issuerSignatureBase64Url': base64UrlEncode(
       Uint8List.fromList(List<int>.generate(64, (i) => i)),

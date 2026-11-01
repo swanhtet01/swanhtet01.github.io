@@ -8,6 +8,8 @@ const connectedPlatformSecurityChannel =
     'dev.supermega.supermega_shop/connected_security_v1';
 
 const _prepareRequestSchema = 'supermega.connected-platform-prepare-request.v1';
+const _prepareResponseSchema =
+    'supermega.connected-platform-prepare-response.v1';
 const _enrollmentRequestSchema =
     'supermega.connected-platform-enrollment-request.v1';
 const _completeRequestSchema =
@@ -26,6 +28,8 @@ const _cleanupEvidenceSchema =
     'supermega.connected-platform-cleanup-evidence.v1';
 const _maxCertificateChainBytes = 64 * 1024;
 const connectedIdentityPreparationTtl = Duration(minutes: 10);
+const connectedIdentityPrepareFreshness = Duration(minutes: 2);
+const connectedIdentityClockSkew = Duration(seconds: 30);
 
 class ConnectedPlatformSecurityException implements Exception {
   const ConnectedPlatformSecurityException(this.code);
@@ -263,6 +267,7 @@ class ConnectedPlatformEnrollmentBundle {
     required this.tlsCertificateFingerprintSha256,
     required this.issuedAt,
     required this.expiresAt,
+    required this.pendingExpiresAt,
     required this.signatureAlgorithm,
     required this.issuerSignatureBase64Url,
   }) {
@@ -293,6 +298,7 @@ class ConnectedPlatformEnrollmentBundle {
   final String tlsCertificateFingerprintSha256;
   final String issuedAt;
   final String expiresAt;
+  final String pendingExpiresAt;
   final String signatureAlgorithm;
   final String issuerSignatureBase64Url;
   bool _disposed = false;
@@ -326,6 +332,7 @@ class ConnectedPlatformEnrollmentBundle {
         'tlsCertificateFingerprintSha256',
         'issuedAt',
         'expiresAt',
+        'pendingExpiresAt',
         'signatureAlgorithm',
         'issuerSignatureBase64Url',
       }, 'platform_enrollment_bundle_invalid');
@@ -363,6 +370,7 @@ class ConnectedPlatformEnrollmentBundle {
         ),
         issuedAt: text('issuedAt'),
         expiresAt: text('expiresAt'),
+        pendingExpiresAt: text('pendingExpiresAt'),
         signatureAlgorithm: text('signatureAlgorithm'),
         issuerSignatureBase64Url: text('issuerSignatureBase64Url'),
       );
@@ -392,6 +400,7 @@ class ConnectedPlatformEnrollmentBundle {
     'tlsCertificateFingerprintSha256': tlsCertificateFingerprintSha256,
     'issuedAt': issuedAt,
     'expiresAt': expiresAt,
+    'pendingExpiresAt': pendingExpiresAt,
     'signatureAlgorithm': signatureAlgorithm,
   };
 
@@ -412,7 +421,7 @@ class ConnectedPlatformEnrollmentBundle {
     };
   }
 
-  void validate() {
+  void validate({DateTime? now}) {
     if (_disposed) {
       throw const ConnectedPlatformSecurityException(
         'platform_enrollment_bundle_disposed',
@@ -450,11 +459,26 @@ class ConnectedPlatformEnrollmentBundle {
     _decodeBase64UrlNoPadding(issuerSignatureBase64Url, 'issuer_signature', 64);
     final issued = _validateUtcTimestamp(issuedAt, 'issued_at');
     final expires = _validateUtcTimestamp(expiresAt, 'expires_at');
+    final pendingExpiry = _validateUtcTimestamp(
+      pendingExpiresAt,
+      'pending_expires_at',
+    );
     if (!expires.isAfter(issued) ||
-        expires.difference(issued) > const Duration(days: 400)) {
+        expires.difference(issued) > const Duration(days: 400) ||
+        expires.isBefore(pendingExpiry)) {
       throw const ConnectedPlatformSecurityException(
         'platform_enrollment_validity_invalid',
       );
+    }
+    if (now != null) {
+      final utcNow = now.toUtc();
+      if (issued.isAfter(utcNow.add(connectedIdentityClockSkew)) ||
+          !expires.isAfter(utcNow) ||
+          !pendingExpiry.isAfter(utcNow)) {
+        throw const ConnectedPlatformSecurityException(
+          'platform_enrollment_bundle_stale',
+        );
+      }
     }
     if (certificateChainPem.isEmpty ||
         certificateChainPem.length > _maxCertificateChainBytes ||
@@ -742,6 +766,17 @@ class ConnectedPlatformIdentity {
   final String tlsCertificateFingerprintSha256;
   final String sealedTlsMaterialId;
 
+  Map<String, Object> toJson() => <String, Object>{
+    'schema': 'supermega.connected-platform-identity.v1',
+    'alias': alias,
+    'keyId': keyId,
+    'algorithm': algorithm,
+    'publicKeyBase64': publicKeyBase64,
+    'publicKeyFingerprintSha256': publicKeyFingerprintSha256,
+    'tlsCertificateFingerprintSha256': tlsCertificateFingerprintSha256,
+    'sealedTlsMaterialId': sealedTlsMaterialId,
+  };
+
   factory ConnectedPlatformIdentity.fromJson(Object? value) {
     if (value is! Map) {
       throw const ConnectedPlatformSecurityException(
@@ -873,12 +908,15 @@ abstract interface class ConnectedPlatformSecurity {
 
   Future<void> abortIdentityPreparation({
     required String alias,
-    String? preparationHandle,
+    required String preparationHandle,
+    required String requestDigest,
   });
 
   Future<ConnectedPlatformPreparationStatus> reconcileIdentity({
     required String alias,
     required String requestDigest,
+    required String? expectedBundleDigest,
+    required ConnectedPlatformIdentity? expectedIdentity,
   });
 
   Future<ConnectedPlatformIdentity> loadIdentity({required String alias});
@@ -910,7 +948,8 @@ class UnavailableConnectedPlatformSecurity
   @override
   Future<void> abortIdentityPreparation({
     required String alias,
-    String? preparationHandle,
+    required String preparationHandle,
+    required String requestDigest,
   }) async => _unavailable();
 
   @override
@@ -942,6 +981,8 @@ class UnavailableConnectedPlatformSecurity
   Future<ConnectedPlatformPreparationStatus> reconcileIdentity({
     required String alias,
     required String requestDigest,
+    required String? expectedBundleDigest,
+    required ConnectedPlatformIdentity? expectedIdentity,
   }) async => _unavailable();
 
   @override
@@ -962,11 +1003,15 @@ class UnavailableConnectedPlatformSecurity
 /// implementation until installed-device review proves the platform boundary.
 class MethodChannelConnectedPlatformSecurity
     implements ConnectedPlatformSecurity {
-  MethodChannelConnectedPlatformSecurity({MethodChannel? channel})
-    : _channel =
-          channel ?? const MethodChannel(connectedPlatformSecurityChannel);
+  MethodChannelConnectedPlatformSecurity({
+    MethodChannel? channel,
+    DateTime Function()? now,
+  }) : _channel =
+           channel ?? const MethodChannel(connectedPlatformSecurityChannel),
+       _now = now ?? DateTime.now;
 
   final MethodChannel _channel;
+  final DateTime Function() _now;
 
   @override
   Future<ConnectedPlatformEnrollmentRequest> prepareIdentity({
@@ -995,7 +1040,12 @@ class MethodChannelConnectedPlatformSecurity
         'deviceId': deviceId,
         'sessionGeneration': sessionGeneration,
       });
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      if (error.code == 'platform_identity_pending_conflict') {
+        throw const ConnectedPlatformSecurityException(
+          'platform_identity_pending_conflict',
+        );
+      }
       throw const ConnectedPlatformSecurityException(
         'platform_security_operation_failed',
       );
@@ -1005,16 +1055,38 @@ class MethodChannelConnectedPlatformSecurity
       );
     }
 
-    final preparationHandle = _opaquePreparationHandle(value);
+    final envelope = _trustedPreparationEnvelope(value);
     try {
-      final request = ConnectedPlatformEnrollmentRequest.fromJson(value);
+      final request = ConnectedPlatformEnrollmentRequest.fromJson(
+        envelope.request,
+      );
       if (request.alias != alias ||
           request.workspaceId != workspaceId ||
           request.siteId != siteId ||
           request.deviceId != deviceId ||
-          request.sessionGeneration != sessionGeneration) {
+          request.sessionGeneration != sessionGeneration ||
+          request.preparationHandle != envelope.preparationHandle ||
+          request.requestDigest != envelope.requestDigest) {
         throw const ConnectedPlatformSecurityException(
           'platform_enrollment_request_binding_mismatch',
+        );
+      }
+      final now = _now().toUtc();
+      final createdAt = _validateUtcTimestamp(request.createdAt, 'created_at');
+      final pendingExpiresAt = _validateUtcTimestamp(
+        request.pendingExpiresAt,
+        'pending_expires_at',
+      );
+      if (createdAt.isBefore(now.subtract(connectedIdentityPrepareFreshness)) ||
+          createdAt.isAfter(now.add(connectedIdentityClockSkew)) ||
+          !pendingExpiresAt.isAfter(now) ||
+          pendingExpiresAt.isAfter(
+            now
+                .add(connectedIdentityPreparationTtl)
+                .add(connectedIdentityClockSkew),
+          )) {
+        throw const ConnectedPlatformSecurityException(
+          'platform_enrollment_request_stale',
         );
       }
       return request;
@@ -1022,7 +1094,8 @@ class MethodChannelConnectedPlatformSecurity
       try {
         await abortIdentityPreparation(
           alias: alias,
-          preparationHandle: preparationHandle,
+          preparationHandle: envelope.preparationHandle,
+          requestDigest: envelope.requestDigest,
         );
       } on Object {
         throw const ConnectedPlatformSecurityException(
@@ -1038,7 +1111,7 @@ class MethodChannelConnectedPlatformSecurity
     required ConnectedPlatformEnrollmentBundle bundle,
   }) async {
     try {
-      bundle.validate();
+      bundle.validate(now: _now());
       final value = await _channel.invokeMethod<Object?>(
         'completeIdentityEnrollment',
         bundle.toChannelArguments(),
@@ -1106,19 +1179,18 @@ class MethodChannelConnectedPlatformSecurity
     }
   }
 
-  /// Deletes only an incomplete preparation. With no handle, native code must
-  /// scope cleanup to the requested alias and must never delete a committed
-  /// identity. A `true` response is required before Dart considers cleanup
-  /// complete.
+  /// Deletes only the single incomplete preparation bound to all three values.
+  /// Native code must compare-and-delete atomically and never delete a
+  /// committed identity. A `true` response confirms that exact operation.
   @override
   Future<void> abortIdentityPreparation({
     required String alias,
-    String? preparationHandle,
+    required String preparationHandle,
+    required String requestDigest,
   }) async {
     _validateToken(alias, 'alias');
-    if (preparationHandle != null) {
-      _validateToken(preparationHandle, 'preparation_handle');
-    }
+    _validateToken(preparationHandle, 'preparation_handle');
+    _validateDigest(requestDigest, 'request_digest');
     try {
       final result = await _channel.invokeMethod<Object?>(
         'abortIdentityPreparation',
@@ -1126,7 +1198,8 @@ class MethodChannelConnectedPlatformSecurity
           'schema': _abortPreparationSchema,
           'alias': alias,
           'scope': 'incomplete-only',
-          'preparationHandle': ?preparationHandle,
+          'preparationHandle': preparationHandle,
+          'requestDigest': requestDigest,
         },
       );
       if (result != true) {
@@ -1154,20 +1227,40 @@ class MethodChannelConnectedPlatformSecurity
   Future<ConnectedPlatformPreparationStatus> reconcileIdentity({
     required String alias,
     required String requestDigest,
+    required String? expectedBundleDigest,
+    required ConnectedPlatformIdentity? expectedIdentity,
   }) async {
     _validateToken(alias, 'alias');
     _validateDigest(requestDigest, 'request_digest');
+    if (expectedBundleDigest != null) {
+      _validateDigest(expectedBundleDigest, 'bundle_digest');
+    }
     try {
       final value = await _channel.invokeMethod<Object?>('reconcileIdentity', {
         'schema': _reconcileRequestSchema,
         'alias': alias,
         'requestDigest': requestDigest,
+        'expectedBundleDigest': expectedBundleDigest,
+        'expectedIdentity': expectedIdentity?.toJson(),
       });
       final status = ConnectedPlatformPreparationStatus.fromJson(value);
       if (status.alias != alias || status.requestDigest != requestDigest) {
         throw const ConnectedPlatformSecurityException(
           'platform_preparation_status_binding_mismatch',
         );
+      }
+      if (status.state == ConnectedPlatformPreparationState.completed) {
+        if (expectedBundleDigest == null || expectedIdentity == null) {
+          throw const ConnectedPlatformSecurityException(
+            'platform_preparation_recovery_expectation_missing',
+          );
+        }
+        if (status.committedBundleDigest != expectedBundleDigest ||
+            !_sameIdentity(status.identity!, expectedIdentity)) {
+          throw const ConnectedPlatformSecurityException(
+            'platform_preparation_recovery_mismatch',
+          );
+        }
       }
       return status;
     } on ConnectedPlatformSecurityException {
@@ -1363,17 +1456,50 @@ ConnectedEphemeralTlsIdentity parseConnectedPlatformTlsIdentity(Object? value) {
   );
 }
 
-String? _opaquePreparationHandle(Object? value) {
-  if (value is! Map) return null;
-  final candidate = value['preparationHandle'];
-  if (candidate is! String) return null;
-  try {
-    _validateToken(candidate, 'preparation_handle');
-    return candidate;
-  } on ConnectedPlatformSecurityException {
-    return null;
+({String preparationHandle, String requestDigest, Object? request})
+_trustedPreparationEnvelope(Object? value) {
+  final map = _exactStringMap(value, const <String>{
+    'schema',
+    'preparationHandle',
+    'requestDigest',
+    'request',
+  }, 'platform_preparation_envelope_invalid');
+  if (map['schema'] != _prepareResponseSchema) {
+    throw const ConnectedPlatformSecurityException(
+      'platform_preparation_envelope_invalid',
+    );
   }
+  final preparationHandle = _requiredString(
+    map,
+    'preparationHandle',
+    'platform_preparation_envelope_invalid',
+  );
+  final requestDigest = _requiredString(
+    map,
+    'requestDigest',
+    'platform_preparation_envelope_invalid',
+  );
+  _validateToken(preparationHandle, 'preparation_handle');
+  _validateDigest(requestDigest, 'request_digest');
+  return (
+    preparationHandle: preparationHandle,
+    requestDigest: requestDigest,
+    request: map['request'],
+  );
 }
+
+bool _sameIdentity(
+  ConnectedPlatformIdentity actual,
+  ConnectedPlatformIdentity expected,
+) =>
+    actual.alias == expected.alias &&
+    actual.keyId == expected.keyId &&
+    actual.algorithm == expected.algorithm &&
+    actual.publicKeyBase64 == expected.publicKeyBase64 &&
+    actual.publicKeyFingerprintSha256 == expected.publicKeyFingerprintSha256 &&
+    actual.tlsCertificateFingerprintSha256 ==
+        expected.tlsCertificateFingerprintSha256 &&
+    actual.sealedTlsMaterialId == expected.sealedTlsMaterialId;
 
 void _validateToken(String value, String field) {
   if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$').hasMatch(value)) {
