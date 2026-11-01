@@ -7,6 +7,46 @@
 
 ## 2026-11-01 exact-head release checkpoint
 
+### Private authenticated cloud HTTP executor successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `45c41bb3e3a323239df5baef6428a5dc3089d123`, repository tree
+  `acc3078f4e1e46324d3edc10fbcf2a387951a192`, native tree
+  `ba14c5a990c1d4deecd72af6409a94daa978eff3`, and native `lib/` tree
+  `d1e1b51a349c7d6054bd495c513050b02879b33b`. Its exact predecessor is
+  ledger `386cc7116d32ca53f91e292004f9c16d90e54f0e`; binary patch SHA-256 is
+  `3af69370a42764ef8740265ca1f3e3603e0d371bd93f29f40319477aa1cc217a`.
+  This successor is private and unpublished.
+- The default-off Dart I/O executor now supplies the previously missing real
+  HTTPS boundary for the authenticated connected-cloud wire client. It binds
+  one exact HTTPS origin, disables redirects and ambient proxies, rejects
+  ambient `HttpOverrides` both before and after asynchronous authentication,
+  accepts only bearer-only or the complete four-header signed-device
+  envelope, copies caller inputs, enforces printable ASCII/header/body caps,
+  uses one absolute auth-to-body deadline, force-closes on expiry, and stops
+  oversized response streams without retaining server bodies in errors.
+  Operating-system trust remains the default; an injected `SecurityContext`
+  exists only for reviewed platform composition and deterministic local TLS
+  tests. Native CI now formats and diff-checks the new source symmetrically.
+- Exact-source connected client, authority, reconciliation and durable-store
+  tests are **66/66 PASS** in 86 seconds, including a local ephemeral-TLS
+  fixture, redirect rejection, response caps, incomplete/mixed credentials,
+  control characters, pre/post-auth HTTP override substitution and slow-drip
+  deadline attacks. Targeted analyzer is **PASS**; native CI and QA isolation
+  contracts are **45/45 PASS**; `git diff --check` is **PASS**. Independent
+  review is **ACCEPT** after three rounds; earlier rounds correctly held the
+  change for the absolute deadline, complete authentication envelopes,
+  control characters, HTTP-override TOCTOU and CI diff coverage.
+- **BLOCKED / NOT RUN:** the executor and authenticator are still independently
+  default-off and are not mounted into a production runtime. No live cloud
+  endpoint, production credential, real issuer/key custody, certificate pin
+  composition, installed-device network test, PostgreSQL rehearsal, merchant
+  or production acceptance was used or claimed. A separately reviewed
+  joining-device authority checkpoint remains required after sequence 1.
+- Capacity was remeasured at `2026-11-01T23:56:34Z`: `/dev/shm` had
+  5,316,374,528 bytes free and durable `/workspace` had 286,167,040 bytes
+  free. No artifact build, cleanup, publication or deployment was attempted.
+
 ### Private connected-cloud reconciliation successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
