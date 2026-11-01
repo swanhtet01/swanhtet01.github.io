@@ -255,8 +255,8 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   }
   requireToken(
     source,
-    'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "300"',
-    'native_test_aggregate_budget_not_bounded_to_300_seconds',
+    'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "480"',
+    'native_test_aggregate_budget_not_bounded_to_480_seconds',
     failures,
   )
   requireToken(

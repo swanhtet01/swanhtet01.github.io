@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "300"
+      SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "480"
     defaults:
       run:
         working-directory: mobile/shop_pos

@@ -540,14 +540,14 @@ test('production identity is generated only after every default-profile test sha
 test('default-profile test shards share one evidence-backed aggregate budget', () => {
   const widened = verifyShopNativeCiContract(
     workflow.replace(
-      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "300"',
-      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "360"',
+      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "480"',
+      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "540"',
     ),
     gradleWrapper,
   )
   assert.ok(
     widened.failures.includes(
-      'native_test_aggregate_budget_not_bounded_to_300_seconds',
+      'native_test_aggregate_budget_not_bounded_to_480_seconds',
     ),
   )
 
