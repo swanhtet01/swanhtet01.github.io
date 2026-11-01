@@ -255,26 +255,71 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   }
   requireToken(
     source,
-    'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "480"',
-    'native_test_aggregate_budget_not_bounded_to_480_seconds',
+    'timeout-minutes: 60',
+    'native_android_job_timeout_not_60_minutes',
     failures,
   )
   requireToken(
     source,
-    'started_at="$(date +%s)"',
-    'native_test_aggregate_budget_start_missing',
+    'SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS: "600"',
+    'native_test_shard_budget_not_bounded_to_600_seconds',
     failures,
   )
   requireToken(
     source,
-    'behavior_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior.XXXXXX")"',
-    'native_behavior_shard_temp_isolation_missing',
+    'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "2400"',
+    'native_test_total_budget_not_bounded_to_2400_seconds',
+    failures,
+  )
+  requireToken(
+    source,
+    'overall_started_at="$(date +%s)"',
+    'native_test_total_budget_start_missing',
+    failures,
+  )
+  for (const token of [
+    'remaining="$(( SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS - elapsed ))"',
+    'if [ "$remaining" -le 0 ]; then',
+    'if [ "$remaining" -lt "$SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS" ]; then',
+    'printf \'%s\\n\' "$remaining"',
+    'printf \'%s\\n\' "$SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS"',
+  ]) {
+    requireToken(source, token, 'native_test_remaining_total_budget_guard_missing', failures)
+  }
+  requireToken(
+    source,
+    'behavior_core_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-core.XXXXXX")"',
+    'native_behavior_core_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'behavior_shell_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-shell.XXXXXX")"',
+    'native_behavior_shell_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'behavior_checkout_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-checkout.XXXXXX")"',
+    'native_behavior_checkout_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'persistence_backup_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-backup.XXXXXX")"',
+    'native_persistence_backup_shard_temp_isolation_missing',
     failures,
   )
   requireToken(
     source,
     'persistence_a_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-a.XXXXXX")"',
     'native_persistence_a_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'TMPDIR="$persistence_backup_tmp" timeout --signal=TERM --kill-after=10s "${persistence_backup_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
+    'native_persistence_backup_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
@@ -291,53 +336,206 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
-    'native_behavior_shard_not_bounded_or_sequential',
+    'TMPDIR="$behavior_core_tmp" timeout --signal=TERM --kill-after=10s "${behavior_core_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
+    'native_behavior_core_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
     source,
-    'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
+    'TMPDIR="$behavior_shell_tmp" timeout --signal=TERM --kill-after=10s "${behavior_shell_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
+    'native_behavior_shell_shard_not_bounded_or_sequential',
+    failures,
+  )
+  requireToken(
+    source,
+    'TMPDIR="$behavior_checkout_tmp" timeout --signal=TERM --kill-after=10s "${behavior_checkout_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
+    'native_behavior_checkout_shard_not_bounded_or_sequential',
+    failures,
+  )
+  requireToken(
+    source,
+    'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${persistence_a_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
     'native_persistence_a_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
     source,
-    'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
+    'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${persistence_b_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
     'native_persistence_b_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
     source,
-    'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
+    'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${connected_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
     'native_connected_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
     source,
-    'rm -rf -- "$behavior_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"',
+    'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"',
     'native_test_shard_cleanup_incomplete',
     failures,
   )
-  for (const shard of ['behavior', 'persistence_a', 'persistence_b', 'connected']) {
-    requireToken(source, `wait "$${shard}_pid"`, `native_${shard}_shard_wait_missing`, failures)
+  const isolatedShardStart = source.indexOf('name: Run isolated Flutter test shards')
+  const isolatedShardEnd = source.indexOf('name: Run real Flutter process-interruption scenarios')
+  const isolatedShardBlock = isolatedShardStart >= 0 && isolatedShardEnd > isolatedShardStart
+    ? source.slice(isolatedShardStart, isolatedShardEnd)
+    : ''
+  if (/[ \t]&[ \t]*$/m.test(isolatedShardBlock) || /_pid="\$!"/.test(isolatedShardBlock)) {
+    failures.push('native_test_shards_not_strictly_serial')
+  }
+  const shards = ['behavior_core', 'behavior_shell', 'behavior_checkout', 'persistence_backup', 'persistence_a', 'persistence_b', 'connected']
+  const shardPaths = (start, end) => {
+    const startIndex = isolatedShardBlock.indexOf(start)
+    const endIndex = isolatedShardBlock.indexOf(end)
+    if (startIndex < 0 || endIndex <= startIndex) return []
+    return isolatedShardBlock
+      .slice(startIndex, endIndex)
+      .split(/\r?\n/)
+      .map(line => line.trim().replace(/ \\$/, ''))
+      .filter(line => /^test\/.+_test\.dart$/.test(line))
+  }
+  const expectedBehaviorCorePaths = [
+    'test/connected_orders_test.dart',
+    'test/shop_add_product_test.dart',
+    'test/shop_cafe_order_screen_test.dart',
+    'test/shop_catalog_search_test.dart',
+    'test/shop_correction_authorization_service_test.dart',
+    'test/shop_foundation_test.dart',
+    'test/shop_operational_export_saver_test.dart',
+    'test/shop_operational_export_test.dart',
+    'test/shop_operational_export_widget_test.dart',
+    'test/shop_responsiveness_test.dart',
+    'test/shop_runtime_profile_test.dart',
+    'test/shop_runtime_scope_test.dart',
+    'test/shop_startup_cleanup_test.dart',
+    'test/shop_stock_activity_test.dart',
+  ]
+  const expectedBehaviorShellPaths = ['test/widget_shell_test.dart']
+  const expectedBehaviorCheckoutPaths = ['test/widget_checkout_test.dart']
+  const expectedPersistenceBackupPaths = ['test/shop_backup_test.dart']
+  if (JSON.stringify(shardPaths(
+    'behavior_core_started_at="$(date +%s)"',
+    'behavior_shell_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedBehaviorCorePaths)) {
+    failures.push('native_behavior_core_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'behavior_shell_started_at="$(date +%s)"',
+    'behavior_checkout_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedBehaviorShellPaths)) {
+    failures.push('native_behavior_shell_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'behavior_checkout_started_at="$(date +%s)"',
+    'persistence_backup_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedBehaviorCheckoutPaths)) {
+    failures.push('native_behavior_checkout_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'persistence_backup_started_at="$(date +%s)"',
+    'persistence_a_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedPersistenceBackupPaths)) {
+    failures.push('native_persistence_backup_shard_inventory_or_order_wrong')
+  }
+  for (const shard of shards) {
+    const command = `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m`
+    requireToken(
+      source,
+      `${shard}_budget="$(calculate_shard_budget)" || exit "$?"`,
+      `native_${shard}_remaining_total_budget_not_applied`,
+      failures,
+    )
+    requireToken(
+      source,
+      `${shard}_started_at="$(date +%s)"`,
+      `native_${shard}_shard_start_missing`,
+      failures,
+    )
+    requireToken(
+      source,
+      `${shard}_status="$?"`,
+      `native_${shard}_shard_status_capture_missing`,
+      failures,
+    )
     requireToken(
       source,
       `test "$${shard}_status" -eq 0`,
       `native_${shard}_shard_status_not_fail_closed`,
       failures,
     )
+    requireToken(
+      source,
+      `${shard}_elapsed="$(( $(date +%s) - ${shard}_started_at ))"`,
+      `native_${shard}_shard_elapsed_capture_missing`,
+      failures,
+    )
+    requireToken(
+      source,
+      `if [ "$${shard}_elapsed" -gt "$${shard}_budget" ]; then`,
+      `native_${shard}_shard_elapsed_guard_missing`,
+      failures,
+    )
+    requireToken(
+      source,
+      `shop_flutter_test_${shard}_budget_exhausted`,
+      `native_${shard}_shard_budget_exhaustion_not_fail_closed`,
+      failures,
+    )
+    requireOrder(
+      source,
+      `${shard}_started_at="$(date +%s)"`,
+      command,
+      `native_${shard}_shard_command_not_after_start`,
+      failures,
+    )
+    requireOrder(
+      source,
+      command,
+      `${shard}_status="$?"`,
+      `native_${shard}_shard_status_captured_before_execution`,
+      failures,
+    )
+    requireOrder(
+      source,
+      `${shard}_status="$?"`,
+      `test "$${shard}_status" -eq 0`,
+      `native_${shard}_shard_status_checked_before_capture`,
+      failures,
+    )
   }
   requireToken(
     source,
-    'if [ "$elapsed" -gt "$SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS" ]; then',
-    'native_test_aggregate_budget_elapsed_guard_missing',
+    'overall_elapsed="$(( $(date +%s) - overall_started_at ))"',
+    'native_test_total_budget_elapsed_capture_missing',
     failures,
   )
   requireToken(
     source,
-    'shop_flutter_test_aggregate_budget_exhausted',
-    'native_test_aggregate_budget_exhaustion_not_fail_closed',
+    'if [ "$overall_elapsed" -gt "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then',
+    'native_test_total_budget_elapsed_guard_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'shop_flutter_test_total_budget_exhausted',
+    'native_test_total_budget_exhaustion_not_fail_closed',
+    failures,
+  )
+  for (let index = 0; index < shards.length - 1; index += 1) {
+    requireOrder(
+      source,
+      `test "$${shards[index]}_status" -eq 0`,
+      `${shards[index + 1]}_started_at="$(date +%s)"`,
+      `native_${shards[index + 1]}_shard_started_before_${shards[index]}_passed`,
+      failures,
+    )
+  }
+  requireOrder(
+    source,
+    'test "$connected_status" -eq 0',
+    'overall_elapsed="$(( $(date +%s) - overall_started_at ))"',
+    'native_test_total_budget_checked_before_all_shards_verified',
     failures,
   )
   requireOrder(

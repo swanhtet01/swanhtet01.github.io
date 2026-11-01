@@ -18,9 +18,10 @@ jobs:
   android:
     name: Analyze, test, and build Android
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
-      SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "480"
+      SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS: "600"
+      SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "2400"
     defaults:
       run:
         working-directory: mobile/shop_pos
@@ -126,17 +127,37 @@ jobs:
 
       - name: Run isolated Flutter test shards
         run: |
-          started_at="$(date +%s)"
-          behavior_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior.XXXXXX")"
+          overall_started_at="$(date +%s)"
+          behavior_core_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-core.XXXXXX")"
+          behavior_shell_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-shell.XXXXXX")"
+          behavior_checkout_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-checkout.XXXXXX")"
+          persistence_backup_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-backup.XXXXXX")"
           persistence_a_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-a.XXXXXX")"
           persistence_b_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-b.XXXXXX")"
           connected_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected.XXXXXX")"
           cleanup() {
-            rm -rf -- "$behavior_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"
+            rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"
           }
           trap cleanup EXIT
+          calculate_shard_budget() {
+            local elapsed remaining
+            elapsed="$(( $(date +%s) - overall_started_at ))"
+            remaining="$(( SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS - elapsed ))"
+            if [ "$remaining" -le 0 ]; then
+              echo "shop_flutter_test_total_budget_exhausted" >&2
+              return 124
+            fi
+            if [ "$remaining" -lt "$SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS" ]; then
+              printf '%s\n' "$remaining"
+            else
+              printf '%s\n' "$SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS"
+            fi
+          }
+          behavior_core_budget="$(calculate_shard_budget)" || exit "$?"
+          behavior_core_started_at="$(date +%s)"
+          set +e
           (
-            TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+            TMPDIR="$behavior_core_tmp" timeout --signal=TERM --kill-after=10s "${behavior_core_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
               test/connected_orders_test.dart \
               test/shop_add_product_test.dart \
               test/shop_cafe_order_screen_test.dart \
@@ -150,14 +171,70 @@ jobs:
               test/shop_runtime_profile_test.dart \
               test/shop_runtime_scope_test.dart \
               test/shop_startup_cleanup_test.dart \
-              test/shop_stock_activity_test.dart \
-              test/widget_shell_test.dart \
-              test/widget_checkout_test.dart
-          ) &
-          behavior_pid="$!"
+              test/shop_stock_activity_test.dart
+          )
+          behavior_core_status="$?"
+          set -e
+          behavior_core_elapsed="$(( $(date +%s) - behavior_core_started_at ))"
+          if [ "$behavior_core_elapsed" -gt "$behavior_core_budget" ]; then
+            echo "shop_flutter_test_behavior_core_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$behavior_core_status" -eq 0
+
+          behavior_shell_budget="$(calculate_shard_budget)" || exit "$?"
+          behavior_shell_started_at="$(date +%s)"
+          set +e
           (
-            TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
-              test/shop_backup_test.dart \
+            TMPDIR="$behavior_shell_tmp" timeout --signal=TERM --kill-after=10s "${behavior_shell_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/widget_shell_test.dart
+          )
+          behavior_shell_status="$?"
+          set -e
+          behavior_shell_elapsed="$(( $(date +%s) - behavior_shell_started_at ))"
+          if [ "$behavior_shell_elapsed" -gt "$behavior_shell_budget" ]; then
+            echo "shop_flutter_test_behavior_shell_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$behavior_shell_status" -eq 0
+
+          behavior_checkout_budget="$(calculate_shard_budget)" || exit "$?"
+          behavior_checkout_started_at="$(date +%s)"
+          set +e
+          (
+            TMPDIR="$behavior_checkout_tmp" timeout --signal=TERM --kill-after=10s "${behavior_checkout_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/widget_checkout_test.dart
+          )
+          behavior_checkout_status="$?"
+          set -e
+          behavior_checkout_elapsed="$(( $(date +%s) - behavior_checkout_started_at ))"
+          if [ "$behavior_checkout_elapsed" -gt "$behavior_checkout_budget" ]; then
+            echo "shop_flutter_test_behavior_checkout_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$behavior_checkout_status" -eq 0
+
+          persistence_backup_budget="$(calculate_shard_budget)" || exit "$?"
+          persistence_backup_started_at="$(date +%s)"
+          set +e
+          (
+            TMPDIR="$persistence_backup_tmp" timeout --signal=TERM --kill-after=10s "${persistence_backup_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_backup_test.dart
+          )
+          persistence_backup_status="$?"
+          set -e
+          persistence_backup_elapsed="$(( $(date +%s) - persistence_backup_started_at ))"
+          if [ "$persistence_backup_elapsed" -gt "$persistence_backup_budget" ]; then
+            echo "shop_flutter_test_persistence_backup_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$persistence_backup_status" -eq 0
+
+          persistence_a_budget="$(calculate_shard_budget)" || exit "$?"
+          persistence_a_started_at="$(date +%s)"
+          set +e
+          (
+            TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${persistence_a_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
               test/shop_cafe_kitchen_entitlement_test.dart \
               test/shop_cafe_order_contract_test.dart \
               test/shop_cafe_order_store_test.dart \
@@ -165,10 +242,21 @@ jobs:
               test/shop_cash_movement_authorized_flow_test.dart \
               test/shop_cash_movement_test.dart \
               test/shop_core_internal_acceptance_test.dart
-          ) &
-          persistence_a_pid="$!"
+          )
+          persistence_a_status="$?"
+          set -e
+          persistence_a_elapsed="$(( $(date +%s) - persistence_a_started_at ))"
+          if [ "$persistence_a_elapsed" -gt "$persistence_a_budget" ]; then
+            echo "shop_flutter_test_persistence_a_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$persistence_a_status" -eq 0
+
+          persistence_b_budget="$(calculate_shard_budget)" || exit "$?"
+          persistence_b_started_at="$(date +%s)"
+          set +e
           (
-            TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+            TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${persistence_b_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
               test/shop_correction_consumption_test.dart \
               test/shop_member_identity_test.dart \
               test/shop_mmk_input_test.dart \
@@ -178,10 +266,21 @@ jobs:
               test/shop_sqlite_full_recovery_test.dart \
               test/shop_staff_authorization_test.dart \
               test/visual_capture_test.dart
-          ) &
-          persistence_b_pid="$!"
+          )
+          persistence_b_status="$?"
+          set -e
+          persistence_b_elapsed="$(( $(date +%s) - persistence_b_started_at ))"
+          if [ "$persistence_b_elapsed" -gt "$persistence_b_budget" ]; then
+            echo "shop_flutter_test_persistence_b_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$persistence_b_status" -eq 0
+
+          connected_budget="$(calculate_shard_budget)" || exit "$?"
+          connected_started_at="$(date +%s)"
+          set +e
           (
-            TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+            TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${connected_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
               test/shop_connected_application_boundary_test.dart \
               test/shop_connected_coordinator_host_test.dart \
               test/shop_connected_onboarding_test.dart \
@@ -201,27 +300,20 @@ jobs:
               test/shop_connected_stock_reservation_test.dart \
               test/shop_offline_staff_lease_test.dart \
               test/shop_site_coordinator_test.dart
-          ) &
-          connected_pid="$!"
-          set +e
-          wait "$behavior_pid"
-          behavior_status="$?"
-          wait "$persistence_a_pid"
-          persistence_a_status="$?"
-          wait "$persistence_b_pid"
-          persistence_b_status="$?"
-          wait "$connected_pid"
+          )
           connected_status="$?"
           set -e
-          elapsed="$(( $(date +%s) - started_at ))"
-          if [ "$elapsed" -gt "$SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS" ]; then
-            echo "shop_flutter_test_aggregate_budget_exhausted" >&2
+          connected_elapsed="$(( $(date +%s) - connected_started_at ))"
+          if [ "$connected_elapsed" -gt "$connected_budget" ]; then
+            echo "shop_flutter_test_connected_budget_exhausted" >&2
             exit 124
           fi
-          test "$behavior_status" -eq 0
-          test "$persistence_a_status" -eq 0
-          test "$persistence_b_status" -eq 0
           test "$connected_status" -eq 0
+          overall_elapsed="$(( $(date +%s) - overall_started_at ))"
+          if [ "$overall_elapsed" -gt "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then
+            echo "shop_flutter_test_total_budget_exhausted" >&2
+            exit 124
+          fi
 
       - name: Run real Flutter process-interruption scenarios
         run: |

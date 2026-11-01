@@ -537,34 +537,110 @@ test('production identity is generated only after every default-profile test sha
   )
 })
 
-test('default-profile test shards share one evidence-backed aggregate budget', () => {
+test('default-profile test shards run serially with fail-closed shard and total budgets', () => {
+  const shortJob = verifyShopNativeCiContract(
+    workflow.replace('timeout-minutes: 60', 'timeout-minutes: 30'),
+    gradleWrapper,
+  )
+  assert.ok(shortJob.failures.includes('native_android_job_timeout_not_60_minutes'))
+
   const widened = verifyShopNativeCiContract(
     workflow.replace(
-      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "480"',
-      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "540"',
+      'SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS: "600"',
+      'SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS: "660"',
     ),
     gradleWrapper,
   )
   assert.ok(
     widened.failures.includes(
-      'native_test_aggregate_budget_not_bounded_to_480_seconds',
+      'native_test_shard_budget_not_bounded_to_600_seconds',
+    ),
+  )
+
+  const widenedTotal = verifyShopNativeCiContract(
+    workflow.replace(
+      'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "2400"',
+      'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "2460"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    widenedTotal.failures.includes(
+      'native_test_total_budget_not_bounded_to_2400_seconds',
     ),
   )
 
   const missingStart = verifyShopNativeCiContract(
     workflow.replace(
-      'started_at="$(date +%s)"',
+      'behavior_core_started_at="$(date +%s)"',
       'true',
     ),
     gradleWrapper,
   )
   assert.ok(
-    missingStart.failures.includes('native_test_aggregate_budget_start_missing'),
+    missingStart.failures.includes('native_behavior_core_shard_start_missing'),
+  )
+
+  const missingConnectedStart = verifyShopNativeCiContract(
+    workflow.replace('connected_started_at="$(date +%s)"', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(missingConnectedStart.failures.includes('native_connected_shard_start_missing'))
+
+  const missingOverallStart = verifyShopNativeCiContract(
+    workflow.replace('overall_started_at="$(date +%s)"', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(missingOverallStart.failures.includes('native_test_total_budget_start_missing'))
+
+  const missingRemainingBudget = verifyShopNativeCiContract(
+    workflow.replace(
+      'remaining="$(( SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS - elapsed ))"',
+      'remaining="$SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingRemainingBudget.failures.includes('native_test_remaining_total_budget_guard_missing'),
+  )
+
+  const unappliedRemainingBudget = verifyShopNativeCiContract(
+    workflow.replace(
+      'behavior_checkout_budget="$(calculate_shard_budget)" || exit "$?"',
+      'behavior_checkout_budget="$SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    unappliedRemainingBudget.failures.includes(
+      'native_behavior_checkout_remaining_total_budget_not_applied',
+    ),
+  )
+
+  const wrongShellInventory = verifyShopNativeCiContract(
+    workflow.replace(
+      '              test/widget_shell_test.dart',
+      '              test/widget_checkout_test.dart',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    wrongShellInventory.failures.includes('native_behavior_shell_shard_inventory_or_order_wrong'),
+  )
+
+  const incompleteBehaviorCore = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_stock_activity_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    incompleteBehaviorCore.failures.includes(
+      'native_behavior_core_shard_inventory_or_order_wrong',
+    ),
   )
 
   const unboundedPersistenceA = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${persistence_a_budget}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
@@ -577,7 +653,7 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
 
   const unboundedPersistenceB = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${persistence_b_budget}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
@@ -590,7 +666,7 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
 
   const unboundedConnected = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${connected_budget}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
@@ -601,52 +677,126 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
     ),
   )
 
-  const unboundedBehavior = verifyShopNativeCiContract(
+  const unboundedBehaviorCore = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
-      'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
+      'TMPDIR="$behavior_core_tmp" timeout --signal=TERM --kill-after=10s "${behavior_core_budget}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$behavior_core_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
   )
   assert.ok(
-    unboundedBehavior.failures.includes(
-      'native_behavior_shard_not_bounded_or_sequential',
+    unboundedBehaviorCore.failures.includes(
+      'native_behavior_core_shard_not_bounded_or_sequential',
     ),
   )
 
   for (const [shard, failure] of [
-    ['behavior', 'native_behavior_shard_not_bounded_or_sequential'],
+    ['behavior_core', 'native_behavior_core_shard_not_bounded_or_sequential'],
+    ['behavior_shell', 'native_behavior_shell_shard_not_bounded_or_sequential'],
+    ['behavior_checkout', 'native_behavior_checkout_shard_not_bounded_or_sequential'],
+    ['persistence_backup', 'native_persistence_backup_shard_not_bounded_or_sequential'],
     ['persistence_a', 'native_persistence_a_shard_not_bounded_or_sequential'],
     ['persistence_b', 'native_persistence_b_shard_not_bounded_or_sequential'],
     ['connected', 'native_connected_shard_not_bounded_or_sequential'],
   ]) {
     const missingNoPub = verifyShopNativeCiContract(
       workflow.replace(
-        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1`,
-        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1`,
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --no-pub --concurrency=1`,
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --concurrency=1`,
       ),
       gradleWrapper,
     )
     assert.ok(missingNoPub.failures.includes(failure), `${shard} must require --no-pub`)
+
+    const missingPerTestTimeout = verifyShopNativeCiContract(
+      workflow.replace(
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m`,
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded`,
+      ),
+      gradleWrapper,
+    )
+    assert.ok(
+      missingPerTestTimeout.failures.includes(failure),
+      `${shard} must retain the per-test timeout`,
+    )
   }
 
   const missingElapsedGuard = verifyShopNativeCiContract(
     workflow.replace(
-      'if [ "$elapsed" -gt "$SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS" ]; then',
+      'if [ "$behavior_core_elapsed" -gt "$behavior_core_budget" ]; then',
       'if false; then',
     ),
     gradleWrapper,
   )
   assert.ok(
     missingElapsedGuard.failures.includes(
-      'native_test_aggregate_budget_elapsed_guard_missing',
+      'native_behavior_core_shard_elapsed_guard_missing',
     ),
   )
+
+  const missingConnectedElapsed = verifyShopNativeCiContract(
+    workflow.replace(
+      'connected_elapsed="$(( $(date +%s) - connected_started_at ))"',
+      'connected_elapsed=0',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingConnectedElapsed.failures.includes('native_connected_shard_elapsed_capture_missing'),
+  )
+
+  const missingConnectedGuard = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$connected_elapsed" -gt "$connected_budget" ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingConnectedGuard.failures.includes('native_connected_shard_elapsed_guard_missing'),
+  )
+
+  for (const [token, failure] of [
+    ['shop_flutter_test_behavior_core_budget_exhausted', 'native_behavior_core_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_behavior_shell_budget_exhausted', 'native_behavior_shell_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_behavior_checkout_budget_exhausted', 'native_behavior_checkout_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_persistence_backup_budget_exhausted', 'native_persistence_backup_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_persistence_a_budget_exhausted', 'native_persistence_a_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_persistence_b_budget_exhausted', 'native_persistence_b_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_connected_budget_exhausted', 'native_connected_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_total_budget_exhausted', 'native_test_total_budget_exhaustion_not_fail_closed'],
+  ]) {
+    const missingExhaustion = verifyShopNativeCiContract(
+      workflow.replaceAll(token, 'budget_exhaustion_removed'),
+      gradleWrapper,
+    )
+    assert.ok(missingExhaustion.failures.includes(failure), `${token} must fail closed`)
+  }
+
+  const missingTotalElapsed = verifyShopNativeCiContract(
+    workflow.replace(
+      'overall_elapsed="$(( $(date +%s) - overall_started_at ))"',
+      'overall_elapsed=0',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingTotalElapsed.failures.includes('native_test_total_budget_elapsed_capture_missing'),
+  )
+
+  const missingTotalGuard = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$overall_elapsed" -gt "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(missingTotalGuard.failures.includes('native_test_total_budget_elapsed_guard_missing'))
 
   const sharedTemp = verifyShopNativeCiContract(
     workflow.replace(
       'persistence_a_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-a.XXXXXX")"',
-      'persistence_a_tmp="$behavior_tmp"',
+      'persistence_a_tmp="$behavior_core_tmp"',
     ),
     gradleWrapper,
   )
@@ -656,18 +806,44 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
 
   const incompleteCleanup = verifyShopNativeCiContract(
     workflow.replace(
-      'rm -rf -- "$behavior_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"',
-      'rm -rf -- "$behavior_tmp"',
+      'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"',
+      'rm -rf -- "$behavior_core_tmp"',
     ),
     gradleWrapper,
   )
   assert.ok(incompleteCleanup.failures.includes('native_test_shard_cleanup_incomplete'))
 
-  const missingConnectedWait = verifyShopNativeCiContract(
-    workflow.replace('wait "$connected_pid"', 'true'),
+  const backgroundBehaviorCore = verifyShopNativeCiContract(
+    workflow.replace(
+      '          )\n          behavior_core_status="$?"',
+      '          ) &\n          behavior_core_status="$?"',
+    ),
     gradleWrapper,
   )
-  assert.ok(missingConnectedWait.failures.includes('native_connected_shard_wait_missing'))
+  assert.ok(backgroundBehaviorCore.failures.includes('native_test_shards_not_strictly_serial'))
+
+  const startsPersistenceBackupEarly = verifyShopNativeCiContract(
+    workflow.replace(
+      'persistence_backup_started_at="$(date +%s)"',
+      'behavior_checkout_started_at="$(date +%s)"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    startsPersistenceBackupEarly.failures.includes(
+      'native_persistence_backup_shard_started_before_behavior_checkout_passed',
+    ),
+  )
+
+  const missingPersistenceAStatus = verifyShopNativeCiContract(
+    workflow.replace('persistence_a_status="$?"', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingPersistenceAStatus.failures.includes(
+      'native_persistence_a_shard_status_capture_missing',
+    ),
+  )
 
   const ignoredPersistenceB = verifyShopNativeCiContract(
     workflow.replace('test "$persistence_b_status" -eq 0', 'true'),
