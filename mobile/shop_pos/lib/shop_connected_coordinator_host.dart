@@ -210,6 +210,192 @@ class _ConnectedCoordinatorPlatformStatus {
   final bool connectedOperationEnabled;
 }
 
+const connectedWindowsCoordinatorHostChannel =
+    'dev.supermega.supermega_shop/connected_coordinator_host_v1';
+const _connectedWindowsCoordinatorRequestSchema =
+    'supermega.connected-coordinator-host-request.v1';
+const _connectedWindowsCoordinatorStatusSchema =
+    'supermega.connected-coordinator-host-status.v1';
+
+/// Windows app-host lifecycle matching the Dart TLS listener. The native host
+/// owns the single-instance mutex while Dart owns protocol transport; neither
+/// layer may advertise shared writes until both have confirmed the transition.
+class MethodChannelWindowsConnectedCoordinatorPlatformLifecycle
+    implements ConnectedCoordinatorPlatformLifecycle {
+  MethodChannelWindowsConnectedCoordinatorPlatformLifecycle({
+    MethodChannel? channel,
+    ConnectedCoordinatorPlatformInvoker? invoke,
+  }) : _channel =
+           channel ??
+           const MethodChannel(connectedWindowsCoordinatorHostChannel),
+       _invokeOverride = invoke;
+
+  final MethodChannel _channel;
+  final ConnectedCoordinatorPlatformInvoker? _invokeOverride;
+  String? _alias;
+
+  Future<Object?> _invoke(String method, Map<String, Object> arguments) =>
+      _invokeOverride?.call(method, arguments) ??
+      _channel.invokeMethod<Object?>(method, arguments);
+
+  @override
+  Future<void> start({required String coordinatorAlias}) async {
+    if (_alias != null) {
+      throw StateError('connected_windows_coordinator_already_started');
+    }
+    try {
+      final status = _status(
+        await _invoke('start', <String, Object>{
+          'schema': _connectedWindowsCoordinatorRequestSchema,
+          'coordinatorAlias': coordinatorAlias,
+        }),
+      );
+      if (!status.featureEnabled ||
+          !status.ownerHeld ||
+          !status.restartCleanupComplete ||
+          !status.visibleStatusRequired ||
+          status.state != 'running' ||
+          status.coordinatorAlias != coordinatorAlias ||
+          status.transportListening ||
+          status.sharedWritesAvailable) {
+        throw StateError('connected_windows_coordinator_start_unconfirmed');
+      }
+      _alias = coordinatorAlias;
+    } catch (error, stackTrace) {
+      try {
+        await _stopNative();
+      } catch (_) {
+        Error.throwWithStackTrace(
+          StateError('connected_windows_coordinator_cleanup_unconfirmed'),
+          stackTrace,
+        );
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  @override
+  Future<void> markListening({required String coordinatorAlias}) async {
+    if (_alias != coordinatorAlias) {
+      throw StateError('connected_windows_coordinator_alias_mismatch');
+    }
+    final status = _status(
+      await _invoke('markListening', <String, Object>{
+        'schema': _connectedWindowsCoordinatorRequestSchema,
+        'coordinatorAlias': coordinatorAlias,
+      }),
+    );
+    if (!status.featureEnabled ||
+        !status.ownerHeld ||
+        status.state != 'running' ||
+        status.coordinatorAlias != coordinatorAlias ||
+        !status.transportListening ||
+        !status.sharedWritesAvailable) {
+      throw StateError('connected_windows_coordinator_listening_unconfirmed');
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    await _stopNative();
+    _alias = null;
+  }
+
+  Future<void> _stopNative() async {
+    final status = _status(
+      await _invoke('stop', const <String, Object>{
+        'schema': _connectedWindowsCoordinatorRequestSchema,
+      }),
+    );
+    if (status.ownerHeld ||
+        status.transportListening ||
+        status.sharedWritesAvailable ||
+        status.coordinatorAlias != null ||
+        !const <String>{'stopped', 'disabled'}.contains(status.state)) {
+      throw StateError('connected_windows_coordinator_stop_unconfirmed');
+    }
+  }
+
+  _ConnectedWindowsCoordinatorStatus _status(Object? value) {
+    if (value is! Map) {
+      throw StateError('connected_windows_coordinator_status_invalid');
+    }
+    final map = value.map<String, Object?>((key, value) {
+      if (key is! String) {
+        throw StateError('connected_windows_coordinator_status_invalid');
+      }
+      return MapEntry(key, value);
+    });
+    const fields = <String>{
+      'schema',
+      'state',
+      'featureEnabled',
+      'ownerHeld',
+      'transportListening',
+      'sharedWritesAvailable',
+      'coordinatorAlias',
+      'restartCleanupComplete',
+      'visibleStatusRequired',
+      'lastError',
+    };
+    if (map.keys.toSet().difference(fields).isNotEmpty ||
+        fields.difference(map.keys.toSet()).isNotEmpty ||
+        map['schema'] != _connectedWindowsCoordinatorStatusSchema ||
+        map['state'] is! String ||
+        map['featureEnabled'] is! bool ||
+        map['ownerHeld'] is! bool ||
+        map['transportListening'] is! bool ||
+        map['sharedWritesAvailable'] is! bool ||
+        (map['coordinatorAlias'] != null &&
+            map['coordinatorAlias'] is! String) ||
+        map['restartCleanupComplete'] is! bool ||
+        map['visibleStatusRequired'] is! bool ||
+        map['lastError'] is! String) {
+      throw StateError('connected_windows_coordinator_status_invalid');
+    }
+    final status = _ConnectedWindowsCoordinatorStatus(
+      state: map['state']! as String,
+      featureEnabled: map['featureEnabled']! as bool,
+      ownerHeld: map['ownerHeld']! as bool,
+      transportListening: map['transportListening']! as bool,
+      sharedWritesAvailable: map['sharedWritesAvailable']! as bool,
+      coordinatorAlias: map['coordinatorAlias'] as String?,
+      restartCleanupComplete: map['restartCleanupComplete']! as bool,
+      visibleStatusRequired: map['visibleStatusRequired']! as bool,
+    );
+    if (status.transportListening != status.sharedWritesAvailable ||
+        (status.transportListening &&
+            (!status.featureEnabled ||
+                !status.ownerHeld ||
+                status.state != 'running'))) {
+      throw StateError('connected_windows_coordinator_status_invalid');
+    }
+    return status;
+  }
+}
+
+class _ConnectedWindowsCoordinatorStatus {
+  const _ConnectedWindowsCoordinatorStatus({
+    required this.state,
+    required this.featureEnabled,
+    required this.ownerHeld,
+    required this.transportListening,
+    required this.sharedWritesAvailable,
+    required this.coordinatorAlias,
+    required this.restartCleanupComplete,
+    required this.visibleStatusRequired,
+  });
+
+  final String state;
+  final bool featureEnabled;
+  final bool ownerHeld;
+  final bool transportListening;
+  final bool sharedWritesAvailable;
+  final String? coordinatorAlias;
+  final bool restartCleanupComplete;
+  final bool visibleStatusRequired;
+}
+
 class UnavailableConnectedCoordinatorPlatformLifecycle
     implements ConnectedCoordinatorPlatformLifecycle {
   const UnavailableConnectedCoordinatorPlatformLifecycle();

@@ -148,7 +148,9 @@ test('Windows coordinator host stays visible, single-owner, and default-off', ()
     'Local\\\\SuperMegaShopConnectedCoordinatorHostV1',
     'call.method_name() == "status"',
     'call.method_name() == "start"',
+    'call.method_name() == "markListening"',
     'call.method_name() == "stop"',
+    'supermega.connected-coordinator-host-request.v1',
     'connected_site_disabled',
     'coordinator_start_rejected',
     'transportListening',
@@ -158,6 +160,8 @@ test('Windows coordinator host stays visible, single-owner, and default-off', ()
     'CreateMutexW',
     'WAIT_ABANDONED',
     'ReleaseOwnership()',
+    'coordinator_listener_transition_invalid',
+    'coordinator_already_started',
   ]) {
     assert.ok(windowsCoordinatorHost.includes(token), token)
   }

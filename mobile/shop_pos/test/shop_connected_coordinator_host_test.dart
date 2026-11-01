@@ -219,6 +219,71 @@ void main() {
       );
     },
   );
+
+  test(
+    'Windows bridge confirms ownership before and after listener bind',
+    () async {
+      final native = _NativeLifecycle(<Object?>[
+        _windowsStatus(alias: 'site-primary'),
+        _windowsStatus(alias: 'site-primary', listening: true),
+        _windowsStatus(state: 'stopped', featureEnabled: true),
+      ]);
+      final bridge = MethodChannelWindowsConnectedCoordinatorPlatformLifecycle(
+        invoke: native.invoke,
+      );
+
+      await bridge.start(coordinatorAlias: 'site-primary');
+      await bridge.markListening(coordinatorAlias: 'site-primary');
+      await bridge.stop();
+
+      expect(native.methods, ['start', 'markListening', 'stop']);
+    },
+  );
+
+  test('Windows bridge stops after an inconsistent start response', () async {
+    final native = _NativeLifecycle(<Object?>[
+      _windowsStatus(alias: 'site-primary', ownerHeld: false),
+      _windowsStatus(state: 'stopped', featureEnabled: true),
+    ]);
+    final bridge = MethodChannelWindowsConnectedCoordinatorPlatformLifecycle(
+      invoke: native.invoke,
+    );
+
+    await expectLater(
+      bridge.start(coordinatorAlias: 'site-primary'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'connected_windows_coordinator_start_unconfirmed',
+        ),
+      ),
+    );
+    expect(native.methods, ['start', 'stop']);
+  });
+
+  test('Windows bridge rejects shared writes without a listener', () async {
+    final malformed = _windowsStatus(alias: 'site-primary')
+      ..['sharedWritesAvailable'] = true;
+    final native = _NativeLifecycle(<Object?>[
+      malformed,
+      _windowsStatus(state: 'stopped', featureEnabled: true),
+    ]);
+    final bridge = MethodChannelWindowsConnectedCoordinatorPlatformLifecycle(
+      invoke: native.invoke,
+    );
+
+    await expectLater(
+      bridge.start(coordinatorAlias: 'site-primary'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'connected_windows_coordinator_status_invalid',
+        ),
+      ),
+    );
+  });
 }
 
 final _timeline = <String>[];
@@ -313,6 +378,25 @@ Map<String, Object?> _status({
   'connectedOperationEnabled': listening,
   'restartPolicy': 'sticky_when_ready',
   'updatedAt': '2026-11-01T00:00:00.000Z',
+};
+
+Map<String, Object?> _windowsStatus({
+  String state = 'running',
+  bool featureEnabled = true,
+  bool ownerHeld = true,
+  String? alias,
+  bool listening = false,
+}) => <String, Object?>{
+  'schema': 'supermega.connected-coordinator-host-status.v1',
+  'state': state,
+  'featureEnabled': featureEnabled,
+  'ownerHeld': state == 'running' && ownerHeld,
+  'transportListening': listening,
+  'sharedWritesAvailable': listening,
+  'coordinatorAlias': state == 'running' ? alias : null,
+  'restartCleanupComplete': true,
+  'visibleStatusRequired': true,
+  'lastError': '',
 };
 
 class _NativeLifecycle {

@@ -77,6 +77,7 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
   'test/shop_cash_movement_authorized_flow_test.dart',
   'test/shop_cash_movement_test.dart',
   'test/shop_catalog_search_test.dart',
+  'test/shop_connected_coordinator_host_test.dart',
   'test/shop_connected_onboarding_test.dart',
   'test/shop_connected_platform_security_test.dart',
   'test/shop_connected_runtime_test.dart',

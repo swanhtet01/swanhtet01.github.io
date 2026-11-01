@@ -9,12 +9,15 @@
 
 #include <memory>
 #include <string>
+#include <variant>
 
 namespace supermega::connected_security {
 namespace {
 
 constexpr char kChannelName[] =
     "dev.supermega.supermega_shop/connected_coordinator_host_v1";
+constexpr char kRequestSchema[] =
+    "supermega.connected-coordinator-host-request.v1";
 constexpr wchar_t kOwnershipMutex[] =
     L"Local\\SuperMegaShopConnectedCoordinatorHostV1";
 
@@ -30,10 +33,14 @@ class ConnectedCoordinatorHost {
 
   ~ConnectedCoordinatorHost() { Stop(); }
 
-  bool Start() {
+  bool Start(const std::string& coordinator_alias) {
     if (!feature_enabled_) {
       state_ = "disabled";
       last_error_ = "connected_site_disabled";
+      return false;
+    }
+    if (ownership_mutex_ != nullptr) {
+      last_error_ = "coordinator_already_started";
       return false;
     }
     if (!TryAcquireOwnership()) {
@@ -41,18 +48,34 @@ class ConnectedCoordinatorHost {
       last_error_ = "coordinator_owner_unavailable";
       return false;
     }
-    // This checkpoint intentionally contains no transport implementation.
-    // Release ownership rather than reporting a coordinator as running.
-    ReleaseOwnership();
-    state_ = "blocked_transport";
-    last_error_ = "coordinator_transport_unavailable";
-    return false;
+    coordinator_alias_ = coordinator_alias;
+    transport_listening_ = false;
+    state_ = "running";
+    last_error_.clear();
+    return true;
+  }
+
+  bool MarkListening(const std::string& coordinator_alias) {
+    if (!feature_enabled_ || ownership_mutex_ == nullptr ||
+        state_ != "running" || coordinator_alias_ != coordinator_alias ||
+        transport_listening_) {
+      last_error_ = "coordinator_listener_transition_invalid";
+      return false;
+    }
+    transport_listening_ = true;
+    return true;
   }
 
   void Stop() {
     ReleaseOwnership();
+    coordinator_alias_.clear();
+    transport_listening_ = false;
     state_ = feature_enabled_ ? "stopped" : "disabled";
-    if (!feature_enabled_) last_error_ = "connected_site_disabled";
+    if (feature_enabled_) {
+      last_error_.clear();
+    } else {
+      last_error_ = "connected_site_disabled";
+    }
   }
 
   flutter::EncodableMap Status() const {
@@ -66,9 +89,13 @@ class ConnectedCoordinatorHost {
     status[flutter::EncodableValue("ownerHeld")] =
         flutter::EncodableValue(ownership_mutex_ != nullptr);
     status[flutter::EncodableValue("transportListening")] =
-        flutter::EncodableValue(false);
+        flutter::EncodableValue(transport_listening_);
     status[flutter::EncodableValue("sharedWritesAvailable")] =
-        flutter::EncodableValue(false);
+        flutter::EncodableValue(transport_listening_);
+    status[flutter::EncodableValue("coordinatorAlias")] =
+        coordinator_alias_.empty()
+            ? flutter::EncodableValue()
+            : flutter::EncodableValue(coordinator_alias_);
     status[flutter::EncodableValue("restartCleanupComplete")] =
         flutter::EncodableValue(restart_cleanup_complete_);
     status[flutter::EncodableValue("visibleStatusRequired")] =
@@ -118,9 +145,53 @@ class ConnectedCoordinatorHost {
   const bool feature_enabled_;
   HANDLE ownership_mutex_ = nullptr;
   bool restart_cleanup_complete_ = false;
+  bool transport_listening_ = false;
   std::string state_ = "disabled";
   std::string last_error_ = "connected_site_disabled";
+  std::string coordinator_alias_;
 };
+
+bool IsAlias(const std::string& value) {
+  if (value.empty() || value.size() > 128) return false;
+  for (size_t index = 0; index < value.size(); ++index) {
+    const char value_at = value[index];
+    const bool allowed =
+        (value_at >= 'A' && value_at <= 'Z') ||
+        (value_at >= 'a' && value_at <= 'z') ||
+        (value_at >= '0' && value_at <= '9') ||
+        (index > 0 && (value_at == '.' || value_at == '_' ||
+                       value_at == ':' || value_at == '-'));
+    if (!allowed) return false;
+  }
+  return true;
+}
+
+const flutter::EncodableMap* RequestArguments(
+    const flutter::MethodCall<>& call,
+    bool requires_alias,
+    std::string* coordinator_alias) {
+  const auto* arguments =
+      std::get_if<flutter::EncodableMap>(call.arguments());
+  if (arguments == nullptr ||
+      arguments->size() != (requires_alias ? 2u : 1u)) {
+    return nullptr;
+  }
+  const auto schema = arguments->find(flutter::EncodableValue("schema"));
+  if (schema == arguments->end() ||
+      !std::holds_alternative<std::string>(schema->second) ||
+      std::get<std::string>(schema->second) != kRequestSchema) {
+    return nullptr;
+  }
+  if (!requires_alias) return arguments;
+  const auto alias =
+      arguments->find(flutter::EncodableValue("coordinatorAlias"));
+  if (alias == arguments->end() ||
+      !std::holds_alternative<std::string>(alias->second)) {
+    return nullptr;
+  }
+  *coordinator_alias = std::get<std::string>(alias->second);
+  return IsAlias(*coordinator_alias) ? arguments : nullptr;
+}
 
 }  // namespace
 
@@ -136,11 +207,21 @@ void RegisterConnectedCoordinatorHostChannel(flutter::FlutterEngine* engine,
       [](const flutter::MethodCall<>& call,
          std::unique_ptr<flutter::MethodResult<>> result) {
         if (call.method_name() == "status") {
+          std::string ignored;
+          if (RequestArguments(call, false, &ignored) == nullptr) {
+            result->Error("coordinator_request_invalid");
+            return;
+          }
           result->Success(flutter::EncodableValue(host->Status()));
           return;
         }
         if (call.method_name() == "start") {
-          if (!host->Start()) {
+          std::string coordinator_alias;
+          if (RequestArguments(call, true, &coordinator_alias) == nullptr) {
+            result->Error("coordinator_request_invalid");
+            return;
+          }
+          if (!host->Start(coordinator_alias)) {
             result->Error("coordinator_start_rejected",
                           "Windows coordinator host is unavailable.",
                           flutter::EncodableValue(host->Status()));
@@ -149,7 +230,27 @@ void RegisterConnectedCoordinatorHostChannel(flutter::FlutterEngine* engine,
           result->Success(flutter::EncodableValue(host->Status()));
           return;
         }
+        if (call.method_name() == "markListening") {
+          std::string coordinator_alias;
+          if (RequestArguments(call, true, &coordinator_alias) == nullptr) {
+            result->Error("coordinator_request_invalid");
+            return;
+          }
+          if (!host->MarkListening(coordinator_alias)) {
+            result->Error("coordinator_listener_rejected",
+                          "Windows coordinator listener was not confirmed.",
+                          flutter::EncodableValue(host->Status()));
+            return;
+          }
+          result->Success(flutter::EncodableValue(host->Status()));
+          return;
+        }
         if (call.method_name() == "stop") {
+          std::string ignored;
+          if (RequestArguments(call, false, &ignored) == nullptr) {
+            result->Error("coordinator_request_invalid");
+            return;
+          }
           host->Stop();
           result->Success(flutter::EncodableValue(host->Status()));
           return;
