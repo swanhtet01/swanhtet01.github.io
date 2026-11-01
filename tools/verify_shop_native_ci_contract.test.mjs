@@ -11,6 +11,19 @@ import { verifyShopNativeCiContract } from './verify_shop_native_ci_contract.mjs
 const workflow = await readFile('.github/workflows/shop-native-ci.yml', 'utf8')
 const gradleWrapper = await readFile('mobile/shop_pos/android/gradle/wrapper/gradle-wrapper.properties', 'utf8')
 const qaManifest = await readFile('mobile/shop_pos/android/app/src/qa/AndroidManifest.xml', 'utf8')
+const windowsOverlayScript = await readFile('mobile/shop_pos/windows_overlay/apply.ps1', 'utf8')
+const windowsSecurityBridge = await readFile(
+  'mobile/shop_pos/windows_overlay/runner/connected_security_bridge.cpp',
+  'utf8',
+)
+const windowsSecurityStore = await readFile(
+  'mobile/shop_pos/windows_overlay/runner/connected_security_store.cpp',
+  'utf8',
+)
+const windowsSecurityStoreHeader = await readFile(
+  'mobile/shop_pos/windows_overlay/runner/connected_security_store.h',
+  'utf8',
+)
 const actualTestPaths = (await readdir('mobile/shop_pos/test', { withFileTypes: true }))
   .filter(entry => entry.isFile() && entry.name.endsWith('_test.dart'))
   .map(entry => `test/${entry.name}`)
@@ -69,6 +82,37 @@ test('iOS and Windows QA artifacts inspect signing and use canonical source bind
     )
     assert.ok(result.failures.includes(failure), failure)
   }
+})
+
+test('both generated Windows runners apply the fail-closed security overlay', () => {
+  assert.equal(
+    workflow.split('& .\\windows_overlay\\apply.ps1').length - 1,
+    2,
+  )
+  const missing = verifyShopNativeCiContract(
+    workflow.replace('& .\\windows_overlay\\apply.ps1', 'echo overlay-omitted'),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(
+    missing.failures.includes('windows_connected_security_overlay_missing'),
+  )
+  for (const token of [
+    'connected_security_bridge.cpp',
+    'connected_security_store.cpp',
+    'windows_security_overlay_registration_anchor_invalid',
+    'advapi32.lib',
+    'crypt32.lib',
+  ]) {
+    assert.ok(windowsOverlayScript.includes(token), token)
+  }
+  assert.ok(windowsSecurityBridge.includes('result->NotImplemented()'))
+  assert.ok(windowsSecurityBridge.includes('SupportsPersistentNonExportableEd25519'))
+  assert.ok(windowsSecurityStore.includes('CRYPTPROTECT_UI_FORBIDDEN'))
+  assert.ok(windowsSecurityStore.includes('PROTECTED_DACL_SECURITY_INFORMATION'))
+  assert.ok(windowsSecurityStore.includes('SupportsPersistentNonExportableEd25519() { return false; }'))
+  assert.ok(windowsSecurityStoreHeader.includes('class IdentityMetadataStore'))
+  assert.ok(windowsSecurityStoreHeader.includes('class PersistentEd25519KeyStore'))
 })
 
 test('native CI retains exactly the contracted 18-file public gallery artifact', () => {

@@ -447,6 +447,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     ["Get-FileHash -Algorithm SHA256 -LiteralPath $packagePath", 'windows_inner_checksum_not_recorded'],
     ["if ($recordedChecksum -cne $expectedChecksum)", 'windows_inner_checksum_not_verified'],
     ['supermega-shop-windows-unsigned.zip.sha256', 'windows_checksum_not_retained'],
+    ['& .\\windows_overlay\\apply.ps1', 'windows_connected_security_overlay_missing'],
     ['Build iOS app without signing', 'ios_no_codesign_boundary_missing'],
     ['flutter build ios --debug --no-codesign --no-pub', 'ios_no_codesign_command_missing'],
     ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-android', 'android_qa_artifact_not_bound_to_source_or_promotion_state'],
@@ -490,6 +491,10 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     ['flutter --version --machine | Set-Content -LiteralPath \'supermega-shop-windows-qa.zip.toolchain.json\' -Encoding utf8NoBOM', 'windows_qa_observed_toolchain_missing'],
     ['node tools/write_shop_qa_artifact_manifest.mjs --platform windows --artifact supermega-shop-windows-qa.zip --checksum supermega-shop-windows-qa.zip.sha256 --toolchain supermega-shop-windows-qa.zip.toolchain.json --signing supermega-shop-windows-qa.zip.signing.json --output supermega-shop-windows-qa.zip.manifest', 'windows_qa_canonical_manifest_missing'],
   ]) requireToken(source, token, failure, failures)
+
+  if (source.split('& .\\windows_overlay\\apply.ps1').length - 1 !== 2) {
+    failures.push('windows_connected_security_overlay_missing')
+  }
 
   if (source.includes('command -v apkanalyzer')) {
     failures.push('android_qa_analyzer_path_lookup_forbidden')

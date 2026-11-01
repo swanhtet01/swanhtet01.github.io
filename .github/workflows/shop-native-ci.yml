@@ -368,6 +368,7 @@ jobs:
           flutter create --platforms=windows --no-pub --project-name supermega_shop $runnerSource
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item -LiteralPath (Join-Path $runnerSource 'windows') -Destination 'windows' -Recurse
+          & .\windows_overlay\apply.ps1
           & .\scripts\build_windows_icon.ps1
           $lockAfter = (Get-FileHash -Algorithm SHA256 -LiteralPath 'pubspec.lock').Hash
           if ($lockBefore -ne $lockAfter) { throw 'Windows runner generation changed the committed pubspec.lock.' }
@@ -582,6 +583,7 @@ jobs:
           flutter create --platforms=windows --no-pub --project-name supermega_shop $runnerSource
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item -LiteralPath (Join-Path $runnerSource 'windows') -Destination 'windows' -Recurse
+          & .\windows_overlay\apply.ps1
 
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
