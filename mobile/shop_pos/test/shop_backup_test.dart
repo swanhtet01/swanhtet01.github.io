@@ -5053,7 +5053,7 @@ void _removeV14AuthorizationProofsForLegacyFixture(Database connection) {
 
 void _removeV17CorrectionConsumptionObjects(Database connection) {
   for (final definition
-      in shopConnectedCloudProofSchemaDefinitionsV34().entries
+      in shopConnectedCloudProofSchemaDefinitionsV35().entries
           .toList()
           .reversed) {
     final type = shopSchemaObjectTypeForDefinition(definition.value);
