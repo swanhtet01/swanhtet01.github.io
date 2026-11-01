@@ -1065,9 +1065,9 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
   && databaseRehearsal.migration?.count === databaseImplementationPaths.filter((path) => path.startsWith('supabase/migrations/')).length
-  && databaseRehearsal.migration?.schemaVersion === 13
+  && databaseRehearsal.migration?.schemaVersion === 14
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 74
+  && Object.keys(databaseRehearsal.checks || {}).length === 79
   && databaseRehearsal.checks?.managedCounterOldReceiptRecovery === true
   && databaseRehearsal.checks?.temporaryRuntimePasswordExpiryVerified === true
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
@@ -1111,7 +1111,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.overall?.hostedActivationReady === false
   && managedPilotReadiness.localDatabase?.receiptDigest === databaseRehearsal.receiptDigest
   && managedPilotReadiness.localDatabase?.implementationDigest === databaseRehearsal.implementationDigest
-  && managedPilotReadiness.localDatabase?.schemaVersion === 13
+  && managedPilotReadiness.localDatabase?.schemaVersion === 14
   && managedPilotReadiness.localDatabase?.hostedEvidenceCurrent === false
   && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').length
   && managedPilotReadiness.overall?.blockingGateIds?.join(',') === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').map((entry) => entry.id).join(',')
@@ -1146,8 +1146,8 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.liveProduction?.schemaVersion === supabaseSecurityAudit.managedBackend?.liveSchemaVersion
   && managedPilotReadiness.liveProduction?.observedAt === supabaseSecurityAudit.asOf
   && managedPilotReadiness.liveProduction?.currentStateRevalidated === false
-  && managedPilotReadiness.liveProduction?.localTargetVersion === 13
-  && managedPilotReadiness.liveProduction?.versionDrift === 13 - supabaseSecurityAudit.managedBackend?.liveSchemaVersion
+  && managedPilotReadiness.liveProduction?.localTargetVersion === 14
+  && managedPilotReadiness.liveProduction?.versionDrift === 14 - supabaseSecurityAudit.managedBackend?.liveSchemaVersion
   && managedPilotReadiness.liveProduction?.browserRolesDenied === true
   && managedPilotReadiness.liveProduction?.publicBrowserQuarantine === false
   && managedPilotReadiness.liveProduction?.managedWritesEnabled === false
@@ -1195,8 +1195,8 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.securityAudit?.localTargetVersion === supabaseSecurityAudit.managedBackend?.localTargetVersion
   && managedPilotReadiness.securityAudit?.productionMutationAuthorized === false
   && managedPilotReadiness.securityAudit?.databaseWrites === 0
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === `Historical ${supabaseSecurityAudit.advisor?.status} audit (${supabaseSecurityAudit.advisor?.findingCount} findings) observed managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} against its then-target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}. Current schema v13 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.`
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === 'Obtain fresh schema v13, privilege/RLS and session/billing evidence for this candidate on an owner-approved isolated target; retain the prior security audit only as history.'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === `Historical ${supabaseSecurityAudit.advisor?.status} audit (${supabaseSecurityAudit.advisor?.findingCount} findings) observed managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} against its then-target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}. Current schema v14 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.`
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === 'Obtain fresh schema v14, privilege/RLS, session/billing and Shop correction-consumption evidence for this candidate on an owner-approved isolated target; retain prior security audits only as history.'
   && supabaseSecurityAudit.projectRef === JSON.parse(packageText).supermega?.productionSupabaseProjectRef
   && supabaseSecurityAudit.targetClassification === 'protected-production'
   && Number.isInteger(supabaseSecurityAudit.managedBackend?.liveSchemaVersion)

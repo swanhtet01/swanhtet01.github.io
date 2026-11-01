@@ -95,7 +95,7 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(readiness?.contract !== 'supermega.managed-pilot-readiness.v5', failures, 'strategy_posture_readiness_contract_invalid')
   addIf(readiness?.pilotMode !== 'owner_named', failures, 'strategy_posture_pilot_mode_not_owner_named')
   addIf(!Number.isInteger(liveSchemaVersion), failures, 'strategy_posture_live_schema_version_invalid')
-  addIf(localTargetVersion !== 13 || liveSchemaVersion !== 11, failures, 'strategy_posture_schema_drift_present')
+  addIf(localTargetVersion !== 14 || liveSchemaVersion !== 11, failures, 'strategy_posture_schema_drift_present')
   addIf(liveSchemaVersion !== securityLiveSchemaVersion, failures, 'strategy_posture_security_schema_mismatch')
   addIf(readiness?.liveProduction?.versionDrift !== localTargetVersion - liveSchemaVersion, failures, 'strategy_posture_version_drift_inconsistent')
   addIf(readiness?.liveProduction?.currentStateRevalidated !== false
@@ -129,7 +129,7 @@ export function buildStrategyPostureReport(input = {}) {
 
   addIf(!has(aiNative, 'Owner-named Shop pilot before self-serve onboarding'), failures, 'strategy_posture_ai_owner_named_section_missing')
   addIf(!has(aiNative, `historical hosted schema v${liveSchemaVersion}; current hosted state not revalidated`), failures, 'strategy_posture_ai_schema_line_stale')
-  addIf(!has(aiNative, `local schema v${localTargetVersion}; hosted parity is unproven`), failures, 'strategy_posture_ai_parity_line_stale')
+  addIf(!has(aiNative, `local target schema v${localTargetVersion}; fresh PostgreSQL 17 proof pending`), failures, 'strategy_posture_ai_parity_line_stale')
   for (const document of [aiNative, clientReadiness]) {
     addIf(has(document, `current v${liveSchemaVersion} production parity`) || has(document, 'zero drift from the local v11 target'), failures, 'strategy_posture_false_current_parity_claim')
   }
@@ -156,7 +156,9 @@ export function buildStrategyPostureReport(input = {}) {
 
   addIf(!has(clientReadiness, 'Freshness note, 2026-09-07')
     || !has(clientReadiness, `historical hosted schema v${liveSchemaVersion}; current hosted state not revalidated`)
-    || !has(clientReadiness, `local schema v${localTargetVersion}; hosted parity is unproven`), failures, 'strategy_posture_client_freshness_note_missing')
+    || !has(clientReadiness, `source contract targets local schema v${localTargetVersion}`)
+    || !has(clientReadiness, 'accepted v13 rehearsal is historical')
+    || !has(clientReadiness, `fresh v${localTargetVersion} PostgreSQL 17 rehearsal is not run`), failures, 'strategy_posture_client_freshness_note_missing')
   assertNoActiveStaleSchemaClaims(clientReadiness, failures, { liveSchemaVersion })
 
   addIf(!has(productSupremacy, 'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended'), failures, 'strategy_posture_product_supremacy_local_ai_freshness_missing')
@@ -225,8 +227,8 @@ function runSelfTest() {
     pilotMode: 'owner_named',
     liveProduction: {
       schemaVersion: 11,
-      localTargetVersion: 13,
-      versionDrift: 2,
+      localTargetVersion: 14,
+      versionDrift: 3,
       observedAt: '2026-08-20T17:02:04.312+06:30',
       currentStateRevalidated: false,
       browserRolesDenied: true,
@@ -235,7 +237,7 @@ function runSelfTest() {
       productionMutationAuthorized: false,
     },
     securityAudit: { liveSchemaVersion: 11, asOf: '2026-08-20T17:02:04.312+06:30' },
-    localDatabase: { contract: 'supermega.hq.database-rehearsal.v3', schemaVersion: 13, hostedEvidenceCurrent: false },
+    localDatabase: { contract: 'supermega.hq.database-rehearsal.v3', schemaVersion: 14, hostedEvidenceCurrent: false },
     overall: { status: 'blocked', hostedActivationReady: false, blockingGateCount: 6,
       blockingGateIds: ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'] },
     pilotEvidence: {
@@ -255,7 +257,7 @@ function runSelfTest() {
   const aiNative = [
     '### 3.2 Owner-named Shop pilot before self-serve onboarding',
     'historical hosted schema v11; current hosted state not revalidated',
-    'local schema v13; hosted parity is unproven',
+    'local target schema v14; fresh PostgreSQL 17 proof pending',
     'Self-serve remains a later product expansion, not the active activation route',
     '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates',
     'no public signup, claim-code provisioning, hosted tenant',
@@ -274,7 +276,7 @@ function runSelfTest() {
     'Plant, Website, and Ecommerce keep security, dependency, regression, and handoff maintenance until Shop produces a decision packet',
     'Current 30-day AI runtime policy: local Ollama only, `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',
   ].join('\n')
-  const clientReadiness = 'Freshness note, 2026-09-07\nhistorical hosted schema v11; current hosted state not revalidated\nlocal schema v13; hosted parity is unproven'
+  const clientReadiness = 'Freshness note, 2026-09-07\nhistorical hosted schema v11; current hosted state not revalidated\nsource contract targets local schema v14; the accepted v13 rehearsal is historical\nfresh v14 PostgreSQL 17 rehearsal is not run'
   const productSupremacy = [
     'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended',
     'Active AI R&D is local Ollama only: `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',

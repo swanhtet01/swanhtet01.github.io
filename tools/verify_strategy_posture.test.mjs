@@ -10,8 +10,8 @@ function readiness(overrides = {}) {
     pilotMode: 'owner_named',
     liveProduction: {
       schemaVersion: 11,
-      localTargetVersion: 13,
-      versionDrift: 2,
+      localTargetVersion: 14,
+      versionDrift: 3,
       observedAt: '2026-08-20T17:02:04.312+06:30',
       currentStateRevalidated: false,
       browserRolesDenied: true,
@@ -21,7 +21,7 @@ function readiness(overrides = {}) {
       ...(overrides.liveProduction || {}),
     },
     securityAudit: { liveSchemaVersion: 11, asOf: '2026-08-20T17:02:04.312+06:30', ...(overrides.securityAudit || {}) },
-    localDatabase: { contract: 'supermega.hq.database-rehearsal.v3', schemaVersion: 13, hostedEvidenceCurrent: false },
+    localDatabase: { contract: 'supermega.hq.database-rehearsal.v3', schemaVersion: 14, hostedEvidenceCurrent: false },
     overall: { status: 'blocked', hostedActivationReady: false, blockingGateCount: 6,
       blockingGateIds: ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'] },
     pilotEvidence: {
@@ -45,7 +45,7 @@ function readiness(overrides = {}) {
 const aiNative = [
   '### 3.2 Owner-named Shop pilot before self-serve onboarding',
   'historical hosted schema v11; current hosted state not revalidated',
-  'local schema v13; hosted parity is unproven',
+  'local target schema v14; fresh PostgreSQL 17 proof pending',
   'Self-serve remains a later product expansion, not the active activation route',
   '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates',
   'no public signup, claim-code provisioning, hosted tenant',
@@ -66,7 +66,7 @@ const competitiveCut = [
   'Current 30-day AI runtime policy: local Ollama only, `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',
 ].join('\n')
 
-const clientReadiness = 'Freshness note, 2026-09-07\nhistorical hosted schema v11; current hosted state not revalidated\nlocal schema v13; hosted parity is unproven'
+const clientReadiness = 'Freshness note, 2026-09-07\nhistorical hosted schema v11; current hosted state not revalidated\nsource contract targets local schema v14; the accepted v13 rehearsal is historical\nfresh v14 PostgreSQL 17 rehearsal is not run'
 
 const productSupremacy = [
   'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended',
@@ -107,11 +107,18 @@ test('current source documents preserve local versus historical hosted truth', a
     clientReadiness: 'CLIENT-READINESS-BRIEF.md', productSupremacy: 'PRODUCT-SUPREMACY-ROADMAP.md',
     orderIntakeEvalPlan: 'AI-ORDER-INTAKE-EVAL-PLAN.md',
   })) input[key] = await readFile(new URL('hq/strategy/' + file, root), 'utf8')
+  const staleResult = buildStrategyPostureReport(input)
+  assert.deepEqual(staleResult.failures, [
+    'strategy_posture_schema_drift_present',
+    'strategy_posture_ai_parity_line_stale',
+    'strategy_posture_client_freshness_note_missing',
+  ])
+  input.readiness = readiness()
   const result = buildStrategyPostureReport(input)
   assert.deepEqual(result.failures, [])
   assert.equal(result.releaseAuthorized, false)
   assert.equal(result.hostedEvidenceCurrent, false)
-  assert.equal(result.localTargetVersion, 13)
+  assert.equal(result.localTargetVersion, 14)
   for (const mutate of [
     (r) => { r.liveProduction.versionDrift = 0 },
     (r) => { r.liveProduction.currentStateRevalidated = true },
@@ -121,7 +128,7 @@ test('current source documents preserve local versus historical hosted truth', a
     (r) => { r.overall.hostedActivationReady = true },
     (r) => { r.overall.blockingGateIds.splice(1, 1); r.overall.blockingGateCount -= 1 },
   ]) {
-    const changed = structuredClone(actual)
+    const changed = structuredClone(input.readiness)
     mutate(changed)
     assert.equal(buildStrategyPostureReport({ ...input, readiness: changed }).ok, false)
   }
