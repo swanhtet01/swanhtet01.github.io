@@ -275,6 +275,13 @@ class _Security implements ConnectedPlatformSecurity {
   Completer<void> loadEntered = Completer<void>();
   Completer<void>? loadBarrier;
 
+  // Enrollment is outside this runtime lifecycle test. Keep unexpected calls
+  // fail closed while allowing this focused fake to track the runtime surface.
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError(
+    'unexpected_security_call:${invocation.memberName}',
+  );
+
   @override
   Future<ConnectedPlatformIdentity> loadIdentity({
     required String alias,
