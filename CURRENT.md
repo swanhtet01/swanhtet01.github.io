@@ -7,6 +7,28 @@
 
 ## 2026-11-02 exact-head CI repair checkpoint
 
+- Swan authorized and Cloud completed a guarded plain fast-forward of draft PR
+  #752 from `5c69ebd9` to this exact ledger `72bb614f`; remote readback matched.
+  No force-push, merge, deployment, signing, production change or merchant
+  contact occurred.
+- Exact-head App run `41338374033` is terminal **FAIL** only at canonical step
+  638/668 (`hq:verify` 1/37), `database_rehearsal_evidence_stale`, with
+  `secretValuesExposed:false`; all preceding contracts, disposable PostgreSQL,
+  migration, RLS, dependency install, lint and build-contract steps passed.
+- Exact-head Kernel run `41338377485` is **PASS**. Dependency run `41338377467`
+  remains **FAIL / BLOCKED** only for the known app/kernel minimatch audit;
+  platform, pip and added-line credential scanning are **PASS**. Official
+  registry metadata still exposes no compatible upstream range.
+- Native run `41338377466` has exact-current isolated Android, iOS and Windows
+  QA plus unsigned iPad/iOS jobs **PASS**. The full Android job is **FAIL** at
+  its isolated shard step and Windows PC remains running at last readback;
+  provider logs for the completed Android job are unavailable until the whole
+  workflow terminates, so the new failure is not yet classified.
+- The separately authorized non-authoritative Windows observer probe could not
+  dispatch: GitHub returned HTTP 404 because the manual workflow is not
+  registered on the default branch. No bypass, alternate transfer, installer,
+  PostgreSQL process or database was attempted.
+
 - Published draft PR #752 remains at `5c69ebd942e5cbc1260187416cb01a7b975352d6`,
   tree `4f6d8b52ae3af32373bf967f2f448ff511c947cb`; it is not merged or deployed.
 - App CI run `41336319981` passed checks 1--637/668 and now fails only at the
