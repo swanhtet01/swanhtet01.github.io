@@ -25,6 +25,10 @@ import {
   toolchainPreflightSummary,
   requireVerifiedRecorderRuntime,
 } from './record_postgres17_rehearsal.mjs'
+import {
+  rehearsalMigrations,
+  sourceOnlyMigrations,
+} from '../kernel/database-rehearsal-evidence.mjs'
 
 const verifiedToolchainFixture = () => ({
   profileId: 'synthetic-profile',
@@ -484,16 +488,21 @@ const checkNames = [
 ]
 
 const implementation = await implementationEvidence()
-const migrationNames = implementation.paths.filter((path) => path.startsWith('supabase/migrations/')).map((path) => path.split('/').at(-1))
+const migrationNames = [...rehearsalMigrations]
+const sourceMigrationNames = implementation.paths
+  .filter((path) => path.startsWith('supabase/migrations/'))
+  .map((path) => path.split('/').at(-1))
 test('receipt inventory matches the actual PostgreSQL runner including Website acceptance', () => {
   const python = process.env.SUPERMEGA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
-  const result = spawnSync(python, ['-c', 'import json; from tools.rehearse_supermega_postgres17 import IMPLEMENTATION_PATHS, CURRENT_MIGRATIONS; print(json.dumps({"paths": list(IMPLEMENTATION_PATHS), "migrations": list(CURRENT_MIGRATIONS)}))'], {
+  const result = spawnSync(python, ['-c', 'import json; from tools.rehearse_supermega_postgres17 import IMPLEMENTATION_PATHS, CURRENT_MIGRATIONS, SOURCE_ONLY_MIGRATIONS; print(json.dumps({"paths": list(IMPLEMENTATION_PATHS), "migrations": list(CURRENT_MIGRATIONS), "sourceOnlyMigrations": list(SOURCE_ONLY_MIGRATIONS)}))'], {
     cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 10000, windowsHide: true,
   })
   assert.equal(result.status, 0, 'runner inventory must be readable')
   const runner = JSON.parse(result.stdout)
   assert.deepEqual(implementation.paths, runner.paths)
   assert.deepEqual(migrationNames, runner.migrations)
+  assert.deepEqual(sourceOnlyMigrations, runner.sourceOnlyMigrations)
+  assert.deepEqual(sourceMigrationNames, [...runner.migrations, ...runner.sourceOnlyMigrations].sort())
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
   assert.equal(runner.migrations.at(-1), '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql')
@@ -708,13 +717,15 @@ test('receipt verifier rejects non-canonical or incomplete toolchain evidence', 
 
 test('Python and recorder bind the same exact ordered source inventory and digest', () => {
   const result = spawnSync(process.execPath, ['tools/run_python_tool.mjs', '-c',
-    'import json; from tools import rehearse_supermega_postgres17 as p; print(json.dumps({"paths":list(p.IMPLEMENTATION_PATHS),"digest":p._implementation_digest(),"migrations":list(p.CURRENT_MIGRATIONS)}))'],
+    'import json; from tools import rehearse_supermega_postgres17 as p; print(json.dumps({"paths":list(p.IMPLEMENTATION_PATHS),"digest":p._implementation_digest(),"migrations":list(p.CURRENT_MIGRATIONS),"sourceOnlyMigrations":list(p.SOURCE_ONLY_MIGRATIONS)}))'],
   { cwd: new URL('..', import.meta.url), encoding: 'utf8', windowsHide: true, timeout: 30_000 })
   assert.equal(result.status, 0, result.stderr)
   const observed = JSON.parse(result.stdout.trim())
   assert.deepEqual(observed.paths, implementation.paths)
   assert.equal(observed.digest, implementation.digest)
   assert.deepEqual(observed.migrations, migrationNames)
+  assert.deepEqual(observed.sourceOnlyMigrations, sourceOnlyMigrations)
+  assert.deepEqual(sourceMigrationNames, [...observed.migrations, ...observed.sourceOnlyMigrations].sort())
 })
 
 test('read-only CLI consumer rejects a receipt whose authority is not current source-controlled evidence', async () => {

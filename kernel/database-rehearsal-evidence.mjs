@@ -46,6 +46,15 @@ const migrations = [
   '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql',
 ]
 
+// These migrations are part of the exact source tree and therefore must
+// invalidate stale implementation evidence, but they are deliberately not
+// applied by the authoritative v14 rehearsal until their separate catalog
+// contract is reviewed. Keep this list distinct from `migrations` so source
+// identity cannot silently omit them or accidentally overclaim v15 execution.
+const sourceOnlyMigrations = [
+  '20261101090000_private_trial_backend_v15_connected_site.sql',
+]
+
 const implementationPaths = [...new Set([
   'supermega_runtime/managed_context.py',
   'supermega_runtime/managed_activation.py',
@@ -68,7 +77,10 @@ const implementationPaths = [...new Set([
   'tools/verify_managed_runtime_environment_values.mjs',
   'tools/verify_private_trial_migrations.mjs',
   ...migrations.map((name) => `supabase/migrations/${name}`),
+  ...sourceOnlyMigrations.map((name) => `supabase/migrations/${name}`),
   'kernel/database-rehearsal-evidence.mjs',
+  'supermega_runtime/connected_site_v15.py',
+  'tools/verify_connected_site_v15.mjs',
   'supermega_runtime/billing_rail.py',
   'tests/test_billing_rail.py',
   'supermega_runtime/website_customer_review.py',
@@ -600,4 +612,11 @@ export function validateSanitizedProof(proof, currentImplementation) {
   return { ok: true, contract: DATABASE_REHEARSAL_EVIDENCE_SCHEMA, checks: rawCheckNames.length, implementationFiles: currentImplementation.fileCount, hostedActivationProven: false }
 }
 
-export { implementationPaths, fail, sha256, same }
+export {
+  implementationPaths,
+  migrations as rehearsalMigrations,
+  sourceOnlyMigrations,
+  fail,
+  sha256,
+  same,
+}
