@@ -16,14 +16,21 @@ void main() {
 
     progress = progress.record(
       _evidence(ConnectedOnboardingStep.ownerEnrollment),
+      context: _evidenceContext,
     );
     expect(progress.currentStep, ConnectedOnboardingStep.shopTemplate);
     expect(
-      () => progress.record(_evidence(ConnectedOnboardingStep.catalog)),
+      () => progress.record(
+        _evidence(ConnectedOnboardingStep.catalog),
+        context: _evidenceContext,
+      ),
       throwsStateError,
     );
     expect(
-      () => progress.record(_evidence(ConnectedOnboardingStep.shopTemplate)),
+      () => progress.record(
+        _evidence(ConnectedOnboardingStep.shopTemplate),
+        context: _evidenceContext,
+      ),
       throwsStateError,
     );
   });
@@ -37,10 +44,15 @@ void main() {
       );
       progress = progress.record(
         _evidence(ConnectedOnboardingStep.ownerEnrollment),
+        context: _evidenceContext,
       );
       progress = progress.chooseTemplate(ConnectedShopTemplate.cafe);
       progress = progress.record(
-        _evidence(ConnectedOnboardingStep.shopTemplate),
+        _evidence(
+          ConnectedOnboardingStep.shopTemplate,
+          template: ConnectedShopTemplate.cafe,
+        ),
+        context: _evidenceContext,
       );
 
       final resumed = ConnectedOnboardingProgress.fromJson(progress.toJson());
@@ -61,6 +73,9 @@ void main() {
               binding.template == ConnectedShopTemplate.cafe &&
               binding.deviceId == 'counter-device-1' &&
               binding.artifactDigest == _artifactDigest &&
+              binding.tenantId == _tenantId &&
+              binding.siteId == _siteId &&
+              binding.protocolVersion == _protocolVersion &&
               binding.evidence.evidenceId ==
                   'evidence-${binding.evidence.step.name}' &&
               binding.evidence.subjectDigest == _subjectDigest &&
@@ -83,9 +98,12 @@ void main() {
   );
 
   test('resume rejects context substitution and tampered evidence', () async {
-    var progress = ConnectedOnboardingProgress.start(
-      progressId: 'shop-setup-context',
-    ).record(_evidence(ConnectedOnboardingStep.ownerEnrollment));
+    var progress =
+        ConnectedOnboardingProgress.start(progressId: 'shop-setup-context')
+            .record(
+              _evidence(ConnectedOnboardingStep.ownerEnrollment),
+              context: _evidenceContext,
+            );
     final serialized = progress.toJson();
     final draft = ConnectedOnboardingProgress.fromJson(serialized);
     final verifier = CallbackConnectedOnboardingResumeVerifier((binding) async {
@@ -97,8 +115,11 @@ void main() {
     await expectLater(
       draft.verifyResume(
         context: ConnectedOnboardingResumeContext(
+          tenantId: _tenantId,
+          siteId: _siteId,
           deviceId: 'substituted-device',
           artifactDigest: _artifactDigest,
+          protocolVersion: _protocolVersion,
         ),
         verifier: verifier,
       ),
@@ -126,6 +147,7 @@ void main() {
     var calls = 0;
     final controller = ConnectedOnboardingController(
       progress: ConnectedOnboardingProgress.start(progressId: 'shop-setup-3'),
+      evidenceContext: _evidenceContext,
       internetAvailable: () => online,
       stepHandler: (step, progress) async {
         calls++;
@@ -151,10 +173,71 @@ void main() {
     );
   });
 
+  test(
+    'generic callback evidence cannot cross context or evidence kind',
+    () async {
+      final wrongContext = ConnectedOnboardingController(
+        progress: ConnectedOnboardingProgress.start(
+          progressId: 'shop-setup-wrong-context',
+        ),
+        evidenceContext: _evidenceContext,
+        internetAvailable: () => true,
+        stepHandler: (step, progress) async => ConnectedOnboardingEvidence(
+          step: step,
+          evidenceKind: step.evidenceKind,
+          evidenceId: 'wrong-context',
+          subjectDigest: _subjectDigest,
+          tenantId: _tenantId,
+          siteId: 'other-site',
+          deviceId: 'counter-device-1',
+          artifactDigest: _artifactDigest,
+          protocolVersion: _protocolVersion,
+          template: null,
+          completedAt: DateTime.utc(2026, 10, 31, 12),
+        ),
+      );
+      await wrongContext.runCurrentStep();
+      expect(wrongContext.error, 'connected_onboarding_step_failed');
+      expect(
+        wrongContext.progress.currentStep,
+        ConnectedOnboardingStep.ownerEnrollment,
+      );
+
+      final wrongKind = ConnectedOnboardingController(
+        progress: ConnectedOnboardingProgress.start(
+          progressId: 'shop-setup-wrong-kind',
+        ),
+        evidenceContext: _evidenceContext,
+        internetAvailable: () => true,
+        stepHandler: (step, progress) async => ConnectedOnboardingEvidence(
+          step: step,
+          evidenceKind: ConnectedOnboardingStep.catalog.evidenceKind,
+          evidenceId: 'wrong-kind',
+          subjectDigest: _subjectDigest,
+          tenantId: _tenantId,
+          siteId: _siteId,
+          deviceId: 'counter-device-1',
+          artifactDigest: _artifactDigest,
+          protocolVersion: _protocolVersion,
+          template: null,
+          completedAt: DateTime.utc(2026, 10, 31, 12),
+        ),
+      );
+      await wrongKind.runCurrentStep();
+      expect(wrongKind.error, 'connected_onboarding_step_failed');
+      expect(
+        wrongKind.progress.currentStep,
+        ConnectedOnboardingStep.ownerEnrollment,
+      );
+    },
+  );
+
   test('mode cannot be relabelled after evidence is recorded', () {
-    final progress = ConnectedOnboardingProgress.start(
-      progressId: 'shop-setup-4',
-    ).record(_evidence(ConnectedOnboardingStep.ownerEnrollment));
+    final progress =
+        ConnectedOnboardingProgress.start(progressId: 'shop-setup-4').record(
+          _evidence(ConnectedOnboardingStep.ownerEnrollment),
+          context: _evidenceContext,
+        );
     expect(
       () => progress.chooseMode(ConnectedOnboardingMode.selfService),
       throwsStateError,
@@ -170,6 +253,7 @@ void main() {
           initialProgress: ConnectedOnboardingProgress.start(
             progressId: 'shop-setup-5',
           ),
+          evidenceContext: _evidenceContext,
           internetAvailable: () => true,
           stepHandler: (step, progress) async => _evidence(step),
         ),
@@ -194,6 +278,7 @@ void main() {
           initialProgress: ConnectedOnboardingProgress.start(
             progressId: 'shop-setup-6',
           ),
+          evidenceContext: _evidenceContext,
           internetAvailable: () => false,
           stepHandler: (step, progress) async => _evidence(step),
         ),
@@ -216,21 +301,117 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('connected-onboarding-error')), findsOneWidget);
     expect(find.textContaining('အင်တာနက်'), findsWidgets);
+
+    await tester.scrollUntilVisible(find.textContaining('ခုနစ်ရက်'), 300);
+    expect(find.textContaining('ခုနစ်ရက်'), findsOneWidget);
+    expect(find.textContaining('တစ်ကြိမ်'), findsOneWidget);
   });
+
+  testWidgets('enabled English screen discloses enrollment and lease limits', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConnectedOnboardingScreen(
+          enabled: true,
+          initialProgress: ConnectedOnboardingProgress.start(
+            progressId: 'shop-setup-en-boundaries',
+          ),
+          evidenceContext: _evidenceContext,
+          internetAvailable: () => true,
+          stepHandler: (step, progress) async => _evidence(step),
+        ),
+      ),
+    );
+
+    await tester.scrollUntilVisible(find.textContaining('seven days'), 300);
+    expect(find.textContaining('seven days'), findsOneWidget);
+    expect(find.textContaining('require internet once'), findsOneWidget);
+    expect(find.textContaining('does not fall back'), findsOneWidget);
+  });
+
+  for (final myanmar in <bool>[false, true]) {
+    testWidgets(
+      'unverified ${myanmar ? 'Myanmar' : 'English'} resume disables all setup actions',
+      (tester) async {
+        final saved =
+            ConnectedOnboardingProgress.start(
+              progressId: 'shop-setup-resume-${myanmar ? 'my' : 'en'}',
+            ).record(
+              _evidence(ConnectedOnboardingStep.ownerEnrollment),
+              context: _evidenceContext,
+            );
+        final draft = ConnectedOnboardingProgress.fromJson(saved.toJson());
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ConnectedOnboardingScreen(
+              enabled: true,
+              myanmar: myanmar,
+              initialProgress: draft,
+              evidenceContext: _evidenceContext,
+              internetAvailable: () => true,
+              stepHandler: (step, progress) async => _evidence(step),
+            ),
+          ),
+        );
+
+        expect(
+          find.byKey(const Key('connected-onboarding-resume-verification')),
+          findsOneWidget,
+        );
+        final mode = tester
+            .widget<DropdownButtonFormField<ConnectedOnboardingMode>>(
+              find.byType(DropdownButtonFormField<ConnectedOnboardingMode>),
+            );
+        expect(mode.onChanged, isNull);
+        expect(
+          find.textContaining(myanmar ? 'စစ်ဆေးအတည်ပြု' : 'must be verified'),
+          findsWidgets,
+        );
+        await tester.scrollUntilVisible(find.byType(FilledButton), 300);
+        final action = tester.widget<FilledButton>(find.byType(FilledButton));
+        expect(action.onPressed, isNull);
+      },
+    );
+  }
 }
 
-ConnectedOnboardingEvidence _evidence(ConnectedOnboardingStep step) =>
-    ConnectedOnboardingEvidence(
-      step: step,
-      evidenceId: 'evidence-${step.name}',
-      subjectDigest: _subjectDigest,
-      completedAt: DateTime.utc(2026, 10, 31, 12),
-    );
+ConnectedOnboardingEvidence _evidence(
+  ConnectedOnboardingStep step, {
+  ConnectedShopTemplate? template,
+}) => ConnectedOnboardingEvidence(
+  step: step,
+  evidenceKind: step.evidenceKind,
+  evidenceId: 'evidence-${step.name}',
+  subjectDigest: _subjectDigest,
+  tenantId: _tenantId,
+  siteId: _siteId,
+  deviceId: 'counter-device-1',
+  artifactDigest: _artifactDigest,
+  protocolVersion: _protocolVersion,
+  template: template,
+  completedAt: DateTime.utc(2026, 10, 31, 12),
+);
 
 final _subjectDigest = List<String>.filled(64, 'a').join();
 final _artifactDigest = List<String>.filled(64, 'c').join();
+const _tenantId = 'tenant-1';
+const _siteId = 'site-1';
+const _protocolVersion = 'v1';
 
-ConnectedOnboardingResumeContext _context() => ConnectedOnboardingResumeContext(
+final _evidenceContext = ConnectedOnboardingEvidenceContext(
+  tenantId: _tenantId,
+  siteId: _siteId,
   deviceId: 'counter-device-1',
   artifactDigest: _artifactDigest,
+  protocolVersion: _protocolVersion,
+);
+
+ConnectedOnboardingResumeContext _context() => ConnectedOnboardingResumeContext(
+  tenantId: _tenantId,
+  siteId: _siteId,
+  deviceId: 'counter-device-1',
+  artifactDigest: _artifactDigest,
+  protocolVersion: _protocolVersion,
 );

@@ -22,30 +22,92 @@ enum ConnectedOnboardingStep {
 
 extension ConnectedOnboardingStepPolicy on ConnectedOnboardingStep {
   bool get requiresInternet => this == ConnectedOnboardingStep.ownerEnrollment;
+
+  String get evidenceKind => switch (this) {
+    ConnectedOnboardingStep.ownerEnrollment => 'owner_enrollment',
+    ConnectedOnboardingStep.shopTemplate => 'shop_template_selection',
+    ConnectedOnboardingStep.catalog => 'catalog_configuration',
+    ConnectedOnboardingStep.staffRoles => 'staff_role_assignment',
+    ConnectedOnboardingStep.coordinator => 'coordinator_selection',
+    ConnectedOnboardingStep.pairing => 'device_pairing',
+    ConnectedOnboardingStep.testSale => 'practice_sale',
+    ConnectedOnboardingStep.printerCheck => 'named_printer_check',
+    ConnectedOnboardingStep.backupConfirmation =>
+      'encrypted_backup_confirmation',
+  };
+}
+
+class ConnectedOnboardingEvidenceContext {
+  ConnectedOnboardingEvidenceContext({
+    required String tenantId,
+    required String siteId,
+    required String deviceId,
+    required String artifactDigest,
+    required String protocolVersion,
+  }) : tenantId = _validatedContextId(tenantId, 'tenant_id'),
+       siteId = _validatedContextId(siteId, 'site_id'),
+       deviceId = _validatedContextId(deviceId, 'device_id'),
+       artifactDigest = _validatedDigest(artifactDigest),
+       protocolVersion = _validatedContextId(
+         protocolVersion,
+         'protocol_version',
+       );
+
+  final String tenantId;
+  final String siteId;
+  final String deviceId;
+  final String artifactDigest;
+  final String protocolVersion;
 }
 
 class ConnectedOnboardingEvidence {
   const ConnectedOnboardingEvidence({
     required this.step,
+    required this.evidenceKind,
     required this.evidenceId,
     required this.subjectDigest,
+    required this.tenantId,
+    required this.siteId,
+    required this.deviceId,
+    required this.artifactDigest,
+    required this.protocolVersion,
+    required this.template,
     required this.completedAt,
   });
 
   final ConnectedOnboardingStep step;
+  final String evidenceKind;
   final String evidenceId;
   final String subjectDigest;
+  final String tenantId;
+  final String siteId;
+  final String deviceId;
+  final String artifactDigest;
+  final String protocolVersion;
+  final ConnectedShopTemplate? template;
   final DateTime completedAt;
 
-  Map<String, Object> toJson() => <String, Object>{
+  Map<String, Object?> toJson() => <String, Object?>{
     'step': step.name,
+    'evidenceKind': evidenceKind,
     'evidenceId': evidenceId,
     'subjectDigest': subjectDigest,
+    'tenantId': tenantId,
+    'siteId': siteId,
+    'deviceId': deviceId,
+    'artifactDigest': artifactDigest,
+    'protocolVersion': protocolVersion,
+    'template': template?.name,
     'completedAt': completedAt.toUtc().toIso8601String(),
   };
 
   factory ConnectedOnboardingEvidence.fromJson(Map<String, Object?> json) {
     final step = _enumByName(ConnectedOnboardingStep.values, json['step']);
+    final evidenceKind = _boundedString(
+      json['evidenceKind'],
+      'evidence_kind',
+      64,
+    );
     final evidenceId = _boundedString(json['evidenceId'], 'evidenceId', 128);
     final digest = _boundedString(json['subjectDigest'], 'subjectDigest', 64);
     if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(digest)) {
@@ -57,24 +119,49 @@ class ConnectedOnboardingEvidence {
     if (completedAt == null || !completedAt.isUtc) {
       throw const FormatException('connected_onboarding_time_invalid');
     }
+    final templateValue = json['template'];
+    final template = templateValue == null
+        ? null
+        : _enumByName(ConnectedShopTemplate.values, templateValue);
     return ConnectedOnboardingEvidence(
       step: step,
+      evidenceKind: evidenceKind,
       evidenceId: evidenceId,
       subjectDigest: digest,
+      tenantId: _validatedContextId(
+        _boundedString(json['tenantId'], 'tenant_id', 128),
+        'tenant_id',
+      ),
+      siteId: _validatedContextId(
+        _boundedString(json['siteId'], 'site_id', 128),
+        'site_id',
+      ),
+      deviceId: _validatedContextId(
+        _boundedString(json['deviceId'], 'device_id', 128),
+        'device_id',
+      ),
+      artifactDigest: _validatedDigest(
+        _boundedString(json['artifactDigest'], 'artifact_digest', 64),
+      ),
+      protocolVersion: _validatedContextId(
+        _boundedString(json['protocolVersion'], 'protocol_version', 128),
+        'protocol_version',
+      ),
+      template: template,
       completedAt: completedAt,
     );
   }
 }
 
-class ConnectedOnboardingResumeContext {
+class ConnectedOnboardingResumeContext
+    extends ConnectedOnboardingEvidenceContext {
   ConnectedOnboardingResumeContext({
-    required String deviceId,
-    required String artifactDigest,
-  }) : deviceId = _validatedContextId(deviceId, 'device_id'),
-       artifactDigest = _validatedDigest(artifactDigest);
-
-  final String deviceId;
-  final String artifactDigest;
+    required super.tenantId,
+    required super.siteId,
+    required super.deviceId,
+    required super.artifactDigest,
+    required super.protocolVersion,
+  });
 }
 
 class ConnectedOnboardingResumeBinding {
@@ -85,6 +172,9 @@ class ConnectedOnboardingResumeBinding {
     required this.evidence,
     required this.deviceId,
     required this.artifactDigest,
+    required this.tenantId,
+    required this.siteId,
+    required this.protocolVersion,
   });
 
   final String progressId;
@@ -93,6 +183,9 @@ class ConnectedOnboardingResumeBinding {
   final ConnectedOnboardingEvidence evidence;
   final String deviceId;
   final String artifactDigest;
+  final String tenantId;
+  final String siteId;
+  final String protocolVersion;
 }
 
 abstract interface class ConnectedOnboardingResumeVerifier {
@@ -129,7 +222,7 @@ class ConnectedOnboardingProgress {
     required this._unverifiedResumeEvidence,
   });
 
-  static const schema = 'supermega.connected-onboarding.v1';
+  static const schema = 'supermega.connected-onboarding.v2';
 
   factory ConnectedOnboardingProgress.start({
     required String progressId,
@@ -175,7 +268,10 @@ class ConnectedOnboardingProgress {
     return _copy(template: value);
   }
 
-  ConnectedOnboardingProgress record(ConnectedOnboardingEvidence value) {
+  ConnectedOnboardingProgress record(
+    ConnectedOnboardingEvidence value, {
+    required ConnectedOnboardingEvidenceContext context,
+  }) {
     final expected = currentStep;
     if (expected == null) {
       throw StateError('connected_onboarding_already_complete');
@@ -186,7 +282,7 @@ class ConnectedOnboardingProgress {
     if (expected == ConnectedOnboardingStep.shopTemplate && template == null) {
       throw StateError('connected_onboarding_template_required');
     }
-    _validateEvidence(value);
+    _validateEvidence(value, context: context, expectedTemplate: template);
     return _copy(
       evidence: <ConnectedOnboardingStep, ConnectedOnboardingEvidence>{
         ...evidence,
@@ -208,6 +304,17 @@ class ConnectedOnboardingProgress {
     for (final step in ConnectedOnboardingStep.values) {
       final item = _unverifiedResumeEvidence[step];
       if (item == null) break;
+      try {
+        _validateEvidence(
+          item,
+          context: context,
+          expectedTemplate: step == ConnectedOnboardingStep.ownerEnrollment
+              ? null
+              : template,
+        );
+      } on FormatException {
+        throw StateError('connected_onboarding_resume_unverified');
+      }
       final accepted = await verifier.verify(
         ConnectedOnboardingResumeBinding(
           progressId: progressId,
@@ -216,6 +323,9 @@ class ConnectedOnboardingProgress {
           evidence: item,
           deviceId: context.deviceId,
           artifactDigest: context.artifactDigest,
+          tenantId: context.tenantId,
+          siteId: context.siteId,
+          protocolVersion: context.protocolVersion,
         ),
       );
       if (!accepted) {
@@ -271,7 +381,19 @@ class ConnectedOnboardingProgress {
           parsed.containsKey(item.step)) {
         throw const FormatException('connected_onboarding_order_invalid');
       }
-      _validateEvidence(item);
+      _validateEvidence(
+        item,
+        context: ConnectedOnboardingEvidenceContext(
+          tenantId: item.tenantId,
+          siteId: item.siteId,
+          deviceId: item.deviceId,
+          artifactDigest: item.artifactDigest,
+          protocolVersion: item.protocolVersion,
+        ),
+        expectedTemplate: item.step == ConnectedOnboardingStep.ownerEnrollment
+            ? null
+            : template,
+      );
       parsed[item.step] = item;
     }
     if (parsed.containsKey(ConnectedOnboardingStep.shopTemplate) &&
@@ -315,18 +437,25 @@ typedef ConnectedOnboardingStepHandler =
 class ConnectedOnboardingController extends ChangeNotifier {
   factory ConnectedOnboardingController({
     required ConnectedOnboardingProgress progress,
+    required ConnectedOnboardingEvidenceContext evidenceContext,
     required ConnectedOnboardingStepHandler stepHandler,
     required bool Function() internetAvailable,
-  }) =>
-      ConnectedOnboardingController._(progress, stepHandler, internetAvailable);
+  }) => ConnectedOnboardingController._(
+    progress,
+    evidenceContext,
+    stepHandler,
+    internetAvailable,
+  );
 
   ConnectedOnboardingController._(
     this._progress,
+    this._evidenceContext,
     this._stepHandler,
     this._internetAvailable,
   );
 
   ConnectedOnboardingProgress _progress;
+  final ConnectedOnboardingEvidenceContext _evidenceContext;
   final ConnectedOnboardingStepHandler _stepHandler;
   final bool Function() _internetAvailable;
   bool _busy = false;
@@ -348,6 +477,11 @@ class ConnectedOnboardingController extends ChangeNotifier {
 
   Future<void> runCurrentStep() async {
     if (_busy) return;
+    if (_progress.hasUnverifiedResumeEvidence) {
+      _error = 'connected_onboarding_resume_unverified';
+      notifyListeners();
+      return;
+    }
     final step = _progress.currentStep;
     if (step == null) return;
     if (step.requiresInternet && !_internetAvailable()) {
@@ -370,7 +504,7 @@ class ConnectedOnboardingController extends ChangeNotifier {
         _error = 'connected_onboarding_evidence_required';
         return;
       }
-      _progress = _progress.record(evidence);
+      _progress = _progress.record(evidence, context: _evidenceContext);
     } on Object {
       _error = 'connected_onboarding_step_failed';
     } finally {
@@ -386,6 +520,7 @@ class ConnectedOnboardingScreen extends StatefulWidget {
     required this.initialProgress,
     required this.stepHandler,
     required this.internetAvailable,
+    required this.evidenceContext,
     this.enabled = connectedOnboardingDefaultEnabled,
     this.myanmar = false,
     this.onProgressChanged,
@@ -394,6 +529,7 @@ class ConnectedOnboardingScreen extends StatefulWidget {
   final ConnectedOnboardingProgress initialProgress;
   final ConnectedOnboardingStepHandler stepHandler;
   final bool Function() internetAvailable;
+  final ConnectedOnboardingEvidenceContext evidenceContext;
   final bool enabled;
   final bool myanmar;
   final ValueChanged<ConnectedOnboardingProgress>? onProgressChanged;
@@ -411,6 +547,7 @@ class _ConnectedOnboardingScreenState extends State<ConnectedOnboardingScreen> {
     super.initState();
     _controller = ConnectedOnboardingController(
       progress: widget.initialProgress,
+      evidenceContext: widget.evidenceContext,
       stepHandler: widget.stepHandler,
       internetAvailable: widget.internetAvailable,
     )..addListener(_changed);
@@ -457,6 +594,7 @@ class _ConnectedOnboardingScreenState extends State<ConnectedOnboardingScreen> {
 
     final progress = _controller.progress;
     final current = progress.currentStep;
+    final resumeLocked = progress.hasUnverifiedResumeEvidence;
     return Scaffold(
       appBar: AppBar(
         title: Text(_copy(my, 'Shop setup', 'ဆိုင် စတင်ပြင်ဆင်ခြင်း')),
@@ -485,7 +623,7 @@ class _ConnectedOnboardingScreenState extends State<ConnectedOnboardingScreen> {
                   ),
                 )
                 .toList(growable: false),
-            onChanged: progress.evidence.isEmpty
+            onChanged: progress.evidence.isEmpty && !resumeLocked
                 ? (value) {
                     if (value != null) _controller.chooseMode(value);
                   }
@@ -506,9 +644,23 @@ class _ConnectedOnboardingScreenState extends State<ConnectedOnboardingScreen> {
                     ),
                   )
                   .toList(growable: false),
-              onChanged: (value) {
-                if (value != null) _controller.chooseTemplate(value);
-              },
+              onChanged: resumeLocked
+                  ? null
+                  : (value) {
+                      if (value != null) _controller.chooseTemplate(value);
+                    },
+            ),
+          ],
+          if (resumeLocked) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              _copy(
+                my,
+                'Saved setup evidence must be verified for this shop, device, app artifact and protocol before setup can continue. No step has been accepted yet.',
+                'သိမ်းထားသော ပြင်ဆင်မှုအထောက်အထားကို ဤဆိုင်၊ စက်၊ အက်ပ်ဗားရှင်းနှင့် ချိတ်ဆက်စနစ်အတွက် စစ်ဆေးအတည်ပြုပြီးမှ ဆက်လုပ်နိုင်ပါသည်။ မည်သည့်အဆင့်ကိုမျှ အတည်မပြုရသေးပါ။',
+              ),
+              key: const Key('connected-onboarding-resume-verification'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],
           const SizedBox(height: 16),
@@ -537,7 +689,9 @@ class _ConnectedOnboardingScreenState extends State<ConnectedOnboardingScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 12),
               child: FilledButton(
-                onPressed: _controller.busy ? null : _controller.runCurrentStep,
+                onPressed: _controller.busy || resumeLocked
+                    ? null
+                    : _controller.runCurrentStep,
                 child: Text(
                   _controller.busy
                       ? _copy(my, 'Checking…', 'စစ်ဆေးနေသည်…')
@@ -669,6 +823,11 @@ String _stepLabel(ConnectedOnboardingStep step, bool myanmar) => switch (step) {
 };
 
 String _errorLabel(String error, bool myanmar) => switch (error) {
+  'connected_onboarding_resume_unverified' => _copy(
+    myanmar,
+    'Verify the saved setup evidence for this shop and device before continuing.',
+    'ဆက်မလုပ်မီ ဤဆိုင်နှင့် စက်အတွက် သိမ်းထားသော ပြင်ဆင်မှုအထောက်အထားကို စစ်ဆေးအတည်ပြုပါ။',
+  ),
   'connected_onboarding_internet_required' => _copy(
     myanmar,
     'Connect to the internet to enroll the owner and this device.',
@@ -692,6 +851,16 @@ String _errorLabel(String error, bool myanmar) => switch (error) {
 };
 
 List<String> _boundaries(bool myanmar) => <String>[
+  _copy(
+    myanmar,
+    'Owner enrollment, tenant membership, device registration and the first offline staff lease require internet once.',
+    'ဆိုင်ရှင်စာရင်းသွင်းခြင်း၊ လုပ်ငန်းအဖွဲ့ဝင်ဖြစ်ခြင်း၊ စက်မှတ်ပုံတင်ခြင်းနှင့် ပထမဆုံး အော့ဖ်လိုင်းဝန်ထမ်းခွင့်အတွက် အင်တာနက်ကို တစ်ကြိမ် လိုအပ်သည်။',
+  ),
+  _copy(
+    myanmar,
+    'Managed offline staff leases last seven days. After expiry, shared writes pause until the lease is renewed online; the app does not fall back to an unmanaged role.',
+    'စီမံထားသော အော့ဖ်လိုင်းဝန်ထမ်းခွင့်သည် ခုနစ်ရက် သက်တမ်းရှိသည်။ သက်တမ်းကုန်လျှင် အွန်လိုင်းမှ သက်တမ်းတိုးမချင်း မျှဝေရေးသားမှု ရပ်ထားမည်ဖြစ်ပြီး စီမံမထားသော တာဝန်သို့ အလိုအလျောက် မပြောင်းပါ။',
+  ),
   _copy(
     myanmar,
     'The coordinator must remain available for shared writes; there is no automatic failover.',
@@ -752,7 +921,14 @@ String _validatedDigest(String value) {
   return value;
 }
 
-void _validateEvidence(ConnectedOnboardingEvidence evidence) {
+void _validateEvidence(
+  ConnectedOnboardingEvidence evidence, {
+  required ConnectedOnboardingEvidenceContext context,
+  required ConnectedShopTemplate? expectedTemplate,
+}) {
+  if (evidence.evidenceKind != evidence.step.evidenceKind) {
+    throw const FormatException('connected_onboarding_evidence_kind_invalid');
+  }
   if (evidence.evidenceId.isEmpty || evidence.evidenceId.length > 128) {
     throw const FormatException('connected_onboarding_evidence_id_invalid');
   }
@@ -761,5 +937,15 @@ void _validateEvidence(ConnectedOnboardingEvidence evidence) {
   }
   if (!evidence.completedAt.isUtc) {
     throw const FormatException('connected_onboarding_time_invalid');
+  }
+  if (evidence.tenantId != context.tenantId ||
+      evidence.siteId != context.siteId ||
+      evidence.deviceId != context.deviceId ||
+      evidence.artifactDigest != context.artifactDigest ||
+      evidence.protocolVersion != context.protocolVersion) {
+    throw const FormatException('connected_onboarding_context_mismatch');
+  }
+  if (evidence.template != expectedTemplate) {
+    throw const FormatException('connected_onboarding_template_mismatch');
   }
 }
