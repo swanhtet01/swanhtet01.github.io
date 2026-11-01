@@ -25,6 +25,8 @@ function Replace-ExactOnce(
 }
 
 foreach ($name in @(
+  'connected_coordinator_host.cpp',
+  'connected_coordinator_host.h',
   'connected_security_bridge.cpp',
   'connected_security_bridge.h',
   'connected_security_store.cpp',
@@ -40,6 +42,8 @@ foreach ($name in @(
   }
 }
 foreach ($name in @(
+  'connected_coordinator_host.cpp',
+  'connected_coordinator_host.h',
   'connected_security_bridge.cpp',
   'connected_security_bridge.h',
   'connected_security_store.cpp',
@@ -65,7 +69,7 @@ $cmake = Get-Content -LiteralPath $cmakePath -Raw
 $cmake = Replace-ExactOnce `
   $cmake `
   '  "flutter_window.cpp"' `
-  "  `"flutter_window.cpp`"`n  `"connected_security_bridge.cpp`"`n  `"connected_security_store.cpp`"" `
+  "  `"flutter_window.cpp`"`n  `"connected_coordinator_host.cpp`"`n  `"connected_security_bridge.cpp`"`n  `"connected_security_store.cpp`"" `
   'windows_security_overlay_cmake_source_anchor_invalid'
 $cmake = Replace-ExactOnce `
   $cmake `

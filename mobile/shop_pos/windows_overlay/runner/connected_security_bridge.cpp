@@ -8,6 +8,7 @@
 #include <string>
 
 #include "connected_security_store.h"
+#include "connected_coordinator_host.h"
 
 namespace supermega::connected_security {
 namespace {
@@ -48,6 +49,7 @@ void RegisterConnectedSecurityChannel(flutter::FlutterEngine* engine) {
         }
         result->NotImplemented();
       });
+  RegisterConnectedCoordinatorHostChannel(engine, false);
 }
 
 }  // namespace supermega::connected_security

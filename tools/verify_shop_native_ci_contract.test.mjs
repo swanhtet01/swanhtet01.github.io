@@ -17,6 +17,10 @@ const windowsSecurityBridge = await readFile(
   'mobile/shop_pos/windows_overlay/runner/connected_security_bridge.cpp',
   'utf8',
 )
+const windowsCoordinatorHost = await readFile(
+  'mobile/shop_pos/windows_overlay/runner/connected_coordinator_host.cpp',
+  'utf8',
+)
 const windowsSecurityStore = await readFile(
   'mobile/shop_pos/windows_overlay/runner/connected_security_store.cpp',
   'utf8',
@@ -113,6 +117,8 @@ test('both generated Windows runners apply the fail-closed security overlay', ()
     missing.failures.includes('windows_connected_security_overlay_missing'),
   )
   for (const token of [
+    'connected_coordinator_host.cpp',
+    'connected_coordinator_host.h',
     'connected_security_bridge.cpp',
     'connected_security_store.cpp',
     'windows_security_overlay_registration_anchor_invalid',
@@ -125,6 +131,7 @@ test('both generated Windows runners apply the fail-closed security overlay', ()
   }
   assert.ok(windowsSecurityBridge.includes('result->NotImplemented()'))
   assert.ok(windowsSecurityBridge.includes('SupportsPersistentNonExportableEd25519'))
+  assert.ok(windowsSecurityBridge.includes('RegisterConnectedCoordinatorHostChannel(engine, false)'))
   assert.ok(windowsSecurityStore.includes('CRYPTPROTECT_UI_FORBIDDEN'))
   assert.ok(windowsSecurityStore.includes('PROTECTED_DACL_SECURITY_INFORMATION'))
   assert.ok(windowsSecurityStore.includes("std::vector<uint8_t> identity{'S', 'M', 'C', 'S', '1'}"))
@@ -132,6 +139,38 @@ test('both generated Windows runners apply the fail-closed security overlay', ()
   assert.ok(windowsSecurityStore.includes('SupportsPersistentNonExportableEd25519() { return false; }'))
   assert.ok(windowsSecurityStoreHeader.includes('class IdentityMetadataStore'))
   assert.ok(windowsSecurityStoreHeader.includes('class PersistentEd25519KeyStore'))
+})
+
+test('Windows coordinator host stays visible, single-owner, and default-off', () => {
+  for (const token of [
+    'connected_coordinator_host_v1',
+    'supermega.connected-coordinator-host-status.v1',
+    'Local\\\\SuperMegaShopConnectedCoordinatorHostV1',
+    'call.method_name() == "status"',
+    'call.method_name() == "start"',
+    'call.method_name() == "stop"',
+    'connected_site_disabled',
+    'coordinator_start_rejected',
+    'transportListening',
+    'sharedWritesAvailable',
+    'restartCleanupComplete',
+    'visibleStatusRequired',
+    'CreateMutexW',
+    'WAIT_ABANDONED',
+    'ReleaseOwnership()',
+  ]) {
+    assert.ok(windowsCoordinatorHost.includes(token), token)
+  }
+  for (const forbidden of [
+    /\bHttpServer\b/,
+    /\bWSAStartup\b/,
+    /\bsocket\s*\(/,
+    /\blisten\s*\(/,
+    /\bbind\s*\(/,
+    /\bconnect\s*\(/,
+  ]) {
+    assert.equal(forbidden.test(windowsCoordinatorHost), false, forbidden)
+  }
 })
 
 test('Windows sealed-state filenames are digest-only and collision resistant', () => {
