@@ -801,7 +801,7 @@
     "client:install:self-test": "node --test tools/rehearse_local_client_install.test.mjs",
     "client:setup:registry:self-test": "node --test tools/product_setup_registry.test.mjs",
     "shop:sample:rebase:self-test": "node --test tools/shop_sample_activity_rebase.test.mjs",
-    "shop:outbox:self-test": "node --test tools/commerce_sync_outbox.test.mjs",
+    "shop:outbox:self-test": "node --test tools/commerce_sync_outbox.test.mjs tools/test_local_shop_concurrent_recovery.mjs",
     "storage:durability:self-test": "node --test tools/storage_durability.test.mjs",
     "shop:inventory:capacity:self-test": "node --test tools/shop_inventory_capacity.test.mjs",
     "shop:packs:self-test": "node --test tools/shop_industry_pack_provisioning.test.mjs",
