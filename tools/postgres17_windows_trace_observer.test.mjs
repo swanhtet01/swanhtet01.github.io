@@ -55,6 +55,43 @@ function probeFixture() {
   }
 }
 
+const probeImage = 'supermega-observer-probe.exe'
+function traceEvent({ task, opcode, pid, image = probeImage, key = 'key-1',
+  time = '2026-11-01T00:00:00.0000000Z' }) {
+  const data = [
+    `<Data Name="ProcessID">${pid}</Data>`,
+    `<Data Name="ImageName">${image}</Data>`,
+    key === null ? '' : `<Data Name="ProcessKey">${key}</Data>`,
+  ].join('')
+  return `<Event><System><Task Name="${task}"/><Opcode Name="${opcode}"/>`
+    + `<TimeCreated SystemTime="${time}"/></System><EventData>${data}</EventData></Event>`
+}
+
+// Independent fixture oracle for the source-level correlation contract. The Windows
+// implementation uses XmlDocument/SelectNodes rather than this test-only tokenizer.
+function fixtureCorrelates(xml) {
+  const records = [...xml.matchAll(/<Event>([\s\S]*?)<\/Event>/g)].map(([, body]) => {
+    const field = (pattern) => body.match(pattern)?.[1] ?? null
+    return {
+      task: field(/<Task Name="([^"]+)"\/>/),
+      opcode: field(/<Opcode Name="([^"]+)"\/>/),
+      pid: field(/<Data Name="ProcessID">(\d+)<\/Data>/),
+      image: field(/<Data Name="ImageName">([^<]+)<\/Data>/),
+      key: field(/<Data Name="ProcessKey">([^<]+)<\/Data>/),
+      time: field(/<TimeCreated SystemTime="([^"]+)"\/>/),
+    }
+  }).filter((record) => record.image === probeImage)
+  if (records.some((record) => !record.pid || !record.time)) return false
+  const starts = records.filter((record) => record.task === 'Process'
+    && ['Start', 'DCStart'].includes(record.opcode))
+  const images = records.filter((record) => ['Image', 'ImageLoad', 'Loader'].includes(record.task)
+    && ['Load', 'Start', 'DCStart'].includes(record.opcode))
+  if (starts.length !== 1 || images.length !== 1) return false
+  const [start] = starts; const [image] = images
+  return start.pid === image.pid && Date.parse(image.time) >= Date.parse(start.time)
+    && (!start.key || !image.key || start.key === image.key)
+}
+
 test('manual workflow exposes an exact-SHA observer probe without automatic triggers', async () => {
   const workflow = await readFile(new URL(
     '../.github/workflows/postgres17-windows-evidence.yml', import.meta.url), 'utf8')
@@ -99,6 +136,10 @@ test('probe uses fixed signed Windows tools, explicit loss checks, and no Postgr
     'BuffersLost',
     'observer_probe_trace_loss_detected',
     'observer_probe_trace_coverage_incomplete',
+    'Read-ProbeTraceCorrelation',
+    "SelectNodes(\"//*[local-name()='Event']\")",
+    'observer_probe_trace_correlation_ambiguous',
+    'observer_probe_trace_correlation_mismatch',
     'postgresDownloaded = $false',
     'postgresExecuted = $false',
     'databaseStarted = $false',
@@ -111,6 +152,51 @@ test('probe uses fixed signed Windows tools, explicit loss checks, and no Postgr
     'postgresql-17.11-5-windows-x64.exe',
     'record_postgres17_rehearsal.mjs',
   ]) assert.equal(source.includes(forbidden), false, forbidden)
+  assert.doesNotMatch(source, /Process\.\{0,4096\}/)
+  assert.doesNotMatch(source, /Image\.\{0,4096\}/)
+})
+
+test('structured trace fixture accepts one correlated process and image record', () => {
+  const xml = `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
+    + `${traceEvent({ task: 'ImageLoad', opcode: 'Load', pid: 41,
+      time: '2026-11-01T00:00:00.1000000Z' })}</Events>`
+  assert.equal(fixtureCorrelates(xml), true)
+})
+
+test('structured trace fixture rejects process-only evidence', () => {
+  assert.equal(fixtureCorrelates(`<Events>${traceEvent({
+    task: 'Process', opcode: 'Start', pid: 41,
+  })}</Events>`), false)
+})
+
+test('structured trace fixture rejects image-only evidence', () => {
+  assert.equal(fixtureCorrelates(`<Events>${traceEvent({
+    task: 'Image', opcode: 'Load', pid: 41,
+  })}</Events>`), false)
+})
+
+test('structured trace fixture rejects unrelated process and image records', () => {
+  const xml = `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
+    + `${traceEvent({ task: 'Image', opcode: 'Load', pid: 99,
+      image: 'unrelated.exe', time: '2026-11-01T00:00:00.1000000Z' })}</Events>`
+  assert.equal(fixtureCorrelates(xml), false)
+})
+
+test('structured trace fixture rejects PID reuse and ambiguous starts', () => {
+  const xml = `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
+    + `${traceEvent({ task: 'Process', opcode: 'Start', pid: 41,
+      key: 'key-2', time: '2026-11-01T00:00:00.0500000Z' })}`
+    + `${traceEvent({ task: 'Image', opcode: 'Load', pid: 41,
+      key: 'key-2', time: '2026-11-01T00:00:00.1000000Z' })}</Events>`
+  assert.equal(fixtureCorrelates(xml), false)
+})
+
+test('structured trace fixture rejects missing correlation identity fields', () => {
+  const validStart = traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })
+  const missingPid = traceEvent({ task: 'Image', opcode: 'Load', pid: 41,
+    time: '2026-11-01T00:00:00.1000000Z' })
+    .replace('<Data Name="ProcessID">41</Data>', '')
+  assert.equal(fixtureCorrelates(`<Events>${validStart}${missingPid}</Events>`), false)
 })
 
 test('observer probe contract rejects incomplete, lossy, authoritative, or unsafe evidence', () => {

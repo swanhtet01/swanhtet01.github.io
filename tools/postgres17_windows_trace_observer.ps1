@@ -78,6 +78,139 @@ function Try-ReadLossCounter([string]$Text, [string]$Name) {
   }
   return $null
 }
+function Get-XmlAttributeOrText([System.Xml.XmlNode]$Node) {
+  if ($null -eq $Node) { return $null }
+  foreach ($attributeName in @('Name', 'Value')) {
+    $attribute = $Node.Attributes[$attributeName]
+    if ($null -ne $attribute -and -not [string]::IsNullOrWhiteSpace($attribute.Value)) {
+      return $attribute.Value.Trim()
+    }
+  }
+  if (-not [string]::IsNullOrWhiteSpace($Node.InnerText)) { return $Node.InnerText.Trim() }
+  return $null
+}
+function Read-TraceXml([string]$Path) {
+  $settings = [System.Xml.XmlReaderSettings]::new()
+  $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
+  $settings.XmlResolver = $null
+  $settings.MaxCharactersInDocument = 67108864
+  $reader = [System.Xml.XmlReader]::Create($Path, $settings)
+  try {
+    $document = [System.Xml.XmlDocument]::new()
+    $document.XmlResolver = $null
+    $document.Load($reader)
+    return $document
+  } finally { $reader.Dispose() }
+}
+function Get-TraceData([System.Xml.XmlNode]$Event) {
+  $values = @{}
+  foreach ($data in @($Event.SelectNodes("./*[local-name()='EventData']/*[local-name()='Data']"))) {
+    $name = $data.Attributes['Name']
+    if ($null -eq $name -or [string]::IsNullOrWhiteSpace($name.Value)) { continue }
+    $key = $name.Value.Trim()
+    if ($values.ContainsKey($key)) { Fail 'observer_probe_trace_field_ambiguous' }
+    $values[$key] = $data.InnerText.Trim()
+  }
+  return $values
+}
+function Get-FirstTraceValue([hashtable]$Data, [string[]]$Names) {
+  $found = @()
+  foreach ($name in $Names) {
+    if ($Data.ContainsKey($name) -and -not [string]::IsNullOrWhiteSpace($Data[$name])) {
+      $found += $Data[$name].Trim()
+    }
+  }
+  $unique = @($found | Select-Object -Unique)
+  if ($unique.Count -gt 1) { Fail 'observer_probe_trace_field_ambiguous' }
+  if ($unique.Count -eq 1) { return $unique[0] }
+  return $null
+}
+function Read-ProbeTraceCorrelation([string]$Path, [string]$ExpectedImagePath) {
+  $document = Read-TraceXml $Path
+  $expectedLeaf = [System.IO.Path]::GetFileName($ExpectedImagePath)
+  $processStarts = @(); $processEnds = @(); $imageLoads = @()
+  foreach ($event in @($document.SelectNodes("//*[local-name()='Event']"))) {
+    $system = $event.SelectSingleNode("./*[local-name()='System']")
+    if ($null -eq $system) { continue }
+    $task = Get-XmlAttributeOrText ($system.SelectSingleNode("./*[local-name()='Task']"))
+    $opcode = Get-XmlAttributeOrText ($system.SelectSingleNode("./*[local-name()='Opcode']"))
+    if ([string]::IsNullOrWhiteSpace($task) -or [string]::IsNullOrWhiteSpace($opcode)) { continue }
+    $taskKey = $task.Trim().ToLowerInvariant()
+    $opcodeKey = $opcode.Trim().ToLowerInvariant()
+    $kind = $null
+    if ($taskKey -eq 'process' -and @('start', 'dcstart') -contains $opcodeKey) {
+      $kind = 'process-start'
+    } elseif ($taskKey -eq 'process' -and @('end', 'dcend', 'stop') -contains $opcodeKey) {
+      $kind = 'process-end'
+    } elseif (@('image', 'imageload', 'loader') -contains $taskKey
+      -and @('load', 'start', 'dcstart') -contains $opcodeKey) {
+      $kind = 'image-load'
+    } else { continue }
+
+    $data = Get-TraceData $event
+    $imageName = Get-FirstTraceValue $data @('ImageName', 'ImageFileName', 'FileName')
+    if ([string]::IsNullOrWhiteSpace($imageName)
+      -or [System.IO.Path]::GetFileName($imageName) -ine $expectedLeaf) { continue }
+    $pidText = Get-FirstTraceValue $data @('ProcessID', 'ProcessId', 'PID')
+    if ([string]::IsNullOrWhiteSpace($pidText)) {
+      $execution = $system.SelectSingleNode("./*[local-name()='Execution']")
+      if ($null -ne $execution -and $null -ne $execution.Attributes['ProcessID']) {
+        $pidText = $execution.Attributes['ProcessID'].Value
+      }
+    }
+    [uint64]$pid = 0
+    if ([string]::IsNullOrWhiteSpace($pidText)
+      -or -not [uint64]::TryParse($pidText, [ref]$pid) -or $pid -eq 0) {
+      Fail 'observer_probe_trace_identity_missing'
+    }
+    $timeNode = $system.SelectSingleNode("./*[local-name()='TimeCreated']")
+    $timeText = if ($null -ne $timeNode -and $null -ne $timeNode.Attributes['SystemTime']) {
+      $timeNode.Attributes['SystemTime'].Value
+    } else { $null }
+    [DateTimeOffset]$timestamp = [DateTimeOffset]::MinValue
+    if ([string]::IsNullOrWhiteSpace($timeText)
+      -or -not [DateTimeOffset]::TryParse($timeText,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$timestamp)) {
+      Fail 'observer_probe_trace_identity_missing'
+    }
+    $record = [pscustomobject]@{
+      Kind = $kind
+      Pid = $pid
+      ProcessKey = Get-FirstTraceValue $data @('ProcessKey', 'UniqueProcessKey')
+      Timestamp = $timestamp.ToUniversalTime()
+    }
+    switch ($kind) {
+      'process-start' { $processStarts += $record }
+      'process-end' { $processEnds += $record }
+      'image-load' { $imageLoads += $record }
+    }
+  }
+  if ($processStarts.Count -ne 1 -or $imageLoads.Count -ne 1) {
+    Fail 'observer_probe_trace_correlation_ambiguous'
+  }
+  $start = $processStarts[0]; $image = $imageLoads[0]
+  if ($start.Pid -ne $image.Pid -or $image.Timestamp -lt $start.Timestamp) {
+    Fail 'observer_probe_trace_correlation_mismatch'
+  }
+  if (-not [string]::IsNullOrWhiteSpace($start.ProcessKey)
+    -and -not [string]::IsNullOrWhiteSpace($image.ProcessKey)
+    -and $start.ProcessKey -ne $image.ProcessKey) {
+    Fail 'observer_probe_trace_correlation_mismatch'
+  }
+  $matchingEnds = @($processEnds | Where-Object { $_.Pid -eq $start.Pid })
+  if ($matchingEnds.Count -gt 1) { Fail 'observer_probe_trace_correlation_ambiguous' }
+  if ($matchingEnds.Count -eq 1) {
+    $end = $matchingEnds[0]
+    if ($end.Timestamp -lt $start.Timestamp -or $image.Timestamp -gt $end.Timestamp
+      -or (-not [string]::IsNullOrWhiteSpace($start.ProcessKey)
+        -and -not [string]::IsNullOrWhiteSpace($end.ProcessKey)
+        -and $start.ProcessKey -ne $end.ProcessKey)) {
+      Fail 'observer_probe_trace_correlation_mismatch'
+    }
+  }
+  return [pscustomobject]@{ ProcessObserved = $true; ImageObserved = $true }
+}
 function Assert-SanitizedEvidence([string]$Path) {
   $item = Get-Item -LiteralPath $Path -Force
   if ($item.LinkType -or $item.PSIsContainer -or $item.Length -lt 2 -or $item.Length -gt 1048576) {
@@ -166,7 +299,6 @@ try {
   & $tracerpt $tracePath -of XML -o $traceXmlPath -summary $summaryPath -y
   if ($LASTEXITCODE -ne 0) { Fail 'observer_probe_trace_parse_failed' }
   $parsed = $true
-  $traceText = [System.IO.File]::ReadAllText($traceXmlPath)
   $summaryText = [System.IO.File]::ReadAllText($summaryPath)
   $eventsLost = Try-ReadLossCounter $summaryText 'EventsLost'
   if ($eventsLost -eq $null) { $eventsLost = Try-ReadLossCounter $summaryText 'Events Lost' }
@@ -176,9 +308,9 @@ try {
     Fail 'observer_probe_loss_counter_unavailable'
   }
   if ($eventsLost -ne 0 -or $buffersLost -ne 0) { Fail 'observer_probe_trace_loss_detected' }
-  $probeNamePattern = [Regex]::Escape([System.IO.Path]::GetFileName($copiedProbePath))
-  $processObserved = $traceText -match "(?is)(Process.{0,4096}$probeNamePattern|$probeNamePattern.{0,4096}Process)"
-  $imageObserved = $traceText -match "(?is)(Image.{0,4096}$probeNamePattern|$probeNamePattern.{0,4096}Image)"
+  $correlation = Read-ProbeTraceCorrelation $traceXmlPath $copiedProbePath
+  $processObserved = $correlation.ProcessObserved
+  $imageObserved = $correlation.ImageObserved
   if (-not $processObserved -or -not $imageObserved) { Fail 'observer_probe_trace_coverage_incomplete' }
 } finally {
   $cancelFailed = $false
