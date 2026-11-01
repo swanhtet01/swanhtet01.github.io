@@ -3831,11 +3831,12 @@ bool shopConnectedStockReservationRowsValidV24({
           'targetState': ConnectedStockReservationState.released.name,
           'reason': transition.reason,
         };
-        if (releaseCommand == null ||
-            releaseEvent == null ||
-            releaseCommand['payload_digest'] !=
-                connectedSiteSha256(releasePayload) ||
-            !eventMatches(
+        final stockReleaseValid =
+            releaseCommand != null &&
+            releaseEvent != null &&
+            releaseCommand['payload_digest'] ==
+                connectedSiteSha256(releasePayload) &&
+            eventMatches(
               event: releaseEvent,
               commandId: releaseCommandId,
               tenantId: reservation.workspaceId,
@@ -3844,7 +3845,55 @@ bool shopConnectedStockReservationRowsValidV24({
               aggregateId: reservation.subjectId,
               eventType: shopConnectedStockReleasedEventType,
               payload: releasePayload,
-            )) {
+            );
+        var cafeCancellationValid = false;
+        if (!stockReleaseValid &&
+            releaseCommand != null &&
+            releaseEvent != null &&
+            releaseEvent['event_type'] == 'shop.cafe_order.cancel.v1' &&
+            transition.reason == 'cafe_order_cancelled') {
+          final decoded = jsonDecode(releaseEvent['payload_json']! as String);
+          if (decoded is Map) {
+            final payload = Map<String, Object?>.from(decoded);
+            final binding = payload['reservationBinding'];
+            final expectedBinding = <String, Object?>{
+              'reservationId': reservation.reservationId,
+              'reservationDigest': reservation.reservationDigest,
+              'reservationCommandId': commandId,
+              'reservationAckDigest': commandById[commandId] == null
+                  ? null
+                  : connectedSiteSha256({
+                      'contract': 'supermega.shop.connected-site-local-ack.v1',
+                      'commandDigest':
+                          commandById[commandId]!['command_digest'],
+                    }),
+              'basketDigest': reservation.basketDigest,
+            };
+            cafeCancellationValid =
+                payload.length == 5 &&
+                payload['contract'] ==
+                    'supermega.shop.connected-cafe-order-cancel.v1' &&
+                payload['orderId'] == reservation.subjectId &&
+                payload['operationId'] == releaseCommandId &&
+                payload['expectedStateRevision'] is int &&
+                (payload['expectedStateRevision']! as int) >= 0 &&
+                canonicalConnectedSiteJson(binding) ==
+                    canonicalConnectedSiteJson(expectedBinding) &&
+                releaseCommand['payload_digest'] ==
+                    connectedSiteSha256(payload) &&
+                eventMatches(
+                  event: releaseEvent,
+                  commandId: releaseCommandId,
+                  tenantId: reservation.workspaceId,
+                  siteId: reservation.siteId,
+                  aggregateType: reservation.workflowType.name,
+                  aggregateId: reservation.subjectId,
+                  eventType: 'shop.cafe_order.cancel.v1',
+                  payload: payload,
+                );
+          }
+        }
+        if (!stockReleaseValid && !cafeCancellationValid) {
           return false;
         }
       } else {
@@ -4992,6 +5041,32 @@ class ShopConnectedStockReservationLifecycleInput {
   final ConnectedStockReservationState targetState;
 }
 
+class ShopConnectedStockReservationRequirement {
+  const ShopConnectedStockReservationRequirement({
+    required this.reservationId,
+    required this.reservationDigest,
+    required this.reservationCommandId,
+    required this.reservationAckDigest,
+    required this.requiredBasketDigest,
+    this.releaseOnAccepted = false,
+    this.requiredPriorEventType,
+  });
+
+  final String reservationId;
+  final String reservationDigest;
+  final String reservationCommandId;
+  final String reservationAckDigest;
+  final String requiredBasketDigest;
+  final bool releaseOnAccepted;
+  final String? requiredPriorEventType;
+}
+
+class ShopConnectedProjectionConflict implements Exception {
+  const ShopConnectedProjectionConflict(this.code);
+
+  final String code;
+}
+
 class ShopConnectedSiteCommandInput {
   const ShopConnectedSiteCommandInput({
     required this.commandId,
@@ -5020,6 +5095,7 @@ class ShopConnectedSiteCommandInput {
     this.reservationExpiresAtMillis,
     this.stockReservation,
     this.stockReservationLifecycle,
+    this.stockReservationRequirement,
     this.acceptedProjection,
   });
 
@@ -5049,6 +5125,7 @@ class ShopConnectedSiteCommandInput {
   final int? reservationExpiresAtMillis;
   final ConnectedStockReservationV1? stockReservation;
   final ShopConnectedStockReservationLifecycleInput? stockReservationLifecycle;
+  final ShopConnectedStockReservationRequirement? stockReservationRequirement;
   final Future<void> Function()? acceptedProjection;
 }
 
@@ -9721,6 +9798,7 @@ class ShopDatabase extends _$ShopDatabase {
     _validateConnectedSiteCommandInput(input);
     final payload = _connectedSiteEventPayload(input.eventPayloadJson);
     final stockPayload = _connectedStockCommandPayload(input, payload);
+    _validateConnectedCafeReservationRequirement(input, payload);
     final canonicalPayloadJson = canonicalConnectedSiteJson(payload);
     final eventEnvelope = _connectedSiteEventEnvelope(
       input,
@@ -9782,7 +9860,9 @@ class ShopDatabase extends _$ShopDatabase {
       }
 
       final trustedNow =
-          stockPayload.reservation == null && stockPayload.lifecycle == null
+          stockPayload.reservation == null &&
+              stockPayload.lifecycle == null &&
+              input.stockReservationRequirement == null
           ? null
           : await _validatedConnectedSiteNow(
               timeAuthority,
@@ -9894,6 +9974,14 @@ class ShopDatabase extends _$ShopDatabase {
         conflictReason = 'connected_scope_mismatch';
       } else if (currentVersion != input.expectedVersion) {
         conflictReason = 'aggregate_version_mismatch';
+      } else if (input.stockReservationRequirement case final requirement?) {
+        final validation = await _validateConnectedStockRequirement(
+          input,
+          requirement,
+          trustedNow: trustedNow!,
+        );
+        conflictReason = validation.conflictReason;
+        lifecycleTransition = validation.transition;
       } else if (stockPayload.reservation != null) {
         for (final line in stockPayload.reservation!.lines) {
           final product = await customSelect(
@@ -9983,15 +10071,29 @@ class ShopDatabase extends _$ShopDatabase {
             nowMillis: trustedNow,
           );
         }
-        final conflictDigest = await _sha256Hex(
-          '${input.commandDigest}:$conflictReason:$currentVersion',
+        return _recordConnectedSiteConflict(
+          input,
+          currentVersion: currentVersion,
+          reason: conflictReason,
         );
+      }
+
+      final nextVersion = currentVersion + 1;
+      if (trustedNow != null) {
+        await _recordConnectedTrustedTime(
+          tenantId: input.tenantId,
+          siteId: input.siteId,
+          nowMillis: trustedNow,
+        );
+      }
+      await customStatement('SAVEPOINT shop_connected_projection');
+      try {
         await customInsert(
           'INSERT INTO shop_site_commands '
           '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
           'aggregate_type, capability, expected_version, payload_digest, lease_digest, '
           'command_digest, state, received_at_millis) '
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'conflict', ?)",
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?)",
           variables: [
             Variable<String>(input.commandId),
             Variable<String>(input.tenantId),
@@ -10008,171 +10110,183 @@ class ShopDatabase extends _$ShopDatabase {
             Variable<int>(input.createdAtMillis),
           ],
         );
-        await customInsert(
-          'INSERT INTO shop_site_conflicts '
-          '(conflict_id, command_id, reason_code, detail_digest, state, '
-          "created_at_millis) VALUES (?, ?, ?, ?, 'pending', ?)",
+        final nextSiteSequenceRow = await customSelect(
+          'SELECT COALESCE(MAX(site_sequence), 0) + 1 AS next_sequence '
+          'FROM shop_site_events WHERE tenant_id = ? AND site_id = ?',
           variables: [
-            Variable<String>('conflict:${input.commandId}'),
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+          ],
+        ).getSingle();
+        final siteSequence = nextSiteSequenceRow.read<int>('next_sequence');
+        final eventRowId = await customInsert(
+          'INSERT INTO shop_site_events '
+          '(site_sequence, event_id, command_id, tenant_id, site_id, '
+          'aggregate_type, aggregate_id, '
+          'aggregate_version, event_type, payload_json, event_digest, '
+          'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<int>(siteSequence),
+            Variable<String>(input.eventId),
             Variable<String>(input.commandId),
-            Variable<String>(conflictReason),
-            Variable<String>(conflictDigest),
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+            Variable<String>(input.aggregateType),
+            Variable<String>(input.aggregateId),
+            Variable<int>(nextVersion),
+            Variable<String>(input.eventType),
+            Variable<String>(canonicalPayloadJson),
+            Variable<String>(input.eventDigest),
             Variable<int>(input.createdAtMillis),
           ],
         );
+        await customInsert(
+          'INSERT INTO shop_site_aggregate_versions '
+          '(tenant_id, site_id, aggregate_type, aggregate_id, version, '
+          'last_event_row_id, last_site_sequence, updated_at_millis) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?) '
+          'ON CONFLICT(tenant_id, site_id, aggregate_type, aggregate_id) DO UPDATE SET '
+          'version = excluded.version, '
+          'last_event_row_id = excluded.last_event_row_id, '
+          'last_site_sequence = excluded.last_site_sequence, '
+          'updated_at_millis = excluded.updated_at_millis',
+          variables: [
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+            Variable<String>(input.aggregateType),
+            Variable<String>(input.aggregateId),
+            Variable<int>(nextVersion),
+            Variable<int>(eventRowId),
+            Variable<int>(siteSequence),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        if (stockPayload.reservation != null) {
+          await _insertConnectedStockReservation(
+            stockPayload.reservation!,
+            commandId: input.commandId,
+          );
+        }
+        if (lifecycleTransition != null) {
+          await _insertConnectedStockTransition(
+            lifecycleTransition,
+            operationId: input.commandId,
+            saleId: null,
+          );
+        }
+        await customInsert(
+          'INSERT INTO shop_site_audit '
+          '(audit_id, command_id, actor_id, action, metadata_digest, '
+          'created_at_millis) VALUES (?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>('audit:${input.commandId}'),
+            Variable<String>(input.commandId),
+            Variable<String>(input.actorId),
+            Variable<String>(input.auditAction),
+            Variable<String>(input.auditMetadataDigest),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        await input.acceptedProjection?.call();
         await customInsert(
           'INSERT INTO shop_site_command_acks '
           '(command_id, status, event_row_id, site_sequence, canonical_version, '
-          "ack_digest, created_at_millis) VALUES (?, 'conflict', NULL, NULL, ?, ?, ?)",
+          "ack_digest, created_at_millis) VALUES (?, 'accepted', ?, ?, ?, ?, ?)",
           variables: [
             Variable<String>(input.commandId),
-            Variable<int>(currentVersion),
-            Variable<String>(conflictDigest),
+            Variable<int>(eventRowId),
+            Variable<int>(siteSequence),
+            Variable<int>(nextVersion),
+            Variable<String>(input.ackDigest),
             Variable<int>(input.createdAtMillis),
           ],
         );
+        await customStatement('RELEASE SAVEPOINT shop_connected_projection');
         return ShopConnectedSiteCommandResult(
-          status: ShopConnectedSiteCommandStatus.conflict,
+          status: ShopConnectedSiteCommandStatus.accepted,
           commandId: input.commandId,
-          ackDigest: conflictDigest,
-          canonicalVersion: currentVersion,
-          eventSequence: null,
-          eventDigest: null,
-          conflictCode: conflictReason,
+          ackDigest: input.ackDigest,
+          canonicalVersion: nextVersion,
+          eventSequence: siteSequence,
+          eventDigest: input.eventDigest,
+          conflictCode: null,
+        );
+      } on ShopConnectedProjectionConflict catch (conflict) {
+        await customStatement(
+          'ROLLBACK TO SAVEPOINT shop_connected_projection',
+        );
+        await customStatement('RELEASE SAVEPOINT shop_connected_projection');
+        return _recordConnectedSiteConflict(
+          input,
+          currentVersion: currentVersion,
+          reason: conflict.code,
         );
       }
-
-      final nextVersion = currentVersion + 1;
-      if (trustedNow != null) {
-        await _recordConnectedTrustedTime(
-          tenantId: input.tenantId,
-          siteId: input.siteId,
-          nowMillis: trustedNow,
-        );
-      }
-      await customInsert(
-        'INSERT INTO shop_site_commands '
-        '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
-        'aggregate_type, capability, expected_version, payload_digest, lease_digest, '
-        'command_digest, state, received_at_millis) '
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?)",
-        variables: [
-          Variable<String>(input.commandId),
-          Variable<String>(input.tenantId),
-          Variable<String>(input.siteId),
-          Variable<String>(input.actorId),
-          Variable<String>(input.deviceId),
-          Variable<String>(input.aggregateId),
-          Variable<String>(input.aggregateType),
-          Variable<String>(input.capability),
-          Variable<int>(input.expectedVersion),
-          Variable<String>(input.payloadDigest),
-          Variable<String>(input.leaseDigest),
-          Variable<String>(input.commandDigest),
-          Variable<int>(input.createdAtMillis),
-        ],
-      );
-      final nextSiteSequenceRow = await customSelect(
-        'SELECT COALESCE(MAX(site_sequence), 0) + 1 AS next_sequence '
-        'FROM shop_site_events WHERE tenant_id = ? AND site_id = ?',
-        variables: [
-          Variable<String>(input.tenantId),
-          Variable<String>(input.siteId),
-        ],
-      ).getSingle();
-      final siteSequence = nextSiteSequenceRow.read<int>('next_sequence');
-      final eventRowId = await customInsert(
-        'INSERT INTO shop_site_events '
-        '(site_sequence, event_id, command_id, tenant_id, site_id, '
-        'aggregate_type, aggregate_id, '
-        'aggregate_version, event_type, payload_json, event_digest, '
-        'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        variables: [
-          Variable<int>(siteSequence),
-          Variable<String>(input.eventId),
-          Variable<String>(input.commandId),
-          Variable<String>(input.tenantId),
-          Variable<String>(input.siteId),
-          Variable<String>(input.aggregateType),
-          Variable<String>(input.aggregateId),
-          Variable<int>(nextVersion),
-          Variable<String>(input.eventType),
-          Variable<String>(canonicalPayloadJson),
-          Variable<String>(input.eventDigest),
-          Variable<int>(input.createdAtMillis),
-        ],
-      );
-      await customInsert(
-        'INSERT INTO shop_site_aggregate_versions '
-        '(tenant_id, site_id, aggregate_type, aggregate_id, version, '
-        'last_event_row_id, last_site_sequence, updated_at_millis) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?) '
-        'ON CONFLICT(tenant_id, site_id, aggregate_type, aggregate_id) DO UPDATE SET '
-        'version = excluded.version, '
-        'last_event_row_id = excluded.last_event_row_id, '
-        'last_site_sequence = excluded.last_site_sequence, '
-        'updated_at_millis = excluded.updated_at_millis',
-        variables: [
-          Variable<String>(input.tenantId),
-          Variable<String>(input.siteId),
-          Variable<String>(input.aggregateType),
-          Variable<String>(input.aggregateId),
-          Variable<int>(nextVersion),
-          Variable<int>(eventRowId),
-          Variable<int>(siteSequence),
-          Variable<int>(input.createdAtMillis),
-        ],
-      );
-      if (stockPayload.reservation != null) {
-        await _insertConnectedStockReservation(
-          stockPayload.reservation!,
-          commandId: input.commandId,
-        );
-      }
-      if (lifecycleTransition != null) {
-        await _insertConnectedStockTransition(
-          lifecycleTransition,
-          operationId: input.commandId,
-          saleId: null,
-        );
-      }
-      await input.acceptedProjection?.call();
-      await customInsert(
-        'INSERT INTO shop_site_audit '
-        '(audit_id, command_id, actor_id, action, metadata_digest, '
-        'created_at_millis) VALUES (?, ?, ?, ?, ?, ?)',
-        variables: [
-          Variable<String>('audit:${input.commandId}'),
-          Variable<String>(input.commandId),
-          Variable<String>(input.actorId),
-          Variable<String>(input.auditAction),
-          Variable<String>(input.auditMetadataDigest),
-          Variable<int>(input.createdAtMillis),
-        ],
-      );
-      await customInsert(
-        'INSERT INTO shop_site_command_acks '
-        '(command_id, status, event_row_id, site_sequence, canonical_version, '
-        "ack_digest, created_at_millis) VALUES (?, 'accepted', ?, ?, ?, ?, ?)",
-        variables: [
-          Variable<String>(input.commandId),
-          Variable<int>(eventRowId),
-          Variable<int>(siteSequence),
-          Variable<int>(nextVersion),
-          Variable<String>(input.ackDigest),
-          Variable<int>(input.createdAtMillis),
-        ],
-      );
-      return ShopConnectedSiteCommandResult(
-        status: ShopConnectedSiteCommandStatus.accepted,
-        commandId: input.commandId,
-        ackDigest: input.ackDigest,
-        canonicalVersion: nextVersion,
-        eventSequence: siteSequence,
-        eventDigest: input.eventDigest,
-        conflictCode: null,
-      );
     });
+  }
+
+  Future<ShopConnectedSiteCommandResult> _recordConnectedSiteConflict(
+    ShopConnectedSiteCommandInput input, {
+    required int currentVersion,
+    required String reason,
+  }) async {
+    final conflictDigest = await _sha256Hex(
+      '${input.commandDigest}:$reason:$currentVersion',
+    );
+    await customInsert(
+      'INSERT INTO shop_site_commands '
+      '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+      'aggregate_type, capability, expected_version, payload_digest, lease_digest, '
+      'command_digest, state, received_at_millis) '
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'conflict', ?)",
+      variables: [
+        Variable<String>(input.commandId),
+        Variable<String>(input.tenantId),
+        Variable<String>(input.siteId),
+        Variable<String>(input.actorId),
+        Variable<String>(input.deviceId),
+        Variable<String>(input.aggregateId),
+        Variable<String>(input.aggregateType),
+        Variable<String>(input.capability),
+        Variable<int>(input.expectedVersion),
+        Variable<String>(input.payloadDigest),
+        Variable<String>(input.leaseDigest),
+        Variable<String>(input.commandDigest),
+        Variable<int>(input.createdAtMillis),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_site_conflicts '
+      '(conflict_id, command_id, reason_code, detail_digest, state, '
+      "created_at_millis) VALUES (?, ?, ?, ?, 'pending', ?)",
+      variables: [
+        Variable<String>('conflict:${input.commandId}'),
+        Variable<String>(input.commandId),
+        Variable<String>(reason),
+        Variable<String>(conflictDigest),
+        Variable<int>(input.createdAtMillis),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_site_command_acks '
+      '(command_id, status, event_row_id, site_sequence, canonical_version, '
+      "ack_digest, created_at_millis) VALUES (?, 'conflict', NULL, NULL, ?, ?, ?)",
+      variables: [
+        Variable<String>(input.commandId),
+        Variable<int>(currentVersion),
+        Variable<String>(conflictDigest),
+        Variable<int>(input.createdAtMillis),
+      ],
+    );
+    return ShopConnectedSiteCommandResult(
+      status: ShopConnectedSiteCommandStatus.conflict,
+      commandId: input.commandId,
+      ackDigest: conflictDigest,
+      canonicalVersion: currentVersion,
+      eventSequence: null,
+      eventDigest: null,
+      conflictCode: reason,
+    );
   }
 
   /// Reconstructs strict wire events from immutable database rows.
@@ -10282,6 +10396,130 @@ class ShopDatabase extends _$ShopDatabase {
         ],
       );
     }
+  }
+
+  Future<
+    ({
+      String? conflictReason,
+      ConnectedStockReservationTransitionV1? transition,
+    })
+  >
+  _validateConnectedStockRequirement(
+    ShopConnectedSiteCommandInput input,
+    ShopConnectedStockReservationRequirement requirement, {
+    required int trustedNow,
+  }) async {
+    final row = await customSelect(
+      'SELECT header.reservation_json, header.legacy_source, '
+      'source_command.state AS command_state, source_ack.status AS ack_status, '
+      'source_ack.ack_digest FROM shop_connected_stock_reservation_headers header '
+      'JOIN shop_site_commands source_command '
+      'ON source_command.command_id = header.command_id '
+      'JOIN shop_site_command_acks source_ack '
+      'ON source_ack.command_id = header.command_id '
+      'WHERE header.reservation_id = ? AND header.command_id = ? '
+      'AND header.tenant_id = ? AND header.site_id = ? '
+      'AND header.actor_id = ? AND header.device_id = ? '
+      "AND header.workflow_type = 'cafeOrder' AND header.subject_id = ? "
+      "AND header.capability = 'cafeOrderWrite'",
+      variables: [
+        Variable<String>(requirement.reservationId),
+        Variable<String>(requirement.reservationCommandId),
+        Variable<String>(input.tenantId),
+        Variable<String>(input.siteId),
+        Variable<String>(input.actorId),
+        Variable<String>(input.deviceId),
+        Variable<String>(input.aggregateId),
+      ],
+    ).getSingleOrNull();
+    if (row == null ||
+        row.read<String>('command_state') != 'accepted' ||
+        row.read<String>('ack_status') != 'accepted' ||
+        row.read<String>('ack_digest') != requirement.reservationAckDigest) {
+      return (conflictReason: 'reservation_not_acknowledged', transition: null);
+    }
+    if (row.read<int>('legacy_source') == 1) {
+      return (
+        conflictReason: 'reservation_legacy_unadoptable',
+        transition: null,
+      );
+    }
+    final reservation = ConnectedStockReservationV1.fromJson(
+      jsonDecode(row.read<String>('reservation_json')),
+    );
+    if (reservation.reservationDigest != requirement.reservationDigest) {
+      return (conflictReason: 'reservation_digest_mismatch', transition: null);
+    }
+    if (reservation.basketDigest != requirement.requiredBasketDigest) {
+      return (conflictReason: 'reservation_basket_mismatch', transition: null);
+    }
+    final terminal = await customSelect(
+      'SELECT 1 FROM shop_connected_stock_reservation_transitions '
+      'WHERE reservation_id = ? LIMIT 1',
+      variables: [Variable<String>(requirement.reservationId)],
+    ).getSingleOrNull();
+    if (terminal != null) {
+      return (conflictReason: 'reservation_terminal', transition: null);
+    }
+    if (trustedNow <
+            DateTime.parse(reservation.issuedAt).millisecondsSinceEpoch ||
+        trustedNow >=
+            DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch) {
+      return (conflictReason: 'reservation_time_invalid', transition: null);
+    }
+    final expectedBinding = <String, Object?>{
+      'reservationId': requirement.reservationId,
+      'reservationDigest': requirement.reservationDigest,
+      'reservationCommandId': requirement.reservationCommandId,
+      'reservationAckDigest': requirement.reservationAckDigest,
+      'basketDigest': requirement.requiredBasketDigest,
+    };
+    final requiredPriorEventType = requirement.requiredPriorEventType;
+    if (requiredPriorEventType != null) {
+      final prior = await customSelect(
+        'SELECT event.payload_json FROM shop_site_events event '
+        'JOIN shop_site_commands command ON command.command_id = event.command_id '
+        'WHERE command.state = \'accepted\' AND event.tenant_id = ? '
+        'AND event.site_id = ? AND event.aggregate_type = ? '
+        'AND event.aggregate_id = ? AND event.event_type = ? '
+        'ORDER BY event.site_sequence LIMIT 1',
+        variables: [
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.aggregateType),
+          Variable<String>(input.aggregateId),
+          Variable<String>(requiredPriorEventType),
+        ],
+      ).getSingleOrNull();
+      if (prior == null) {
+        return (
+          conflictReason: 'reservation_order_binding_missing',
+          transition: null,
+        );
+      }
+      final priorPayload = jsonDecode(prior.read<String>('payload_json'));
+      if (priorPayload is! Map ||
+          canonicalConnectedSiteJson(priorPayload['reservationBinding']) !=
+              canonicalConnectedSiteJson(expectedBinding)) {
+        return (
+          conflictReason: 'reservation_order_binding_mismatch',
+          transition: null,
+        );
+      }
+    }
+    if (!requirement.releaseOnAccepted) {
+      return (conflictReason: null, transition: null);
+    }
+    return (
+      conflictReason: null,
+      transition: transitionConnectedStockReservation(
+        reservation: reservation,
+        expectedReservationDigest: requirement.reservationDigest,
+        targetState: ConnectedStockReservationState.released,
+        transitionedAt: _connectedSiteOccurredAt(trustedNow),
+        reason: 'cafe_order_cancelled',
+      ),
+    );
   }
 
   Future<int> _readConnectedHeldQuantity(
@@ -11372,6 +11610,46 @@ class ShopDatabase extends _$ShopDatabase {
     return (reservation: null, lifecycle: lifecycle);
   }
 
+  void _validateConnectedCafeReservationRequirement(
+    ShopConnectedSiteCommandInput input,
+    Map<String, Object?> payload,
+  ) {
+    final requirement = input.stockReservationRequirement;
+    if (requirement == null) {
+      if (payload.containsKey('reservationBinding')) {
+        throw StateError(
+          'Connected café reservation bytes require their persistence sidecar.',
+        );
+      }
+      return;
+    }
+    final expectedBinding = <String, Object?>{
+      'reservationId': requirement.reservationId,
+      'reservationDigest': requirement.reservationDigest,
+      'reservationCommandId': requirement.reservationCommandId,
+      'reservationAckDigest': requirement.reservationAckDigest,
+      'basketDigest': requirement.requiredBasketDigest,
+    };
+    final isPut =
+        input.eventType == 'shop.cafe_order.put.v1' &&
+        payload['contract'] == 'supermega.shop.connected-cafe-order-put.v1' &&
+        !requirement.releaseOnAccepted &&
+        requirement.requiredPriorEventType == null;
+    final isCancel =
+        input.eventType == 'shop.cafe_order.cancel.v1' &&
+        payload['contract'] ==
+            'supermega.shop.connected-cafe-order-cancel.v1' &&
+        requirement.releaseOnAccepted &&
+        requirement.requiredPriorEventType == 'shop.cafe_order.put.v1';
+    if ((!isPut && !isCancel) ||
+        canonicalConnectedSiteJson(payload['reservationBinding']) !=
+            canonicalConnectedSiteJson(expectedBinding)) {
+      throw StateError(
+        'Connected café reservation sidecar does not match event bytes.',
+      );
+    }
+  }
+
   /// Immutably binds this local inventory to an authenticated enrollment
   /// scope before any connected stock command is accepted.
   ///
@@ -11521,6 +11799,19 @@ class ShopDatabase extends _$ShopDatabase {
             !id.hasMatch(lifecycle.reason) ||
             lifecycle.targetState != ConnectedStockReservationState.released)) {
       throw ArgumentError('Connected-site reservation lifecycle is invalid.');
+    }
+    final requirement = input.stockReservationRequirement;
+    if (requirement != null &&
+        (!id.hasMatch(requirement.reservationId) ||
+            !id.hasMatch(requirement.reservationCommandId) ||
+            !digest.hasMatch(requirement.reservationDigest) ||
+            !digest.hasMatch(requirement.reservationAckDigest) ||
+            !digest.hasMatch(requirement.requiredBasketDigest) ||
+            (requirement.requiredPriorEventType != null &&
+                !id.hasMatch(requirement.requiredPriorEventType!)) ||
+            input.aggregateType != 'cafeOrder' ||
+            input.capability != ShopStaffCapability.cafeOrderWrite.name)) {
+      throw ArgumentError('Connected-site reservation requirement is invalid.');
     }
   }
 

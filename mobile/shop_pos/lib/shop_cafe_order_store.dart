@@ -66,6 +66,12 @@ class ShopCafeStartedKitchenLineException implements Exception {
   const ShopCafeStartedKitchenLineException();
 }
 
+class ShopCafeConnectedConflictException implements Exception {
+  const ShopCafeConnectedConflictException(this.code);
+
+  final String code;
+}
+
 class ShopConnectedCafeProjectionContext {
   const ShopConnectedCafeProjectionContext({
     required this.commandId,
@@ -75,6 +81,9 @@ class ShopConnectedCafeProjectionContext {
     required this.deviceId,
     required this.aggregateId,
     required this.capability,
+    required this.commandType,
+    required this.eventType,
+    required this.auditAction,
     required this.commandDigest,
   });
 
@@ -85,6 +94,9 @@ class ShopConnectedCafeProjectionContext {
   final String deviceId;
   final String aggregateId;
   final ShopStaffCapability capability;
+  final String commandType;
+  final String eventType;
+  final String auditAction;
   final String commandDigest;
 }
 
@@ -161,6 +173,9 @@ class ShopCafeOrderStore {
   ) async {
     await _requireConnectedProjection(context);
     if (context.capability != ShopStaffCapability.cafeOrderWrite ||
+        context.commandType != 'cafe.order.put.v1' ||
+        context.eventType != 'shop.cafe_order.put.v1' ||
+        context.auditAction != 'shop.cafe_order.put' ||
         command.id != context.commandId ||
         command.ticketId != context.aggregateId) {
       throw StateError('Connected café order projection is not authorized.');
@@ -203,20 +218,45 @@ class ShopCafeOrderStore {
           )
           .getSingleOrNull();
       if (cancellation != null) {
+        if (!authorizeLocal) {
+          throw const ShopCafeConnectedConflictException(
+            'cafe_order_cancelled',
+          );
+        }
         throw StateError('A cancelled café order is immutable.');
       }
       if (prior.state == 'completed') {
+        if (!authorizeLocal) {
+          throw const ShopCafeConnectedConflictException(
+            'cafe_order_completed',
+          );
+        }
         throw StateError('A completed café order is immutable.');
       }
     }
-    final ticket = applyCafeOrderCommand(
-      prior?.ticket,
-      command,
-      modifierCatalog,
-    );
+    late final CafeOrderTicket ticket;
+    try {
+      ticket = applyCafeOrderCommand(prior?.ticket, command, modifierCatalog);
+    } on FormatException {
+      if (!authorizeLocal) {
+        throw const ShopCafeConnectedConflictException(
+          'cafe_order_version_or_payload_conflict',
+        );
+      }
+      rethrow;
+    }
     if (identical(ticket, prior?.ticket)) return _attachKitchenDispatch(prior!);
     if (prior != null) {
-      await _requireStartedKitchenLinesUnchanged(prior, ticket);
+      try {
+        await _requireStartedKitchenLinesUnchanged(prior, ticket);
+      } on ShopCafeStartedKitchenLineException {
+        if (!authorizeLocal) {
+          throw const ShopCafeConnectedConflictException(
+            'cafe_started_line_immutable',
+          );
+        }
+        rethrow;
+      }
     }
     await _requireCurrentProducts(ticket);
     final now = _now();
@@ -329,6 +369,9 @@ class ShopCafeOrderStore {
     } else {
       await _requireConnectedProjection(connectedContext);
       if (connectedContext.capability != ShopStaffCapability.cafeOrderWrite ||
+          connectedContext.commandType != 'cafe.order.state.v1' ||
+          connectedContext.eventType != 'shop.cafe_order.state.v1' ||
+          connectedContext.auditAction != 'shop.cafe_order.state' ||
           connectedContext.commandId != cleanOperationId ||
           connectedContext.aggregateId != cleanOrderId) {
         throw StateError('Connected café state projection is not authorized.');
@@ -358,6 +401,11 @@ class ShopCafeOrderStore {
     if (order == null ||
         order.state != fromState ||
         order.stateRevision != expectedStateRevision) {
+      if (connectedContext != null) {
+        throw const ShopCafeConnectedConflictException(
+          'cafe_order_state_version_conflict',
+        );
+      }
       throw StateError('The café order changed. Refresh and try again.');
     }
     final now = _now();
@@ -456,6 +504,9 @@ class ShopCafeOrderStore {
     } else {
       await _requireConnectedProjection(connectedContext);
       if (connectedContext.capability != ShopStaffCapability.cafeOrderWrite ||
+          connectedContext.commandType != 'cafe.order.cancel.v1' ||
+          connectedContext.eventType != 'shop.cafe_order.cancel.v1' ||
+          connectedContext.auditAction != 'shop.cafe_order.cancel' ||
           connectedContext.commandId != cleanOperationId ||
           connectedContext.aggregateId != cleanOrderId) {
         throw StateError(
@@ -470,6 +521,9 @@ class ShopCafeOrderStore {
         )
         .getSingleOrNull();
     if (orderRow == null) {
+      if (connectedContext != null) {
+        throw const ShopCafeConnectedConflictException('cafe_order_missing');
+      }
       throw StateError('The café order changed. Refresh and try again.');
     }
     final order = _fromRow(orderRow);
@@ -503,10 +557,18 @@ class ShopCafeOrderStore {
         )
         .getSingleOrNull();
     if (priorCancellation != null) {
+      if (connectedContext != null) {
+        throw const ShopCafeConnectedConflictException('cafe_order_cancelled');
+      }
       throw StateError('This café order was already cancelled.');
     }
     if ((order.state != 'open' && order.state != 'held') ||
         order.stateRevision != expectedStateRevision) {
+      if (connectedContext != null) {
+        throw const ShopCafeConnectedConflictException(
+          'cafe_order_state_version_conflict',
+        );
+      }
       throw StateError('The café order changed. Refresh and try again.');
     }
     final now = _now();
@@ -614,6 +676,9 @@ class ShopCafeOrderStore {
       await _requireConnectedProjection(connectedContext);
       if (connectedContext.capability !=
               ShopStaffCapability.cafeKitchenStatus ||
+          connectedContext.commandType != 'cafe.kitchen.status.v1' ||
+          connectedContext.eventType != 'shop.cafe_kitchen.status.v1' ||
+          connectedContext.auditAction != 'shop.cafe_kitchen.status' ||
           connectedContext.commandId != cleanOperationId ||
           connectedContext.aggregateId != cleanOrderId) {
         throw StateError(
@@ -648,12 +713,22 @@ class ShopCafeOrderStore {
     if (order == null ||
         (order.state != 'open' && order.state != 'held') ||
         order.ticket.version != expectedTicketVersion) {
+      if (connectedContext != null) {
+        throw const ShopCafeConnectedConflictException(
+          'cafe_kitchen_order_version_conflict',
+        );
+      }
       throw StateError('The café order changed. Refresh and try again.');
     }
     final line = order.ticket.lines
         .where((item) => item.id == cleanLineId && item.hasPreparationRoute)
         .singleOrNull;
     if (line == null) {
+      if (connectedContext != null) {
+        throw const ShopCafeConnectedConflictException(
+          'cafe_kitchen_line_unavailable',
+        );
+      }
       throw StateError('This kitchen ticket is no longer available.');
     }
     final dispatch = order.kitchenDispatchLines
@@ -661,6 +736,11 @@ class ShopCafeOrderStore {
         .singleOrNull;
     if (dispatch == null ||
         order.kitchenStatusByLine[cleanLineId] != expectedStatus) {
+      if (connectedContext != null) {
+        throw const ShopCafeConnectedConflictException(
+          'cafe_kitchen_status_conflict',
+        );
+      }
       throw StateError('The kitchen status changed. Refresh and try again.');
     }
     final sequence = cafeKitchenNextSequence(expectedStatus);
@@ -1862,11 +1942,16 @@ class ShopCafeOrderStore {
   ) async {
     final row = await database
         .customSelect(
-          'SELECT 1 FROM shop_site_commands WHERE command_id = ? '
-          "AND state = 'accepted' AND tenant_id = ? AND site_id = ? "
-          'AND actor_id = ? AND device_id = ? '
-          "AND aggregate_type = 'cafeOrder' AND aggregate_id = ? "
-          'AND capability = ? AND command_digest = ?',
+          'SELECT 1 FROM shop_site_commands command '
+          'JOIN shop_site_events event ON event.command_id = command.command_id '
+          'JOIN shop_site_audit audit ON audit.command_id = command.command_id '
+          'WHERE command.command_id = ? AND command.state = \'accepted\' '
+          'AND command.tenant_id = ? AND command.site_id = ? '
+          'AND command.actor_id = ? AND command.device_id = ? '
+          "AND command.aggregate_type = 'cafeOrder' "
+          'AND command.aggregate_id = ? AND command.capability = ? '
+          'AND command.command_digest = ? AND event.event_type = ? '
+          'AND audit.action = ?',
           variables: [
             Variable<String>(context.commandId),
             Variable<String>(context.tenantId),
@@ -1876,6 +1961,8 @@ class ShopCafeOrderStore {
             Variable<String>(context.aggregateId),
             Variable<String>(context.capability.name),
             Variable<String>(context.commandDigest),
+            Variable<String>(context.eventType),
+            Variable<String>(context.auditAction),
           ],
         )
         .getSingleOrNull();

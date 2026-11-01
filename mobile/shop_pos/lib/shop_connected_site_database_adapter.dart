@@ -53,16 +53,18 @@ class ShopConnectedSiteDatabaseCapabilityResolver
 /// seam. This adapter does not verify signatures, issue leases, or enable the
 /// connected feature; those checks remain mandatory in the coordinator core.
 class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
-  const ShopConnectedSiteDatabaseCommandHandler({
+  ShopConnectedSiteDatabaseCommandHandler({
     required this.database,
     required this.timeAuthority,
     this.cafeStore,
+    Map<String, CafeModifierSnapshot> cafeModifierCatalog = const {},
     this.connectedSiteEnabled = false,
-  });
+  }) : cafeModifierCatalog = Map.unmodifiable(cafeModifierCatalog);
 
   final ShopDatabase database;
   final ShopConnectedSiteCoordinatorTimeAuthority timeAuthority;
   final ShopCafeOrderStore? cafeStore;
+  final Map<String, CafeModifierSnapshot> cafeModifierCatalog;
   final bool connectedSiteEnabled;
 
   @override
@@ -127,6 +129,7 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
         createdAtMillis: issuedAtMillis,
         stockReservation: mapping.reservation,
         stockReservationLifecycle: mapping.lifecycle,
+        stockReservationRequirement: mapping.reservationRequirement,
         acceptedProjection: mapping.acceptedProjection,
       ),
       connectedSiteEnabled: true,
@@ -293,21 +296,12 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
     final capability = command.commandType == shopCafeKitchenStatusCommandType
         ? ShopStaffCapability.cafeKitchenStatus
         : ShopStaffCapability.cafeOrderWrite;
-    final context = ShopConnectedCafeProjectionContext(
-      commandId: command.commandId,
-      tenantId: command.workspaceId,
-      siteId: command.siteId,
-      actorId: command.actorId,
-      deviceId: command.deviceId,
-      aggregateId: command.aggregateId,
-      capability: capability,
-      commandDigest: command.commandDigest,
-    );
     switch (command.commandType) {
       case shopCafeOrderPutCommandType:
         _requireExactPayload(command.payload, {
           'contract',
           'command',
+          'reservationBinding',
         }, _shopCafeOrderPutPayloadContract);
         final cafeCommand = CafeOrderCommand.fromJson(
           command.payload['command'],
@@ -316,26 +310,29 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
             cafeCommand.ticketId != command.aggregateId) {
           throw StateError('Connected café order payload is invalid.');
         }
-        final catalog = <String, CafeModifierSnapshot>{};
-        for (final line in cafeCommand.lines) {
-          for (final modifier in line.modifiers) {
-            final prior = catalog[modifier.key];
-            if (prior != null &&
-                canonicalConnectedSiteJson(prior.toJson()) !=
-                    canonicalConnectedSiteJson(modifier.toJson())) {
-              throw StateError('Connected café modifier changed in one order.');
-            }
-            catalog[modifier.key] = modifier;
-          }
-        }
+        final reservationRequirement = _cafeReservationRequirement(
+          command.payload['reservationBinding'],
+          cafeCommand: cafeCommand,
+        );
+        const eventType = 'shop.cafe_order.put.v1';
+        const auditAction = 'shop.cafe_order.put';
+        final context = _cafeContext(
+          command,
+          capability: capability,
+          eventType: eventType,
+          auditAction: auditAction,
+        );
         return _CommandMapping(
           capability: capability,
-          eventType: 'shop.cafe_order.put.v1',
-          auditAction: 'shop.cafe_order.put',
-          acceptedProjection: () => store.applyConnectedCommandProjection(
-            cafeCommand,
-            Map.unmodifiable(catalog),
-            context,
+          eventType: eventType,
+          auditAction: auditAction,
+          reservationRequirement: reservationRequirement,
+          acceptedProjection: () => _projectCafe(
+            () => store.applyConnectedCommandProjection(
+              cafeCommand,
+              cafeModifierCatalog,
+              context,
+            ),
           ),
         );
       case shopCafeOrderStateCommandType:
@@ -360,17 +357,27 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
                 (from == 'held' && to == 'open'))) {
           throw StateError('Connected café state payload is invalid.');
         }
+        const eventType = 'shop.cafe_order.state.v1';
+        const auditAction = 'shop.cafe_order.state';
+        final context = _cafeContext(
+          command,
+          capability: capability,
+          eventType: eventType,
+          auditAction: auditAction,
+        );
         return _CommandMapping(
           capability: capability,
-          eventType: 'shop.cafe_order.state.v1',
-          auditAction: 'shop.cafe_order.state',
-          acceptedProjection: () => store.transitionConnected(
-            orderId: orderId as String,
-            operationId: operationId as String,
-            expectedStateRevision: revision,
-            fromState: from as String,
-            toState: to as String,
-            context: context,
+          eventType: eventType,
+          auditAction: auditAction,
+          acceptedProjection: () => _projectCafe(
+            () => store.transitionConnected(
+              orderId: orderId as String,
+              operationId: operationId as String,
+              expectedStateRevision: revision,
+              fromState: from as String,
+              toState: to as String,
+              context: context,
+            ),
           ),
         );
       case shopCafeOrderCancelCommandType:
@@ -379,6 +386,7 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
           'orderId',
           'operationId',
           'expectedStateRevision',
+          'reservationBinding',
         }, _shopCafeOrderCancelPayloadContract);
         final orderId = command.payload['orderId'];
         final operationId = command.payload['operationId'];
@@ -389,15 +397,31 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
             revision < 0) {
           throw StateError('Connected café cancellation payload is invalid.');
         }
+        final reservationRequirement = _cafeReservationRequirement(
+          command.payload['reservationBinding'],
+          releaseOnAccepted: true,
+          requiredPriorEventType: 'shop.cafe_order.put.v1',
+        );
+        const eventType = 'shop.cafe_order.cancel.v1';
+        const auditAction = 'shop.cafe_order.cancel';
+        final context = _cafeContext(
+          command,
+          capability: capability,
+          eventType: eventType,
+          auditAction: auditAction,
+        );
         return _CommandMapping(
           capability: capability,
-          eventType: 'shop.cafe_order.cancel.v1',
-          auditAction: 'shop.cafe_order.cancel',
-          acceptedProjection: () => store.cancelConnected(
-            orderId: orderId as String,
-            operationId: operationId as String,
-            expectedStateRevision: revision,
-            context: context,
+          eventType: eventType,
+          auditAction: auditAction,
+          reservationRequirement: reservationRequirement,
+          acceptedProjection: () => _projectCafe(
+            () => store.cancelConnected(
+              orderId: orderId as String,
+              operationId: operationId as String,
+              expectedStateRevision: revision,
+              context: context,
+            ),
           ),
         );
       case shopCafeKitchenStatusCommandType:
@@ -422,21 +446,127 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
             status is! String) {
           throw StateError('Connected café kitchen payload is invalid.');
         }
+        const eventType = 'shop.cafe_kitchen.status.v1';
+        const auditAction = 'shop.cafe_kitchen.status';
+        final context = _cafeContext(
+          command,
+          capability: capability,
+          eventType: eventType,
+          auditAction: auditAction,
+        );
         return _CommandMapping(
           capability: capability,
-          eventType: 'shop.cafe_kitchen.status.v1',
-          auditAction: 'shop.cafe_kitchen.status',
-          acceptedProjection: () => store.advanceKitchenStatusConnected(
-            orderId: orderId as String,
-            lineId: lineId,
-            operationId: operationId as String,
-            expectedTicketVersion: version,
-            expectedStatus: status,
-            context: context,
+          eventType: eventType,
+          auditAction: auditAction,
+          acceptedProjection: () => _projectCafe(
+            () => store.advanceKitchenStatusConnected(
+              orderId: orderId as String,
+              lineId: lineId,
+              operationId: operationId as String,
+              expectedTicketVersion: version,
+              expectedStatus: status,
+              context: context,
+            ),
           ),
         );
       default:
         throw StateError('Connected café command type is unsupported.');
+    }
+  }
+
+  ShopConnectedCafeProjectionContext _cafeContext(
+    SiteCommandV1 command, {
+    required ShopStaffCapability capability,
+    required String eventType,
+    required String auditAction,
+  }) => ShopConnectedCafeProjectionContext(
+    commandId: command.commandId,
+    tenantId: command.workspaceId,
+    siteId: command.siteId,
+    actorId: command.actorId,
+    deviceId: command.deviceId,
+    aggregateId: command.aggregateId,
+    capability: capability,
+    commandType: command.commandType,
+    eventType: eventType,
+    auditAction: auditAction,
+    commandDigest: command.commandDigest,
+  );
+
+  ShopConnectedStockReservationRequirement _cafeReservationRequirement(
+    Object? value, {
+    CafeOrderCommand? cafeCommand,
+    bool releaseOnAccepted = false,
+    String? requiredPriorEventType,
+  }) {
+    if (value is! Map ||
+        value.length != 5 ||
+        value.keys.toSet().difference({
+          'reservationId',
+          'reservationDigest',
+          'reservationCommandId',
+          'reservationAckDigest',
+          'basketDigest',
+        }).isNotEmpty) {
+      throw StateError('Connected café reservation binding is invalid.');
+    }
+    final json = Map<String, Object?>.from(value);
+    final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$');
+    final digest = RegExp(r'^[0-9a-f]{64}$');
+    final reservationId = json['reservationId'];
+    final reservationDigest = json['reservationDigest'];
+    final reservationCommandId = json['reservationCommandId'];
+    final reservationAckDigest = json['reservationAckDigest'];
+    final basketDigest = json['basketDigest'];
+    if (reservationId is! String ||
+        !id.hasMatch(reservationId) ||
+        reservationCommandId is! String ||
+        !id.hasMatch(reservationCommandId) ||
+        reservationDigest is! String ||
+        !digest.hasMatch(reservationDigest) ||
+        reservationAckDigest is! String ||
+        !digest.hasMatch(reservationAckDigest) ||
+        basketDigest is! String ||
+        !digest.hasMatch(basketDigest)) {
+      throw StateError('Connected café reservation binding is invalid.');
+    }
+    if (cafeCommand != null) {
+      final quantities = <String, int>{};
+      for (final line in cafeCommand.lines) {
+        quantities.update(
+          line.productId,
+          (quantity) => quantity + line.quantity,
+          ifAbsent: () => line.quantity,
+        );
+      }
+      final productIds = quantities.keys.toList()..sort();
+      final expectedBasketDigest = connectedSiteSha256({
+        'schemaVersion': connectedStockReservationSchemaVersion,
+        'lines': [
+          for (final productId in productIds)
+            {'productId': productId, 'quantity': quantities[productId]!},
+        ],
+      });
+      if (basketDigest != expectedBasketDigest) {
+        throw StateError('Connected café reservation basket is invalid.');
+      }
+    }
+    return ShopConnectedStockReservationRequirement(
+      reservationId: reservationId,
+      reservationDigest: reservationDigest,
+      reservationCommandId: reservationCommandId,
+      reservationAckDigest: reservationAckDigest,
+      requiredBasketDigest: basketDigest,
+      releaseOnAccepted: releaseOnAccepted,
+      requiredPriorEventType: requiredPriorEventType,
+    );
+  }
+
+  Future<void> _projectCafe(Future<Object?> Function() projection) async {
+    try {
+      await projection();
+    } on ShopCafeConnectedConflictException catch (conflict) {
+      throw ShopConnectedProjectionConflict(conflict.code);
     }
   }
 
@@ -461,6 +591,7 @@ class _CommandMapping {
     required this.auditAction,
     this.reservation,
     this.lifecycle,
+    this.reservationRequirement,
     this.acceptedProjection,
   });
 
@@ -469,6 +600,7 @@ class _CommandMapping {
   final String auditAction;
   final ConnectedStockReservationV1? reservation;
   final ShopConnectedStockReservationLifecycleInput? lifecycle;
+  final ShopConnectedStockReservationRequirement? reservationRequirement;
   final Future<void> Function()? acceptedProjection;
 }
 
