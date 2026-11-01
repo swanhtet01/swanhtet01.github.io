@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_database.dart';
 
+import 'historical_shop_fixture_support.dart';
 import 'managed_staff_test_support.dart';
 
 import 'package:supermega_shop/shop_models.dart';
@@ -17,6 +18,55 @@ const _testKeyId = 'shop-export-test-2026';
 const _testPublicKey = 'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
 
 void main() {
+  test('historical schema inventory rejects retained newer objects', () {
+    final raw = sqlite3.openInMemory();
+    try {
+      requireNoPostV15SchemaObjects(raw);
+      raw.execute('CREATE TABLE shop_members (id TEXT PRIMARY KEY)');
+      expect(
+        () => requireNoPostV15SchemaObjects(raw),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('table:shop_members'),
+          ),
+        ),
+      );
+      raw.execute('DROP TABLE shop_members');
+      raw.execute(
+        'CREATE VIEW unexpected_historical_view AS SELECT 1 AS value',
+      );
+      expect(
+        () => requireNoPostV15SchemaObjects(raw),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('view:unexpected_historical_view'),
+          ),
+        ),
+      );
+    } finally {
+      raw.close();
+    }
+  });
+
+  test(
+    'historical schema inventory tracks the current database version',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        expect(
+          database.schemaVersion,
+          historicalShopFixtureSupportedSchemaVersion,
+        );
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
   test('closed-shift snapshot reads linked sale, line, movement and totals without mutation', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
@@ -136,6 +186,7 @@ void main() {
       final raw = sqlite3.open(snapshotFile.path);
       try {
         _removePostV15SchemaObjects(raw);
+        requireNoPostV15SchemaObjects(raw);
         raw.execute('PRAGMA user_version = 15');
       } finally {
         raw.close();

@@ -19,6 +19,7 @@ import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
 
+import 'historical_shop_fixture_support.dart';
 import 'managed_staff_test_support.dart';
 
 import 'package:supermega_shop/shop_models.dart';
@@ -3620,6 +3621,7 @@ void main() {
         await _dropV16MemberSchema(database);
         await database.customStatement('DROP TABLE shop_cash_shift_sales');
         await database.customStatement('DROP TABLE shop_cash_shifts');
+        await requireNoPostV15SchemaObjectsInShopDatabase(database);
         await database.customStatement('PRAGMA user_version = 5');
         await database.close();
         database = ShopDatabase(NativeDatabase(file));
