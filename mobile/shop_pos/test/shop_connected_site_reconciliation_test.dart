@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
+import 'package:supermega_shop/shop_connected_site_cloud_http.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
 
@@ -805,6 +806,298 @@ void main() {
       },
     );
   });
+
+  group('connected-site authenticated cloud executor', () {
+    test('is independently default-off before authentication or I/O', () async {
+      final authenticator = _CloudRequestAuthenticator();
+      final executor = DartIoConnectedSiteAuthenticatedRequestExecutor(
+        allowedOrigin: Uri.parse('https://cloud.example.invalid'),
+        authenticator: authenticator,
+      );
+      await expectLater(
+        executor.execute(
+          uri: Uri.parse('https://cloud.example.invalid/status'),
+          method: 'GET',
+          headers: const {'accept': 'application/json'},
+          body: const [],
+          maxResponseBytes: 1024,
+        ),
+        throwsA(
+          _reconciliationCode('connected_site_authenticated_executor_disabled'),
+        ),
+      );
+      expect(authenticator.calls, 0);
+    });
+
+    test('injects authentication only after origin validation', () async {
+      String? receivedAuthorization;
+      String? receivedBody;
+      final fixture = await _CloudTlsServer.start((request) async {
+        receivedAuthorization = request.headers.value('authorization');
+        receivedBody = await utf8.decoder.bind(request).join();
+        request.response.headers.contentType = ContentType.json;
+        request.response.write('{"accepted":true}');
+        await request.response.close();
+      });
+      try {
+        final authenticator = _CloudRequestAuthenticator();
+        final executor = fixture.executor(authenticator: authenticator);
+        final uri = fixture.origin.resolve('/reconcile');
+        final response = await executor.execute(
+          uri: uri,
+          method: 'POST',
+          headers: const {
+            'accept': 'application/json',
+            'content-type': 'application/json',
+          },
+          body: utf8.encode('{"ok":true}'),
+          maxResponseBytes: 1024,
+        );
+        expect(response.statusCode, 200);
+        expect(response.effectiveUri, uri);
+        expect(utf8.decode(response.body), '{"accepted":true}');
+        expect(receivedAuthorization, 'Device synthetic');
+        expect(receivedBody, '{"ok":true}');
+        expect(authenticator.calls, 1);
+        expect(authenticator.lastBodySha256, connectedSiteSha256({'ok': true}));
+
+        await expectLater(
+          executor.execute(
+            uri: Uri.parse('https://other.example.invalid/reconcile'),
+            method: 'POST',
+            headers: const {'accept': 'application/json'},
+            body: const [],
+            maxResponseBytes: 1024,
+          ),
+          throwsA(_reconciliationCode('connected_site_cloud_request_rejected')),
+        );
+        expect(authenticator.calls, 1);
+      } finally {
+        await fixture.close();
+      }
+    });
+
+    test('rejects redirects and aborts streaming at the caller cap', () async {
+      var requests = 0;
+      final fixture = await _CloudTlsServer.start((request) async {
+        requests += 1;
+        if (request.uri.path == '/redirect') {
+          request.response
+            ..statusCode = HttpStatus.found
+            ..headers.set(HttpHeaders.locationHeader, '/final');
+        } else {
+          request.response.headers.contentType = ContentType.json;
+          request.response.add(List<int>.filled(2048, 120));
+        }
+        await request.response.close();
+      });
+      try {
+        final executor = fixture.executor(
+          authenticator: _CloudRequestAuthenticator(),
+        );
+        await expectLater(
+          executor.execute(
+            uri: fixture.origin.resolve('/redirect'),
+            method: 'GET',
+            headers: const {'accept': 'application/json'},
+            body: const [],
+            maxResponseBytes: 1024,
+          ),
+          throwsA(
+            _reconciliationCode('connected_site_cloud_redirect_rejected'),
+          ),
+        );
+        expect(requests, 1);
+        await expectLater(
+          executor.execute(
+            uri: fixture.origin.resolve('/large'),
+            method: 'GET',
+            headers: const {'accept': 'application/json'},
+            body: const [],
+            maxResponseBytes: 1024,
+          ),
+          throwsA(
+            _reconciliationCode('connected_site_cloud_response_too_large'),
+          ),
+        );
+        expect(requests, 2);
+      } finally {
+        await fixture.close();
+      }
+    });
+
+    test('rejects credential header injection before network I/O', () async {
+      final authenticator = _CloudRequestAuthenticator(
+        headers: const {'cookie': 'forbidden=value'},
+      );
+      final executor = DartIoConnectedSiteAuthenticatedRequestExecutor(
+        allowedOrigin: Uri.parse('https://cloud.example.invalid'),
+        authenticator: authenticator,
+        runtimeEnabled: true,
+      );
+      await expectLater(
+        executor.execute(
+          uri: Uri.parse('https://cloud.example.invalid/status'),
+          method: 'GET',
+          headers: const {'accept': 'application/json'},
+          body: const [],
+          maxResponseBytes: 1024,
+        ),
+        throwsA(
+          _reconciliationCode('connected_site_cloud_authentication_rejected'),
+        ),
+      );
+      expect(authenticator.calls, 1);
+    });
+
+    test('rejects partial or mixed authentication envelopes', () async {
+      for (final headers in <Map<String, String>>[
+        const {'x-supermega-device-id': 'device-a'},
+        const {
+          'x-supermega-device-id': 'device-a',
+          'x-supermega-key-id': 'key-a',
+          'x-supermega-request-signature': 'signature-a',
+        },
+        const {
+          'authorization': 'Device synthetic',
+          'x-supermega-device-id': 'device-a',
+          'x-supermega-key-id': 'key-a',
+          'x-supermega-request-signature': 'signature-a',
+          'x-supermega-request-timestamp': '2026-11-01T00:00:00Z',
+        },
+      ]) {
+        final executor = DartIoConnectedSiteAuthenticatedRequestExecutor(
+          allowedOrigin: Uri.parse('https://cloud.example.invalid'),
+          authenticator: _CloudRequestAuthenticator(headers: headers),
+          runtimeEnabled: true,
+        );
+        await expectLater(
+          executor.execute(
+            uri: Uri.parse('https://cloud.example.invalid/status'),
+            method: 'GET',
+            headers: const {'accept': 'application/json'},
+            body: const [],
+            maxResponseBytes: 1024,
+          ),
+          throwsA(
+            _reconciliationCode('connected_site_cloud_authentication_rejected'),
+          ),
+        );
+      }
+    });
+
+    test('rejects control characters before network I/O', () async {
+      for (final value in <String>['value\u0000suffix', 'value\tsuffix']) {
+        final executor = DartIoConnectedSiteAuthenticatedRequestExecutor(
+          allowedOrigin: Uri.parse('https://cloud.example.invalid'),
+          authenticator: _CloudRequestAuthenticator(),
+          runtimeEnabled: true,
+        );
+        await expectLater(
+          executor.execute(
+            uri: Uri.parse('https://cloud.example.invalid/status'),
+            method: 'GET',
+            headers: {'x-test-value': value},
+            body: const [],
+            maxResponseBytes: 1024,
+          ),
+          throwsA(
+            _reconciliationCode(
+              'connected_site_cloud_request_headers_rejected',
+            ),
+          ),
+        );
+      }
+    });
+
+    test('rejects ambient HTTP overrides before authentication', () async {
+      final authenticator = _CloudRequestAuthenticator();
+      await HttpOverrides.runZoned(() async {
+        final executor = DartIoConnectedSiteAuthenticatedRequestExecutor(
+          allowedOrigin: Uri.parse('https://cloud.example.invalid'),
+          authenticator: authenticator,
+          runtimeEnabled: true,
+        );
+        await expectLater(
+          executor.execute(
+            uri: Uri.parse('https://cloud.example.invalid/status'),
+            method: 'GET',
+            headers: const {'accept': 'application/json'},
+            body: const [],
+            maxResponseBytes: 1024,
+          ),
+          throwsA(
+            _reconciliationCode('connected_site_cloud_http_override_rejected'),
+          ),
+        );
+      }, createHttpClient: (_) => throw StateError('must not create a client'));
+      expect(authenticator.calls, 0);
+    });
+
+    test('rechecks HTTP overrides after asynchronous authentication', () async {
+      final authenticator = _OverrideInstallingCloudAuthenticator();
+      try {
+        final executor = DartIoConnectedSiteAuthenticatedRequestExecutor(
+          allowedOrigin: Uri.parse('https://cloud.example.invalid'),
+          authenticator: authenticator,
+          runtimeEnabled: true,
+        );
+        await expectLater(
+          executor.execute(
+            uri: Uri.parse('https://cloud.example.invalid/status'),
+            method: 'GET',
+            headers: const {'accept': 'application/json'},
+            body: const [],
+            maxResponseBytes: 1024,
+          ),
+          throwsA(
+            _reconciliationCode('connected_site_cloud_http_override_rejected'),
+          ),
+        );
+        expect(authenticator.calls, 1);
+        expect(authenticator.clientCreations, 0);
+      } finally {
+        HttpOverrides.global = null;
+      }
+    });
+
+    test('enforces one end-to-end deadline against slow drip bodies', () async {
+      var requests = 0;
+      final fixture = await _CloudTlsServer.start((request) async {
+        requests += 1;
+        request.response.headers.contentType = ContentType.json;
+        for (var index = 0; index < 8; index += 1) {
+          request.response.add(const [120]);
+          await request.response.flush();
+          await Future<void>.delayed(const Duration(milliseconds: 40));
+        }
+        await request.response.close();
+      });
+      final elapsed = Stopwatch()..start();
+      try {
+        final executor = fixture.executor(
+          authenticator: _CloudRequestAuthenticator(),
+          timeout: const Duration(milliseconds: 140),
+        );
+        await expectLater(
+          executor.execute(
+            uri: fixture.origin.resolve('/slow'),
+            method: 'GET',
+            headers: const {'accept': 'application/json'},
+            body: const [],
+            maxResponseBytes: 1024,
+          ),
+          throwsA(
+            _reconciliationCode('connected_site_cloud_transport_timeout'),
+          ),
+        );
+        expect(requests, 1);
+        expect(elapsed.elapsed, lessThan(const Duration(seconds: 1)));
+      } finally {
+        await fixture.close();
+      }
+    });
+  });
 }
 
 Matcher _reconciliationCode(String code) =>
@@ -1314,4 +1607,145 @@ Map<String, Object?> _cloudAuthorityResponse(
     'authoritySignature': 's' * 64,
     'issuerKeyId': 'authority-key-1',
   };
+}
+
+class _CloudRequestAuthenticator
+    implements ConnectedSiteCloudRequestAuthenticator {
+  _CloudRequestAuthenticator({
+    this.headers = const {'authorization': 'Device synthetic'},
+  });
+
+  final Map<String, String> headers;
+  int calls = 0;
+  String? lastBodySha256;
+
+  @override
+  Future<Map<String, String>> authenticationHeaders({
+    required Uri uri,
+    required String method,
+    required String bodySha256,
+  }) async {
+    calls += 1;
+    lastBodySha256 = bodySha256;
+    return headers;
+  }
+}
+
+class _OverrideInstallingCloudAuthenticator
+    implements ConnectedSiteCloudRequestAuthenticator {
+  int calls = 0;
+  int clientCreations = 0;
+
+  @override
+  Future<Map<String, String>> authenticationHeaders({
+    required Uri uri,
+    required String method,
+    required String bodySha256,
+  }) async {
+    calls += 1;
+    await Future<void>.delayed(Duration.zero);
+    HttpOverrides.global = _RejectingHttpOverrides(
+      onCreate: () => clientCreations += 1,
+    );
+    return const {'authorization': 'Device synthetic'};
+  }
+}
+
+class _RejectingHttpOverrides extends HttpOverrides {
+  _RejectingHttpOverrides({required this.onCreate});
+
+  final void Function() onCreate;
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    onCreate();
+    throw StateError('overridden client must not be created');
+  }
+}
+
+class _CloudTlsServer {
+  _CloudTlsServer._({
+    required this.server,
+    required this.directory,
+    required this.clientContext,
+  });
+
+  final HttpServer server;
+  final Directory directory;
+  final SecurityContext clientContext;
+
+  Uri get origin => Uri(scheme: 'https', host: 'localhost', port: server.port);
+
+  DartIoConnectedSiteAuthenticatedRequestExecutor executor({
+    required ConnectedSiteCloudRequestAuthenticator authenticator,
+    Duration timeout = const Duration(seconds: 12),
+  }) => DartIoConnectedSiteAuthenticatedRequestExecutor(
+    allowedOrigin: origin,
+    authenticator: authenticator,
+    trustedContext: clientContext,
+    runtimeEnabled: true,
+    timeout: timeout,
+  );
+
+  static Future<_CloudTlsServer> start(
+    Future<void> Function(HttpRequest request) handler,
+  ) async {
+    final directory = await Directory.systemTemp.createTemp(
+      'supermega-cloud-http-test-',
+    );
+    final certificate = File('${directory.path}/certificate.pem');
+    final privateKey = File('${directory.path}/private-key.pem');
+    final result = await Process.run('openssl', <String>[
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-keyout',
+      privateKey.path,
+      '-out',
+      certificate.path,
+      '-subj',
+      '/CN=localhost',
+      '-addext',
+      'subjectAltName=DNS:localhost,IP:127.0.0.1',
+      '-days',
+      '1',
+    ]);
+    if (result.exitCode != 0) {
+      await directory.delete(recursive: true);
+      throw StateError('openssl_cloud_test_identity_failed:${result.exitCode}');
+    }
+    final serverContext = SecurityContext(withTrustedRoots: false)
+      ..useCertificateChain(certificate.path)
+      ..usePrivateKey(privateKey.path);
+    final server = await HttpServer.bindSecure(
+      InternetAddress.loopbackIPv4,
+      0,
+      serverContext,
+    );
+    server.listen((request) async {
+      try {
+        await handler(request);
+      } on Object {
+        try {
+          await request.response.close();
+        } on Object {
+          // The size-cap test deliberately closes the client mid-response.
+        }
+      }
+    });
+    final clientContext = SecurityContext(withTrustedRoots: false)
+      ..setTrustedCertificates(certificate.path);
+    return _CloudTlsServer._(
+      server: server,
+      directory: directory,
+      clientContext: clientContext,
+    );
+  }
+
+  Future<void> close() async {
+    await server.close(force: true);
+    await directory.delete(recursive: true);
+  }
 }
