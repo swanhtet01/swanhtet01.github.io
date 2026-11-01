@@ -2405,6 +2405,24 @@ void _downgradeV19(File file, int target) {
   final connection = sqlite.sqlite3.open(file.path);
   try {
     for (final definition
+        in shopConnectedCloudProofSchemaDefinitionsV35().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedReplicaSchemaDefinitionsV33().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedReplicaSchemaDefinitionsV32().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
         in shopConnectedReservationSessionSchemaDefinitionsV31().entries
             .toList()
             .reversed) {
