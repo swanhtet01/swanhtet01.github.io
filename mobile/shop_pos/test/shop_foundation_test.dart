@@ -1991,7 +1991,7 @@ void main() {
 
       final first = await database.readRecentSales(limit: 31);
       final second = await database.readRecentSales(limit: 31, offset: 30);
-      expect(first, hasLength(32));
+      expect(first, hasLength(31));
       expect(second, hasLength(5));
       expect(
         first
@@ -4806,6 +4806,24 @@ void main() {
 }
 
 Future<void> _dropV16MemberSchema(ShopDatabase database) async {
+  for (final definitions in [
+    shopConnectedCloudProofSchemaDefinitionsV35(),
+    shopConnectedReplicaSchemaDefinitionsV33(),
+    shopConnectedReplicaSchemaDefinitionsV32(),
+    shopConnectedReservationSessionSchemaDefinitionsV31(),
+    shopConnectedAuthorityPayloadSchemaDefinitionsV30(),
+  ]) {
+    for (final definition in definitions.entries.toList().reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      await database.customStatement(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
+  }
   for (final definition
       in shopConnectedEnvelopeSchemaDefinitionsV29().entries
           .toList()

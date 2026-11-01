@@ -492,6 +492,24 @@ Future<ShopCorrectionAuthorization> _authorization({
 }
 
 void _removePostV15SchemaObjects(Database connection) {
+  for (final definitions in [
+    shopConnectedCloudProofSchemaDefinitionsV35(),
+    shopConnectedReplicaSchemaDefinitionsV33(),
+    shopConnectedReplicaSchemaDefinitionsV32(),
+    shopConnectedReservationSessionSchemaDefinitionsV31(),
+    shopConnectedAuthorityPayloadSchemaDefinitionsV30(),
+  ]) {
+    for (final definition in definitions.entries.toList().reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      connection.execute(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
+  }
   for (final definition
       in shopConnectedEnvelopeSchemaDefinitionsV29().entries
           .toList()
