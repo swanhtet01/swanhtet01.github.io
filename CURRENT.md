@@ -29,8 +29,20 @@
   dependency set is currently available, and the rejected blanket v11
   override or forced downgrade must not be used.
 - GitGuardian remains **FAIL / BLOCKED** with two distinct findings across the
-  PR history. Neither finding is resolved by this ledger and their contents
-  must not be reproduced here.
+  PR history. Sanitized independent triage correlates them with (1) a
+  deterministic test-only PostgreSQL blocker assertion introduced at
+  `d696c98a` and source-remediated at `721922eb`, and (2) a real private-key
+  syntax block introduced at `4ede1560` as a synthetic self-signed coordinator
+  test fixture and removed at `01e8eb13` in favor of per-run ephemeral
+  generation. Both removal/remediation commits are ancestors of the published
+  head; current source contains neither historical literal representation nor
+  committed test key. No production use or trust binding is evidenced, but
+  the historical key is treated as compromised by definition. GitHub exposes
+  no finding annotations, so exact provider incident-to-path mapping still
+  requires authorized dashboard read access. Neither incident is dispositioned
+  by this ledger, their contents must not be reproduced, and no rotation or
+  false-positive decision may be inferred without the owner confirming that no
+  external trust store or deployment ever used the synthetic certificate.
 - Local test-only successor
   `beb03ceb149f7e961d1d78b148b8da425e553726`, tree
   `dc2329e0f6db22f20522c249d8b3bd12ae97d677`, adds a fail-closed historical
