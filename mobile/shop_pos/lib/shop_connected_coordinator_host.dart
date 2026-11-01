@@ -55,6 +55,7 @@ class MethodChannelConnectedCoordinatorPlatformLifecycle
   final Duration startPollInterval;
 
   String? _alias;
+  bool _nativeMayBeStarted = false;
 
   Future<Object?> _invoke(String method, Map<String, Object> arguments) =>
       _invokeOverride?.call(method, arguments) ??
@@ -62,9 +63,10 @@ class MethodChannelConnectedCoordinatorPlatformLifecycle
 
   @override
   Future<void> start({required String coordinatorAlias}) async {
-    if (_alias != null) {
+    if (_alias != null || _nativeMayBeStarted) {
       throw StateError('connected_coordinator_platform_already_started');
     }
+    _nativeMayBeStarted = true;
     try {
       var status = _status(
         await _invoke('start', <String, Object>{
@@ -141,6 +143,7 @@ class MethodChannelConnectedCoordinatorPlatformLifecycle
         status.connectedOperationEnabled) {
       throw StateError('connected_coordinator_platform_stop_unconfirmed');
     }
+    _nativeMayBeStarted = false;
   }
 
   _ConnectedCoordinatorPlatformStatus _status(Object? value) {
@@ -233,6 +236,7 @@ class MethodChannelWindowsConnectedCoordinatorPlatformLifecycle
   final MethodChannel _channel;
   final ConnectedCoordinatorPlatformInvoker? _invokeOverride;
   String? _alias;
+  bool _nativeMayBeStarted = false;
 
   Future<Object?> _invoke(String method, Map<String, Object> arguments) =>
       _invokeOverride?.call(method, arguments) ??
@@ -240,9 +244,10 @@ class MethodChannelWindowsConnectedCoordinatorPlatformLifecycle
 
   @override
   Future<void> start({required String coordinatorAlias}) async {
-    if (_alias != null) {
+    if (_alias != null || _nativeMayBeStarted) {
       throw StateError('connected_windows_coordinator_already_started');
     }
+    _nativeMayBeStarted = true;
     try {
       final status = _status(
         await _invoke('start', <String, Object>{
@@ -287,6 +292,8 @@ class MethodChannelWindowsConnectedCoordinatorPlatformLifecycle
     );
     if (!status.featureEnabled ||
         !status.ownerHeld ||
+        !status.restartCleanupComplete ||
+        !status.visibleStatusRequired ||
         status.state != 'running' ||
         status.coordinatorAlias != coordinatorAlias ||
         !status.transportListening ||
@@ -311,9 +318,12 @@ class MethodChannelWindowsConnectedCoordinatorPlatformLifecycle
         status.transportListening ||
         status.sharedWritesAvailable ||
         status.coordinatorAlias != null ||
+        !status.restartCleanupComplete ||
+        !status.visibleStatusRequired ||
         !const <String>{'stopped', 'disabled'}.contains(status.state)) {
       throw StateError('connected_windows_coordinator_stop_unconfirmed');
     }
+    _nativeMayBeStarted = false;
   }
 
   _ConnectedWindowsCoordinatorStatus _status(Object? value) {
@@ -503,54 +513,44 @@ class ConnectedCoordinatorRuntimeHost implements ConnectedCoordinatorHost {
   }
 
   Future<bool> _rollbackStart() async {
-    var confirmed = true;
     if (_transportStarted) {
       try {
         await transport.stop();
-      } catch (_) {
-        confirmed = false;
-      } finally {
         _transportStarted = false;
+      } catch (_) {
+        // Keep the transport and visible platform marked started. A listener
+        // with unknown stop outcome must remain visible and retryable.
+        return false;
       }
     }
     if (_platformStarted) {
       try {
         await platform.stop();
-      } catch (_) {
-        confirmed = false;
-      } finally {
         _platformStarted = false;
+      } catch (_) {
+        return false;
       }
     }
-    return confirmed;
+    return true;
   }
 
   @override
   Future<void> stop() async {
-    Object? failure;
-    StackTrace? failureStack;
     if (_transportStarted) {
       try {
         await transport.stop();
-      } catch (error, stackTrace) {
-        failure = error;
-        failureStack = stackTrace;
-      } finally {
         _transportStarted = false;
+      } catch (error, stackTrace) {
+        Error.throwWithStackTrace(error, stackTrace);
       }
     }
     if (_platformStarted) {
       try {
         await platform.stop();
-      } catch (error, stackTrace) {
-        failure ??= error;
-        failureStack ??= stackTrace;
-      } finally {
         _platformStarted = false;
+      } catch (error, stackTrace) {
+        Error.throwWithStackTrace(error, stackTrace);
       }
-    }
-    if (failure != null) {
-      Error.throwWithStackTrace(failure, failureStack!);
     }
   }
 }

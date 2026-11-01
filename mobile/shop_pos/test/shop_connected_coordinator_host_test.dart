@@ -97,11 +97,43 @@ void main() {
     ]);
   });
 
+  test('failed transport cleanup remains visible and retryable', () async {
+    platform.failListening = true;
+    transport.failStop = true;
+    await expectLater(
+      host.start(
+        bindAddress: '192.168.10.4',
+        identity: _identity(),
+        tlsIdentity: _tls(),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'connected_coordinator_host_cleanup_unconfirmed',
+        ),
+      ),
+    );
+    expect(platform.events, isNot(contains('platform.stop')));
+    await expectLater(host.stop(), throwsStateError);
+    await expectLater(
+      host.start(
+        bindAddress: '192.168.10.4',
+        identity: _identity(),
+        tlsIdentity: _tls(),
+      ),
+      throwsStateError,
+    );
+    transport.failStop = false;
+    await host.stop();
+    expect(platform.timeline.takeLast(2), ['transport.stop', 'platform.stop']);
+  });
+
   test(
-    'cleanup failure is explicit and a later stop stays idempotent',
+    'failed platform cleanup remains retryable and blocks restart',
     () async {
       platform.failListening = true;
-      transport.failStop = true;
+      platform.failStop = true;
       await expectLater(
         host.start(
           bindAddress: '192.168.10.4',
@@ -116,6 +148,20 @@ void main() {
           ),
         ),
       );
+      expect(
+        transport.events.where((event) => event == 'transport.stop'),
+        hasLength(1),
+      );
+      await expectLater(host.stop(), throwsStateError);
+      await expectLater(
+        host.start(
+          bindAddress: '192.168.10.4',
+          identity: _identity(),
+          tlsIdentity: _tls(),
+        ),
+        throwsStateError,
+      );
+      platform.failStop = false;
       await host.stop();
     },
   );
@@ -221,6 +267,38 @@ void main() {
   );
 
   test(
+    'Android bridge blocks restart until uncertain cleanup is retried',
+    () async {
+      final native = _NativeLifecycle(<Object?>[
+        _status(state: 'running', alias: 'site-primary', listening: true),
+        null,
+        _status(state: 'stopped'),
+      ]);
+      final bridge = MethodChannelConnectedCoordinatorPlatformLifecycle(
+        invoke: native.invoke,
+        delay: (_) async {},
+      );
+
+      await expectLater(
+        bridge.start(coordinatorAlias: 'site-primary'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'connected_coordinator_platform_cleanup_unconfirmed',
+          ),
+        ),
+      );
+      await expectLater(
+        bridge.start(coordinatorAlias: 'site-primary'),
+        throwsStateError,
+      );
+      await bridge.stop();
+      expect(native.methods, ['start', 'stop', 'stop']);
+    },
+  );
+
+  test(
     'Windows bridge confirms ownership before and after listener bind',
     () async {
       final native = _NativeLifecycle(<Object?>[
@@ -284,6 +362,37 @@ void main() {
       ),
     );
   });
+
+  test(
+    'Windows bridge blocks restart until uncertain cleanup is retried',
+    () async {
+      final native = _NativeLifecycle(<Object?>[
+        _windowsStatus(alias: 'site-primary', ownerHeld: false),
+        null,
+        _windowsStatus(state: 'stopped', featureEnabled: true),
+      ]);
+      final bridge = MethodChannelWindowsConnectedCoordinatorPlatformLifecycle(
+        invoke: native.invoke,
+      );
+
+      await expectLater(
+        bridge.start(coordinatorAlias: 'site-primary'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'connected_windows_coordinator_cleanup_unconfirmed',
+          ),
+        ),
+      );
+      await expectLater(
+        bridge.start(coordinatorAlias: 'site-primary'),
+        throwsStateError,
+      );
+      await bridge.stop();
+      expect(native.methods, ['start', 'stop', 'stop']);
+    },
+  );
 }
 
 final _timeline = <String>[];
@@ -293,6 +402,7 @@ class _Platform implements ConnectedCoordinatorPlatformLifecycle {
   final timeline = _timeline..clear();
   bool failStart = false;
   bool failListening = false;
+  bool failStop = false;
 
   @override
   Future<void> start({required String coordinatorAlias}) async {
@@ -314,6 +424,7 @@ class _Platform implements ConnectedCoordinatorPlatformLifecycle {
   Future<void> stop() async {
     events.add('platform.stop');
     timeline.add('platform.stop');
+    if (failStop) throw StateError('synthetic_platform_stop');
   }
 }
 

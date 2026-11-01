@@ -578,6 +578,8 @@ class SiteCoordinatorServer {
 
   HttpServer? _server;
   int _activeRequests = 0;
+  bool _stopping = false;
+  Completer<void>? _drained;
 
   bool get isRunning => _server != null;
   int? get boundPort => _server?.port;
@@ -627,11 +629,26 @@ class SiteCoordinatorServer {
 
   Future<void> stop() async {
     final server = _server;
+    if (server == null) return;
+    _stopping = true;
+    await server.close(force: true).timeout(requestTimeout);
+    if (_activeRequests > 0) {
+      final drained = _drained ??= Completer<void>();
+      await drained.future.timeout(requestTimeout);
+    }
     _server = null;
-    await server?.close(force: false);
+    _stopping = false;
+    _drained = null;
   }
 
   Future<void> _serve(HttpRequest request) async {
+    if (_stopping) {
+      await _write(
+        request.response,
+        _error(HttpStatus.serviceUnavailable, 'coordinator_stopping'),
+      );
+      return;
+    }
     if (_activeRequests >= maxConcurrentRequests) {
       await _write(
         request.response,
@@ -642,6 +659,13 @@ class SiteCoordinatorServer {
     _activeRequests += 1;
     try {
       final body = await _readBody(request);
+      if (_stopping) {
+        await _write(
+          request.response,
+          _error(HttpStatus.serviceUnavailable, 'coordinator_stopping'),
+        );
+        return;
+      }
       final response = await dispatch(
         SiteCoordinatorRequest(
           method: request.method,
@@ -668,6 +692,9 @@ class SiteCoordinatorServer {
       );
     } finally {
       _activeRequests -= 1;
+      if (_activeRequests == 0 && _drained != null && !_drained!.isCompleted) {
+        _drained!.complete();
+      }
     }
   }
 

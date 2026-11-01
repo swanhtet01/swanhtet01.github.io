@@ -115,6 +115,57 @@ void main() {
         expect(server.isRunning, isFalse);
       },
     );
+
+    test(
+      'forced stop drains an incomplete TLS request before returning',
+      () async {
+        final identity = CoordinatorTlsIdentity.fromPem(
+          certificateChainPem: Uint8List.fromList(
+            utf8.encode(_testCertificatePem),
+          ),
+          privateKeyPem: Uint8List.fromList(utf8.encode(_testPrivateKeyPem)),
+        );
+        final keys = _ClientKeys();
+        final server = SiteCoordinatorServer(
+          runtimeEnabled: true,
+          pairing: _NonceStore(),
+          requestAuthenticator: Ed25519CoordinatorRequestAuthenticator(
+            clients: keys,
+            nonces: _RequestNonces(),
+            now: () => _now,
+          ),
+          commands: _Commands(),
+          replication: _Replication(),
+          health: _Health(),
+          pairingResponse: _pairing(
+            certificateSha256: identity.leafCertificateSha256,
+          ),
+          now: () => _now,
+        );
+        await server.start(
+          address: InternetAddress.loopbackIPv4,
+          port: 0,
+          tlsIdentity: identity,
+          allowLoopbackForSimulation: true,
+        );
+        final client = HttpClient()..badCertificateCallback = (_, _, _) => true;
+        try {
+          final request = await client.postUrl(
+            Uri.parse('https://127.0.0.1:${server.boundPort}/v1/pair'),
+          );
+          request.contentLength = 10;
+          request.add(const [1]);
+          await request.flush();
+
+          await server.stop().timeout(const Duration(seconds: 2));
+          expect(server.isRunning, isFalse);
+          await server.stop();
+        } finally {
+          client.close(force: true);
+          if (server.isRunning) await server.stop();
+        }
+      },
+    );
   });
 
   group('coordinator protocol dispatcher (loopback-free simulation)', () {
