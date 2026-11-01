@@ -39,6 +39,11 @@
   CI contract tests are **21/21 PASS**, the contract verifier is **PASS**, and
   extracted shell syntax is **PASS**. Independent source review and final
   budget/control review both **ACCEPT** with no findings.
+- On the clean successor, PostgreSQL provenance/observer self-tests are
+  **80/80 Node + 30/30 Python PASS** and the Shop claims guard is **179/179
+  PASS**. The read-only receipt verifier returns only
+  `database_rehearsal_evidence_stale` with no secret exposure, preserving the
+  intended fail-closed release boundary.
 - Release remains **BLOCKED**: PostgreSQL 17 evidence is stale and the genuine
   Windows rehearsal is **NOT RUN**; dependency security remains red on the
   unsupported upstream minimatch range; exact-current hosted CI, signed
