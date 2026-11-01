@@ -146,6 +146,26 @@ void main() {
         );
         expect((await reader.readDelta(_fingerprint, 0)).events, hasLength(1));
 
+        for (final forged in [
+          _releaseCommand('release-wrong-actor', reserve, actorId: 'other'),
+          _releaseCommand('release-wrong-device', reserve, deviceId: 'other'),
+          _releaseCommand(
+            'release-wrong-subject',
+            reserve,
+            aggregateId: 'other',
+          ),
+          _releaseCommand(
+            'release-wrong-workflow-capability',
+            reserve,
+            aggregateType: ConnectedStockWorkflowType.cafeOrder.name,
+            commandType: shopCafeStockReleaseCommandType,
+          ),
+        ]) {
+          await expectLater(
+            handler.handle(_fingerprint, forged),
+            throwsStateError,
+          );
+        }
         final release = _releaseCommand('adapter-release', reserve);
         final released = await handler.handle(_fingerprint, release);
         expect(released.state, SiteCommandAckState.accepted);
@@ -561,7 +581,15 @@ SiteCommandV1 _reserveCommand(
   );
 }
 
-SiteCommandV1 _releaseCommand(String id, SiteCommandV1 reserve) {
+SiteCommandV1 _releaseCommand(
+  String id,
+  SiteCommandV1 reserve, {
+  String actorId = _actor,
+  String deviceId = _device,
+  String? aggregateType,
+  String? aggregateId,
+  String commandType = shopRetailStockReleaseCommandType,
+}) {
   final reservation = ConnectedStockReservationV1.fromJson(
     reserve.payload['reservation'],
   );
@@ -576,12 +604,12 @@ SiteCommandV1 _releaseCommand(String id, SiteCommandV1 reserve) {
     commandId: id,
     workspaceId: _workspace,
     siteId: _site,
-    actorId: _actor,
-    deviceId: _device,
-    aggregateType: reservation.workflowType.name,
-    aggregateId: reservation.subjectId,
+    actorId: actorId,
+    deviceId: deviceId,
+    aggregateType: aggregateType ?? reservation.workflowType.name,
+    aggregateId: aggregateId ?? reservation.subjectId,
     expectedVersion: 1,
-    commandType: shopRetailStockReleaseCommandType,
+    commandType: commandType,
     payload: payload,
     payloadDigest: connectedSiteSha256(payload),
     leaseDigest: _leaseDigest,

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import 'shop_connected_site_contracts.dart';
@@ -49,8 +51,8 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
     if (!connectedSiteEnabled) {
       throw StateError('Connected-site database commands are disabled.');
     }
-    final mapping = _mapping(command);
     await _requireActiveClient(clientFingerprint, command);
+    final mapping = await _mapping(command);
     final issuedAtMillis = DateTime.parse(command.issuedAt)
         .toUtc()
         .millisecondsSinceEpoch;
@@ -146,7 +148,7 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
     }
   }
 
-  _CommandMapping _mapping(SiteCommandV1 command) {
+  Future<_CommandMapping> _mapping(SiteCommandV1 command) async {
     final isReserve = switch (command.commandType) {
       shopRetailStockReserveCommandType ||
       shopCafeStockReserveCommandType => true,
@@ -199,14 +201,51 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
         command.payload['reason'] is! String) {
       throw StateError('Connected-site release payload is invalid.');
     }
+    final reservationId = command.payload['reservationId']! as String;
+    final expectedDigest =
+        command.payload['expectedReservationDigest']! as String;
+    final stored = await database
+        .customSelect(
+          'SELECT reservation_json FROM '
+          'shop_connected_stock_reservation_headers '
+          'WHERE reservation_id = ? AND tenant_id = ? AND site_id = ? '
+          'AND actor_id = ? AND device_id = ? AND workflow_type = ? '
+          'AND subject_id = ? AND capability = ?',
+          variables: [
+            Variable<String>(reservationId),
+            Variable<String>(command.workspaceId),
+            Variable<String>(command.siteId),
+            Variable<String>(command.actorId),
+            Variable<String>(command.deviceId),
+            Variable<String>(workflow.name),
+            Variable<String>(command.aggregateId),
+            Variable<String>(capability.name),
+          ],
+        )
+        .getSingleOrNull();
+    if (stored == null) {
+      throw StateError('Connected-site release scope is invalid.');
+    }
+    final reservation = ConnectedStockReservationV1.fromJson(
+      jsonDecode(stored.read<String>('reservation_json')),
+    );
+    if (reservation.workspaceId != command.workspaceId ||
+        reservation.siteId != command.siteId ||
+        reservation.actorId != command.actorId ||
+        reservation.deviceId != command.deviceId ||
+        reservation.workflowType != workflow ||
+        reservation.subjectId != command.aggregateId ||
+        reservation.capability != capability ||
+        reservation.reservationDigest != expectedDigest) {
+      throw StateError('Connected-site release scope is invalid.');
+    }
     return _CommandMapping(
       capability: capability,
       eventType: shopConnectedStockReleasedEventType,
       auditAction: 'shop.connected_stock.release',
       lifecycle: ShopConnectedStockReservationLifecycleInput.release(
-        reservationId: command.payload['reservationId']! as String,
-        expectedReservationDigest:
-            command.payload['expectedReservationDigest']! as String,
+        reservationId: reservationId,
+        expectedReservationDigest: expectedDigest,
         reason: command.payload['reason']! as String,
       ),
     );

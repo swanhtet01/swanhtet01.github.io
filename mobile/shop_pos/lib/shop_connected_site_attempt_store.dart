@@ -654,6 +654,9 @@ class ShopConnectedSiteAttemptStore
             variables: [Variable.withString(command.commandId)],
           )
           .getSingleOrNull();
+      final preparedAtMillis =
+          existing?.read<int>('prepared_at_millis') ??
+          now().millisecondsSinceEpoch;
       if (existing == null) {
         await database.customStatement(
           'INSERT INTO shop_site_command_attempts (command_id, binding_digest, '
@@ -670,7 +673,7 @@ class ShopConnectedSiteAttemptStore
             command.commandDigest,
             commandJson,
             bodySha256,
-            now().millisecondsSinceEpoch,
+            preparedAtMillis,
           ],
         );
       } else if (existing.read<String>('binding_digest') != bindingDigest ||
@@ -678,6 +681,10 @@ class ShopConnectedSiteAttemptStore
           existing.read<String>('body_sha256') != bodySha256) {
         throw StateError('connected_command_attempt_substituted');
       }
+      await database.bindConnectedReservationSessionAttemptV31(
+        command,
+        boundAtMillis: preparedAtMillis,
+      );
       await database.verifyConnectedAttemptEvidence();
       final result = await database
           .customSelect(

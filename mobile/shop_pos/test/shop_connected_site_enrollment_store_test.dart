@@ -140,7 +140,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 30);
+      expect(database.schemaVersion, 31);
       for (final table in const [
         'shop_site_pairing_nonces',
         'shop_site_pending_enrollments',

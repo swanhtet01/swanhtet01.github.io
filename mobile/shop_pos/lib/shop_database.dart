@@ -2419,6 +2419,40 @@ Map<String, String> shopConnectedAuthorityPayloadSchemaDefinitionsV30() => {
   },
 };
 
+const shopConnectedReservationSessionBindingsV31Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_reservation_session_bindings (
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    workflow_type TEXT NOT NULL CHECK (workflow_type IN ('retailCart', 'cafeOrder')),
+    subject_id TEXT NOT NULL CHECK (length(subject_id) BETWEEN 1 AND 128),
+    reservation_id TEXT NOT NULL CHECK (length(reservation_id) BETWEEN 1 AND 128),
+    reservation_digest TEXT NOT NULL CHECK (length(reservation_digest) = 64),
+    reserve_command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_command_attempts(command_id),
+    reserve_command_digest TEXT NOT NULL CHECK (length(reserve_command_digest) = 64),
+    bound_at_millis INTEGER NOT NULL CHECK (bound_at_millis > 0),
+    PRIMARY KEY (workspace_id, site_id, actor_id, device_id, workflow_type, subject_id)
+  )
+''';
+
+Map<String, String> shopConnectedReservationSessionSchemaDefinitionsV31() => {
+  'shop_connected_reservation_session_bindings':
+      shopConnectedReservationSessionBindingsV31Sql,
+  'shop_connected_reservation_session_bindings_no_update':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_connected_reservation_session_bindings',
+        operation: 'update',
+        message: 'Connected reservation session bindings are immutable',
+      ),
+  'shop_connected_reservation_session_bindings_no_delete':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_connected_reservation_session_bindings',
+        operation: 'delete',
+        message: 'Connected reservation session bindings are immutable',
+      ),
+};
+
 bool shopConnectedAuthorityPayloadRowsValidV30({
   required Iterable<Map<String, Object?>> payloads,
   required Iterable<Map<String, Object?>> members,
@@ -4096,7 +4130,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 30) return const {};
+  if (schemaVersion < 5 || schemaVersion > 31) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -5085,7 +5119,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v30.');
+        throw StateError('The staged Shop restore did not reach schema v31.');
       }
     } finally {
       await database.close();
@@ -5152,7 +5186,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5192,16 +5226,28 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV29Schema();
       await _createConnectedAuthorityPayloadSchemaV30();
       await _requireUnifiedV30Schema();
+      await _createConnectedReservationSessionSchemaV31();
+      await _requireUnifiedV31Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 30) {
+        await _requireUnifiedV30Schema();
+        await _createConnectedReservationSessionSchemaV31();
+        await _backfillConnectedReservationSessionBindingsV31();
+        await _requireUnifiedV31Schema();
+        return;
+      }
       final origin = await _classifyUpgradeOrigin(from);
       if (from == 29) {
         await _requireUnifiedV29Schema();
         await _createConnectedAuthorityPayloadSchemaV30();
         await _requireUnifiedV30Schema();
+        await _createConnectedReservationSessionSchemaV31();
+        await _backfillConnectedReservationSessionBindingsV31();
+        await _requireUnifiedV31Schema();
         return;
       }
       if (from == 28) {
@@ -5223,6 +5269,9 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV29Schema();
         await _createConnectedAuthorityPayloadSchemaV30();
         await _requireUnifiedV30Schema();
+        await _createConnectedReservationSessionSchemaV31();
+        await _backfillConnectedReservationSessionBindingsV31();
+        await _requireUnifiedV31Schema();
         return;
       }
       if (from < 2) {
@@ -5440,14 +5489,17 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV29Schema();
       await _createConnectedAuthorityPayloadSchemaV30();
       await _requireUnifiedV30Schema();
+      await _createConnectedReservationSessionSchemaV31();
+      await _backfillConnectedReservationSessionBindingsV31();
+      await _requireUnifiedV31Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV30Schema();
+      await _requireUnifiedV31Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV30Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV31Schema();
 
   /// Revalidates the complete immutable cloud-disposition chain before a
   /// reconstructed upload cursor is trusted in the current process.
@@ -5468,7 +5520,8 @@ class ShopDatabase extends _$ShopDatabase {
   /// the retained approval signature with its trusted authority verifier.
   Future<void> verifyConnectedAttemptEvidence() async {
     if (!await _v28ConnectedAttemptRowsValid() ||
-        !await _v29ConnectedEnvelopeRowsValid()) {
+        !await _v29ConnectedEnvelopeRowsValid() ||
+        !await _v31ConnectedReservationSessionRowsValid()) {
       throw StateError('Connected command-attempt evidence is invalid.');
     }
   }
@@ -5643,6 +5696,106 @@ class ShopDatabase extends _$ShopDatabase {
     for (final definition
         in shopConnectedAuthorityPayloadSchemaDefinitionsV30().values) {
       await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedReservationSessionSchemaV31() async {
+    for (final definition
+        in shopConnectedReservationSessionSchemaDefinitionsV31().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _backfillConnectedReservationSessionBindingsV31() async {
+    final attempts = await customSelect(
+      'SELECT command_json, prepared_at_millis '
+      'FROM shop_site_command_attempts ORDER BY command_id',
+    ).get();
+    for (final row in attempts) {
+      final decoded = jsonDecode(row.read<String>('command_json'));
+      final command = SiteCommandV1.fromJson(decoded);
+      await bindConnectedReservationSessionAttemptV31(
+        command,
+        boundAtMillis: row.read<int>('prepared_at_millis'),
+      );
+    }
+  }
+
+  /// Atomically binds one retained reserve attempt to its durable subject.
+  ///
+  /// The caller must invoke this in the same SQLite transaction that inserts
+  /// the command attempt. Non-reservation commands are intentionally ignored.
+  Future<void> bindConnectedReservationSessionAttemptV31(
+    SiteCommandV1 command, {
+    required int boundAtMillis,
+  }) async {
+    if (command.payload['contract'] !=
+        _shopConnectedStockReservePayloadContract) {
+      return;
+    }
+    final reservation = ConnectedStockReservationV1.fromJson(
+      command.payload['reservation'],
+    );
+    final expectedType = switch (reservation.workflowType) {
+      ConnectedStockWorkflowType.retailCart => 'retail.stock.reserve.v1',
+      ConnectedStockWorkflowType.cafeOrder => 'cafe.stock.reserve.v1',
+    };
+    if (command.payload.length != 2 ||
+        command.commandType != expectedType ||
+        command.workspaceId != reservation.workspaceId ||
+        command.siteId != reservation.siteId ||
+        command.actorId != reservation.actorId ||
+        command.deviceId != reservation.deviceId ||
+        command.aggregateType != reservation.workflowType.name ||
+        command.aggregateId != reservation.subjectId ||
+        command.payloadDigest != connectedSiteSha256(command.payload) ||
+        boundAtMillis <= 0) {
+      throw StateError('connected_reservation_session_binding_invalid');
+    }
+    final existing = await customSelect(
+      'SELECT * FROM shop_connected_reservation_session_bindings '
+      'WHERE workspace_id = ? AND site_id = ? AND actor_id = ? '
+      'AND device_id = ? AND workflow_type = ? AND subject_id = ?',
+      variables: [
+        Variable<String>(reservation.workspaceId),
+        Variable<String>(reservation.siteId),
+        Variable<String>(reservation.actorId),
+        Variable<String>(reservation.deviceId),
+        Variable<String>(reservation.workflowType.name),
+        Variable<String>(reservation.subjectId),
+      ],
+    ).getSingleOrNull();
+    if (existing == null) {
+      await customInsert(
+        'INSERT INTO shop_connected_reservation_session_bindings '
+        '(workspace_id, site_id, actor_id, device_id, workflow_type, '
+        'subject_id, reservation_id, reservation_digest, reserve_command_id, '
+        'reserve_command_digest, bound_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(reservation.workspaceId),
+          Variable<String>(reservation.siteId),
+          Variable<String>(reservation.actorId),
+          Variable<String>(reservation.deviceId),
+          Variable<String>(reservation.workflowType.name),
+          Variable<String>(reservation.subjectId),
+          Variable<String>(reservation.reservationId),
+          Variable<String>(reservation.reservationDigest),
+          Variable<String>(command.commandId),
+          Variable<String>(command.commandDigest),
+          Variable<int>(boundAtMillis),
+        ],
+      );
+      return;
+    }
+    if (existing.read<String>('reservation_id') != reservation.reservationId ||
+        existing.read<String>('reservation_digest') !=
+            reservation.reservationDigest ||
+        existing.read<String>('reserve_command_id') != command.commandId ||
+        existing.read<String>('reserve_command_digest') !=
+            command.commandDigest ||
+        existing.read<int>('bound_at_millis') != boundAtMillis) {
+      throw StateError('connected_reservation_subject_already_bound');
     }
   }
 
@@ -6603,7 +6756,7 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
     if (from < 1 || from > 29) {
-      throw StateError('This Shop database version cannot migrate to v30.');
+      throw StateError('This Shop database version cannot migrate to v31.');
     }
     if (from == 29) {
       await _requireUnifiedV29Schema();
@@ -7163,6 +7316,10 @@ class ShopDatabase extends _$ShopDatabase {
         shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys.every(
           objects.containsKey,
         );
+    final hasReservationSessionV31 =
+        shopConnectedReservationSessionSchemaDefinitionsV31().keys.every(
+          objects.containsKey,
+        );
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -7214,6 +7371,11 @@ class ShopDatabase extends _$ShopDatabase {
             in shopConnectedAuthorityPayloadSchemaDefinitionsV30().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasReservationSessionV31)
+        for (final entry
+            in shopConnectedReservationSessionSchemaDefinitionsV31().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -7243,6 +7405,8 @@ class ShopDatabase extends _$ShopDatabase {
       if (hasEnvelopeV29) ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
       if (hasAuthorityPayloadV30)
         ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,
+      if (hasReservationSessionV31)
+        ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -7423,6 +7587,10 @@ class ShopDatabase extends _$ShopDatabase {
         shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys.every(
           objects.containsKey,
         );
+    final hasReservationSessionV31 =
+        shopConnectedReservationSessionSchemaDefinitionsV31().keys.every(
+          objects.containsKey,
+        );
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -7456,6 +7624,8 @@ class ShopDatabase extends _$ShopDatabase {
       if (hasEnvelopeV29) ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
       if (hasAuthorityPayloadV30)
         ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,
+      if (hasReservationSessionV31)
+        ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -7923,6 +8093,106 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v30 authority-payload schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV31Schema() async {
+    await _requireUnifiedV30Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedReservationSessionSchemaDefinitionsV31();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v31ConnectedReservationSessionRowsValid()) {
+      throw StateError(
+        'The unified Shop v31 reservation-session schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v31ConnectedReservationSessionRowsValid() async {
+    try {
+      final attempts = await customSelect(
+        'SELECT command_id, command_digest, command_json, prepared_at_millis '
+        'FROM shop_site_command_attempts ORDER BY command_id',
+      ).get();
+      final bindings = await customSelect(
+        'SELECT * FROM shop_connected_reservation_session_bindings '
+        'ORDER BY workspace_id, site_id, actor_id, device_id, workflow_type, subject_id',
+      ).get();
+      final expected = <String, Map<String, Object?>>{};
+      for (final row in attempts) {
+        final command = SiteCommandV1.fromJson(
+          jsonDecode(row.read<String>('command_json')),
+        );
+        if (command.payload['contract'] !=
+            _shopConnectedStockReservePayloadContract) {
+          continue;
+        }
+        final reservation = ConnectedStockReservationV1.fromJson(
+          command.payload['reservation'],
+        );
+        final expectedType = switch (reservation.workflowType) {
+          ConnectedStockWorkflowType.retailCart => 'retail.stock.reserve.v1',
+          ConnectedStockWorkflowType.cafeOrder => 'cafe.stock.reserve.v1',
+        };
+        if (command.commandId != row.read<String>('command_id') ||
+            command.commandDigest != row.read<String>('command_digest') ||
+            command.commandType != expectedType ||
+            command.workspaceId != reservation.workspaceId ||
+            command.siteId != reservation.siteId ||
+            command.actorId != reservation.actorId ||
+            command.deviceId != reservation.deviceId ||
+            command.aggregateType != reservation.workflowType.name ||
+            command.aggregateId != reservation.subjectId ||
+            command.payloadDigest != connectedSiteSha256(command.payload)) {
+          return false;
+        }
+        final key = [
+          reservation.workspaceId,
+          reservation.siteId,
+          reservation.actorId,
+          reservation.deviceId,
+          reservation.workflowType.name,
+          reservation.subjectId,
+        ].join('\u0000');
+        if (expected.containsKey(key)) return false;
+        expected[key] = {
+          'workspace_id': reservation.workspaceId,
+          'site_id': reservation.siteId,
+          'actor_id': reservation.actorId,
+          'device_id': reservation.deviceId,
+          'workflow_type': reservation.workflowType.name,
+          'subject_id': reservation.subjectId,
+          'reservation_id': reservation.reservationId,
+          'reservation_digest': reservation.reservationDigest,
+          'reserve_command_id': command.commandId,
+          'reserve_command_digest': command.commandDigest,
+          'bound_at_millis': row.read<int>('prepared_at_millis'),
+        };
+      }
+      if (bindings.length != expected.length) return false;
+      for (final row in bindings) {
+        final data = Map<String, Object?>.from(row.data);
+        final key = [
+          data['workspace_id'],
+          data['site_id'],
+          data['actor_id'],
+          data['device_id'],
+          data['workflow_type'],
+          data['subject_id'],
+        ].join('\u0000');
+        final value = expected[key];
+        if (value == null ||
+            value.entries.any((entry) => data[entry.key] != entry.value)) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
     }
   }
 
@@ -9672,7 +9942,15 @@ class ShopDatabase extends _$ShopDatabase {
             final reservation = ConnectedStockReservationV1.fromJson(
               jsonDecode(header.read<String>('reservation_json')),
             );
-            if (reservation.reservationDigest !=
+            if (reservation.workspaceId != input.tenantId ||
+                reservation.siteId != input.siteId ||
+                reservation.actorId != input.actorId ||
+                reservation.deviceId != input.deviceId ||
+                reservation.workflowType.name != input.aggregateType ||
+                reservation.subjectId != input.aggregateId ||
+                reservation.capability.name != input.capability) {
+              conflictReason = 'reservation_scope_mismatch';
+            } else if (reservation.reservationDigest !=
                 lifecycle.expectedReservationDigest) {
               conflictReason = 'reservation_digest_mismatch';
             } else if (trustedNow! <

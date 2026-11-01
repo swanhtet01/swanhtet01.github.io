@@ -809,6 +809,16 @@ void main() {
     var database = ShopDatabase(NativeDatabase(file));
     try {
       for (final entry
+          in shopConnectedReservationSessionSchemaDefinitionsV31().entries
+              .toList()
+              .reversed) {
+        final type =
+            canonicalShopSchemaSql(entry.value).startsWith('create table')
+            ? 'TABLE'
+            : 'TRIGGER';
+        await database.customStatement('DROP $type IF EXISTS ${entry.key}');
+      }
+      for (final entry
           in shopConnectedAuthorityPayloadSchemaDefinitionsV30().entries
               .toList()
               .reversed) {
@@ -823,7 +833,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 30);
+      expect(database.schemaVersion, 31);
       expect(await _count(database, 'shop_site_authority_payloads'), 0);
       expect(await _count(database, 'shop_site_authority_members'), 0);
       expect(await _count(database, 'shop_site_configuration_snapshots'), 0);

@@ -23,10 +23,10 @@ const _device = 'device-1';
 final _leaseDigest = _digest('lease:$_tenant:$_site:$_device');
 
 void main() {
-  test('connected-site persistence is default-off and schema is v30', () async {
+  test('connected-site persistence is default-off and schema is v31', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 30);
+      expect(database.schemaVersion, 31);
       final tables =
           (await database
                   .customSelect(
@@ -512,6 +512,38 @@ void main() {
         connectedTimeAuthority: const _FixedTime(_now + 10000),
       );
       expect(await database.readReservedStockQuantity('shared-adoption'), 1);
+      final retailStates = await database
+          .customSelect(
+            'SELECT header.reservation_id, transition.to_state '
+            'FROM shop_connected_stock_reservation_headers header '
+            'LEFT JOIN shop_connected_stock_reservation_transitions transition '
+            'ON transition.reservation_id = header.reservation_id '
+            'WHERE header.reservation_id IN (?, ?) ORDER BY header.reservation_id',
+            variables: [
+              Variable<String>(own.reservationId),
+              const Variable<String>('reservation:shared-foreign-hold'),
+            ],
+          )
+          .get();
+      expect(retailStates, hasLength(2));
+      expect(
+        retailStates
+            .singleWhere(
+              (row) => row.read<String>('reservation_id') == own.reservationId,
+            )
+            .readNullable<String>('to_state'),
+        ConnectedStockReservationState.committed.name,
+      );
+      expect(
+        retailStates
+            .singleWhere(
+              (row) =>
+                  row.read<String>('reservation_id') ==
+                  'reservation:shared-foreign-hold',
+            )
+            .readNullable<String>('to_state'),
+        isNull,
+      );
     } finally {
       await database.close();
     }
@@ -709,6 +741,37 @@ void main() {
         1,
       );
       expect((await database.readActiveProducts()).single.onHand, 1);
+      final cafeStates = await database
+          .customSelect(
+            'SELECT header.reservation_id, transition.to_state '
+            'FROM shop_connected_stock_reservation_headers header '
+            'LEFT JOIN shop_connected_stock_reservation_transitions transition '
+            'ON transition.reservation_id = header.reservation_id '
+            'WHERE header.reservation_id IN (?, ?) ORDER BY header.reservation_id',
+            variables: [
+              Variable<String>(own.reservationId),
+              Variable<String>(foreign.reservationId),
+            ],
+          )
+          .get();
+      expect(cafeStates, hasLength(2));
+      expect(
+        cafeStates
+            .singleWhere(
+              (row) => row.read<String>('reservation_id') == own.reservationId,
+            )
+            .readNullable<String>('to_state'),
+        ConnectedStockReservationState.committed.name,
+      );
+      expect(
+        cafeStates
+            .singleWhere(
+              (row) =>
+                  row.read<String>('reservation_id') == foreign.reservationId,
+            )
+            .readNullable<String>('to_state'),
+        isNull,
+      );
       final replay = await store.completeCash(
         orderId: order.ticket.id,
         operationId: 'cafe-connected-sale',
@@ -966,7 +1029,7 @@ void main() {
     () async {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
-        await _seedAuthority(database);
+        final originalLease = await _seedAuthority(database);
         await database.addProduct(
           id: 'release-item',
           name: 'Release item',
@@ -1002,11 +1065,15 @@ void main() {
           actorId: 'actor-2',
           deviceId: 'device-2',
         );
+        final thirdLease = await _seedAuthority(database, deviceId: 'device-3');
 
         Future<ShopConnectedSiteCommandResult> release({
           required String id,
           required String aggregateType,
           required String aggregateId,
+          String actorId = _actor,
+          String deviceId = _device,
+          String? leaseDigest,
           ShopStaffCapability capability = ShopStaffCapability.counterSale,
           int createdAtMillis = _now + 1000,
           int expectedVersion = 0,
@@ -1015,9 +1082,9 @@ void main() {
             id,
             aggregateType: aggregateType,
             aggregateId: aggregateId,
-            actorId: 'actor-2',
-            deviceId: 'device-2',
-            leaseDigest: secondLease,
+            actorId: actorId,
+            deviceId: deviceId,
+            leaseDigest: leaseDigest ?? originalLease,
             capability: capability,
             createdAtMillis: createdAtMillis,
             expectedVersion: expectedVersion,
@@ -1054,6 +1121,27 @@ void main() {
         );
         expect(wrongCapability.status, ShopConnectedSiteCommandStatus.conflict);
         expect(wrongCapability.conflictCode, 'reservation_not_found');
+        final wrongActor = await release(
+          id: 'wrong-actor-release',
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: reservation.subjectId,
+          actorId: 'actor-2',
+          deviceId: 'device-2',
+          leaseDigest: secondLease,
+          expectedVersion: 1,
+        );
+        expect(wrongActor.status, ShopConnectedSiteCommandStatus.conflict);
+        expect(wrongActor.conflictCode, 'reservation_not_found');
+        final wrongDevice = await release(
+          id: 'wrong-device-release',
+          aggregateType: ConnectedStockWorkflowType.retailCart.name,
+          aggregateId: reservation.subjectId,
+          deviceId: 'device-3',
+          leaseDigest: thirdLease,
+          expectedVersion: 1,
+        );
+        expect(wrongDevice.status, ShopConnectedSiteCommandStatus.conflict);
+        expect(wrongDevice.conflictCode, 'reservation_not_found');
         final releaseCommand = _command(
           'cross-device-release',
           aggregateType: ConnectedStockWorkflowType.retailCart.name,
@@ -1391,7 +1479,7 @@ void main() {
   });
 
   test(
-    'v22 migrates to v30 and encrypted-backup snapshot remains valid',
+    'v22 migrates to v31 and encrypted-backup snapshot remains valid',
     () async {
       final root = await Directory.systemTemp.createTemp('shop-site-v23-');
       final file = File('${root.path}/shop.sqlite');
@@ -1455,7 +1543,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 30);
+        expect(database.schemaVersion, 31);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(

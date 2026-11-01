@@ -11,6 +11,8 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'shop_database.dart';
 import 'shop_cafe_order_contract.dart';
+import 'shop_connected_site_contracts.dart';
+import 'shop_connected_stock_reservation.dart';
 
 enum ShopStorePresence { empty, existing, interrupted, unsafe }
 
@@ -61,7 +63,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 30;
+  static const supportedSchemaVersion = 31;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1911,6 +1913,9 @@ abstract final class ShopBackup {
     final authorityPayloadDefinitions = schemaVersion >= 30
         ? shopConnectedAuthorityPayloadSchemaDefinitionsV30()
         : const <String, String>{};
+    final reservationSessionDefinitions = schemaVersion >= 31
+        ? shopConnectedReservationSessionSchemaDefinitionsV31()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1927,7 +1932,8 @@ abstract final class ShopBackup {
             schemaVersion == 27 ||
             schemaVersion == 28 ||
             schemaVersion == 29 ||
-            schemaVersion == 30) &&
+            schemaVersion == 30 ||
+            schemaVersion == 31) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -1971,6 +1977,14 @@ abstract final class ShopBackup {
             )) &&
         (schemaVersion < 30 ||
             _v30ConnectedAuthorityPayloadRowsValid(connection)) &&
+        (schemaVersion < 31 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              reservationSessionDefinitions,
+              reservationSessionDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 31 ||
+            _v31ConnectedReservationSessionRowsValid(connection)) &&
         _snapshotDefinitionGroupExact(
           objects,
           const {
@@ -1997,6 +2011,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 23) connectedSiteDefinitions,
           if (schemaVersion >= 29) envelopeDefinitions,
           if (schemaVersion >= 30) authorityPayloadDefinitions,
+          if (schemaVersion >= 31) reservationSessionDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2012,6 +2027,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 23) ...connectedSiteDefinitions.keys,
           if (schemaVersion >= 29) ...envelopeDefinitions.keys,
           if (schemaVersion >= 30) ...authorityPayloadDefinitions.keys,
+          if (schemaVersion >= 31) ...reservationSessionDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3529,6 +3545,90 @@ abstract final class ShopBackup {
         configurations: rows('shop_site_configuration_snapshots'),
         deltas: rows('shop_site_authority_deltas'),
       );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v31ConnectedReservationSessionRowsValid(Database connection) {
+    try {
+      final attempts = connection.select(
+        'SELECT command_id, command_digest, command_json, prepared_at_millis '
+        'FROM shop_site_command_attempts ORDER BY command_id',
+      );
+      final bindings = connection.select(
+        'SELECT * FROM shop_connected_reservation_session_bindings '
+        'ORDER BY workspace_id, site_id, actor_id, device_id, workflow_type, subject_id',
+      );
+      final expected = <String, Map<String, Object?>>{};
+      for (final row in attempts) {
+        final command = SiteCommandV1.fromJson(
+          jsonDecode(row['command_json']! as String),
+        );
+        if (command.payload['contract'] !=
+            'supermega.shop.connected-stock-reserve.v1') {
+          continue;
+        }
+        final reservation = ConnectedStockReservationV1.fromJson(
+          command.payload['reservation'],
+        );
+        final expectedType = switch (reservation.workflowType) {
+          ConnectedStockWorkflowType.retailCart => 'retail.stock.reserve.v1',
+          ConnectedStockWorkflowType.cafeOrder => 'cafe.stock.reserve.v1',
+        };
+        if (command.commandId != row['command_id'] ||
+            command.commandDigest != row['command_digest'] ||
+            command.commandType != expectedType ||
+            command.workspaceId != reservation.workspaceId ||
+            command.siteId != reservation.siteId ||
+            command.actorId != reservation.actorId ||
+            command.deviceId != reservation.deviceId ||
+            command.aggregateType != reservation.workflowType.name ||
+            command.aggregateId != reservation.subjectId ||
+            command.payloadDigest != connectedSiteSha256(command.payload)) {
+          return false;
+        }
+        final key = [
+          reservation.workspaceId,
+          reservation.siteId,
+          reservation.actorId,
+          reservation.deviceId,
+          reservation.workflowType.name,
+          reservation.subjectId,
+        ].join('\u0000');
+        if (expected.containsKey(key)) return false;
+        expected[key] = {
+          'workspace_id': reservation.workspaceId,
+          'site_id': reservation.siteId,
+          'actor_id': reservation.actorId,
+          'device_id': reservation.deviceId,
+          'workflow_type': reservation.workflowType.name,
+          'subject_id': reservation.subjectId,
+          'reservation_id': reservation.reservationId,
+          'reservation_digest': reservation.reservationDigest,
+          'reserve_command_id': command.commandId,
+          'reserve_command_digest': command.commandDigest,
+          'bound_at_millis': row['prepared_at_millis'],
+        };
+      }
+      if (bindings.length != expected.length) return false;
+      for (final raw in bindings) {
+        final row = Map<String, Object?>.from(raw);
+        final key = [
+          row['workspace_id'],
+          row['site_id'],
+          row['actor_id'],
+          row['device_id'],
+          row['workflow_type'],
+          row['subject_id'],
+        ].join('\u0000');
+        final value = expected[key];
+        if (value == null ||
+            value.entries.any((entry) => row[entry.key] != entry.value)) {
+          return false;
+        }
+      }
+      return true;
     } on Object {
       return false;
     }

@@ -230,6 +230,56 @@ void main() {
   );
 
   test(
+    'concurrent reserve preparation atomically binds one exact subject',
+    () async {
+      final approval = await _seedEnrollment(database, clock);
+      final binding = await store.importApproval(approval);
+      final first = _reservationCommand(
+        commandId: 'reserve-race-a',
+        reservationId: 'reservation-race-a',
+        subjectId: 'race-cart',
+      );
+      final second = _reservationCommand(
+        commandId: 'reserve-race-b',
+        reservationId: 'reservation-race-b',
+        subjectId: 'race-cart',
+      );
+      final outcomes = await Future.wait(
+        [first, second].map(
+          (command) => store
+              .prepare(
+                command: command,
+                bindingDigest: binding,
+                clientFingerprint: approval.clientFingerprint,
+              )
+              .then((_) => 'accepted')
+              .catchError((Object _) => 'rejected'),
+        ),
+      );
+      expect(outcomes.where((value) => value == 'accepted'), hasLength(1));
+      expect(outcomes.where((value) => value == 'rejected'), hasLength(1));
+      final attempts = await database
+          .customSelect(
+            'SELECT command_id FROM shop_site_command_attempts ORDER BY command_id',
+          )
+          .get();
+      final bindings = await database
+          .customSelect(
+            'SELECT reserve_command_id FROM '
+            'shop_connected_reservation_session_bindings',
+          )
+          .get();
+      expect(attempts, hasLength(1));
+      expect(bindings, hasLength(1));
+      expect(
+        bindings.single.read<String>('reserve_command_id'),
+        attempts.single.read<String>('command_id'),
+      );
+      await database.verifyConnectedAttemptEvidence();
+    },
+  );
+
+  test(
     'approval rejects public endpoints, excess lifetime and future issue',
     () async {
       final valid = await _seedEnrollment(database, clock);
@@ -455,25 +505,108 @@ void main() {
     },
   );
 
-  test('v29 snapshot verification shares immutable attempt checks', () async {
-    final directory = await Directory.systemTemp.createTemp('shop-v29-');
+  test('v31 snapshot verification shares immutable attempt checks', () async {
+    final directory = await Directory.systemTemp.createTemp('shop-v31-');
     final file = File('${directory.path}/shop.sqlite');
     final persisted = ShopDatabase(NativeDatabase(file));
     try {
-      await persisted.verifyReadyForUse();
+      final approval = await _seedEnrollment(persisted, clock);
+      final persistedStore = ShopConnectedSiteAttemptStore(
+        database: persisted,
+        approvalVerifier: const _ApprovalVerifier(),
+        runtimeEnabled: true,
+        now: () => clock,
+      );
+      final binding = await persistedStore.importApproval(approval);
+      await persistedStore.prepare(
+        command: _reservationCommand(),
+        bindingDigest: binding,
+        clientFingerprint: approval.clientFingerprint,
+      );
       await persisted.close();
       expect(() => ShopBackup.verifySnapshot(file), returnsNormally);
-      final raw = NativeDatabase(file);
-      final altered = ShopDatabase(raw);
+      final raw = sqlite.sqlite3.open(file.path);
       try {
-        await altered.customStatement(
-          'DROP TRIGGER shop_site_command_attempts_no_update',
+        raw.execute(
+          'DROP TRIGGER '
+          'shop_connected_reservation_session_bindings_no_update',
         );
+        raw.execute(
+          'UPDATE shop_connected_reservation_session_bindings '
+          "SET reservation_digest = '${List.filled(64, 'f').join()}'",
+        );
+        raw.execute(
+          shopConnectedReservationSessionSchemaDefinitionsV31()['shop_connected_reservation_session_bindings_no_update']!,
+        );
+      } finally {
+        raw.close();
+      }
+      expect(() => ShopBackup.verifySnapshot(file), throwsFormatException);
+      final altered = ShopDatabase(NativeDatabase(file));
+      try {
+        await expectLater(altered.verifyReadyForUse(), throwsStateError);
       } finally {
         await altered.close();
       }
-      expect(() => ShopBackup.verifySnapshot(file), throwsFormatException);
     } finally {
+      if (file.existsSync()) file.deleteSync();
+      directory.deleteSync(recursive: true);
+    }
+  });
+
+  test('populated v30 migrates exact reservation subject binding to v31', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'shop-v30-binding-',
+    );
+    final file = File('${directory.path}/shop.sqlite');
+    var persisted = ShopDatabase(NativeDatabase(file));
+    try {
+      final approval = await _seedEnrollment(persisted, clock);
+      final persistedStore = ShopConnectedSiteAttemptStore(
+        database: persisted,
+        approvalVerifier: const _ApprovalVerifier(),
+        runtimeEnabled: true,
+        now: () => clock,
+      );
+      final binding = await persistedStore.importApproval(approval);
+      final command = _reservationCommand();
+      await persistedStore.prepare(
+        command: command,
+        bindingDigest: binding,
+        clientFingerprint: approval.clientFingerprint,
+      );
+      await persisted.close();
+
+      final raw = sqlite.sqlite3.open(file.path);
+      try {
+        raw.execute(
+          'DROP TRIGGER shop_connected_reservation_session_bindings_no_update',
+        );
+        raw.execute(
+          'DROP TRIGGER shop_connected_reservation_session_bindings_no_delete',
+        );
+        raw.execute('DROP TABLE shop_connected_reservation_session_bindings');
+        raw.execute('PRAGMA user_version = 30');
+      } finally {
+        raw.close();
+      }
+
+      persisted = ShopDatabase(NativeDatabase(file));
+      await persisted.verifyReadyForUse();
+      expect(persisted.schemaVersion, 31);
+      final retained = await persisted
+          .customSelect(
+            'SELECT reserve_command_id, reserve_command_digest FROM '
+            'shop_connected_reservation_session_bindings',
+          )
+          .getSingle();
+      expect(retained.read<String>('reserve_command_id'), command.commandId);
+      expect(
+        retained.read<String>('reserve_command_digest'),
+        command.commandDigest,
+      );
+    } finally {
+      await persisted.close();
       if (file.existsSync()) file.deleteSync();
       directory.deleteSync(recursive: true);
     }
@@ -859,15 +992,19 @@ SiteCommandV1 _command({
   );
 }
 
-SiteCommandV1 _reservationCommand() {
+SiteCommandV1 _reservationCommand({
+  String commandId = 'command-restore-cart',
+  String reservationId = 'reservation-restore-cart',
+  String subjectId = 'restore-cart',
+}) {
   final reservation = ConnectedStockReservationV1.held(
-    reservationId: 'reservation-restore-cart',
+    reservationId: reservationId,
     workspaceId: 'workspace-1',
     siteId: 'site-1',
     actorId: 'actor-1',
     deviceId: 'device-1',
     workflowType: ConnectedStockWorkflowType.retailCart,
-    subjectId: 'restore-cart',
+    subjectId: subjectId,
     capability: ShopStaffCapability.counterSale,
     lines: [
       ConnectedStockReservationLineV1(productId: 'product-1', quantity: 1),
@@ -880,7 +1017,7 @@ SiteCommandV1 _reservationCommand() {
     'reservation': reservation.toJson(),
   };
   return SiteCommandV1(
-    commandId: 'command-restore-cart',
+    commandId: commandId,
     workspaceId: 'workspace-1',
     siteId: 'site-1',
     actorId: 'actor-1',
