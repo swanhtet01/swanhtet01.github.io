@@ -489,6 +489,7 @@ jobs:
           VERSION_NAME="$("$analyzer" manifest version-name app-qa-debug.apk)" \
           MIN_SDK="$("$analyzer" manifest min-sdk app-qa-debug.apk)" \
           TARGET_SDK="$("$analyzer" manifest target-sdk app-qa-debug.apk)" \
+          BUILD_IDENTITY_SHA256="$(awk '{print $1}' "${RUNNER_TEMP}/shop-build-identity.sha256")" \
           python3 - "$manifest_xml" app-qa-debug.apk.files.txt app-qa-debug.apk.identity.json <<'PY'
           import json, os, pathlib, re, sys, xml.etree.ElementTree as ET
           android = "{http://schemas.android.com/apk/res/android}"
@@ -503,7 +504,12 @@ jobs:
               "dev.supermega.shop.qa.scopedSyntheticExport": "true",
               "dev.supermega.shop.qa.generalExternalFileAccess": "false",
           }
-          abis = sorted(set(re.findall(r"(?:^|/)lib/([^/]+)/", pathlib.Path(sys.argv[2]).read_text())))
+          file_lines = [line.strip().lstrip("/") for line in pathlib.Path(sys.argv[2]).read_text().splitlines()]
+          library_lines = [line for line in file_lines if line.startswith("lib/")]
+          library_matches = [re.fullmatch(r"lib/([^/]+)/[^/]+\.so", line) for line in library_lines]
+          if not library_lines or any(match is None for match in library_matches):
+              raise SystemExit("shop_android_qa_abi_inventory_invalid")
+          abis = sorted({match.group(1) for match in library_matches})
           compile_sdk = root.get("platformBuildVersionCode")
           valid = (len(apps) == 1 and len(metadata) == len(items)
                    and apps[0].get(android + "label") == "Shop QA"
@@ -525,6 +531,7 @@ jobs:
               "minSdk": int(os.environ["MIN_SDK"]),
               "targetSdk": int(os.environ["TARGET_SDK"]),
               "abis": abis,
+              "buildIdentitySha256": os.environ["BUILD_IDENTITY_SHA256"],
           }
           pathlib.Path(sys.argv[3]).write_text(json.dumps(identity, separators=(",", ":")))
           PY
@@ -540,14 +547,17 @@ jobs:
           android_sdk_root="$(readlink -f "$android_sdk_root")"
           build_tools_version='36.0.0'
           apksigner="$android_sdk_root/build-tools/$build_tools_version/apksigner"
+          apksigner_jar="$android_sdk_root/build-tools/$build_tools_version/lib/apksigner.jar"
           build_tools_properties="$android_sdk_root/build-tools/$build_tools_version/source.properties"
           test -x "$apksigner"
+          test -f "$apksigner_jar"
           test -f "$build_tools_properties"
           signature_log="$(mktemp)"
           trap 'rm -f "$signature_log"' EXIT
           LC_ALL=C "$apksigner" verify --verbose --print-certs app-qa-debug.apk > "$signature_log"
           BUILD_TOOLS_VERSION="$build_tools_version" \
           APKSIGNER_SHA256="$(sha256sum "$apksigner" | awk '{print $1}')" \
+          APKSIGNER_JAR_SHA256="$(sha256sum "$apksigner_jar" | awk '{print $1}')" \
           BUILD_TOOLS_PROPERTIES_SHA256="$(sha256sum "$build_tools_properties" | awk '{print $1}')" \
           python3 - "$signature_log" app-qa-debug.apk.signing.json <<'PY'
           import json, os, pathlib, re, sys
@@ -563,6 +573,7 @@ jobs:
               "signatureVerified": True,
               "apksignerBuildToolsVersion": os.environ["BUILD_TOOLS_VERSION"],
               "apksignerSha256": os.environ["APKSIGNER_SHA256"],
+              "apksignerJarSha256": os.environ["APKSIGNER_JAR_SHA256"],
               "buildToolsSourcePropertiesSha256": os.environ["BUILD_TOOLS_PROPERTIES_SHA256"],
           }
           pathlib.Path(sys.argv[2]).write_text(json.dumps(evidence, separators=(",", ":")))
@@ -584,6 +595,7 @@ jobs:
           test -z "$(git diff --cached --name-only)"
           changed_paths="$(git diff --name-only)"
           test -z "$changed_paths" || test "$changed_paths" = 'mobile/shop_pos/lib/shop_build_identity.g.dart'
+          test -z "$(git ls-files --others --exclude-standard)"
           node tools/write_shop_qa_artifact_manifest.mjs --platform android --artifact app-qa-debug.apk --checksum app-qa-debug.apk.sha256 --toolchain app-qa-debug.apk.toolchain.json --signing app-qa-debug.apk.signing.json --identity app-qa-debug.apk.identity.json --output app-qa-debug.apk.manifest
 
       - name: Upload promotion-ineligible Android QA artifact

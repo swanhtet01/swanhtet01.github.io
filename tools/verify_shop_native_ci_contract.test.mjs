@@ -114,7 +114,11 @@ test('Android canonical publication rechecks exact source and clears release sig
     ['git diff --exit-code', 'android_qa_clean_source_precheck_missing'],
     ['test "$(git rev-parse HEAD)" = "${{ github.sha }}"', 'android_qa_source_head_recheck_missing'],
     ['sha256sum --check "${RUNNER_TEMP}/shop-build-identity.sha256"', 'android_qa_generated_identity_recheck_missing'],
+    ['"buildIdentitySha256": os.environ["BUILD_IDENTITY_SHA256"]', 'android_qa_generated_identity_not_bound'],
     ["test -z \"$changed_paths\" || test \"$changed_paths\" = 'mobile/shop_pos/lib/shop_build_identity.g.dart'", 'android_qa_source_drift_recheck_missing'],
+    ['test -z "$(git ls-files --others --exclude-standard)"', 'android_qa_untracked_source_drift_recheck_missing'],
+    ['re.fullmatch(r"lib/([^/]+)/[^/]+\\.so", line)', 'android_qa_abi_inventory_not_root_anchored'],
+    ['apksigner_jar="$android_sdk_root/build-tools/$build_tools_version/lib/apksigner.jar"', 'android_qa_apksigner_jar_not_bound'],
     ["ORG_GRADLE_PROJECT_SHOP_ANDROID_KEYSTORE_PATH: ''", 'android_qa_ci_may_inherit_signing_credentials:SHOP_ANDROID_KEYSTORE_PATH'],
   ]) {
     const result = verifyShopNativeCiContract(
@@ -310,7 +314,8 @@ test('Android QA label parser fails closed for wrong, missing, duplicate, and ma
   const directory = await mkdtemp(join(tmpdir(), 'shop-android-qa-manifest-'))
   try {
     const fixtures = [
-      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android" platformBuildVersionCode="36"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', status: 0 },
+      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android" platformBuildVersionCode="36"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', files: '/assets/packages/printer/lib/resources/asset.bin\n/lib/armeabi-v7a/libapp.so\n/lib/arm64-v8a/libapp.so\n/lib/x86_64/libapp.so\n', status: 0 },
+      { name: 'malformed-lib.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android" platformBuildVersionCode="36"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', files: '/lib/resources/not-a-shared-object\n', status: 1 },
       { name: 'wrong.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop"/></manifest>', status: 1 },
       { name: 'wrong-capability.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v999"/></application></manifest>', status: 1 },
       { name: 'unsafe-external.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="true"/></application></manifest>', status: 1 },
@@ -324,7 +329,7 @@ test('Android QA label parser fails closed for wrong, missing, duplicate, and ma
       const filesPath = join(directory, `${fixture.name}.files`)
       const outputPath = join(directory, `${fixture.name}.json`)
       await writeFile(path, fixture.source, 'utf8')
-      await writeFile(filesPath, '/lib/arm64-v8a/libapp.so\n', 'utf8')
+      await writeFile(filesPath, fixture.files ?? '/lib/arm64-v8a/libapp.so\n', 'utf8')
       const result = spawnSync('python3', ['-c', parser, path, filesPath, outputPath], {
         encoding: 'utf8',
         env: {
@@ -335,9 +340,14 @@ test('Android QA label parser fails closed for wrong, missing, duplicate, and ma
           VERSION_NAME: '1.0.0',
           MIN_SDK: '24',
           TARGET_SDK: '36',
+          BUILD_IDENTITY_SHA256: '9'.repeat(64),
         },
       })
       assert.equal(result.status, fixture.status, fixture.name)
+      if (fixture.status === 0) {
+        const identity = JSON.parse(await readFile(outputPath, 'utf8'))
+        assert.deepEqual(identity.abis, ['arm64-v8a', 'armeabi-v7a', 'x86_64'])
+      }
     }
   } finally {
     await rm(directory, { recursive: true, force: true })

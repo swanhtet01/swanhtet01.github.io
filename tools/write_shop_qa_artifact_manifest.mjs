@@ -104,7 +104,7 @@ export function validateShopQaArtifactManifest(manifest) {
     || (android && !SHA256.test(manifest.artifact.identityReceiptSha256))) fail('shop_qa_manifest_artifact_invalid')
   if (android) {
     if (!exactKeys(manifest.artifact.identity, [
-      ...Object.keys(contract.identity), 'versionCode', 'versionName', 'compileSdk', 'minSdk', 'targetSdk', 'abis',
+      ...Object.keys(contract.identity), 'versionCode', 'versionName', 'compileSdk', 'minSdk', 'targetSdk', 'abis', 'buildIdentitySha256',
     ])
       || Object.entries(contract.identity).some(([key, value]) => manifest.artifact.identity[key] !== value)
       || !/^[1-9][0-9]*$/.test(manifest.artifact.identity.versionCode)
@@ -121,7 +121,8 @@ export function validateShopQaArtifactManifest(manifest) {
       || manifest.artifact.identity.abis.some((abi, index, values) => (
         !['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'].includes(abi)
         || (index > 0 && values[index - 1] >= abi)
-      ))) fail('shop_qa_manifest_android_identity_invalid')
+      ))
+      || !SHA256.test(manifest.artifact.identity.buildIdentitySha256)) fail('shop_qa_manifest_android_identity_invalid')
   } else if (JSON.stringify(manifest.artifact.identity) !== JSON.stringify(contract.identity)) {
     fail('shop_qa_manifest_artifact_invalid')
   }
@@ -139,7 +140,7 @@ export function validateShopQaArtifactManifest(manifest) {
       typeof manifest.toolchain[key] === 'string' && manifest.toolchain[key].trim()
     ))) fail('shop_qa_manifest_toolchain_invalid')
   const signingKeys = android
-    ? ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'certificateSha256', 'signatureVerified', 'apksignerBuildToolsVersion', 'apksignerSha256', 'buildToolsSourcePropertiesSha256', 'receiptSha256']
+    ? ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'certificateSha256', 'signatureVerified', 'apksignerBuildToolsVersion', 'apksignerSha256', 'apksignerJarSha256', 'buildToolsSourcePropertiesSha256', 'receiptSha256']
     : ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'receiptSha256']
   if (!exactKeys(manifest.signing, signingKeys)
     || manifest.signing.classification !== contract.signing
@@ -149,6 +150,7 @@ export function validateShopQaArtifactManifest(manifest) {
       || manifest.signing.signatureVerified !== true
       || !/^\d+\.\d+\.\d+$/.test(manifest.signing.apksignerBuildToolsVersion)
       || !SHA256.test(manifest.signing.apksignerSha256)
+      || !SHA256.test(manifest.signing.apksignerJarSha256)
       || !SHA256.test(manifest.signing.buildToolsSourcePropertiesSha256)))
     || !SHA256.test(manifest.signing.receiptSha256)) fail('shop_qa_manifest_signing_invalid')
   if (!exactKeys(manifest.claimBoundary, [
@@ -252,7 +254,7 @@ export async function writeShopQaArtifactManifest({
   }
   const android = platform === 'android'
   const signingEvidenceKeys = android
-    ? ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'certificateSha256', 'signatureVerified', 'apksignerBuildToolsVersion', 'apksignerSha256', 'buildToolsSourcePropertiesSha256']
+    ? ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'certificateSha256', 'signatureVerified', 'apksignerBuildToolsVersion', 'apksignerSha256', 'apksignerJarSha256', 'buildToolsSourcePropertiesSha256']
     : ['classification', 'productionSigned', 'stableUpdateIdentityProven']
   if (!exactKeys(signingEvidence, signingEvidenceKeys)
     || signingEvidence.classification !== contract.signing
@@ -262,6 +264,7 @@ export async function writeShopQaArtifactManifest({
       || signingEvidence.signatureVerified !== true
       || !/^\d+\.\d+\.\d+$/.test(signingEvidence.apksignerBuildToolsVersion)
       || !SHA256.test(signingEvidence.apksignerSha256)
+      || !SHA256.test(signingEvidence.apksignerJarSha256)
       || !SHA256.test(signingEvidence.buildToolsSourcePropertiesSha256)))) {
     fail('shop_qa_manifest_signing_evidence_invalid')
   }
@@ -277,7 +280,7 @@ export async function writeShopQaArtifactManifest({
       fail('shop_qa_manifest_android_identity_evidence_invalid')
     }
     if (!exactKeys(identityEvidence, [
-      ...Object.keys(contract.identity), 'versionCode', 'versionName', 'compileSdk', 'minSdk', 'targetSdk', 'abis',
+      ...Object.keys(contract.identity), 'versionCode', 'versionName', 'compileSdk', 'minSdk', 'targetSdk', 'abis', 'buildIdentitySha256',
     ])
       || Object.entries(contract.identity).some(([key, value]) => identityEvidence[key] !== value)
       || !/^[1-9][0-9]*$/.test(identityEvidence.versionCode)
@@ -290,7 +293,8 @@ export async function writeShopQaArtifactManifest({
       || identityEvidence.abis.some((abi, index, values) => (
         !['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'].includes(abi)
         || (index > 0 && values[index - 1] >= abi)
-      ))) fail('shop_qa_manifest_android_identity_evidence_invalid')
+      ))
+      || !SHA256.test(identityEvidence.buildIdentitySha256)) fail('shop_qa_manifest_android_identity_evidence_invalid')
     artifactIdentity = identityEvidence
     identityReceiptSha256 = sha256(identityBytes)
   }

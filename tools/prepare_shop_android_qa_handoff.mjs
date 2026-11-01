@@ -425,6 +425,7 @@ export function assessShopAndroidQaHandoff(input = {}) {
               signatureVerified: signing.signatureVerified,
               apksignerBuildToolsVersion: signing.apksignerBuildToolsVersion,
               apksignerSha256: signing.apksignerSha256,
+              apksignerJarSha256: signing.apksignerJarSha256,
               buildToolsSourcePropertiesSha256: signing.buildToolsSourcePropertiesSha256,
             })) addFailure(failures, 'artifact_archive_receipt_content_mismatch')
         } catch {
@@ -546,6 +547,7 @@ export function assessShopAndroidQaHandoff(input = {}) {
       signerCertificateSha256: canonicalAware ? signing.certificateSha256 : null,
       apksignerBuildToolsVersion: canonicalAware ? signing.apksignerBuildToolsVersion : null,
       apksignerSha256: canonicalAware ? signing.apksignerSha256 : null,
+      apksignerJarSha256: canonicalAware ? signing.apksignerJarSha256 : null,
       buildToolsSourcePropertiesSha256: canonicalAware
         ? signing.buildToolsSourcePropertiesSha256
         : null,
@@ -555,6 +557,7 @@ export function assessShopAndroidQaHandoff(input = {}) {
       minSdk: canonicalAware ? identity.minSdk : null,
       targetSdk: canonicalAware ? identity.targetSdk : null,
       abis: canonicalAware ? [...identity.abis] : [],
+      buildIdentitySha256: canonicalAware ? identity.buildIdentitySha256 : null,
       productionSigned: false,
       promotionEligible: false,
     },
@@ -634,6 +637,7 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
   if (canonicalAware && (!SHA64.test(String(artifact.signerCertificateSha256 || ''))
     || !/^\d+\.\d+\.\d+$/.test(String(artifact.apksignerBuildToolsVersion || ''))
     || !SHA64.test(String(artifact.apksignerSha256 || ''))
+    || !SHA64.test(String(artifact.apksignerJarSha256 || ''))
     || !SHA64.test(String(artifact.buildToolsSourcePropertiesSha256 || ''))
     || !/^[1-9][0-9]*$/.test(String(artifact.versionCode || ''))
     || typeof artifact.versionName !== 'string' || !artifact.versionName.trim()
@@ -642,7 +646,8 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
     || !Number.isSafeInteger(artifact.targetSdk)
     || artifact.compileSdk < artifact.targetSdk
     || artifact.targetSdk < artifact.minSdk
-    || !Array.isArray(artifact.abis) || artifact.abis.length === 0)) {
+    || !Array.isArray(artifact.abis) || artifact.abis.length === 0
+    || !SHA64.test(String(artifact.buildIdentitySha256 || '')))) {
     throw new Error('shop_android_qa_handoff_canonical_observation_invalid')
   }
   if (canonicalAware) {
@@ -662,9 +667,11 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
       || canonicalManifest.artifact.identity.compileSdk !== artifact.compileSdk
       || canonicalManifest.artifact.identity.minSdk !== artifact.minSdk
       || canonicalManifest.artifact.identity.targetSdk !== artifact.targetSdk
+      || canonicalManifest.artifact.identity.buildIdentitySha256 !== artifact.buildIdentitySha256
       || canonicalManifest.signing.certificateSha256 !== artifact.signerCertificateSha256
       || canonicalManifest.signing.apksignerBuildToolsVersion !== artifact.apksignerBuildToolsVersion
       || canonicalManifest.signing.apksignerSha256 !== artifact.apksignerSha256
+      || canonicalManifest.signing.apksignerJarSha256 !== artifact.apksignerJarSha256
       || canonicalManifest.signing.buildToolsSourcePropertiesSha256 !== artifact.buildToolsSourcePropertiesSha256) {
       throw new Error('shop_android_qa_handoff_canonical_manifest_mismatch')
     }
@@ -752,6 +759,7 @@ export function sampleShopAndroidQaHandoffInput(overrides = {}) {
     minSdk: 24,
     targetSdk: 36,
     abis: ['arm64-v8a', 'armeabi-v7a', 'x86_64'],
+    buildIdentitySha256: '9'.repeat(64),
   }
   const signingReceipt = {
     classification: 'android_debug',
@@ -761,6 +769,7 @@ export function sampleShopAndroidQaHandoffInput(overrides = {}) {
     signatureVerified: true,
     apksignerBuildToolsVersion: '36.0.0',
     apksignerSha256: '6'.repeat(64),
+    apksignerJarSha256: '8'.repeat(64),
     buildToolsSourcePropertiesSha256: '7'.repeat(64),
   }
   const toolchainReceipt = {
@@ -807,16 +816,22 @@ export function sampleShopAndroidQaHandoffInput(overrides = {}) {
     }
     manifestText = `${JSON.stringify({ ...body, digest: `sha256:${sha256(Buffer.from(JSON.stringify(body)))}` })}\n`
   }
-  const archiveEntries = [
+  let archiveEntries = [
     [EXPECTED_APK_NAME, apkBytes],
     [`${EXPECTED_APK_NAME}.sha256`, Buffer.from(checksumText)],
     ...(canonicalAware ? [
-      [`${EXPECTED_APK_NAME}.identity.json`, identityBytes],
-      [`${EXPECTED_APK_NAME}.signing.json`, signingBytes],
-      [`${EXPECTED_APK_NAME}.toolchain.json`, toolchainBytes],
+      [`${EXPECTED_APK_NAME}.identity.json`, Buffer.from(overrides.canonicalArchiveIdentityBytes ?? identityBytes)],
+      [`${EXPECTED_APK_NAME}.signing.json`, Buffer.from(overrides.canonicalArchiveSigningBytes ?? signingBytes)],
+      [`${EXPECTED_APK_NAME}.toolchain.json`, Buffer.from(overrides.canonicalArchiveToolchainBytes ?? toolchainBytes)],
     ] : []),
     [`${EXPECTED_APK_NAME}.manifest`, Buffer.from(manifestText)],
   ]
+  if (overrides.canonicalOmitArchiveFile) {
+    archiveEntries = archiveEntries.filter(([name]) => name !== overrides.canonicalOmitArchiveFile)
+  }
+  if (overrides.canonicalExtraArchiveEntry) {
+    archiveEntries.push(overrides.canonicalExtraArchiveEntry)
+  }
   const archiveBytes = storedZipFixture(archiveEntries, { dataDescriptors: overrides.zipDataDescriptors === true })
   const metadata = {
     headSha,

@@ -110,6 +110,8 @@ test('v3 derives exact identity, capabilities and signing from canonical retaine
   assert.equal(packet.artifact.signingClass, 'android_debug')
   assert.equal(packet.artifact.signerCertificateSha256, '5'.repeat(64))
   assert.equal(packet.artifact.apksignerBuildToolsVersion, '36.0.0')
+  assert.equal(packet.artifact.apksignerJarSha256, '8'.repeat(64))
+  assert.equal(packet.artifact.buildIdentitySha256, '9'.repeat(64))
   assert.deepEqual(packet.artifact.abis, ['arm64-v8a', 'armeabi-v7a', 'x86_64'])
   assert.equal(packet.artifact.productionSigned, false)
   assert.equal(packet.artifact.promotionEligible, false)
@@ -121,6 +123,31 @@ test('v3 derives exact identity, capabilities and signing from canonical retaine
     })),
     /shop_android_qa_handoff_canonical_(?:observation_invalid|manifest_mismatch)|shop_android_qa_handoff_artifact_identity_invalid/,
   )
+})
+
+test('v3 rejects substituted, missing, or extra canonical receipt entries', () => {
+  for (const [override, failure] of [
+    [{ canonicalArchiveIdentityBytes: Buffer.from('{}') }, 'artifact_archive_receipt_digest_mismatch'],
+    [{ canonicalArchiveSigningBytes: Buffer.from('{}') }, 'artifact_archive_receipt_digest_mismatch'],
+    [{ canonicalArchiveToolchainBytes: Buffer.from('{}') }, 'artifact_archive_receipt_digest_mismatch'],
+    [{ canonicalOmitArchiveFile: 'app-qa-debug.apk.identity.json' }, 'artifact_archive_contents_invalid'],
+    [{ canonicalExtraArchiveEntry: ['unexpected.txt', Buffer.from('unexpected')] }, 'artifact_archive_contents_invalid'],
+  ]) {
+    const packet = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput({
+      canonicalAware: true,
+      ...override,
+    }))
+    assert.equal(packet.ok, false)
+    assert.ok(packet.failures.includes(failure), JSON.stringify(packet.failures))
+  }
+})
+
+test('legacy archives cannot add canonical sidecars without upgrading the manifest contract', () => {
+  const packet = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput({
+    canonicalExtraArchiveEntry: ['app-qa-debug.apk.identity.json', Buffer.from('{}')],
+  }))
+  assert.equal(packet.ok, false)
+  assert.ok(packet.failures.includes('artifact_archive_contents_invalid'))
 })
 
 test('old v1 artifact cannot be relabelled as recovery-capable', () => {

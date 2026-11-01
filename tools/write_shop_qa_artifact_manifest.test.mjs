@@ -84,6 +84,7 @@ async function fixture(platform = 'ios') {
     signatureVerified: true,
     apksignerBuildToolsVersion: '36.0.0',
     apksignerSha256: '6'.repeat(64),
+    apksignerJarSha256: '8'.repeat(64),
     buildToolsSourcePropertiesSha256: '7'.repeat(64),
   } : {
     classification: platform === 'ios' ? 'ios_no_codesign' : 'windows_unsigned',
@@ -105,6 +106,7 @@ async function fixture(platform = 'ios') {
       minSdk: 24,
       targetSdk: 36,
       abis: ['arm64-v8a', 'armeabi-v7a', 'x86_64'],
+      buildIdentitySha256: '9'.repeat(64),
     }))
   }
   return {
@@ -191,9 +193,9 @@ test('Android identity and debug signer evidence fail closed when incomplete or 
   }
 
   for (const signing of [
-    { classification: 'android_debug', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: '5'.repeat(64), signatureVerified: false, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
-    { classification: 'android_debug', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: 'not-a-digest', signatureVerified: true, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
-    { classification: 'android_release', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: '5'.repeat(64), signatureVerified: true, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
+    { classification: 'android_debug', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: '5'.repeat(64), signatureVerified: false, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), apksignerJarSha256: '8'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
+    { classification: 'android_debug', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: 'not-a-digest', signatureVerified: true, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), apksignerJarSha256: '8'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
+    { classification: 'android_release', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: '5'.repeat(64), signatureVerified: true, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), apksignerJarSha256: '8'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
   ]) {
     const item = await fixture('android')
     try {
