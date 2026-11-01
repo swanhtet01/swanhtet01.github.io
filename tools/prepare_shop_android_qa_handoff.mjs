@@ -6,10 +6,14 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inflateRawSync } from 'node:zlib'
 
+import { validateShopQaArtifactManifest } from './write_shop_qa_artifact_manifest.mjs'
+
 export const SHOP_ANDROID_QA_HANDOFF_CONTRACT =
   'supermega.shop.android-qa-internal-handoff.v1'
 export const SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT =
   'supermega.shop.android-qa-internal-handoff.v2'
+export const SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT =
+  'supermega.shop.android-qa-internal-handoff.v3'
 
 export const SHOP_ANDROID_QA_CAPABILITY_CONTRACT =
   'supermega.shop.android-qa-capabilities.v1'
@@ -26,6 +30,14 @@ const EXPECTED_APK_NAME = 'app-qa-debug.apk'
 const EXPECTED_ARCHIVE_FILES = [
   EXPECTED_APK_NAME,
   `${EXPECTED_APK_NAME}.sha256`,
+  `${EXPECTED_APK_NAME}.manifest`,
+]
+const EXPECTED_CANONICAL_ARCHIVE_FILES = [
+  EXPECTED_APK_NAME,
+  `${EXPECTED_APK_NAME}.sha256`,
+  `${EXPECTED_APK_NAME}.identity.json`,
+  `${EXPECTED_APK_NAME}.signing.json`,
+  `${EXPECTED_APK_NAME}.toolchain.json`,
   `${EXPECTED_APK_NAME}.manifest`,
 ]
 const SHA40 = /^[0-9a-f]{40}$/
@@ -337,17 +349,28 @@ export function assessShopAndroidQaHandoff(input = {}) {
   const apkSha256 = sha256(input.apkBytes || Buffer.alloc(0))
   const checksumText = canonicalText(input.checksumText)
   const manifestText = canonicalText(input.manifestText)
+  let canonicalManifest = null
+  try {
+    const parsed = JSON.parse(manifestText)
+    if (parsed?.contract === 'supermega.shop.synthetic-qa-artifact.v1'
+      && parsed?.platform === 'android') {
+      canonicalManifest = validateShopQaArtifactManifest(parsed)
+    }
+  } catch {
+    canonicalManifest = null
+  }
+  const canonicalAware = canonicalManifest !== null
   const generatedAt = input.generatedAt || new Date().toISOString()
   const generatedAtMillis = parseIsoMillis(generatedAt)
   const expiresAtMillis = parseIsoMillis(metadata.expiresAt)
-  const identity = metadata.identityInspection || {}
-  const signing = metadata.signing || {}
+  const identity = canonicalAware ? canonicalManifest.artifact.identity : (metadata.identityInspection || {})
+  const signing = canonicalAware ? canonicalManifest.signing : (metadata.signing || {})
   const claims = metadata.claims || {}
   const capabilityInspection = metadata.capabilityInspection || null
-  const capabilityAware = capabilityInspection != null
-  const capabilityContract = capabilityInspection?.contract
-  const evidenceContract = capabilityInspection?.evidenceContract
-  const capabilities = capabilityInspection?.capabilities
+  const capabilityAware = canonicalAware || capabilityInspection != null
+  const capabilityContract = canonicalAware ? identity.capabilityContract : capabilityInspection?.contract
+  const evidenceContract = canonicalAware ? identity.evidenceContract : capabilityInspection?.evidenceContract
+  const capabilities = canonicalAware ? [...SHOP_ANDROID_QA_CAPABILITIES] : capabilityInspection?.capabilities
 
   if (String(expectations.headSha || '') !== headSha
     || String(expectations.sourceSha || '') !== sourceSha
@@ -375,13 +398,39 @@ export function assessShopAndroidQaHandoff(input = {}) {
   }
   try {
     const entries = readZipEntries(input.archiveBytes)
-    if (entries.size !== EXPECTED_ARCHIVE_FILES.length
-      || EXPECTED_ARCHIVE_FILES.some((name) => !entries.has(name))) {
+    const expectedFiles = canonicalAware ? EXPECTED_CANONICAL_ARCHIVE_FILES : EXPECTED_ARCHIVE_FILES
+    if (entries.size !== expectedFiles.length
+      || expectedFiles.some((name) => !entries.has(name))) {
       addFailure(failures, 'artifact_archive_contents_invalid')
     } else if (!entries.get(EXPECTED_APK_NAME).equals(Buffer.from(input.apkBytes || Buffer.alloc(0)))
       || !entries.get(`${EXPECTED_APK_NAME}.sha256`).equals(Buffer.from(String(input.checksumText || ''), 'utf8'))
       || !entries.get(`${EXPECTED_APK_NAME}.manifest`).equals(Buffer.from(String(input.manifestText || ''), 'utf8'))) {
       addFailure(failures, 'artifact_archive_extraction_mismatch')
+    } else if (canonicalAware) {
+      const identityBytes = entries.get(`${EXPECTED_APK_NAME}.identity.json`)
+      const signingBytes = entries.get(`${EXPECTED_APK_NAME}.signing.json`)
+      const toolchainBytes = entries.get(`${EXPECTED_APK_NAME}.toolchain.json`)
+      if (sha256(identityBytes) !== canonicalManifest.artifact.identityReceiptSha256
+        || sha256(signingBytes) !== canonicalManifest.signing.receiptSha256
+        || sha256(toolchainBytes) !== canonicalManifest.toolchain.receiptSha256) {
+        addFailure(failures, 'artifact_archive_receipt_digest_mismatch')
+      } else {
+        try {
+          if (JSON.stringify(JSON.parse(identityBytes.toString('utf8'))) !== JSON.stringify(identity)
+            || JSON.stringify(JSON.parse(signingBytes.toString('utf8'))) !== JSON.stringify({
+              classification: signing.classification,
+              productionSigned: signing.productionSigned,
+              stableUpdateIdentityProven: signing.stableUpdateIdentityProven,
+              certificateSha256: signing.certificateSha256,
+              signatureVerified: signing.signatureVerified,
+              apksignerBuildToolsVersion: signing.apksignerBuildToolsVersion,
+              apksignerSha256: signing.apksignerSha256,
+              buildToolsSourcePropertiesSha256: signing.buildToolsSourcePropertiesSha256,
+            })) addFailure(failures, 'artifact_archive_receipt_content_mismatch')
+        } catch {
+          addFailure(failures, 'artifact_archive_receipt_content_mismatch')
+        }
+      }
     }
   } catch {
     addFailure(failures, 'artifact_archive_format_invalid')
@@ -393,10 +442,17 @@ export function assessShopAndroidQaHandoff(input = {}) {
   const expectedManifest = capabilityAware
     ? `source-sha=${sourceSha} sha-256=${checksumText} promotion-ineligible qa-capability-contract=${SHOP_ANDROID_QA_CAPABILITY_CONTRACT} qa-evidence-contract=${SHOP_ANDROID_QA_EVIDENCE_CONTRACT} qa-scoped-encrypted-restore=true qa-scoped-synthetic-export=true qa-general-external-file-access=false`
     : `source-sha=${sourceSha} sha-256=${checksumText} promotion-ineligible`
-  if (manifestText !== expectedManifest) {
+  if (!canonicalAware && manifestText !== expectedManifest) {
     addFailure(failures, 'artifact_manifest_mismatch')
   }
-  if (identity.status !== 'passed'
+  if (canonicalAware) {
+    if (canonicalManifest.source.sourceSha !== sourceSha
+      || canonicalManifest.source.nativeTree !== nativeTree
+      || canonicalManifest.artifact.sha256 !== apkSha256
+      || canonicalManifest.artifact.bytes !== Buffer.byteLength(input.apkBytes || Buffer.alloc(0))) {
+      addFailure(failures, 'canonical_manifest_provenance_mismatch')
+    }
+  } else if (identity.status !== 'passed'
     || identity.tool !== 'apkanalyzer'
     || String(identity.runId || '') !== runId
     || String(identity.sourceSha || '') !== sourceSha
@@ -410,18 +466,19 @@ export function assessShopAndroidQaHandoff(input = {}) {
     || !Array.isArray(capabilities)
     || capabilities.length !== SHOP_ANDROID_QA_CAPABILITIES.length
     || capabilities.some((capability, index) => capability !== SHOP_ANDROID_QA_CAPABILITIES[index])
-    || capabilityInspection.status !== 'passed'
-    || capabilityInspection.tool !== 'apkanalyzer'
-    || String(capabilityInspection.runId || '') !== runId
-    || String(capabilityInspection.sourceSha || '') !== sourceSha
-    || capabilityInspection.jobName !== 'Build isolated Android synthetic QA app'
-    || capabilityInspection.applicationId !== EXPECTED_APPLICATION_ID
-    || capabilityInspection.scopedEncryptedRestore !== true
-    || capabilityInspection.scopedSyntheticExport !== true
-    || capabilityInspection.generalExternalFileAccess !== false)) {
+    || (!canonicalAware && capabilityInspection.status !== 'passed')
+    || (!canonicalAware && capabilityInspection.tool !== 'apkanalyzer')
+    || (!canonicalAware && String(capabilityInspection.runId || '') !== runId)
+    || (!canonicalAware && String(capabilityInspection.sourceSha || '') !== sourceSha)
+    || (!canonicalAware && capabilityInspection.jobName !== 'Build isolated Android synthetic QA app')
+    || (canonicalAware ? identity.applicationId : capabilityInspection.applicationId) !== EXPECTED_APPLICATION_ID
+    || (canonicalAware ? identity.scopedEncryptedRestore : capabilityInspection.scopedEncryptedRestore) !== true
+    || (canonicalAware ? identity.scopedSyntheticExport : capabilityInspection.scopedSyntheticExport) !== true
+    || (canonicalAware ? identity.generalExternalFileAccess : capabilityInspection.generalExternalFileAccess) !== false)) {
     addFailure(failures, 'android_qa_capability_evidence_invalid')
   }
-  if (signing.class !== 'android_debug'
+  const signingClass = canonicalAware ? signing.classification : signing.class
+  if (signingClass !== 'android_debug'
     || signing.productionSigned !== false
     || signing.stableUpdateIdentityProven !== false) {
     addFailure(failures, 'android_qa_signing_classification_invalid')
@@ -444,7 +501,7 @@ export function assessShopAndroidQaHandoff(input = {}) {
 
   const body = {
     contract: capabilityAware
-      ? SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+      ? (canonicalAware ? SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT : SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT)
       : SHOP_ANDROID_QA_HANDOFF_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
     generatedAt,
@@ -467,25 +524,37 @@ export function assessShopAndroidQaHandoff(input = {}) {
       apkSha256,
       applicationId: identity.applicationId || null,
       applicationLabel: identity.applicationLabel || null,
-      identityInspection: identity.status === 'passed'
-        ? 'reported_producer_ci_passed_not_reinspected'
-        : 'unverified',
+      identityInspection: canonicalAware
+        ? 'canonical_manifest_and_receipts_verified'
+        : (identity.status === 'passed' ? 'reported_producer_ci_passed_not_reinspected' : 'unverified'),
       capabilityInspection: capabilityAware && !failures.includes('android_qa_capability_evidence_invalid')
-        ? 'reported_producer_ci_passed_not_reinspected'
+        ? (canonicalAware ? 'canonical_manifest_and_receipts_verified' : 'reported_producer_ci_passed_not_reinspected')
         : 'unavailable',
       capabilityContract: capabilityAware ? capabilityContract : null,
       evidenceContract: capabilityAware ? evidenceContract : null,
       capabilities: capabilityAware && Array.isArray(capabilities) ? [...capabilities] : [],
       scopedEncryptedRestore: capabilityAware
-        ? capabilityInspection?.scopedEncryptedRestore === true
+        ? (canonicalAware ? identity.scopedEncryptedRestore === true : capabilityInspection?.scopedEncryptedRestore === true)
         : false,
       scopedSyntheticExport: capabilityAware
-        ? capabilityInspection?.scopedSyntheticExport === true
+        ? (canonicalAware ? identity.scopedSyntheticExport === true : capabilityInspection?.scopedSyntheticExport === true)
         : false,
       generalExternalFileAccess: capabilityAware
-        ? capabilityInspection?.generalExternalFileAccess !== false
+        ? (canonicalAware ? identity.generalExternalFileAccess !== false : capabilityInspection?.generalExternalFileAccess !== false)
         : false,
-      signingClass: signing.class || null,
+      signingClass: signingClass || null,
+      signerCertificateSha256: canonicalAware ? signing.certificateSha256 : null,
+      apksignerBuildToolsVersion: canonicalAware ? signing.apksignerBuildToolsVersion : null,
+      apksignerSha256: canonicalAware ? signing.apksignerSha256 : null,
+      buildToolsSourcePropertiesSha256: canonicalAware
+        ? signing.buildToolsSourcePropertiesSha256
+        : null,
+      versionCode: canonicalAware ? identity.versionCode : null,
+      versionName: canonicalAware ? identity.versionName : null,
+      compileSdk: canonicalAware ? identity.compileSdk : null,
+      minSdk: canonicalAware ? identity.minSdk : null,
+      targetSdk: canonicalAware ? identity.targetSdk : null,
+      abis: canonicalAware ? [...identity.abis] : [],
       productionSigned: false,
       promotionEligible: false,
     },
@@ -498,6 +567,7 @@ export function assessShopAndroidQaHandoff(input = {}) {
       artifactId: String(expectations.artifactId || ''),
       archiveSha256: String(expectations.archiveSha256 || ''),
     },
+    canonicalArtifactManifest: canonicalAware ? canonicalManifest : null,
     runPlan: RUN_STEPS.map(([id, instruction]) => ({ id, instruction, required: true })),
     requiredEvidenceFields: REQUIRED_EVIDENCE_FIELDS,
     artifactCapabilities: capabilityAware ? DECLARED_QA_CAPABILITIES.map((entry) => ({ ...entry })) : [],
@@ -514,7 +584,8 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
   const digest = body.digest
   delete body.digest
   if (digest !== packetDigest(body)) throw new Error('shop_android_qa_handoff_digest_invalid')
-  const capabilityAware = packet.contract === SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+  const canonicalAware = packet.contract === SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT
+  const capabilityAware = canonicalAware || packet.contract === SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
   if (packet.contract !== SHOP_ANDROID_QA_HANDOFF_CONTRACT && !capabilityAware) {
     throw new Error('shop_android_qa_handoff_contract_invalid')
   }
@@ -552,14 +623,58 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
   }
   if (artifact.applicationId !== EXPECTED_APPLICATION_ID
     || packet.artifact?.applicationLabel !== EXPECTED_APPLICATION_LABEL
-    || artifact.identityInspection !== 'reported_producer_ci_passed_not_reinspected'
+    || artifact.identityInspection !== (canonicalAware
+      ? 'canonical_manifest_and_receipts_verified'
+      : 'reported_producer_ci_passed_not_reinspected')
     || artifact.signingClass !== 'android_debug'
     || packet.artifact?.productionSigned !== false
     || packet.artifact?.promotionEligible !== false) {
     throw new Error('shop_android_qa_handoff_artifact_identity_invalid')
   }
+  if (canonicalAware && (!SHA64.test(String(artifact.signerCertificateSha256 || ''))
+    || !/^\d+\.\d+\.\d+$/.test(String(artifact.apksignerBuildToolsVersion || ''))
+    || !SHA64.test(String(artifact.apksignerSha256 || ''))
+    || !SHA64.test(String(artifact.buildToolsSourcePropertiesSha256 || ''))
+    || !/^[1-9][0-9]*$/.test(String(artifact.versionCode || ''))
+    || typeof artifact.versionName !== 'string' || !artifact.versionName.trim()
+    || !Number.isSafeInteger(artifact.compileSdk)
+    || !Number.isSafeInteger(artifact.minSdk)
+    || !Number.isSafeInteger(artifact.targetSdk)
+    || artifact.compileSdk < artifact.targetSdk
+    || artifact.targetSdk < artifact.minSdk
+    || !Array.isArray(artifact.abis) || artifact.abis.length === 0)) {
+    throw new Error('shop_android_qa_handoff_canonical_observation_invalid')
+  }
+  if (canonicalAware) {
+    let canonicalManifest
+    try {
+      canonicalManifest = validateShopQaArtifactManifest(packet.canonicalArtifactManifest)
+    } catch {
+      throw new Error('shop_android_qa_handoff_canonical_manifest_invalid')
+    }
+    if (canonicalManifest.platform !== 'android'
+      || canonicalManifest.source.sourceSha !== artifact.sourceSha
+      || canonicalManifest.source.nativeTree !== artifact.nativeTree
+      || canonicalManifest.artifact.sha256 !== artifact.apkSha256
+      || JSON.stringify(canonicalManifest.artifact.identity.abis) !== JSON.stringify(artifact.abis)
+      || canonicalManifest.artifact.identity.versionCode !== artifact.versionCode
+      || canonicalManifest.artifact.identity.versionName !== artifact.versionName
+      || canonicalManifest.artifact.identity.compileSdk !== artifact.compileSdk
+      || canonicalManifest.artifact.identity.minSdk !== artifact.minSdk
+      || canonicalManifest.artifact.identity.targetSdk !== artifact.targetSdk
+      || canonicalManifest.signing.certificateSha256 !== artifact.signerCertificateSha256
+      || canonicalManifest.signing.apksignerBuildToolsVersion !== artifact.apksignerBuildToolsVersion
+      || canonicalManifest.signing.apksignerSha256 !== artifact.apksignerSha256
+      || canonicalManifest.signing.buildToolsSourcePropertiesSha256 !== artifact.buildToolsSourcePropertiesSha256) {
+      throw new Error('shop_android_qa_handoff_canonical_manifest_mismatch')
+    }
+  } else if (packet.canonicalArtifactManifest != null) {
+    throw new Error('shop_android_qa_handoff_legacy_canonical_manifest_forbidden')
+  }
   if (capabilityAware) {
-    if (artifact.capabilityInspection !== 'reported_producer_ci_passed_not_reinspected'
+    if (artifact.capabilityInspection !== (canonicalAware
+      ? 'canonical_manifest_and_receipts_verified'
+      : 'reported_producer_ci_passed_not_reinspected')
       || artifact.capabilityContract !== SHOP_ANDROID_QA_CAPABILITY_CONTRACT
       || artifact.evidenceContract !== SHOP_ANDROID_QA_EVIDENCE_CONTRACT
       || JSON.stringify(artifact.capabilities) !== JSON.stringify(SHOP_ANDROID_QA_CAPABILITIES)
@@ -611,6 +726,7 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
 }
 
 export function sampleShopAndroidQaHandoffInput(overrides = {}) {
+  const canonicalAware = overrides.canonicalAware === true
   const capabilityAware = overrides.capabilityAware === true
   const headSha = '6bf59b49c6607f411953a19aa90d64ca89eb522e'
   const sourceSha = '0a7fb8e4c01741a1195b6f2a586d43a1f0e3af6a'
@@ -619,14 +735,89 @@ export function sampleShopAndroidQaHandoffInput(overrides = {}) {
   const apkBytes = Buffer.from('synthetic android qa apk fixture')
   const apkHash = sha256(apkBytes)
   const checksumText = `${apkHash}  ${EXPECTED_APK_NAME}\n`
-  const manifestText = capabilityAware
+  let manifestText = capabilityAware
     ? `source-sha=${sourceSha} sha-256=${apkHash}  ${EXPECTED_APK_NAME} promotion-ineligible qa-capability-contract=${SHOP_ANDROID_QA_CAPABILITY_CONTRACT} qa-evidence-contract=${SHOP_ANDROID_QA_EVIDENCE_CONTRACT} qa-scoped-encrypted-restore=true qa-scoped-synthetic-export=true qa-general-external-file-access=false\n`
     : `source-sha=${sourceSha} sha-256=${apkHash}  ${EXPECTED_APK_NAME} promotion-ineligible\n`
-  const archiveBytes = storedZipFixture([
+  const identityReceipt = {
+    applicationId: EXPECTED_APPLICATION_ID,
+    applicationLabel: EXPECTED_APPLICATION_LABEL,
+    capabilityContract: SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
+    evidenceContract: SHOP_ANDROID_QA_EVIDENCE_CONTRACT,
+    scopedEncryptedRestore: true,
+    scopedSyntheticExport: true,
+    generalExternalFileAccess: false,
+    versionCode: '1',
+    versionName: '1.0.0',
+    compileSdk: 36,
+    minSdk: 24,
+    targetSdk: 36,
+    abis: ['arm64-v8a', 'armeabi-v7a', 'x86_64'],
+  }
+  const signingReceipt = {
+    classification: 'android_debug',
+    productionSigned: false,
+    stableUpdateIdentityProven: false,
+    certificateSha256: '5'.repeat(64),
+    signatureVerified: true,
+    apksignerBuildToolsVersion: '36.0.0',
+    apksignerSha256: '6'.repeat(64),
+    buildToolsSourcePropertiesSha256: '7'.repeat(64),
+  }
+  const toolchainReceipt = {
+    frameworkVersion: '3.47.8',
+    frameworkRevision: '4'.repeat(40),
+    dartSdkVersion: '3.13.7',
+  }
+  const identityBytes = Buffer.from(JSON.stringify(identityReceipt))
+  const signingBytes = Buffer.from(JSON.stringify(signingReceipt))
+  const toolchainBytes = Buffer.from(JSON.stringify(toolchainReceipt))
+  if (canonicalAware) {
+    const body = {
+      contract: 'supermega.shop.synthetic-qa-artifact.v1',
+      digestScope: 'utf8_compact_json_without_digest',
+      platform: 'android',
+      buildProfile: 'synthetic_qa_v1',
+      source: { sourceSha, sourceTree: '2'.repeat(40), nativeTree: '3cbfc2038bef56d889fa0ccdef1d266783e0fcb8' },
+      artifact: {
+        fileName: EXPECTED_APK_NAME,
+        sha256: apkHash,
+        bytes: apkBytes.byteLength,
+        identity: identityReceipt,
+        identityReceiptSha256: sha256(identityBytes),
+      },
+      toolchain: {
+        flutterVersion: toolchainReceipt.frameworkVersion,
+        flutterRevision: toolchainReceipt.frameworkRevision,
+        dartVersion: toolchainReceipt.dartSdkVersion,
+        runnerOs: 'Linux',
+        runnerArch: 'X64',
+        runnerImageOs: 'ubuntu24',
+        runnerImageVersion: '20261030.1',
+        receiptSha256: sha256(toolchainBytes),
+      },
+      signing: { ...signingReceipt, receiptSha256: sha256(signingBytes) },
+      claimBoundary: {
+        internalSyntheticQaOnly: true,
+        installedAcceptanceProven: false,
+        hardwareAcceptanceProven: false,
+        merchantAcceptanceProven: false,
+        productionReady: false,
+        promotionEligible: false,
+      },
+    }
+    manifestText = `${JSON.stringify({ ...body, digest: `sha256:${sha256(Buffer.from(JSON.stringify(body)))}` })}\n`
+  }
+  const archiveEntries = [
     [EXPECTED_APK_NAME, apkBytes],
     [`${EXPECTED_APK_NAME}.sha256`, Buffer.from(checksumText)],
+    ...(canonicalAware ? [
+      [`${EXPECTED_APK_NAME}.identity.json`, identityBytes],
+      [`${EXPECTED_APK_NAME}.signing.json`, signingBytes],
+      [`${EXPECTED_APK_NAME}.toolchain.json`, toolchainBytes],
+    ] : []),
     [`${EXPECTED_APK_NAME}.manifest`, Buffer.from(manifestText)],
-  ], { dataDescriptors: overrides.zipDataDescriptors === true })
+  ]
+  const archiveBytes = storedZipFixture(archiveEntries, { dataDescriptors: overrides.zipDataDescriptors === true })
   const metadata = {
     headSha,
     sourceSha,

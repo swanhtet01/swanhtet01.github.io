@@ -7,22 +7,24 @@ import { assessShopQaIsolationContract } from './verify_shop_qa_isolation_contra
 function workflowFixture() {
   const qa = '--dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1'
   const artifactSteps = (platform, artifact, checksum = `sha256sum ${artifact} > ${artifact}.sha256`) => {
-    const toolchainStep = platform === 'android' ? '' : `      - name: Record observed QA toolchain
+    const toolchainStep = `      - name: Record observed QA toolchain
         run: ${platform === 'ios'
           ? `flutter --version --machine > ${artifact}.toolchain.json`
-          : `flutter --version --machine | Set-Content -LiteralPath '${artifact}.toolchain.json' -Encoding utf8NoBOM`}
+          : platform === 'android'
+            ? `flutter --version --machine > ${artifact}.toolchain.json`
+            : `flutter --version --machine | Set-Content -LiteralPath '${artifact}.toolchain.json' -Encoding utf8NoBOM`}
 `
-    const receiptPaths = platform === 'android' ? '' : `            ${artifact}.toolchain.json
+    const receiptPaths = `            ${artifact}.toolchain.json
             ${artifact}.signing.json
+${platform === 'android' ? `            ${artifact}.identity.json
+` : ''}
 `
     return `
       - name: Hash QA artifact
         run: ${checksum}
 ${toolchainStep}
       - name: Bind QA artifact
-        run: ${platform === 'android'
-          ? `echo "source-sha=\${{ github.sha }} sha-256=$(cat ${artifact}.sha256) promotion-ineligible" > ${artifact}.manifest`
-          : `node tools/write_shop_qa_artifact_manifest.mjs --platform ${platform} --artifact ${artifact} --checksum ${artifact}.sha256 --toolchain ${artifact}.toolchain.json --signing ${artifact}.signing.json --output ${artifact}.manifest`}
+        run: node tools/write_shop_qa_artifact_manifest.mjs --platform ${platform} --artifact ${artifact} --checksum ${artifact}.sha256 --toolchain ${artifact}.toolchain.json --signing ${artifact}.signing.json${platform === 'android' ? ` --identity ${artifact}.identity.json` : ''} --output ${artifact}.manifest
       - name: Upload synthetic QA evidence
         uses: actions/upload-artifact@v4
         with:
@@ -49,8 +51,14 @@ ${receiptPaths}            ${artifact}.manifest`
           trap 'rm -f "$manifest_xml"' EXIT
           "$analyzer" manifest print app-qa-debug.apk > "$manifest_xml"
           python3 -c 'import sys, xml.etree.ElementTree as ET; android = "{http://schemas.android.com/apk/res/android}"; apps = ET.parse(sys.argv[1]).getroot().findall("application"); items = apps[0].findall("meta-data") if len(apps) == 1 else []; metadata = {item.get(android + "name"): item.get(android + "value") for item in items}; expected = {"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1", "dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1", "dev.supermega.shop.qa.scopedEncryptedRestore": "true", "dev.supermega.shop.qa.scopedSyntheticExport": "true", "dev.supermega.shop.qa.generalExternalFileAccess": "false"}; valid = len(apps) == 1 and len(metadata) == len(items) and apps[0].get(android + "label") == "Shop QA" and all(metadata.get(key) == value for key, value in expected.items()); sys.exit(None if valid else "shop_android_qa_identity_or_capability_mismatch")' "$manifest_xml"
+          echo identity > app-qa-debug.apk.identity.json
           rm -f "$manifest_xml"
-          trap - EXIT`,
+          trap - EXIT
+      - name: Verify Android QA debug signature
+        run: |
+          apksigner="$android_sdk_root/build-tools/36.0.0/apksigner"
+          "$apksigner" verify --verbose --print-certs app-qa-debug.apk
+          echo 'Signer #1 certificate SHA-256 digest:' > app-qa-debug.apk.signing.json`,
     ios: `
       - name: Inspect iOS QA identity
         run: |
@@ -150,7 +158,7 @@ function fixture() {
     'mobile/shop_pos/lib/shop_runtime_scope.dart': "ShopRuntimeConfiguration.fromEnvironment(); Future<ShopRuntimeScope> resolveShopRuntimeScopeForStartup() async { return ShopRuntimeScope.resolve(ShopRuntimeProfile.production); } ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(ShopRuntimeScope? scope) { if (scope == null) throw StateError('shop_runtime_scope_required'); return scope; } class ShopRuntimeScope { static Future<ShopRuntimeScope> resolve(p) async { SharedPreferences.getInstance(); getApplicationSupportDirectory(); getTemporaryDirectory(); return ShopRuntimeScope(); } } synthetic-evidence sentinel shop_locale_myanmar shop_pending_picker_intent shop_receipt_printer_host_v1 shop_receipt_paper_width_v1",
     'mobile/shop_pos/lib/shop_build_identity.g.dart': 'synthetic_qa_v1 platform',
     'tools/generate_shop_build_identity.mjs': 'production synthetic_qa_v1 windows',
-    'tools/write_shop_qa_artifact_manifest.mjs': 'supermega.shop.synthetic-qa-artifact.v1 HEAD:mobile/shop_pos shop_qa_manifest_checksum_invalid shop_qa_manifest_github_sha_mismatch ios_no_codesign windows_unsigned signingEvidence.productionSigned !== false promotionEligible: false',
+    'tools/write_shop_qa_artifact_manifest.mjs': 'supermega.shop.synthetic-qa-artifact.v1 HEAD:mobile/shop_pos shop_qa_manifest_checksum_invalid shop_qa_manifest_github_sha_mismatch android_debug ios_no_codesign windows_unsigned signingEvidence.productionSigned !== false promotionEligible: false',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1': 'supermega_shop_qa.exe Shop QA',
     'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme': '<TestAction buildConfiguration="Debug-qa"/><LaunchAction buildConfiguration="Debug-qa"/><ProfileAction buildConfiguration="Debug-qa"/><AnalyzeAction buildConfiguration="Debug-qa"/><ArchiveAction buildConfiguration="Debug-qa"/>',
     'mobile/shop_pos/ios/Runner/Info.plist': '<string>$(SHOP_DISPLAY_NAME)</string><string>$(SHOP_BUNDLE_NAME)</string>',
@@ -475,7 +483,7 @@ test('workflow tokens outside executable jobs and run blocks cannot make strict 
 })
 
 test('wrong workflow job, command order, flavor, or QA define fails closed', () => {
-  for (const mutate of [
+  for (const [mutationIndex, mutate] of [
     workflow => workflow.replace('android-qa:', 'mobile-qa:'),
     workflow => workflow.replace(
       'run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1\n      - name: Build Android QA',
@@ -486,14 +494,14 @@ test('wrong workflow job, command order, flavor, or QA define fails closed', () 
     workflow => workflow
       .replace('run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1', 'run: true')
       .replace(' --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', ''),
-    workflow => workflow.replace('echo "source-sha=${{ github.sha }} sha-256=$(cat app-qa-debug.apk.sha256) promotion-ineligible"', 'echo "source-sha=${{ github.sha }} sha-256 promotion-ineligible"'),
-    workflow => workflow.replace(
-      'path: |\n            app-qa-debug.apk\n            app-qa-debug.apk.sha256\n            app-qa-debug.apk.manifest',
-      'path: |\n            unrelated.apk\n            unrelated.apk.sha256\n            unrelated.apk.manifest',
-    ),
+    workflow => workflow.replace('node tools/write_shop_qa_artifact_manifest.mjs --platform android --artifact app-qa-debug.apk --checksum app-qa-debug.apk.sha256 --toolchain app-qa-debug.apk.toolchain.json --signing app-qa-debug.apk.signing.json --identity app-qa-debug.apk.identity.json --output app-qa-debug.apk.manifest', 'echo loose-android-manifest'),
+    workflow => workflow.replace('            app-qa-debug.apk.identity.json', '            unrelated.identity.json'),
     workflow => workflow.replace(/^  android-production:/m, '  android:').replace(/^  android-qa:\n    steps:\n/m, ''),
-  ]) {
-    const sources = fixture(); sources['.github/workflows/shop-native-ci.yml'] = mutate(workflowFixture())
+  ].entries()) {
+    const original = workflowFixture()
+    const mutated = mutate(original)
+    assert.notEqual(mutated, original, `mutation ${mutationIndex} must change fixture`)
+    const sources = fixture(); sources['.github/workflows/shop-native-ci.yml'] = mutated
     const result = assessShopQaIsolationContract({ sources })
     assert.equal(result.strictReady, false, JSON.stringify(result))
     assert.ok(result.blockers.some(item => item.code === 'qa_build_contract_missing'))

@@ -6,6 +6,7 @@ import {
   SHOP_ANDROID_QA_CAPABILITIES,
   SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
   SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT,
+  SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT,
   SHOP_ANDROID_QA_EVIDENCE_CONTRACT,
   SHOP_ANDROID_QA_HANDOFF_CONTRACT,
   assessShopAndroidQaHandoff,
@@ -95,6 +96,31 @@ test('v2 binds scoped recovery capabilities without claiming installed acceptanc
   assert.ok(packet.blockedCapabilities.some((entry) =>
     entry.id === 'general_external_file_export'))
   assert.equal(validateShopAndroidQaHandoff(packet), packet)
+})
+
+test('v3 derives exact identity, capabilities and signing from canonical retained receipts', () => {
+  const packet = assessShopAndroidQaHandoff(
+    sampleShopAndroidQaHandoffInput({ canonicalAware: true }),
+  )
+  assert.equal(packet.contract, SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT)
+  assert.equal(packet.status, 'ready_for_internal_install_run')
+  assert.equal(packet.artifact.identityInspection, 'canonical_manifest_and_receipts_verified')
+  assert.equal(packet.artifact.capabilityInspection, 'canonical_manifest_and_receipts_verified')
+  assert.equal(packet.artifact.applicationId, 'dev.supermega.supermega_shop.qa')
+  assert.equal(packet.artifact.signingClass, 'android_debug')
+  assert.equal(packet.artifact.signerCertificateSha256, '5'.repeat(64))
+  assert.equal(packet.artifact.apksignerBuildToolsVersion, '36.0.0')
+  assert.deepEqual(packet.artifact.abis, ['arm64-v8a', 'armeabi-v7a', 'x86_64'])
+  assert.equal(packet.artifact.productionSigned, false)
+  assert.equal(packet.artifact.promotionEligible, false)
+  assert.equal(validateShopAndroidQaHandoff(packet), packet)
+  assert.throws(
+    () => validateShopAndroidQaHandoff(resign({
+      ...packet,
+      artifact: { ...packet.artifact, signerCertificateSha256: '0'.repeat(64) },
+    })),
+    /shop_android_qa_handoff_canonical_(?:observation_invalid|manifest_mismatch)|shop_android_qa_handoff_artifact_identity_invalid/,
+  )
 })
 
 test('old v1 artifact cannot be relabelled as recovery-capable', () => {

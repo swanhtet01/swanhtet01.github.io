@@ -442,11 +442,27 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
 
+      - name: Prove clean exact source before Android QA generation
+        working-directory: ${{ github.workspace }}
+        run: |
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"
+
       - name: Generate Android QA identity
         working-directory: ${{ github.workspace }}
         run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1
 
+      - name: Record generated Android QA identity digest
+        working-directory: ${{ github.workspace }}
+        run: sha256sum mobile/shop_pos/lib/shop_build_identity.g.dart > "${RUNNER_TEMP}/shop-build-identity.sha256"
+
       - name: Build Android QA
+        env:
+          ORG_GRADLE_PROJECT_SHOP_ANDROID_KEYSTORE_PATH: ''
+          ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_ALIAS: ''
+          ORG_GRADLE_PROJECT_SHOP_ANDROID_STORE_PASSWORD: ''
+          ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_PASSWORD: ''
         run: flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1
 
       - name: Stage Android QA artifact
@@ -467,17 +483,108 @@ jobs:
           manifest_xml="$(mktemp)"
           trap 'rm -f "$manifest_xml"' EXIT
           "$analyzer" manifest print app-qa-debug.apk > "$manifest_xml"
-          python3 -c 'import sys, xml.etree.ElementTree as ET; android = "{http://schemas.android.com/apk/res/android}"; apps = ET.parse(sys.argv[1]).getroot().findall("application"); items = apps[0].findall("meta-data") if len(apps) == 1 else []; metadata = {item.get(android + "name"): item.get(android + "value") for item in items}; expected = {"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1", "dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1", "dev.supermega.shop.qa.scopedEncryptedRestore": "true", "dev.supermega.shop.qa.scopedSyntheticExport": "true", "dev.supermega.shop.qa.generalExternalFileAccess": "false"}; valid = len(apps) == 1 and len(metadata) == len(items) and apps[0].get(android + "label") == "Shop QA" and all(metadata.get(key) == value for key, value in expected.items()); sys.exit(None if valid else "shop_android_qa_identity_or_capability_mismatch")' "$manifest_xml"
+          "$analyzer" files list app-qa-debug.apk > app-qa-debug.apk.files.txt
+          APPLICATION_ID="$("$analyzer" manifest application-id app-qa-debug.apk)" \
+          VERSION_CODE="$("$analyzer" manifest version-code app-qa-debug.apk)" \
+          VERSION_NAME="$("$analyzer" manifest version-name app-qa-debug.apk)" \
+          MIN_SDK="$("$analyzer" manifest min-sdk app-qa-debug.apk)" \
+          TARGET_SDK="$("$analyzer" manifest target-sdk app-qa-debug.apk)" \
+          python3 - "$manifest_xml" app-qa-debug.apk.files.txt app-qa-debug.apk.identity.json <<'PY'
+          import json, os, pathlib, re, sys, xml.etree.ElementTree as ET
+          android = "{http://schemas.android.com/apk/res/android}"
+          root = ET.parse(sys.argv[1]).getroot()
+          apps = root.findall("application")
+          items = apps[0].findall("meta-data") if len(apps) == 1 else []
+          metadata = {item.get(android + "name"): item.get(android + "value") for item in items}
+          expected = {
+              "dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1",
+              "dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1",
+              "dev.supermega.shop.qa.scopedEncryptedRestore": "true",
+              "dev.supermega.shop.qa.scopedSyntheticExport": "true",
+              "dev.supermega.shop.qa.generalExternalFileAccess": "false",
+          }
+          abis = sorted(set(re.findall(r"(?:^|/)lib/([^/]+)/", pathlib.Path(sys.argv[2]).read_text())))
+          compile_sdk = root.get("platformBuildVersionCode")
+          valid = (len(apps) == 1 and len(metadata) == len(items)
+                   and apps[0].get(android + "label") == "Shop QA"
+                   and all(metadata.get(key) == value for key, value in expected.items())
+                   and compile_sdk and abis)
+          if not valid:
+              raise SystemExit("shop_android_qa_identity_or_capability_mismatch")
+          identity = {
+              "applicationId": os.environ["APPLICATION_ID"],
+              "applicationLabel": "Shop QA",
+              "capabilityContract": expected["dev.supermega.shop.qa.capabilityContract"],
+              "evidenceContract": expected["dev.supermega.shop.qa.evidenceContract"],
+              "scopedEncryptedRestore": True,
+              "scopedSyntheticExport": True,
+              "generalExternalFileAccess": False,
+              "versionCode": os.environ["VERSION_CODE"],
+              "versionName": os.environ["VERSION_NAME"],
+              "compileSdk": int(compile_sdk),
+              "minSdk": int(os.environ["MIN_SDK"]),
+              "targetSdk": int(os.environ["TARGET_SDK"]),
+              "abis": abis,
+          }
+          pathlib.Path(sys.argv[3]).write_text(json.dumps(identity, separators=(",", ":")))
+          PY
           rm -f "$manifest_xml"
+          rm -f app-qa-debug.apk.files.txt
           trap - EXIT
+
+      - name: Verify Android QA debug signature
+        working-directory: ${{ github.workspace }}
+        run: |
+          android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$android_sdk_root"
+          android_sdk_root="$(readlink -f "$android_sdk_root")"
+          build_tools_version='36.0.0'
+          apksigner="$android_sdk_root/build-tools/$build_tools_version/apksigner"
+          build_tools_properties="$android_sdk_root/build-tools/$build_tools_version/source.properties"
+          test -x "$apksigner"
+          test -f "$build_tools_properties"
+          signature_log="$(mktemp)"
+          trap 'rm -f "$signature_log"' EXIT
+          LC_ALL=C "$apksigner" verify --verbose --print-certs app-qa-debug.apk > "$signature_log"
+          BUILD_TOOLS_VERSION="$build_tools_version" \
+          APKSIGNER_SHA256="$(sha256sum "$apksigner" | awk '{print $1}')" \
+          BUILD_TOOLS_PROPERTIES_SHA256="$(sha256sum "$build_tools_properties" | awk '{print $1}')" \
+          python3 - "$signature_log" app-qa-debug.apk.signing.json <<'PY'
+          import json, os, pathlib, re, sys
+          text = pathlib.Path(sys.argv[1]).read_text()
+          matches = re.findall(r"^Signer #(\d+) certificate SHA-256 digest: ([0-9a-fA-F]{64})$", text, re.MULTILINE)
+          if len(matches) != 1 or matches[0][0] != "1":
+              raise SystemExit("shop_android_qa_signer_digest_invalid")
+          evidence = {
+              "classification": "android_debug",
+              "productionSigned": False,
+              "stableUpdateIdentityProven": False,
+              "certificateSha256": matches[0][1].lower(),
+              "signatureVerified": True,
+              "apksignerBuildToolsVersion": os.environ["BUILD_TOOLS_VERSION"],
+              "apksignerSha256": os.environ["APKSIGNER_SHA256"],
+              "buildToolsSourcePropertiesSha256": os.environ["BUILD_TOOLS_PROPERTIES_SHA256"],
+          }
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(evidence, separators=(",", ":")))
+          PY
 
       - name: Hash Android QA artifact
         working-directory: ${{ github.workspace }}
         run: sha256sum app-qa-debug.apk > app-qa-debug.apk.sha256
 
-      - name: Bind Android QA artifact to source
+      - name: Record observed Android QA toolchain
         working-directory: ${{ github.workspace }}
-        run: echo "source-sha=${{ github.sha }} sha-256=$(cat app-qa-debug.apk.sha256) promotion-ineligible qa-capability-contract=supermega.shop.android-qa-capabilities.v1 qa-evidence-contract=supermega.shop.synthetic-qa-evidence.v1 qa-scoped-encrypted-restore=true qa-scoped-synthetic-export=true qa-general-external-file-access=false" > app-qa-debug.apk.manifest
+        run: flutter --version --machine > app-qa-debug.apk.toolchain.json
+
+      - name: Bind Android QA artifact to exact source and observations
+        working-directory: ${{ github.workspace }}
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          sha256sum --check "${RUNNER_TEMP}/shop-build-identity.sha256"
+          test -z "$(git diff --cached --name-only)"
+          changed_paths="$(git diff --name-only)"
+          test -z "$changed_paths" || test "$changed_paths" = 'mobile/shop_pos/lib/shop_build_identity.g.dart'
+          node tools/write_shop_qa_artifact_manifest.mjs --platform android --artifact app-qa-debug.apk --checksum app-qa-debug.apk.sha256 --toolchain app-qa-debug.apk.toolchain.json --signing app-qa-debug.apk.signing.json --identity app-qa-debug.apk.identity.json --output app-qa-debug.apk.manifest
 
       - name: Upload promotion-ineligible Android QA artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -486,6 +593,9 @@ jobs:
           path: |
             app-qa-debug.apk
             app-qa-debug.apk.sha256
+            app-qa-debug.apk.toolchain.json
+            app-qa-debug.apk.signing.json
+            app-qa-debug.apk.identity.json
             app-qa-debug.apk.manifest
           if-no-files-found: error
           retention-days: 7

@@ -77,8 +77,14 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
 })
 
-test('iOS and Windows QA artifacts inspect signing and use canonical source binding', () => {
+test('Android, iOS and Windows QA artifacts inspect signing and use canonical source binding', () => {
   for (const [command, failure] of [
+    ['apksigner" verify --verbose --print-certs app-qa-debug.apk', 'android_qa_signature_not_verified'],
+    ['flutter --version --machine > app-qa-debug.apk.toolchain.json', 'android_qa_observed_toolchain_missing'],
+    [
+      'node tools/write_shop_qa_artifact_manifest.mjs --platform android --artifact app-qa-debug.apk --checksum app-qa-debug.apk.sha256 --toolchain app-qa-debug.apk.toolchain.json --signing app-qa-debug.apk.signing.json --identity app-qa-debug.apk.identity.json --output app-qa-debug.apk.manifest',
+      'android_qa_canonical_manifest_missing',
+    ],
     ['codesign -dv --verbose=4', 'ios_qa_signature_not_inspected'],
     ['code object is not signed at all', 'ios_qa_unsigned_result_not_verified'],
     ['flutter --version --machine > Runner.app.zip.toolchain.json', 'ios_qa_observed_toolchain_missing'],
@@ -96,6 +102,23 @@ test('iOS and Windows QA artifacts inspect signing and use canonical source bind
   ]) {
     const result = verifyShopNativeCiContract(
       workflow.replace(command, 'echo loose-source-binding'),
+      gradleWrapper,
+      actualTestPaths,
+    )
+    assert.ok(result.failures.includes(failure), failure)
+  }
+})
+
+test('Android canonical publication rechecks exact source and clears release signing inputs', () => {
+  for (const [token, failure] of [
+    ['git diff --exit-code', 'android_qa_clean_source_precheck_missing'],
+    ['test "$(git rev-parse HEAD)" = "${{ github.sha }}"', 'android_qa_source_head_recheck_missing'],
+    ['sha256sum --check "${RUNNER_TEMP}/shop-build-identity.sha256"', 'android_qa_generated_identity_recheck_missing'],
+    ["test -z \"$changed_paths\" || test \"$changed_paths\" = 'mobile/shop_pos/lib/shop_build_identity.g.dart'", 'android_qa_source_drift_recheck_missing'],
+    ["ORG_GRADLE_PROJECT_SHOP_ANDROID_KEYSTORE_PATH: ''", 'android_qa_ci_may_inherit_signing_credentials:SHOP_ANDROID_KEYSTORE_PATH'],
+  ]) {
+    const result = verifyShopNativeCiContract(
+      workflow.replaceAll(token, 'android-canonical-control-omitted'),
       gradleWrapper,
       actualTestPaths,
     )
@@ -245,7 +268,7 @@ test('Android QA label is parsed structurally from the built manifest', () => {
     'xml.etree.ElementTree',
     'findall("application")',
     'apps[0].get(android + "label")',
-    'sys.exit(None if valid else "shop_android_qa_identity_or_capability_mismatch")',
+    'raise SystemExit("shop_android_qa_identity_or_capability_mismatch")',
   ]) {
     const missing = verifyShopNativeCiContract(
       workflow.replace(token, 'label-inspection-omitted'),
@@ -264,7 +287,7 @@ test('Android QA analyzer is resolved from one consistent runner SDK root', () =
     'test -x "$analyzer"',
   ]) {
     const missing = verifyShopNativeCiContract(
-      workflow.replace(token, 'sdk-analyzer-discovery-omitted'),
+      workflow.replaceAll(token, 'sdk-analyzer-discovery-omitted'),
       gradleWrapper,
     )
     assert.ok(missing.failures.includes('android_qa_postbuild_analyzer_not_pinned_to_sdk'))
@@ -281,12 +304,13 @@ test('Android QA analyzer is resolved from one consistent runner SDK root', () =
 })
 
 test('Android QA label parser fails closed for wrong, missing, duplicate, and malformed manifests', async () => {
-  const parser = workflow.match(/python3 -c '([^'\n]+)' "\$manifest_xml"/)?.[1]
+  const parser = workflow.match(/python3 - "\$manifest_xml" app-qa-debug\.apk\.files\.txt app-qa-debug\.apk\.identity\.json <<'PY'\n([\s\S]*?)\n          PY/)?.[1]
+    ?.split('\n').map(line => line.replace(/^          /, '')).join('\n')
   assert.ok(parser, 'workflow must retain an executable Android manifest parser')
   const directory = await mkdtemp(join(tmpdir(), 'shop-android-qa-manifest-'))
   try {
     const fixtures = [
-      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', status: 0 },
+      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android" platformBuildVersionCode="36"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', status: 0 },
       { name: 'wrong.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop"/></manifest>', status: 1 },
       { name: 'wrong-capability.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v999"/></application></manifest>', status: 1 },
       { name: 'unsafe-external.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="true"/></application></manifest>', status: 1 },
@@ -297,10 +321,21 @@ test('Android QA label parser fails closed for wrong, missing, duplicate, and ma
     ]
     for (const fixture of fixtures) {
       const path = join(directory, fixture.name)
+      const filesPath = join(directory, `${fixture.name}.files`)
+      const outputPath = join(directory, `${fixture.name}.json`)
       await writeFile(path, fixture.source, 'utf8')
-      const result = spawnSync('python3', ['-c', parser, path], {
+      await writeFile(filesPath, '/lib/arm64-v8a/libapp.so\n', 'utf8')
+      const result = spawnSync('python3', ['-c', parser, path, filesPath, outputPath], {
         encoding: 'utf8',
-        env: { ...process.env, PYTHONOPTIMIZE: '1' },
+        env: {
+          ...process.env,
+          PYTHONOPTIMIZE: '1',
+          APPLICATION_ID: 'dev.supermega.supermega_shop.qa',
+          VERSION_CODE: '1',
+          VERSION_NAME: '1.0.0',
+          MIN_SDK: '24',
+          TARGET_SDK: '36',
+        },
       })
       assert.equal(result.status, fixture.status, fixture.name)
     }

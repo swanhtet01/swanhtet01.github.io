@@ -28,6 +28,16 @@ function execution(command, args) {
 }
 
 const platformInputs = Object.freeze({
+  android: {
+    artifact: 'app-qa-debug.apk',
+    environment: {
+      GITHUB_SHA: source.sha,
+      RUNNER_OS: 'Linux',
+      RUNNER_ARCH: 'X64',
+      ImageOS: 'ubuntu24',
+      ImageVersion: '20261030.1',
+    },
+  },
   ios: {
     artifact: 'Runner.app.zip',
     environment: {
@@ -58,6 +68,7 @@ async function fixture(platform = 'ios') {
   const checksumPath = `${artifactPath}.sha256`
   const toolchainPath = `${artifactPath}.toolchain.json`
   const signingPath = `${artifactPath}.signing.json`
+  const identityPath = platform === 'android' ? `${artifactPath}.identity.json` : null
   const outputPath = `${artifactPath}.manifest`
   const bytes = Buffer.from(`artifact-${platform}`)
   const { createHash } = await import('node:crypto')
@@ -65,17 +76,44 @@ async function fixture(platform = 'ios') {
   await writeFile(artifactPath, bytes)
   await writeFile(checksumPath, `${digest}  ${definition.artifact}\n`)
   await writeFile(toolchainPath, JSON.stringify(flutter))
-  await writeFile(signingPath, JSON.stringify({
+  await writeFile(signingPath, JSON.stringify(platform === 'android' ? {
+    classification: 'android_debug',
+    productionSigned: false,
+    stableUpdateIdentityProven: false,
+    certificateSha256: '5'.repeat(64),
+    signatureVerified: true,
+    apksignerBuildToolsVersion: '36.0.0',
+    apksignerSha256: '6'.repeat(64),
+    buildToolsSourcePropertiesSha256: '7'.repeat(64),
+  } : {
     classification: platform === 'ios' ? 'ios_no_codesign' : 'windows_unsigned',
     productionSigned: false,
     stableUpdateIdentityProven: false,
   }))
+  if (identityPath) {
+    await writeFile(identityPath, JSON.stringify({
+      applicationId: 'dev.supermega.supermega_shop.qa',
+      applicationLabel: 'Shop QA',
+      capabilityContract: 'supermega.shop.android-qa-capabilities.v1',
+      evidenceContract: 'supermega.shop.synthetic-qa-evidence.v1',
+      scopedEncryptedRestore: true,
+      scopedSyntheticExport: true,
+      generalExternalFileAccess: false,
+      versionCode: '1',
+      versionName: '1.0.0',
+      compileSdk: 36,
+      minSdk: 24,
+      targetSdk: 36,
+      abis: ['arm64-v8a', 'armeabi-v7a', 'x86_64'],
+    }))
+  }
   return {
     root,
     artifactPath,
     checksumPath,
     toolchainPath,
     signingPath,
+    identityPath,
     outputPath,
     digest,
     environment: definition.environment,
@@ -91,6 +129,7 @@ async function writeFixture(platform = 'ios', changes = {}) {
     checksumPath: item.checksumPath,
     toolchainPath: item.toolchainPath,
     signingPath: item.signingPath,
+    identityPath: item.identityPath,
     outputPath: item.outputPath,
     root: item.root,
     environment: item.environment,
@@ -100,8 +139,8 @@ async function writeFixture(platform = 'ios', changes = {}) {
   return { ...item, manifest }
 }
 
-test('writes canonical exact-source iOS and Windows manifests', async () => {
-  for (const platform of ['ios', 'windows']) {
+test('writes canonical exact-source Android, iOS and Windows manifests', async () => {
+  for (const platform of ['android', 'ios', 'windows']) {
     const item = await writeFixture(platform)
     try {
       assert.equal(item.manifest.source.sourceSha, source.sha)
@@ -110,12 +149,65 @@ test('writes canonical exact-source iOS and Windows manifests', async () => {
       assert.equal(item.manifest.artifact.sha256, item.digest)
       assert.equal(item.manifest.claimBoundary.promotionEligible, false)
       assert.equal(item.manifest.signing.productionSigned, false)
+      if (platform === 'android') {
+        assert.equal(item.manifest.artifact.identity.applicationId, 'dev.supermega.supermega_shop.qa')
+        assert.equal(item.manifest.artifact.identity.targetSdk, 36)
+        assert.equal(item.manifest.signing.classification, 'android_debug')
+        assert.equal(item.manifest.signing.signatureVerified, true)
+      }
       assert.equal(validateShopQaArtifactManifest(item.manifest), item.manifest)
       const retained = await readFile(item.outputPath, 'utf8')
       assert.equal(retained, `${JSON.stringify(item.manifest)}\n`)
     } finally {
       await item.cleanup()
     }
+  }
+})
+
+test('Android identity and debug signer evidence fail closed when incomplete or altered', async () => {
+  const identityMutations = [
+    value => ({ ...value, applicationId: 'dev.supermega.supermega_shop' }),
+    value => ({ ...value, capabilityContract: 'wrong' }),
+    value => ({ ...value, compileSdk: 35, targetSdk: 36 }),
+    value => ({ ...value, minSdk: 37, targetSdk: 36 }),
+    value => ({ ...value, abis: ['x86_64', 'arm64-v8a'] }),
+    value => ({ ...value, abis: [] }),
+  ]
+  for (const mutate of identityMutations) {
+    const item = await fixture('android')
+    try {
+      const original = JSON.parse(await readFile(item.identityPath, 'utf8'))
+      await writeFile(item.identityPath, JSON.stringify(mutate(original)))
+      await assert.rejects(
+        writeShopQaArtifactManifest({
+          platform: 'android', artifactPath: item.artifactPath, checksumPath: item.checksumPath,
+          toolchainPath: item.toolchainPath, signingPath: item.signingPath,
+          identityPath: item.identityPath, outputPath: item.outputPath, root: item.root,
+          environment: item.environment, execute: execution,
+        }),
+        /shop_qa_manifest_android_identity_evidence_invalid/,
+      )
+    } finally { await item.cleanup() }
+  }
+
+  for (const signing of [
+    { classification: 'android_debug', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: '5'.repeat(64), signatureVerified: false, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
+    { classification: 'android_debug', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: 'not-a-digest', signatureVerified: true, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
+    { classification: 'android_release', productionSigned: false, stableUpdateIdentityProven: false, certificateSha256: '5'.repeat(64), signatureVerified: true, apksignerBuildToolsVersion: '36.0.0', apksignerSha256: '6'.repeat(64), buildToolsSourcePropertiesSha256: '7'.repeat(64) },
+  ]) {
+    const item = await fixture('android')
+    try {
+      await writeFile(item.signingPath, JSON.stringify(signing))
+      await assert.rejects(
+        writeShopQaArtifactManifest({
+          platform: 'android', artifactPath: item.artifactPath, checksumPath: item.checksumPath,
+          toolchainPath: item.toolchainPath, signingPath: item.signingPath,
+          identityPath: item.identityPath, outputPath: item.outputPath, root: item.root,
+          environment: item.environment, execute: execution,
+        }),
+        /shop_qa_manifest_signing_evidence_invalid/,
+      )
+    } finally { await item.cleanup() }
   }
 })
 
