@@ -10,10 +10,17 @@ export const OFFICIAL_REGISTRY_OBSERVATION_CONTRACT =
 export const PYPI_RELEASE_JSON_METHOD = 'pypi-release-json-v1'
 export const WINDOWS_AUTHENTICODE_ARTIFACT_METHOD = 'windows-authenticode-artifact-v1'
 export const AUTHENTICATED_BUNDLE_MEMBER_METHOD = 'authenticated-bundle-member-v1'
+export const ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD =
+  'actions-python-versions-toolcache-v1'
+export const PINNED_SETUP_PYTHON_ACTION_SHA =
+  '5fda3b95a4ea91299a34e894583c3862153e4b97'
 
 const COMPONENT_METHODS = new Map([
   ['postgresql', new Set([WINDOWS_AUTHENTICODE_ARTIFACT_METHOD])],
-  ['python', new Set([WINDOWS_AUTHENTICODE_ARTIFACT_METHOD])],
+  ['python', new Set([
+    WINDOWS_AUTHENTICODE_ARTIFACT_METHOD,
+    ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD,
+  ])],
   ['psycopg', new Set([PYPI_RELEASE_JSON_METHOD])],
   ['psycopg_binary', new Set([PYPI_RELEASE_JSON_METHOD])],
   ['openssl', new Set([AUTHENTICATED_BUNDLE_MEMBER_METHOD])],
@@ -57,6 +64,22 @@ function exactOfficialAuthenticodeLocation(value) {
   return Boolean(required) && value.artifactHost === required[0]
     && value.metadataHost === required[0] && value.packageName === required[1]
 }
+function exactActionsPythonVersionsLocation(value) {
+  const requirements = value.authenticationRequirements
+  if (!object(requirements)) return false
+  const tag = requirements.releaseTag
+  const fileName = value.fileName
+  return value.component === 'python'
+    && value.artifactHost === 'github.com'
+    && value.metadataHost === 'api.github.com'
+    && value.packageName === 'actions/python-versions'
+    && value.platform === 'windows-x64'
+    && typeof tag === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(tag)
+    && value.artifactUrl ===
+      `https://github.com/actions/python-versions/releases/download/${tag}/${fileName}`
+    && value.metadataUrl ===
+      `https://api.github.com/repos/actions/python-versions/releases/tags/${tag}`
+}
 function exactArtifact(value) {
   return exact(value, [
     'sourceId', 'component', 'artifactHost', 'metadataHost', 'artifactUrl', 'metadataUrl',
@@ -87,6 +110,10 @@ function exactArtifact(value) {
         && value.metadataKind === 'windows-authenticode-observation-v1'
         && value.authenticationMethod === WINDOWS_AUTHENTICODE_ARTIFACT_METHOD
         && exactOfficialAuthenticodeLocation(value))
+      || (value.component === 'python'
+        && value.metadataKind === 'github-release-json-v1'
+        && value.authenticationMethod === ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD
+        && exactActionsPythonVersionsLocation(value))
       || (value.component === 'openssl' && value.metadataKind === 'bundle-entry-manifest-v1'
         && value.authenticationMethod === AUTHENTICATED_BUNDLE_MEMBER_METHOD))
     && exactAuthenticationRequirements(value)
@@ -97,6 +124,9 @@ function exactArtifact(value) {
     && (value.authenticationMethod !== AUTHENTICATED_BUNDLE_MEMBER_METHOD
       || (value.authenticationRequirements.inventoryEvidenceBytes === value.metadataBytes
         && value.authenticationRequirements.inventoryEvidenceSha256 === value.metadataSha256))
+    && (value.authenticationMethod !== ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD
+      || (value.authenticationRequirements.releaseMetadataBytes === value.metadataBytes
+        && value.authenticationRequirements.releaseMetadataSha256 === value.metadataSha256))
     && SHA256.test(value.sha256 || '') && SHA256.test(value.metadataSha256 || '')
 }
 
@@ -123,6 +153,22 @@ function exactAuthenticationRequirements(value) {
       && requirements.requiredEkuOids.includes('1.3.6.1.5.5.7.3.3')
       && SHA256.test(requirements.signerCertificateSha256 || '')
       && SHA256.test(requirements.timestampCertificateSha256 || '')
+  }
+  if (value.authenticationMethod === ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD) {
+    return exact(requirements, ['repository', 'releaseTag', 'assetName',
+      'operatingSystem', 'architecture', 'setupPythonActionSha',
+      'releaseMetadataBytes', 'releaseMetadataSha256'])
+      && requirements.repository === 'actions/python-versions'
+      && typeof requirements.releaseTag === 'string'
+      && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(requirements.releaseTag)
+      && requirements.assetName === value.fileName
+      && requirements.operatingSystem === 'windows'
+      && requirements.architecture === 'x64'
+      && requirements.setupPythonActionSha === PINNED_SETUP_PYTHON_ACTION_SHA
+      && Number.isSafeInteger(requirements.releaseMetadataBytes)
+      && requirements.releaseMetadataBytes > 0
+      && SHA256.test(requirements.releaseMetadataSha256 || '')
+      && /\.zip$/i.test(value.fileName)
   }
   if (value.authenticationMethod === AUTHENTICATED_BUNDLE_MEMBER_METHOD) {
     return exact(requirements, ['parentSourceId', 'bundleRelativePath', 'inventoryEvidencePath',
@@ -328,6 +374,32 @@ function verifyOfficialRegistryEvidenceInternal({
       || file?.size !== allowed.bytes
       || file?.digests?.sha256 !== allowed.sha256
       || !allowed.fileName.toLowerCase().includes(allowed.platform.toLowerCase())) {
+      fail('database_rehearsal_registry_metadata_binding_invalid')
+    }
+  } else if (allowed.authenticationMethod === ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD) {
+    let metadata
+    try { metadata = JSON.parse(retainedMetadata.toString('utf8')) } catch {
+      fail('database_rehearsal_registry_metadata_invalid')
+    }
+    const requirements = allowed.authenticationRequirements
+    const asset = Array.isArray(metadata?.assets)
+      ? metadata.assets.find((candidate) => candidate?.name === allowed.fileName)
+      : null
+    if (!object(metadata)
+      || metadata.url !== allowed.metadataUrl
+      || metadata.html_url !==
+        `https://github.com/actions/python-versions/releases/tag/${requirements.releaseTag}`
+      || metadata.tag_name !== requirements.releaseTag
+      || metadata.draft !== false || metadata.prerelease !== false
+      || !object(asset)
+      || asset.name !== requirements.assetName
+      || asset.browser_download_url !== allowed.artifactUrl
+      || asset.size !== allowed.bytes
+      || asset.digest !== `sha256:${allowed.sha256}`
+      || requirements.repository !== 'actions/python-versions'
+      || requirements.operatingSystem !== 'windows'
+      || requirements.architecture !== 'x64'
+      || requirements.setupPythonActionSha !== PINNED_SETUP_PYTHON_ACTION_SHA) {
       fail('database_rehearsal_registry_metadata_binding_invalid')
     }
   } else if (allowed.authenticationMethod === WINDOWS_AUTHENTICODE_ARTIFACT_METHOD) {

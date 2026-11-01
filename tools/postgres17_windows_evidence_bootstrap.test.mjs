@@ -10,10 +10,12 @@ import {
 } from './postgres17_windows_evidence_contract.mjs'
 
 import {
+  ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD,
   combinedPolicySha256,
   inspectOfficialRegistryPolicy,
   OFFICIAL_REGISTRY_OBSERVATION_CONTRACT,
   OFFICIAL_REGISTRY_SOURCE_METHOD,
+  PINNED_SETUP_PYTHON_ACTION_SHA,
   PYPI_RELEASE_JSON_METHOD,
   reconstructOfficialRegistryEvidence,
   verifyOfficialRegistryEvidence,
@@ -301,6 +303,52 @@ function completeSyntheticRegistryPolicy(policy, psycopgArtifact) {
   }
 }
 
+function useActionsPythonVersionsToolcache(policy) {
+  const python = policy.artifacts.find(({ component }) => component === 'python')
+  const releaseTag = '3.12.15-20261020'
+  const fileName = 'python-3.12.15-win32-x64.zip'
+  const artifactUrl =
+    `https://github.com/actions/python-versions/releases/download/${releaseTag}/${fileName}`
+  const metadataUrl =
+    `https://api.github.com/repos/actions/python-versions/releases/tags/${releaseTag}`
+  const metadata = Buffer.from(JSON.stringify({
+    url: metadataUrl,
+    html_url: `https://github.com/actions/python-versions/releases/tag/${releaseTag}`,
+    tag_name: releaseTag,
+    draft: false,
+    prerelease: false,
+    assets: [{ name: fileName, browser_download_url: artifactUrl,
+      size: python.bytes, digest: `sha256:${python.sha256}`, id: 123 }],
+    id: 456,
+  }))
+  Object.assign(python, {
+    sourceId: 'python-3.12.15-actions-toolcache-win-x64',
+    artifactHost: 'github.com',
+    metadataHost: 'api.github.com',
+    artifactUrl,
+    metadataUrl,
+    packageName: 'actions/python-versions',
+    packageVersion: '3.12.15',
+    platform: 'windows-x64',
+    fileName,
+    metadataKind: 'github-release-json-v1',
+    metadataBytes: metadata.length,
+    metadataSha256: sha256(metadata),
+    authenticationMethod: ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD,
+    authenticationRequirements: {
+      repository: 'actions/python-versions',
+      releaseTag,
+      assetName: fileName,
+      operatingSystem: 'windows',
+      architecture: 'x64',
+      setupPythonActionSha: PINNED_SETUP_PYTHON_ACTION_SHA,
+      releaseMetadataBytes: metadata.length,
+      releaseMetadataSha256: sha256(metadata),
+    },
+  })
+  return policy
+}
+
 function componentEvidence(policy, component) {
   const artifact = policy.artifacts.find((candidate) => candidate.component === component)
   let metadata
@@ -311,6 +359,18 @@ function componentEvidence(policy, component) {
       urls: [{ filename: artifact.fileName, url: artifact.artifactUrl, yanked: false,
         packagetype: 'bdist_wheel', size: artifact.bytes,
         digests: { sha256: artifact.sha256 } }],
+    }))
+  } else if (artifact.authenticationMethod === ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD) {
+    metadata = Buffer.from(JSON.stringify({
+      url: artifact.metadataUrl,
+      html_url:
+        `https://github.com/actions/python-versions/releases/tag/${artifact.authenticationRequirements.releaseTag}`,
+      tag_name: artifact.authenticationRequirements.releaseTag,
+      draft: false,
+      prerelease: false,
+      assets: [{ name: artifact.fileName, browser_download_url: artifact.artifactUrl,
+        size: artifact.bytes, digest: `sha256:${artifact.sha256}`, id: 123 }],
+      id: 456,
     }))
   } else if (artifact.authenticationMethod === 'windows-authenticode-artifact-v1') {
     metadata = Buffer.from(JSON.stringify({
@@ -344,6 +404,10 @@ function componentEvidence(policy, component) {
   }
   artifact.metadataBytes = metadata.length
   artifact.metadataSha256 = sha256(metadata)
+  if (artifact.authenticationMethod === ACTIONS_PYTHON_VERSIONS_TOOLCACHE_METHOD) {
+    artifact.authenticationRequirements.releaseMetadataBytes = metadata.length
+    artifact.authenticationRequirements.releaseMetadataSha256 = artifact.metadataSha256
+  }
   if (artifact.authenticationMethod === 'authenticated-bundle-member-v1') {
     artifact.authenticationRequirements.inventoryEvidenceBytes = metadata.length
     artifact.authenticationRequirements.inventoryEvidenceSha256 = artifact.metadataSha256
@@ -435,6 +499,77 @@ test('retained component authentication evidence is parsed and exact-bound', () 
       changed.evidence.metadataSha256 = artifact.metadataSha256
     }
     assert.throws(() => verifyOfficialRegistryEvidence(changed), /registry_metadata_/)
+  }
+})
+
+test('actions/python-versions toolcache requires exact release, asset, platform and setup action', () => {
+  const fixture = registryFixture()
+  const policy = useActionsPythonVersionsToolcache(
+    completeSyntheticRegistryPolicy(fixture.policy, fixture.artifact),
+  )
+  assert.equal(inspectOfficialRegistryPolicy(policy).ready, true)
+  const input = componentEvidence(policy, 'python')
+  assert.equal(verifyOfficialRegistryEvidence(input).sourceId, input.source.sourceId)
+
+  const invalidPolicies = [
+    (value) => { value.artifactHost = 'objects.githubusercontent.com' },
+    (value) => { value.authenticationRequirements.repository = 'other/python-versions' },
+    (value) => { value.authenticationRequirements.releaseTag = '../latest' },
+    (value) => { value.authenticationRequirements.assetName = 'other.zip' },
+    (value) => { value.platform = 'linux-x64' },
+    (value) => { value.authenticationRequirements.architecture = 'arm64' },
+    (value) => { value.authenticationRequirements.setupPythonActionSha = 'a'.repeat(40) },
+    (value) => { value.authenticationRequirements.releaseMetadataSha256 = 'b'.repeat(64) },
+  ]
+  for (const mutate of invalidPolicies) {
+    const changed = structuredClone(policy)
+    mutate(changed.artifacts.find(({ component }) => component === 'python'))
+    assert.throws(() => inspectOfficialRegistryPolicy(changed), /registry_policy_invalid/)
+  }
+
+  const changed = structuredClone(input)
+  const metadata = JSON.parse(Buffer.from(
+    changed.evidence.retainedMetadata.bodyBase64, 'base64').toString())
+  metadata.assets[0].digest = `sha256:${'f'.repeat(64)}`
+  const bytes = Buffer.from(JSON.stringify(metadata))
+  const python = changed.policy.artifacts.find(({ component }) => component === 'python')
+  python.metadataBytes = bytes.length
+  python.metadataSha256 = sha256(bytes)
+  python.authenticationRequirements.releaseMetadataBytes = bytes.length
+  python.authenticationRequirements.releaseMetadataSha256 = sha256(bytes)
+  changed.evidence.metadataBytes = bytes.length
+  changed.evidence.metadataSha256 = sha256(bytes)
+  changed.evidence.authenticationRequirements = python.authenticationRequirements
+  changed.evidence.retainedMetadata.bodyBase64 = bytes.toString('base64')
+  assert.throws(() => verifyOfficialRegistryEvidence(changed),
+    /registry_metadata_binding_invalid/)
+
+  for (const mutateMetadata of [
+    (value) => { value.tag_name = 'other-tag' },
+    (value) => { value.url = 'https://api.github.com/repos/other/python/releases/tags/x' },
+    (value) => { value.html_url = 'https://github.com/other/python/releases/tag/x' },
+    (value) => { value.draft = true },
+    (value) => { value.prerelease = true },
+    (value) => { value.assets[0].browser_download_url = 'https://github.com/other/file.zip' },
+    (value) => { value.assets[0].size += 1 },
+  ]) {
+    const tampered = structuredClone(input)
+    const body = JSON.parse(Buffer.from(
+      tampered.evidence.retainedMetadata.bodyBase64, 'base64').toString())
+    mutateMetadata(body)
+    const changedBytes = Buffer.from(JSON.stringify(body))
+    const changedPython = tampered.policy.artifacts.find(
+      ({ component }) => component === 'python')
+    changedPython.metadataBytes = changedBytes.length
+    changedPython.metadataSha256 = sha256(changedBytes)
+    changedPython.authenticationRequirements.releaseMetadataBytes = changedBytes.length
+    changedPython.authenticationRequirements.releaseMetadataSha256 = sha256(changedBytes)
+    tampered.evidence.metadataBytes = changedBytes.length
+    tampered.evidence.metadataSha256 = sha256(changedBytes)
+    tampered.evidence.authenticationRequirements = changedPython.authenticationRequirements
+    tampered.evidence.retainedMetadata.bodyBase64 = changedBytes.toString('base64')
+    assert.throws(() => verifyOfficialRegistryEvidence(tampered),
+      /registry_metadata_binding_invalid/)
   }
 })
 
