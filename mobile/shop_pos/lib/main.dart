@@ -25,6 +25,7 @@ import 'shop_cafe_order_screen.dart';
 import 'shop_catalog_search.dart';
 import 'shop_copy.dart';
 import 'shop_correction_authorization_service.dart';
+import 'shop_connected_application_boundary.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
 import 'shop_runtime_profile.dart';
@@ -102,6 +103,10 @@ Future<void> main() async {
   }
   final runtimeConfiguration = runtimeScope.configuration;
   final preferences = runtimeScope.preferences;
+  final connectedApplicationBoundary = ShopConnectedApplicationBoundary(
+    capabilities: runtimeConfiguration.capabilities,
+  );
+  await connectedApplicationBoundary.initialize();
   final supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
   final publishableKey = const String.fromEnvironment(
     'SUPABASE_PUBLISHABLE_KEY',
@@ -122,6 +127,7 @@ Future<void> main() async {
       importScratchRoot: runtimeScope.temporaryRoot,
       runtimeScope: runtimeScope,
       scopedPreferences: preferences,
+      beforeCloseDatabase: connectedApplicationBoundary.close,
       initialMyanmar:
           preferences.instance.getBool(preferences.keys.localeMyanmar) ?? false,
       buildShop: (database, myanmar) => ShopApp(
@@ -137,6 +143,7 @@ Future<void> main() async {
         runtimeCapabilities: runtimeConfiguration.capabilities,
         runtimeScope: runtimeScope,
         scopedPreferences: preferences,
+        connectedApplicationBoundary: connectedApplicationBoundary,
       ),
     ),
   );
@@ -166,8 +173,13 @@ class ShopApp extends StatefulWidget {
     this.scopedPreferences,
     this.initialCounter = false,
     this.staffContext = const ShopStaffCommandContext.unavailable(),
+    ShopConnectedApplicationBoundary? connectedApplicationBoundary,
     super.key,
-  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+  }) : connectedApplicationBoundary = resolveShopConnectedApplicationBoundary(
+         capabilities: runtimeCapabilities,
+         boundary: connectedApplicationBoundary,
+       ),
+       runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
          testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
        ) {
@@ -186,6 +198,7 @@ class ShopApp extends StatefulWidget {
   final bool testOnlyAllowMissingRuntimeScope;
   final ShopScopedPreferences? scopedPreferences;
   final ShopStaffCommandContext staffContext;
+  final ShopConnectedApplicationBoundary connectedApplicationBoundary;
 
   /// Opens Counter directly for a focused cashier journey or widget test.
   final bool initialCounter;

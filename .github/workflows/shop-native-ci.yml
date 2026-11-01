@@ -50,6 +50,9 @@ jobs:
           dart format lib/shop_connected_coordinator_host.dart lib/shop_connected_onboarding.dart lib/shop_connected_platform_security.dart lib/shop_connected_reservation_session.dart lib/shop_connected_runtime.dart lib/shop_connected_site_authority_store.dart lib/shop_connected_site_client.dart lib/shop_connected_site_contracts.dart lib/shop_connected_site_database_adapter.dart lib/shop_connected_site_enrollment_store.dart lib/shop_connected_site_reconciliation.dart lib/shop_connected_site_reconciliation_store.dart lib/shop_connected_site_replica_store.dart lib/shop_connected_stock_reservation.dart lib/shop_offline_staff_lease.dart lib/shop_site_coordinator.dart test/shop_connected_coordinator_host_test.dart test/shop_connected_onboarding_test.dart test/shop_connected_platform_security_test.dart test/shop_connected_reservation_session_test.dart test/shop_connected_runtime_test.dart test/shop_connected_site_authority_store_test.dart test/shop_connected_site_client_test.dart test/shop_connected_site_contracts_test.dart test/shop_connected_site_database_adapter_test.dart test/shop_connected_site_enrollment_store_test.dart test/shop_connected_site_persistence_test.dart test/shop_connected_site_reconciliation_test.dart test/shop_connected_site_reconciliation_store_test.dart test/shop_connected_site_replica_store_test.dart test/shop_connected_stock_reservation_test.dart test/shop_offline_staff_lease_test.dart test/shop_site_coordinator_test.dart
           git diff --exit-code -- lib/shop_connected_coordinator_host.dart lib/shop_connected_onboarding.dart lib/shop_connected_platform_security.dart lib/shop_connected_reservation_session.dart lib/shop_connected_runtime.dart lib/shop_connected_site_authority_store.dart lib/shop_connected_site_client.dart lib/shop_connected_site_contracts.dart lib/shop_connected_site_database_adapter.dart lib/shop_connected_site_enrollment_store.dart lib/shop_connected_site_reconciliation.dart lib/shop_connected_site_reconciliation_store.dart lib/shop_connected_site_replica_store.dart lib/shop_connected_stock_reservation.dart lib/shop_offline_staff_lease.dart lib/shop_site_coordinator.dart test/shop_connected_coordinator_host_test.dart test/shop_connected_onboarding_test.dart test/shop_connected_platform_security_test.dart test/shop_connected_reservation_session_test.dart test/shop_connected_runtime_test.dart test/shop_connected_site_authority_store_test.dart test/shop_connected_site_client_test.dart test/shop_connected_site_contracts_test.dart test/shop_connected_site_database_adapter_test.dart test/shop_connected_site_enrollment_store_test.dart test/shop_connected_site_persistence_test.dart test/shop_connected_site_reconciliation_test.dart test/shop_connected_site_reconciliation_store_test.dart test/shop_connected_site_replica_store_test.dart test/shop_connected_stock_reservation_test.dart test/shop_offline_staff_lease_test.dart test/shop_site_coordinator_test.dart
 
+          dart format lib/shop_connected_application_boundary.dart test/shop_connected_application_boundary_test.dart test/shop_startup_cleanup_test.dart
+          git diff --exit-code -- lib/shop_connected_application_boundary.dart test/shop_connected_application_boundary_test.dart test/shop_startup_cleanup_test.dart
+
       - name: Check connected attempt-store formatting
         run: |
           dart format lib/shop_connected_site_attempt_store.dart test/shop_connected_site_attempt_store_test.dart
@@ -76,6 +79,7 @@ jobs:
           test/shop_cash_movement_authorized_flow_test.dart
           test/shop_cash_movement_test.dart
           test/shop_catalog_search_test.dart
+          test/shop_connected_application_boundary_test.dart
           test/shop_connected_coordinator_host_test.dart
           test/shop_connected_onboarding_test.dart
           test/shop_connected_platform_security_test.dart
@@ -109,6 +113,7 @@ jobs:
           test/shop_responsiveness_test.dart
           test/shop_runtime_profile_test.dart
           test/shop_runtime_scope_test.dart
+          test/shop_startup_cleanup_test.dart
           test/shop_site_coordinator_test.dart
           test/shop_sqlite_full_recovery_test.dart
           test/shop_staff_authorization_test.dart
@@ -144,6 +149,7 @@ jobs:
               test/shop_responsiveness_test.dart \
               test/shop_runtime_profile_test.dart \
               test/shop_runtime_scope_test.dart \
+              test/shop_startup_cleanup_test.dart \
               test/shop_stock_activity_test.dart \
               test/widget_shell_test.dart \
               test/widget_checkout_test.dart
@@ -176,6 +182,7 @@ jobs:
           persistence_b_pid="$!"
           (
             TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_connected_application_boundary_test.dart \
               test/shop_connected_coordinator_host_test.dart \
               test/shop_connected_onboarding_test.dart \
               test/shop_connected_platform_security_test.dart \

@@ -19,6 +19,39 @@ typedef CloseOpenedShopDatabase = Future<void> Function(ShopDatabase database);
 typedef VerifyShopDatabaseFile = Future<void> Function(File file);
 typedef OpenShopDatabase = ShopDatabase Function(Directory documents);
 typedef VerifyOpenedShopDatabase = Future<void> Function(ShopDatabase database);
+typedef BeforeCloseShopDatabase = Future<void> Function();
+typedef ShopCloseFailureObserver = void Function(
+  Object error,
+  StackTrace stackTrace,
+);
+
+/// Stops external users of SQLite before closing the database. Coordinator
+/// cleanup gets one bounded retry. If it remains uncertain, SQLite stays open
+/// and the failure is reported rather than risking a live listener using a
+/// closed handle.
+Future<void> closeShopResourcesInOrder({
+  required BeforeCloseShopDatabase? beforeCloseDatabase,
+  required Future<void> Function() closeDatabase,
+  required ShopCloseFailureObserver onFailure,
+}) async {
+  if (beforeCloseDatabase != null) {
+    try {
+      await beforeCloseDatabase();
+    } catch (_) {
+      try {
+        await beforeCloseDatabase();
+      } catch (error, stackTrace) {
+        onFailure(error, stackTrace);
+        return;
+      }
+    }
+  }
+  try {
+    await closeDatabase();
+  } catch (error, stackTrace) {
+    onFailure(error, stackTrace);
+  }
+}
 
 Future<XFile?> pickShopBackupForRuntime({
   required ShopRuntimeScope? runtimeScope,
@@ -48,6 +81,8 @@ class ShopStartup extends StatefulWidget {
     this.verifyDatabaseFile,
     this.databaseFactory,
     this.verifyOpenedDatabase,
+    this.beforeCloseDatabase,
+    this.onCloseFailure,
     this.runtimeScope,
     this.qaEvidenceStore,
     this.scopedPreferences,
@@ -76,6 +111,11 @@ class ShopStartup extends StatefulWidget {
   /// Defaults to the database's eager semantic verifier. Widget tests may run
   /// that same verifier in Flutter's real-async zone.
   final VerifyOpenedShopDatabase? verifyOpenedDatabase;
+
+  /// Stops application-owned services before the SQLite handle is closed.
+  /// Connected coordination uses this to prevent listener/database races.
+  final BeforeCloseShopDatabase? beforeCloseDatabase;
+  final ShopCloseFailureObserver? onCloseFailure;
   final ShopRuntimeScope? runtimeScope;
   final ShopQaEvidenceStore? qaEvidenceStore;
   final ShopScopedPreferences? scopedPreferences;
@@ -99,6 +139,19 @@ class _ShopStartupState extends State<ShopStartup> {
   File? _selectedArchive;
   String? _selectedName;
   String? _message;
+  late final BeforeCloseShopDatabase? _beforeCloseDatabase;
+  late final ShopCloseFailureObserver _onCloseFailure;
+
+  static void _reportCloseFailure(Object error, StackTrace stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'supermega_shop',
+        context: ErrorDescription('while closing Shop resources'),
+      ),
+    );
+  }
 
   File get _databaseFile => ShopDatabase.privateDatabaseFile(widget.documents);
   bool get _externalFileSavingAllowed =>
@@ -122,6 +175,8 @@ class _ShopStartupState extends State<ShopStartup> {
   @override
   void initState() {
     super.initState();
+    _beforeCloseDatabase = widget.beforeCloseDatabase;
+    _onCloseFailure = widget.onCloseFailure ?? _reportCloseFailure;
     unawaited(_inspectExistingStore());
   }
 
@@ -521,7 +576,15 @@ class _ShopStartupState extends State<ShopStartup> {
     _password.dispose();
     final database = _openedDatabase;
     _openedDatabase = null;
-    if (database != null) unawaited(_closeDatabase(database));
+    if (database != null) {
+      unawaited(
+        closeShopResourcesInOrder(
+          beforeCloseDatabase: _beforeCloseDatabase,
+          closeDatabase: () => _closeDatabase(database),
+          onFailure: _onCloseFailure,
+        ),
+      );
+    }
     final archive = _selectedArchive;
     if (archive != null) {
       unawaited(() async {

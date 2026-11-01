@@ -76,7 +76,17 @@ abstract interface class ConnectedCoordinatorHost {
   Future<void> stop();
 }
 
-class ShopConnectedRuntime {
+abstract interface class ConnectedRuntimeControl {
+  ConnectedRuntimeState get state;
+
+  Future<void> start(ConnectedRuntimeStartRequest request);
+
+  Future<void> revalidate();
+
+  Future<void> stop();
+}
+
+class ShopConnectedRuntime implements ConnectedRuntimeControl {
   ShopConnectedRuntime({
     required this.platformSecurity,
     required this.readiness,
@@ -95,9 +105,11 @@ class ShopConnectedRuntime {
   String? _pauseReason;
   Future<void> _operationTail = Future<void>.value();
 
+  @override
   ConnectedRuntimeState get state => _state;
   String? get pauseReason => _pauseReason;
 
+  @override
   Future<void> start(ConnectedRuntimeStartRequest request) =>
       _serialize(() => _start(request));
 
@@ -180,6 +192,7 @@ class ShopConnectedRuntime {
     }
   }
 
+  @override
   Future<void> revalidate() => _serialize(_revalidate);
 
   Future<void> _revalidate() async {
@@ -234,6 +247,7 @@ class ShopConnectedRuntime {
     }
   }
 
+  @override
   Future<void> stop() => _serialize(_stop);
 
   Future<void> _stop() async {
