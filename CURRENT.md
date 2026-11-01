@@ -29,8 +29,8 @@
   golden containing a real signed upload and accepted acknowledgement.
   Python runtime/v15 tests **20/20 PASS**; native authority/reconciliation
   focused tests **37/37 PASS**; broader reconciliation, durable store,
-  authority, restart/restore and reservation persistence shard **64/64 PASS**
-  in 1:40; targeted analyzer **PASS**; `git diff --check` **PASS**. The first
+  authority, restart/restore and reservation persistence shard **65/65 PASS**
+  in 1:42; targeted analyzer **PASS**; `git diff --check` **PASS**. The first
   run without the pinned LLVM path failed during toolchain setup and is not
   counted as product evidence. Independent follow-up review **ACCEPT** after
   two rounds; its first round held the change for durable bootstrap, real-store
