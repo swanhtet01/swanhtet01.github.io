@@ -23,10 +23,10 @@ const _device = 'device-1';
 final _leaseDigest = _digest('lease:$_tenant:$_site:$_device');
 
 void main() {
-  test('connected-site persistence is default-off and schema is v29', () async {
+  test('connected-site persistence is default-off and schema is v30', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 29);
+      expect(database.schemaVersion, 30);
       final tables =
           (await database
                   .customSelect(
@@ -1391,7 +1391,7 @@ void main() {
   });
 
   test(
-    'v22 migrates to v29 and encrypted-backup snapshot remains valid',
+    'v22 migrates to v30 and encrypted-backup snapshot remains valid',
     () async {
       final root = await Directory.systemTemp.createTemp('shop-site-v23-');
       final file = File('${root.path}/shop.sqlite');
@@ -1455,7 +1455,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 29);
+        expect(database.schemaVersion, 30);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(

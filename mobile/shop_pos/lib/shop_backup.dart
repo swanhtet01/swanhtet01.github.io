@@ -61,7 +61,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 29;
+  static const supportedSchemaVersion = 30;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1908,6 +1908,9 @@ abstract final class ShopBackup {
     final envelopeDefinitions = schemaVersion >= 29
         ? shopConnectedEnvelopeSchemaDefinitionsV29()
         : const <String, String>{};
+    final authorityPayloadDefinitions = schemaVersion >= 30
+        ? shopConnectedAuthorityPayloadSchemaDefinitionsV30()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1923,7 +1926,8 @@ abstract final class ShopBackup {
             schemaVersion == 26 ||
             schemaVersion == 27 ||
             schemaVersion == 28 ||
-            schemaVersion == 29) &&
+            schemaVersion == 29 ||
+            schemaVersion == 30) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -1959,6 +1963,14 @@ abstract final class ShopBackup {
         (schemaVersion < 27 || _v27ConnectedAuthorityRowsValid(connection)) &&
         (schemaVersion < 28 || _v28ConnectedAttemptRowsValid(connection)) &&
         (schemaVersion < 29 || _v29ConnectedEnvelopeRowsValid(connection)) &&
+        (schemaVersion < 30 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              authorityPayloadDefinitions,
+              authorityPayloadDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 30 ||
+            _v30ConnectedAuthorityPayloadRowsValid(connection)) &&
         _snapshotDefinitionGroupExact(
           objects,
           const {
@@ -1984,6 +1996,7 @@ abstract final class ShopBackup {
           pendingCashCheckoutDefinitions,
           if (schemaVersion >= 23) connectedSiteDefinitions,
           if (schemaVersion >= 29) envelopeDefinitions,
+          if (schemaVersion >= 30) authorityPayloadDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -1998,10 +2011,11 @@ abstract final class ShopBackup {
           ...pendingCashCheckoutDefinitions.keys,
           if (schemaVersion >= 23) ...connectedSiteDefinitions.keys,
           if (schemaVersion >= 29) ...envelopeDefinitions.keys,
+          if (schemaVersion >= 30) ...authorityPayloadDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
-      return schemaVersion == 29
+      return schemaVersion >= 29
           ? _ShopSnapshotSchemaKind.unifiedV29
           : schemaVersion == 28
           ? _ShopSnapshotSchemaKind.unifiedV28
@@ -3497,6 +3511,23 @@ abstract final class ShopBackup {
         transmissions: rows('shop_site_command_transmissions'),
         attempts: rows('shop_site_command_attempts'),
         bindings: rows('shop_site_coordinator_bindings'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v30ConnectedAuthorityPayloadRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedAuthorityPayloadRowsValidV30(
+        payloads: rows('shop_site_authority_payloads'),
+        members: rows('shop_site_authority_members'),
+        configurations: rows('shop_site_configuration_snapshots'),
+        deltas: rows('shop_site_authority_deltas'),
       );
     } on Object {
       return false;

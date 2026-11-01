@@ -2341,6 +2341,228 @@ Map<String, String> shopConnectedEnvelopeSchemaDefinitionsV29() => {
   ),
 };
 
+const shopSiteAuthorityPayloadsV30Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_payloads (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    authority_sequence INTEGER NOT NULL CHECK (authority_sequence > 0),
+    authority_event_id TEXT NOT NULL UNIQUE CHECK (length(authority_event_id) BETWEEN 1 AND 128),
+    previous_authority_digest TEXT CHECK (previous_authority_digest IS NULL OR length(previous_authority_digest) = 64),
+    issuer_key_id TEXT NOT NULL CHECK (length(issuer_key_id) BETWEEN 1 AND 128),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    payload_bytes TEXT NOT NULL CHECK (json_valid(payload_bytes)),
+    payload_digest TEXT NOT NULL UNIQUE CHECK (length(payload_digest) = 64),
+    signature TEXT NOT NULL CHECK (length(signature) BETWEEN 32 AND 4096),
+    membership_digest TEXT NOT NULL CHECK (length(membership_digest) = 64),
+    configuration_digest TEXT NOT NULL CHECK (length(configuration_digest) = 64),
+    revocation_generation INTEGER NOT NULL CHECK (revocation_generation >= 0),
+    configuration_version INTEGER NOT NULL CHECK (configuration_version >= 0),
+    observation_sequence INTEGER NOT NULL,
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, authority_sequence),
+    FOREIGN KEY (tenant_id, site_id, observation_sequence) REFERENCES
+      shop_site_authority_deltas(tenant_id, site_id, observation_sequence)
+  )
+''';
+
+const shopSiteAuthorityMembersV30Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_members (
+    tenant_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    authority_sequence INTEGER NOT NULL,
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    actor_role TEXT NOT NULL CHECK (actor_role IN
+      ('owner', 'manager', 'cashierCounter', 'stockStaff', 'cafeWaiter', 'cafeKitchenBar')),
+    capabilities_json TEXT NOT NULL CHECK (json_valid(capabilities_json)),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    PRIMARY KEY (tenant_id, site_id, authority_sequence, actor_id),
+    FOREIGN KEY (tenant_id, site_id, authority_sequence) REFERENCES
+      shop_site_authority_payloads(tenant_id, site_id, authority_sequence)
+  )
+''';
+
+const shopSiteConfigurationSnapshotsV30Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_configuration_snapshots (
+    tenant_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    authority_sequence INTEGER NOT NULL,
+    configuration_version INTEGER NOT NULL CHECK (configuration_version >= 0),
+    business_profile_json TEXT NOT NULL CHECK (json_valid(business_profile_json)),
+    catalog_reference_json TEXT NOT NULL CHECK (json_valid(catalog_reference_json)),
+    configuration_digest TEXT NOT NULL CHECK (length(configuration_digest) = 64),
+    PRIMARY KEY (tenant_id, site_id, authority_sequence),
+    FOREIGN KEY (tenant_id, site_id, authority_sequence) REFERENCES
+      shop_site_authority_payloads(tenant_id, site_id, authority_sequence)
+  )
+''';
+
+Map<String, String> shopConnectedAuthorityPayloadSchemaDefinitionsV30() => {
+  'shop_site_authority_payloads': shopSiteAuthorityPayloadsV30Sql,
+  'shop_site_authority_members': shopSiteAuthorityMembersV30Sql,
+  'shop_site_configuration_snapshots': shopSiteConfigurationSnapshotsV30Sql,
+  for (final table in const [
+    'shop_site_authority_payloads',
+    'shop_site_authority_members',
+    'shop_site_configuration_snapshots',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected authority payload evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected authority payload evidence is immutable',
+    ),
+  },
+};
+
+bool shopConnectedAuthorityPayloadRowsValidV30({
+  required Iterable<Map<String, Object?>> payloads,
+  required Iterable<Map<String, Object?>> members,
+  required Iterable<Map<String, Object?>> configurations,
+  required Iterable<Map<String, Object?>> deltas,
+}) {
+  try {
+    final payloadList = payloads.toList(growable: false);
+    final deltaByKey = <String, Map<String, Object?>>{
+      for (final row in deltas)
+        '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['observation_sequence']}':
+            row,
+    };
+    final membersByKey = <String, List<Map<String, Object?>>>{};
+    for (final row in members) {
+      final key =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['authority_sequence']}';
+      membersByKey.putIfAbsent(key, () => []).add(row);
+    }
+    final configsByKey = <String, List<Map<String, Object?>>>{};
+    for (final row in configurations) {
+      final key =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['authority_sequence']}';
+      configsByKey.putIfAbsent(key, () => []).add(row);
+    }
+    final chains = <String, List<Map<String, Object?>>>{};
+    final payloadKeys = <String>{};
+    for (final row in payloadList) {
+      final bytes = row['payload_bytes'];
+      final digest = row['payload_digest'];
+      if (bytes is! String ||
+          digest is! String ||
+          canonicalConnectedSiteJson(jsonDecode(bytes)) != bytes ||
+          crypto.sha256.convert(utf8.encode(bytes)).toString() != digest) {
+        return false;
+      }
+      final decoded = jsonDecode(bytes);
+      if (decoded is! Map ||
+          decoded['schemaId'] != 'ConnectedSiteAuthorityPayloadV1' ||
+          decoded['protocolVersion'] != 1 ||
+          decoded['authorityEventId'] != row['authority_event_id'] ||
+          decoded['authoritySequence'] != row['authority_sequence'] ||
+          decoded['previousAuthorityDigest'] !=
+              row['previous_authority_digest'] ||
+          decoded['workspaceId'] != row['tenant_id'] ||
+          decoded['siteId'] != row['site_id'] ||
+          decoded['issuedAtMillis'] != row['issued_at_millis'] ||
+          decoded['issuerKeyId'] != row['issuer_key_id'] ||
+          decoded['membershipSnapshot'] is! Map ||
+          decoded['configurationSnapshot'] is! Map) {
+        return false;
+      }
+      final unsigned = Map<String, Object?>.from(decoded)
+        ..remove('payloadDigest');
+      if (connectedSiteSha256(unsigned) != decoded['payloadDigest']) {
+        return false;
+      }
+      final membership = Map<String, Object?>.from(
+        decoded['membershipSnapshot'] as Map,
+      );
+      final configuration = Map<String, Object?>.from(
+        decoded['configurationSnapshot'] as Map,
+      );
+      if (connectedSiteSha256(membership) != row['membership_digest'] ||
+          connectedSiteSha256(configuration) != row['configuration_digest'] ||
+          membership['revocationGeneration'] != row['revocation_generation'] ||
+          configuration['configurationVersion'] !=
+              row['configuration_version']) {
+        return false;
+      }
+      final key =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['authority_sequence']}';
+      payloadKeys.add(key);
+      final projectedMembers = membersByKey[key] ?? const [];
+      final sourceMembers = membership['members'];
+      if (sourceMembers is! List ||
+          sourceMembers.length != projectedMembers.length) {
+        return false;
+      }
+      final byActor = {
+        for (final item in projectedMembers) item['actor_id']: item,
+      };
+      for (final item in sourceMembers) {
+        if (item is! Map) {
+          return false;
+        }
+        final projected = byActor[item['actorId']];
+        if (projected == null ||
+            projected['actor_role'] != item['role'] ||
+            projected['session_generation'] != item['sessionGeneration'] ||
+            projected['capabilities_json'] !=
+                canonicalConnectedSiteJson(item['capabilities'])) {
+          return false;
+        }
+      }
+      final projectedConfigs = configsByKey[key] ?? const [];
+      if (projectedConfigs.length != 1) {
+        return false;
+      }
+      final projectedConfig = projectedConfigs.single;
+      if (projectedConfig['configuration_version'] !=
+              configuration['configurationVersion'] ||
+          projectedConfig['business_profile_json'] !=
+              canonicalConnectedSiteJson(configuration['businessProfile']) ||
+          projectedConfig['catalog_reference_json'] !=
+              canonicalConnectedSiteJson(configuration['catalogReference']) ||
+          projectedConfig['configuration_digest'] !=
+              row['configuration_digest']) {
+        return false;
+      }
+      final delta =
+          deltaByKey['${row['tenant_id']}\u0000${row['site_id']}\u0000${row['observation_sequence']}'];
+      if (delta == null ||
+          delta['membership_digest'] != row['membership_digest'] ||
+          delta['configuration_digest'] != row['configuration_digest'] ||
+          delta['revocation_generation'] != row['revocation_generation'] ||
+          delta['configuration_version'] != row['configuration_version']) {
+        return false;
+      }
+      chains
+          .putIfAbsent('${row['tenant_id']}\u0000${row['site_id']}', () => [])
+          .add(row);
+    }
+    if (membersByKey.keys.toSet().difference(payloadKeys).isNotEmpty ||
+        configsByKey.keys.toSet().difference(payloadKeys).isNotEmpty) {
+      return false;
+    }
+    for (final chain in chains.values) {
+      chain.sort(
+        (a, b) => (a['authority_sequence'] as int).compareTo(
+          b['authority_sequence'] as int,
+        ),
+      );
+      for (var i = 0; i < chain.length; i++) {
+        if (chain[i]['authority_sequence'] != i + 1 ||
+            chain[i]['previous_authority_digest'] !=
+                (i == 0 ? null : chain[i - 1]['payload_digest'])) {
+          return false;
+        }
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
 bool shopConnectedEnvelopeRowsValidV29({
   required Iterable<Map<String, Object?>> envelopes,
   required Iterable<Map<String, Object?>> transmissions,
@@ -3761,7 +3983,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 29) return const {};
+  if (schemaVersion < 5 || schemaVersion > 30) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -4535,6 +4757,7 @@ enum _ShopUpgradeOrigin {
   unifiedV26,
   unifiedV27,
   unifiedV28,
+  unifiedV29,
 }
 
 enum ShopConnectedSiteCommandStatus { accepted, replayed, conflict }
@@ -4749,7 +4972,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v29.');
+        throw StateError('The staged Shop restore did not reach schema v30.');
       }
     } finally {
       await database.close();
@@ -4816,7 +5039,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4854,12 +5077,20 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV28Schema();
       await _createConnectedEnvelopeSchemaV29();
       await _requireUnifiedV29Schema();
+      await _createConnectedAuthorityPayloadSchemaV30();
+      await _requireUnifiedV30Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
       final origin = await _classifyUpgradeOrigin(from);
+      if (from == 29) {
+        await _requireUnifiedV29Schema();
+        await _createConnectedAuthorityPayloadSchemaV30();
+        await _requireUnifiedV30Schema();
+        return;
+      }
       if (from == 28) {
         await _requireUnifiedV28Schema();
         final legacyTransmissions = await customSelect(
@@ -4877,6 +5108,8 @@ class ShopDatabase extends _$ShopDatabase {
         }
         await _createConnectedEnvelopeSchemaV29();
         await _requireUnifiedV29Schema();
+        await _createConnectedAuthorityPayloadSchemaV30();
+        await _requireUnifiedV30Schema();
         return;
       }
       if (from < 2) {
@@ -5092,14 +5325,16 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV28Schema();
       await _createConnectedEnvelopeSchemaV29();
       await _requireUnifiedV29Schema();
+      await _createConnectedAuthorityPayloadSchemaV30();
+      await _requireUnifiedV30Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV29Schema();
+      await _requireUnifiedV30Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV29Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV30Schema();
 
   /// Revalidates the complete immutable cloud-disposition chain before a
   /// reconstructed upload cursor is trusted in the current process.
@@ -5110,7 +5345,8 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<void> verifyConnectedAuthorityEvidence() async {
-    if (!await _v27ConnectedAuthorityRowsValid()) {
+    if (!await _v27ConnectedAuthorityRowsValid() ||
+        !await _v30ConnectedAuthorityPayloadRowsValid()) {
       throw StateError('Connected authority observation evidence is invalid.');
     }
   }
@@ -5286,6 +5522,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedEnvelopeSchemaV29() async {
     for (final definition
         in shopConnectedEnvelopeSchemaDefinitionsV29().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedAuthorityPayloadSchemaV30() async {
+    for (final definition
+        in shopConnectedAuthorityPayloadSchemaDefinitionsV30().values) {
       await customStatement(definition);
     }
   }
@@ -6246,8 +6489,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 28) {
-      throw StateError('This Shop database version cannot migrate to v29.');
+    if (from < 1 || from > 29) {
+      throw StateError('This Shop database version cannot migrate to v30.');
+    }
+    if (from == 29) {
+      await _requireUnifiedV29Schema();
+      return _ShopUpgradeOrigin.unifiedV29;
     }
     if (from == 28) {
       await _requireUnifiedV28Schema();
@@ -6799,6 +7046,10 @@ class ShopDatabase extends _$ShopDatabase {
     final objects = await _readSchemaObjects();
     final hasEnvelopeV29 = shopConnectedEnvelopeSchemaDefinitionsV29().keys
         .every(objects.containsKey);
+    final hasAuthorityPayloadV30 =
+        shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys.every(
+          objects.containsKey,
+        );
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -6845,6 +7096,11 @@ class ShopDatabase extends _$ShopDatabase {
         for (final entry in shopConnectedEnvelopeSchemaDefinitionsV29().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasAuthorityPayloadV30)
+        for (final entry
+            in shopConnectedAuthorityPayloadSchemaDefinitionsV30().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -6872,6 +7128,8 @@ class ShopDatabase extends _$ShopDatabase {
             ? shopConnectedSiteSchemaDefinitionsV24().keys
             : shopConnectedSiteSchemaDefinitionsV23().keys),
       if (hasEnvelopeV29) ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
+      if (hasAuthorityPayloadV30)
+        ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -7048,6 +7306,10 @@ class ShopDatabase extends _$ShopDatabase {
     final objects = await _readSchemaObjects();
     final hasEnvelopeV29 = shopConnectedEnvelopeSchemaDefinitionsV29().keys
         .every(objects.containsKey);
+    final hasAuthorityPayloadV30 =
+        shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys.every(
+          objects.containsKey,
+        );
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -7079,6 +7341,8 @@ class ShopDatabase extends _$ShopDatabase {
             ? shopConnectedSiteSchemaDefinitionsV24().keys
             : shopConnectedSiteSchemaDefinitionsV23().keys),
       if (hasEnvelopeV29) ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
+      if (hasAuthorityPayloadV30)
+        ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -7530,6 +7794,39 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v29 request-envelope schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV30Schema() async {
+    await _requireUnifiedV29Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedAuthorityPayloadSchemaDefinitionsV30();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v30ConnectedAuthorityPayloadRowsValid()) {
+      throw StateError(
+        'The unified Shop v30 authority-payload schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v30ConnectedAuthorityPayloadRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedAuthorityPayloadRowsValidV30(
+        payloads: await rows('shop_site_authority_payloads'),
+        members: await rows('shop_site_authority_members'),
+        configurations: await rows('shop_site_configuration_snapshots'),
+        deltas: await rows('shop_site_authority_deltas'),
+      );
+    } on Object {
+      return false;
     }
   }
 

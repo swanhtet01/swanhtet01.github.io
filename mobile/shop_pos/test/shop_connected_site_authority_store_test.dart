@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
+import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_database.dart';
@@ -399,6 +400,343 @@ void main() {
       await root.delete(recursive: true);
     }
   });
+
+  test(
+    'v30 authority payload is default-off and verifier fail-closed',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seedDeviceAndRevocation(database);
+        final bytes = _authorityPayload();
+        await expectLater(
+          ShopConnectedSiteAuthorityPayloadStore(
+            database: database,
+            nowMillis: () => _now,
+          ).apply(
+            _scope(),
+            canonicalPayloadBytes: bytes,
+            signature: _signature,
+          ),
+          _throwsCode('connected_site_authority_payload_disabled'),
+        );
+        await expectLater(
+          ShopConnectedSiteAuthorityPayloadStore(
+            database: database,
+            nowMillis: () => _now,
+            runtimeEnabled: true,
+          ).apply(
+            _scope(),
+            canonicalPayloadBytes: bytes,
+            signature: _signature,
+          ),
+          _throwsCode('connected_site_authority_payload_verifier_unavailable'),
+        );
+        expect(await _count(database, 'shop_site_authority_payloads'), 0);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test('v30 payload atomically links projections and rejects replay, gaps, scope and escalation', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    var clock = _now;
+    try {
+      await _seedDeviceAndRevocation(database);
+      final store = ShopConnectedSiteAuthorityPayloadStore(
+        database: database,
+        nowMillis: () => clock++,
+        verifier: const _AllowAuthorityVerifier(),
+        runtimeEnabled: true,
+      );
+      final first = _authorityPayload();
+      await store.apply(
+        _scope(),
+        canonicalPayloadBytes: first,
+        signature: _signature,
+      );
+      await store.apply(
+        _scope(),
+        canonicalPayloadBytes: first,
+        signature: _signature,
+      );
+      expect(await _count(database, 'shop_site_authority_payloads'), 1);
+      expect(await _count(database, 'shop_site_authority_members'), 1);
+      expect(await _count(database, 'shop_site_configuration_snapshots'), 1);
+      expect(await _count(database, 'shop_site_authority_deltas'), 1);
+      final leaseIssuedAt = DateTime.fromMillisecondsSinceEpoch(
+        _now - 1000,
+        isUtc: true,
+      ).toIso8601String();
+      final leaseExpiresAt = DateTime.fromMillisecondsSinceEpoch(
+        _now + 1000,
+        isUtc: true,
+      ).toIso8601String();
+      final leaseUnsigned = <String, Object>{
+        'protocolVersion': 1,
+        'leaseId': 'lease-one',
+        'workspaceId': _workspace,
+        'siteId': _site,
+        'actorId': 'actor-one',
+        'role': 'cashierCounter',
+        'capabilities': const ['counterSale'],
+        'deviceId': _device,
+        'sessionGeneration': 1,
+        'revocationGeneration': 1,
+        'issuedAt': leaseIssuedAt,
+        'expiresAt': leaseExpiresAt,
+        'issuerKeyId': 'issuer-test-key',
+      };
+      final lease = OfflineStaffLeaseV1(
+        leaseId: 'lease-one',
+        workspaceId: _workspace,
+        siteId: _site,
+        actorId: 'actor-one',
+        role: 'cashierCounter',
+        capabilities: const ['counterSale'],
+        deviceId: _device,
+        sessionGeneration: 1,
+        revocationGeneration: 1,
+        issuedAt: leaseIssuedAt,
+        expiresAt: leaseExpiresAt,
+        issuerKeyId: 'issuer-test-key',
+        payloadDigest: connectedSiteSha256(leaseUnsigned),
+        signature: _signature,
+      );
+      await store.requireLeaseCurrent(lease);
+
+      await expectLater(
+        store.apply(
+          _scope(),
+          canonicalPayloadBytes: _authorityPayload(actor: 'actor-changed'),
+          signature: _signature,
+        ),
+        _throwsCode('connected_site_authority_payload_changed_replay'),
+      );
+      await expectLater(
+        store.apply(
+          _scope(),
+          canonicalPayloadBytes: _authorityPayload(
+            sequence: 2,
+            previousDigest: _digest(first),
+            actor: 'actor-changed',
+          ),
+          signature: _signature,
+        ),
+        _throwsCode('connected_site_authority_payload_regressed'),
+      );
+      await expectLater(
+        store.apply(
+          _scope(),
+          canonicalPayloadBytes: _authorityPayload(
+            sequence: 2,
+            previousDigest: _digest(first),
+            issuedAtMillis: _now - const Duration(days: 8).inMilliseconds,
+          ),
+          signature: _signature,
+        ),
+        _throwsCode('connected_site_authority_payload_stale'),
+      );
+
+      await expectLater(
+        store.apply(
+          _scope(),
+          canonicalPayloadBytes: _authorityPayload(
+            sequence: 3,
+            previousDigest: _digest(first),
+          ),
+          signature: _signature,
+        ),
+        _throwsCode('connected_site_authority_payload_sequence'),
+      );
+      await expectLater(
+        store.apply(
+          ConnectedSiteScope(
+            workspaceId: 'other-tenant',
+            siteId: _site,
+            deviceId: _device,
+          ),
+          canonicalPayloadBytes: _authorityPayload(
+            sequence: 2,
+            previousDigest: _digest(first),
+          ),
+          signature: _signature,
+        ),
+        _throwsCode('connected_site_authority_payload_scope_mismatch'),
+      );
+      expect(
+        () => ConnectedSiteAuthorityPayloadV1.parse(
+          canonicalBytes: _authorityPayload(
+            role: 'stockStaff',
+            capabilities: const ['counterSale'],
+          ),
+          signature: _signature,
+        ),
+        _throwsCode('connected_site_authority_payload_capability'),
+      );
+      expect(await _count(database, 'shop_site_authority_payloads'), 1);
+      await store.apply(
+        _scope(),
+        canonicalPayloadBytes: _authorityPayload(
+          sequence: 2,
+          previousDigest: _digest(first),
+          revocationGeneration: 2,
+          configurationVersion: 2,
+        ),
+        signature: _signature,
+      );
+      expect(await _count(database, 'shop_site_authority_payloads'), 2);
+      await expectLater(
+        store.requireLeaseCurrent(lease),
+        _throwsCode('connected_site_authority_payload_lease_stale'),
+      );
+      await database.verifyConnectedAuthorityEvidence();
+    } finally {
+      await database.close();
+    }
+  });
+
+  test('v30 authority scopes isolate two tenants', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seedDeviceAndRevocation(database);
+      await _seedDeviceAndRevocation(
+        database,
+        workspace: 'workspace-two',
+        site: 'site-two',
+        device: 'device-two',
+        seed: 'two',
+      );
+      final store = ShopConnectedSiteAuthorityPayloadStore(
+        database: database,
+        nowMillis: () => _now,
+        verifier: const _AllowAuthorityVerifier(),
+        runtimeEnabled: true,
+      );
+      await store.apply(
+        _scope(),
+        canonicalPayloadBytes: _authorityPayload(),
+        signature: _signature,
+      );
+      await store.apply(
+        ConnectedSiteScope(
+          workspaceId: 'workspace-two',
+          siteId: 'site-two',
+          deviceId: 'device-two',
+        ),
+        canonicalPayloadBytes: _authorityPayload(
+          workspace: 'workspace-two',
+          site: 'site-two',
+          actor: 'actor-two',
+        ),
+        signature: _signature,
+      );
+      expect(await _count(database, 'shop_site_authority_payloads'), 2);
+      await database.verifyConnectedAuthorityEvidence();
+    } finally {
+      await database.close();
+    }
+  });
+
+  test(
+    'v30 payload survives encrypted backup and tampering fails closed',
+    () async {
+      final root = await Directory.systemTemp.createTemp('shop-authority-v30-');
+      final source = File('${root.path}/source.sqlite');
+      final archive = File('${root.path}/authority.smbak');
+      final restored = File('${root.path}/restored.sqlite');
+      var database = ShopDatabase(NativeDatabase(source));
+      try {
+        await _seedDeviceAndRevocation(database);
+        await ShopConnectedSiteAuthorityPayloadStore(
+          database: database,
+          nowMillis: () => _now,
+          verifier: const _AllowAuthorityVerifier(),
+          runtimeEnabled: true,
+        ).apply(
+          _scope(),
+          canonicalPayloadBytes: _authorityPayload(),
+          signature: _signature,
+        );
+        await ShopBackup.exportEncrypted(
+          database: database,
+          archive: archive,
+          password: _password,
+          scratchRoot: root,
+        );
+        await database.close();
+        await ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: restored,
+          password: _password,
+        );
+        ShopBackup.verifySnapshot(restored);
+        database = ShopDatabase(NativeDatabase(restored));
+        await database.verifyReadyForUse();
+        expect(await _count(database, 'shop_site_authority_payloads'), 1);
+        await expectLater(
+          ShopConnectedSiteAuthorityPayloadStore(
+            database: database,
+            nowMillis: () => _now,
+          ).reverifyRetainedPayloads(),
+          _throwsCode('connected_site_authority_payload_verifier_unavailable'),
+        );
+        await ShopConnectedSiteAuthorityPayloadStore(
+          database: database,
+          nowMillis: () => _now,
+          verifier: const _AllowAuthorityVerifier(),
+        ).reverifyRetainedPayloads();
+        await database.close();
+
+        final raw = sqlite3.open(restored.path);
+        try {
+          raw.execute('DROP TRIGGER shop_site_authority_members_no_update');
+          raw.execute(
+            "UPDATE shop_site_authority_members SET actor_role = 'manager'",
+          );
+        } finally {
+          raw.close();
+        }
+        expect(
+          () => ShopBackup.verifySnapshot(restored),
+          throwsFormatException,
+        );
+      } finally {
+        await database.close();
+        await root.delete(recursive: true);
+      }
+    },
+  );
+
+  test('v29 migration creates empty v30 authority payload evidence', () async {
+    final root = await Directory.systemTemp.createTemp('shop-authority-v29-');
+    final file = File('${root.path}/shop.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      for (final entry
+          in shopConnectedAuthorityPayloadSchemaDefinitionsV30().entries
+              .toList()
+              .reversed) {
+        final type =
+            canonicalShopSchemaSql(entry.value).startsWith('create table')
+            ? 'TABLE'
+            : 'TRIGGER';
+        await database.customStatement('DROP $type IF EXISTS ${entry.key}');
+      }
+      await database.customStatement('PRAGMA user_version = 29');
+      await database.close();
+
+      database = ShopDatabase(NativeDatabase(file));
+      await database.verifyReadyForUse();
+      expect(database.schemaVersion, 30);
+      expect(await _count(database, 'shop_site_authority_payloads'), 0);
+      expect(await _count(database, 'shop_site_authority_members'), 0);
+      expect(await _count(database, 'shop_site_configuration_snapshots'), 0);
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
 }
 
 ConnectedSiteScope _scope() => ConnectedSiteScope(
@@ -429,17 +767,23 @@ Matcher _throwsCode(String code) => throwsA(
   ),
 );
 
-Future<void> _seedDeviceAndRevocation(ShopDatabase database) async {
+Future<void> _seedDeviceAndRevocation(
+  ShopDatabase database, {
+  String workspace = _workspace,
+  String site = _site,
+  String device = _device,
+  String seed = 'device-key',
+}) async {
   await database.customInsert(
     'INSERT INTO shop_site_devices '
     '(device_id, tenant_id, site_id, public_key_fingerprint, '
     'session_generation, state, enrolled_at_millis) '
     "VALUES (?, ?, ?, ?, 1, 'active', ?)",
     variables: [
-      const Variable<String>(_device),
-      const Variable<String>(_workspace),
-      const Variable<String>(_site),
-      Variable<String>(_digest('device-key')),
+      Variable<String>(device),
+      Variable<String>(workspace),
+      Variable<String>(site),
+      Variable<String>(_digest(seed)),
       const Variable<int>(_now - 1000),
     ],
   );
@@ -448,8 +792,8 @@ Future<void> _seedDeviceAndRevocation(ShopDatabase database) async {
     '(tenant_id, site_id, generation, observed_at_millis, source_digest) '
     'VALUES (?, ?, 1, ?, ?)',
     variables: [
-      const Variable<String>(_workspace),
-      const Variable<String>(_site),
+      Variable<String>(workspace),
+      Variable<String>(site),
       const Variable<int>(_now - 1000),
       Variable<String>(_digest('bootstrap-revocation')),
     ],
@@ -485,3 +829,68 @@ Future<Map<String, List<Object?>>> _financialFingerprint(
 }
 
 String _digest(String value) => sha256.convert(value.codeUnits).toString();
+
+const _signature = '0123456789abcdef0123456789abcdef';
+
+class _AllowAuthorityVerifier implements ConnectedSiteAuthorityPayloadVerifier {
+  const _AllowAuthorityVerifier();
+
+  @override
+  Future<void> verify({
+    required String canonicalPayloadBytes,
+    required String signature,
+    required String issuerKeyId,
+  }) async {}
+}
+
+String _authorityPayload({
+  String workspace = _workspace,
+  String site = _site,
+  String actor = 'actor-one',
+  String role = 'cashierCounter',
+  List<String> capabilities = const ['counterSale'],
+  int sequence = 1,
+  String? previousDigest,
+  int revocationGeneration = 1,
+  int configurationVersion = 1,
+  int issuedAtMillis = _now - 100,
+}) {
+  final unsigned = <String, Object?>{
+    'authorityEventId': 'authority-$workspace-$sequence',
+    'authoritySequence': sequence,
+    'configurationSnapshot': {
+      'businessProfile': {
+        'schemaId': 'supermega-business-profile',
+        'templateId': 'retail',
+        'templateVersion': 1,
+      },
+      'catalogReference': {
+        'catalogDigest': _digest('catalog-$workspace-$configurationVersion'),
+        'catalogVersion': configurationVersion,
+      },
+      'configurationVersion': configurationVersion,
+    },
+    'issuedAtMillis': issuedAtMillis,
+    'issuerKeyId': 'issuer-test-key',
+    'membershipSnapshot': {
+      'members': [
+        {
+          'actorId': actor,
+          'capabilities': [...capabilities]..sort(),
+          'role': role,
+          'sessionGeneration': 1,
+        },
+      ],
+      'revocationGeneration': revocationGeneration,
+    },
+    'previousAuthorityDigest': previousDigest,
+    'protocolVersion': 1,
+    'schemaId': 'ConnectedSiteAuthorityPayloadV1',
+    'siteId': site,
+    'workspaceId': workspace,
+  };
+  return canonicalConnectedSiteJson({
+    ...unsigned,
+    'payloadDigest': connectedSiteSha256(unsigned),
+  });
+}
