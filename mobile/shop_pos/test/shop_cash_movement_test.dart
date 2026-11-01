@@ -449,6 +449,19 @@ void _downgradeEmptyV18ToV17(File store) {
   final connection = sqlite3.open(store.path);
   try {
     for (final definition
+        in shopConnectedEnvelopeSchemaDefinitionsV29().entries
+            .toList()
+            .reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      connection.execute(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
+    for (final definition
         in shopConnectedSiteSchemaDefinitionsV28().entries.toList().reversed) {
       final type = shopSchemaObjectTypeForDefinition(definition.value);
       connection.execute(

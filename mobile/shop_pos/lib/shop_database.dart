@@ -2312,6 +2312,111 @@ Map<String, String> shopConnectedSiteSchemaDefinitionsV28() => {
   ...shopConnectedAttemptSchemaDefinitionsV28(),
 };
 
+const shopSiteRequestEnvelopesV29Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_request_envelopes (
+    command_id TEXT NOT NULL,
+    transmission_sequence INTEGER NOT NULL CHECK (transmission_sequence > 0),
+    endpoint TEXT NOT NULL CHECK (length(endpoint) BETWEEN 12 AND 2048),
+    certificate_sha256 TEXT NOT NULL CHECK (length(certificate_sha256) = 64),
+    headers_json TEXT NOT NULL CHECK (json_valid(headers_json)),
+    body_json TEXT NOT NULL CHECK (json_valid(body_json)),
+    envelope_digest TEXT NOT NULL UNIQUE CHECK (length(envelope_digest) = 64),
+    PRIMARY KEY (command_id, transmission_sequence),
+    FOREIGN KEY (command_id, transmission_sequence) REFERENCES
+      shop_site_command_transmissions(command_id, transmission_sequence)
+  )
+''';
+
+Map<String, String> shopConnectedEnvelopeSchemaDefinitionsV29() => {
+  'shop_site_request_envelopes': shopSiteRequestEnvelopesV29Sql,
+  'shop_site_request_envelopes_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_request_envelopes',
+    operation: 'update',
+    message: 'Connected request envelopes are immutable',
+  ),
+  'shop_site_request_envelopes_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_request_envelopes',
+    operation: 'delete',
+    message: 'Connected request envelopes are immutable',
+  ),
+};
+
+bool shopConnectedEnvelopeRowsValidV29({
+  required Iterable<Map<String, Object?>> envelopes,
+  required Iterable<Map<String, Object?>> transmissions,
+  required Iterable<Map<String, Object?>> attempts,
+  required Iterable<Map<String, Object?>> bindings,
+}) {
+  try {
+    final transmissionByKey = <String, Map<String, Object?>>{
+      for (final row in transmissions)
+        '${row['command_id']}\u0000${row['transmission_sequence']}': row,
+    };
+    final attemptByCommand = <String, Map<String, Object?>>{
+      for (final row in attempts) row['command_id']! as String: row,
+    };
+    final bindingByDigest = <String, Map<String, Object?>>{
+      for (final row in bindings) row['binding_digest']! as String: row,
+    };
+    for (final row in envelopes) {
+      final key = '${row['command_id']}\u0000${row['transmission_sequence']}';
+      final endpoint = Uri.tryParse(row['endpoint']! as String);
+      final headersJson = row['headers_json']! as String;
+      final bodyJson = row['body_json']! as String;
+      final headers = jsonDecode(headersJson);
+      final transmission = transmissionByKey[key];
+      final attempt = attemptByCommand[row['command_id']];
+      final binding = attempt == null
+          ? null
+          : bindingByDigest[attempt['binding_digest']];
+      final proof = transmission == null
+          ? null
+          : jsonDecode(transmission['proof_json']! as String);
+      if (transmission == null ||
+          attempt == null ||
+          binding == null ||
+          proof is! Map ||
+          endpoint == null ||
+          endpoint.scheme != 'https' ||
+          endpoint.userInfo.isNotEmpty ||
+          endpoint.host.isEmpty ||
+          endpoint.host != binding['address'] ||
+          endpoint.port != binding['port'] ||
+          endpoint.path != '/v1/commands' ||
+          endpoint.hasQuery ||
+          row['certificate_sha256'] != binding['certificate_sha256'] ||
+          headers is! Map ||
+          canonicalConnectedSiteJson(headers) != headersJson ||
+          canonicalConnectedSiteJson(jsonDecode(bodyJson)) != bodyJson ||
+          bodyJson != attempt['command_json'] ||
+          headers.length != 7 ||
+          headers['accept'] != 'application/json' ||
+          headers['content-type'] != 'application/json' ||
+          headers['x-supermega-client-fingerprint'] !=
+              proof['clientFingerprint'] ||
+          headers['x-supermega-device-id'] != proof['claimedDeviceId'] ||
+          headers['x-supermega-issued-at'] != proof['issuedAt'] ||
+          headers['x-supermega-request-nonce'] != proof['nonce'] ||
+          headers['x-supermega-request-signature'] !=
+              transmission['request_signature'] ||
+          connectedSiteSha256({
+                'commandId': row['command_id'],
+                'transmissionSequence': row['transmission_sequence'],
+                'endpoint': endpoint.toString(),
+                'certificateSha256': row['certificate_sha256'],
+                'headers': headers,
+                'body': bodyJson,
+              }) !=
+              row['envelope_digest']) {
+        return false;
+      }
+    }
+    return envelopes.length == transmissionByKey.length;
+  } on Object {
+    return false;
+  }
+}
+
 bool shopConnectedAttemptRowsValidV28({
   required Iterable<Map<String, Object?>> bindings,
   required Iterable<Map<String, Object?>> revocations,
@@ -3656,7 +3761,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 28) return const {};
+  if (schemaVersion < 5 || schemaVersion > 29) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -4429,6 +4534,7 @@ enum _ShopUpgradeOrigin {
   unifiedV25,
   unifiedV26,
   unifiedV27,
+  unifiedV28,
 }
 
 enum ShopConnectedSiteCommandStatus { accepted, replayed, conflict }
@@ -4643,7 +4749,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v28.');
+        throw StateError('The staged Shop restore did not reach schema v29.');
       }
     } finally {
       await database.close();
@@ -4710,7 +4816,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4746,12 +4852,33 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV27Schema();
       await _createConnectedAttemptSchemaV28();
       await _requireUnifiedV28Schema();
+      await _createConnectedEnvelopeSchemaV29();
+      await _requireUnifiedV29Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
       final origin = await _classifyUpgradeOrigin(from);
+      if (from == 28) {
+        await _requireUnifiedV28Schema();
+        final legacyTransmissions = await customSelect(
+          'SELECT COUNT(*) AS count FROM shop_site_command_transmissions',
+        ).getSingle();
+        if (legacyTransmissions.read<int>('count') != 0) {
+          // v28 did not retain the exact endpoint, headers, body and TLS pin.
+          // Reconstructing those bytes would invent transport evidence, so a
+          // populated private preview must be retired or explicitly migrated
+          // by a separately reviewed evidence policy.
+          throw StateError(
+            'Populated Shop v28 command attempts cannot migrate to v29 '
+            'without exact retained request envelopes.',
+          );
+        }
+        await _createConnectedEnvelopeSchemaV29();
+        await _requireUnifiedV29Schema();
+        return;
+      }
       if (from < 2) {
         await migrator.createTable(menuImportDrafts);
         await migrator.createTable(merchantWalletProfiles);
@@ -4963,14 +5090,16 @@ class ShopDatabase extends _$ShopDatabase {
         await _createConnectedAttemptSchemaV28();
       }
       await _requireUnifiedV28Schema();
+      await _createConnectedEnvelopeSchemaV29();
+      await _requireUnifiedV29Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV28Schema();
+      await _requireUnifiedV29Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV28Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV29Schema();
 
   /// Revalidates the complete immutable cloud-disposition chain before a
   /// reconstructed upload cursor is trusted in the current process.
@@ -4989,7 +5118,8 @@ class ShopDatabase extends _$ShopDatabase {
   /// Structural integrity only. Runtime activation must separately reverify
   /// the retained approval signature with its trusted authority verifier.
   Future<void> verifyConnectedAttemptEvidence() async {
-    if (!await _v28ConnectedAttemptRowsValid()) {
+    if (!await _v28ConnectedAttemptRowsValid() ||
+        !await _v29ConnectedEnvelopeRowsValid()) {
       throw StateError('Connected command-attempt evidence is invalid.');
     }
   }
@@ -5149,6 +5279,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedAttemptSchemaV28() async {
     for (final definition
         in shopConnectedAttemptSchemaDefinitionsV28().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedEnvelopeSchemaV29() async {
+    for (final definition
+        in shopConnectedEnvelopeSchemaDefinitionsV29().values) {
       await customStatement(definition);
     }
   }
@@ -6109,8 +6246,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 27) {
-      throw StateError('This Shop database version cannot migrate to v28.');
+    if (from < 1 || from > 28) {
+      throw StateError('This Shop database version cannot migrate to v29.');
+    }
+    if (from == 28) {
+      await _requireUnifiedV28Schema();
+      return _ShopUpgradeOrigin.unifiedV28;
     }
     if (from == 27) {
       await _requireUnifiedV27Schema();
@@ -6656,6 +6797,8 @@ class ShopDatabase extends _$ShopDatabase {
   }) async {
     await _requireDatabaseIntegrity();
     final objects = await _readSchemaObjects();
+    final hasEnvelopeV29 = shopConnectedEnvelopeSchemaDefinitionsV29().keys
+        .every(objects.containsKey);
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -6698,6 +6841,10 @@ class ShopDatabase extends _$ShopDatabase {
                 .entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasEnvelopeV29)
+        for (final entry in shopConnectedEnvelopeSchemaDefinitionsV29().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -6724,6 +6871,7 @@ class ShopDatabase extends _$ShopDatabase {
             : allowReservationV24
             ? shopConnectedSiteSchemaDefinitionsV24().keys
             : shopConnectedSiteSchemaDefinitionsV23().keys),
+      if (hasEnvelopeV29) ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -6898,6 +7046,8 @@ class ShopDatabase extends _$ShopDatabase {
       allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
+    final hasEnvelopeV29 = shopConnectedEnvelopeSchemaDefinitionsV29().keys
+        .every(objects.containsKey);
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -6928,6 +7078,7 @@ class ShopDatabase extends _$ShopDatabase {
             : allowReservationV24
             ? shopConnectedSiteSchemaDefinitionsV24().keys
             : shopConnectedSiteSchemaDefinitionsV23().keys),
+      if (hasEnvelopeV29) ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -7363,6 +7514,39 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v28 command-attempt schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV29Schema() async {
+    await _requireUnifiedV28Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedEnvelopeSchemaDefinitionsV29();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v29ConnectedEnvelopeRowsValid()) {
+      throw StateError(
+        'The unified Shop v29 request-envelope schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v29ConnectedEnvelopeRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedEnvelopeRowsValidV29(
+        envelopes: await rows('shop_site_request_envelopes'),
+        transmissions: await rows('shop_site_command_transmissions'),
+        attempts: await rows('shop_site_command_attempts'),
+        bindings: await rows('shop_site_coordinator_bindings'),
+      );
+    } on Object {
+      return false;
     }
   }
 

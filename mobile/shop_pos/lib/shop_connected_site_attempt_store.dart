@@ -136,7 +136,132 @@ class PreparedConnectedCommandV28 {
   final SiteCommandAckV1? terminalAcknowledgement;
 }
 
-class ShopConnectedSiteAttemptStore {
+class ConnectedSiteApprovedBinding {
+  const ConnectedSiteApprovedBinding({
+    required this.bindingDigest,
+    required this.workspaceId,
+    required this.siteId,
+    required this.coordinatorDeviceId,
+    required this.clientDeviceId,
+    required this.clientFingerprint,
+    required this.clientSigningKeyId,
+    required this.address,
+    required this.port,
+    required this.certificateSha256,
+  });
+
+  final String bindingDigest;
+  final String workspaceId;
+  final String siteId;
+  final String coordinatorDeviceId;
+  final String clientDeviceId;
+  final String clientFingerprint;
+  final String clientSigningKeyId;
+  final String address;
+  final int port;
+  final String certificateSha256;
+
+  Uri endpoint(String target) =>
+      Uri(scheme: 'https', host: address, port: port).resolve(target);
+}
+
+class PreparedConnectedTransmissionV29 {
+  const PreparedConnectedTransmissionV29({
+    required this.commandId,
+    required this.transmissionSequence,
+    required this.uri,
+    required this.headers,
+    required this.body,
+    required this.certificateSha256,
+  });
+
+  final String commandId;
+  final int transmissionSequence;
+  final Uri uri;
+  final Map<String, String> headers;
+  final Uint8List body;
+  final String certificateSha256;
+}
+
+abstract interface class ConnectedSiteCommandAttemptStore {
+  Future<ConnectedSiteApprovedBinding> resolveActiveBinding({
+    required String bindingDigest,
+    required String workspaceId,
+    required String siteId,
+    required String clientDeviceId,
+    required String clientFingerprint,
+    required String clientSigningKeyId,
+  });
+
+  Future<PreparedConnectedCommandV28> prepare({
+    required SiteCommandV1 command,
+    required String bindingDigest,
+    required String clientFingerprint,
+  });
+
+  Future<PreparedConnectedTransmissionV29> beginTransmission({
+    required String commandId,
+    required CoordinatorRequestProof proof,
+    required String requestSignature,
+  });
+
+  Future<SiteCommandAckV1> recordTerminal({
+    required String commandId,
+    required int transmissionSequence,
+    required SiteCommandAckV1 acknowledgement,
+  });
+
+  Future<List<PreparedConnectedCommandV28>> recoverUnresolved({
+    required String bindingDigest,
+  });
+}
+
+class UnavailableConnectedSiteCommandAttemptStore
+    implements ConnectedSiteCommandAttemptStore {
+  const UnavailableConnectedSiteCommandAttemptStore();
+
+  Never _unavailable() =>
+      throw StateError('connected_site_attempt_store_unavailable');
+
+  @override
+  Future<PreparedConnectedTransmissionV29> beginTransmission({
+    required String commandId,
+    required CoordinatorRequestProof proof,
+    required String requestSignature,
+  }) async => _unavailable();
+
+  @override
+  Future<PreparedConnectedCommandV28> prepare({
+    required SiteCommandV1 command,
+    required String bindingDigest,
+    required String clientFingerprint,
+  }) async => _unavailable();
+
+  @override
+  Future<List<PreparedConnectedCommandV28>> recoverUnresolved({
+    required String bindingDigest,
+  }) async => _unavailable();
+
+  @override
+  Future<SiteCommandAckV1> recordTerminal({
+    required String commandId,
+    required int transmissionSequence,
+    required SiteCommandAckV1 acknowledgement,
+  }) async => _unavailable();
+
+  @override
+  Future<ConnectedSiteApprovedBinding> resolveActiveBinding({
+    required String bindingDigest,
+    required String workspaceId,
+    required String siteId,
+    required String clientDeviceId,
+    required String clientFingerprint,
+    required String clientSigningKeyId,
+  }) async => _unavailable();
+}
+
+class ShopConnectedSiteAttemptStore
+    implements ConnectedSiteCommandAttemptStore {
   ShopConnectedSiteAttemptStore({
     required this.database,
     this.approvalVerifier =
@@ -149,6 +274,98 @@ class ShopConnectedSiteAttemptStore {
   final ConnectedCoordinatorApprovalVerifier approvalVerifier;
   final bool runtimeEnabled;
   final DateTime Function() now;
+
+  @override
+  Future<ConnectedSiteApprovedBinding> resolveActiveBinding({
+    required String bindingDigest,
+    required String workspaceId,
+    required String siteId,
+    required String clientDeviceId,
+    required String clientFingerprint,
+    required String clientSigningKeyId,
+  }) async {
+    _requireEnabled();
+    final row = await database
+        .customSelect(
+          'SELECT * FROM shop_site_coordinator_bindings WHERE binding_digest = ?',
+          variables: [Variable.withString(bindingDigest)],
+        )
+        .getSingleOrNull();
+    final latest = row == null
+        ? null
+        : await database
+              .customSelect(
+                'SELECT action, binding_digest FROM ('
+                'SELECT action, binding_digest, approval_generation FROM '
+                'shop_site_coordinator_bindings WHERE workspace_id = ? AND site_id = ? '
+                'AND client_device_id = ? UNION ALL SELECT action, '
+                'target_binding_digest AS binding_digest, approval_generation FROM '
+                'shop_site_coordinator_binding_revocations WHERE workspace_id = ? '
+                'AND site_id = ? AND client_device_id = ?) '
+                'ORDER BY approval_generation DESC LIMIT 1',
+                variables: [
+                  Variable.withString(workspaceId),
+                  Variable.withString(siteId),
+                  Variable.withString(clientDeviceId),
+                  Variable.withString(workspaceId),
+                  Variable.withString(siteId),
+                  Variable.withString(clientDeviceId),
+                ],
+              )
+              .getSingleOrNull();
+    final activeEnrollment = row == null
+        ? null
+        : await database
+              .customSelect(
+                'SELECT 1 FROM shop_site_enrollment_evidence evidence '
+                'JOIN shop_site_devices device ON device.device_id = evidence.device_id '
+                'WHERE evidence.evidence_digest = ? AND evidence.action = ? '
+                'AND evidence.tenant_id = ? AND evidence.site_id = ? '
+                'AND evidence.device_id = ? AND evidence.client_fingerprint = ? '
+                "AND device.state = 'active' LIMIT 1",
+                variables: [
+                  Variable.withString(
+                    row.read<String>('enrollment_evidence_digest'),
+                  ),
+                  const Variable<String>('approve'),
+                  Variable.withString(workspaceId),
+                  Variable.withString(siteId),
+                  Variable.withString(clientDeviceId),
+                  Variable.withString(clientFingerprint),
+                ],
+              )
+              .getSingleOrNull();
+    if (row == null ||
+        latest == null ||
+        activeEnrollment == null ||
+        latest.read<String>('action') != 'approve' ||
+        latest.read<String>('binding_digest') != bindingDigest ||
+        row.read<String>('workspace_id') != workspaceId ||
+        row.read<String>('site_id') != siteId ||
+        row.read<String>('client_device_id') != clientDeviceId ||
+        row.read<String>('client_fingerprint') != clientFingerprint ||
+        row.read<String>('client_signing_key_id') != clientSigningKeyId ||
+        row.read<int>('expires_at_millis') <= now().millisecondsSinceEpoch ||
+        !await approvalVerifier.verify(
+          authorityKeyId: row.read<String>('authority_key_id'),
+          canonicalEvidence: row.read<String>('evidence_json'),
+          signature: row.read<String>('authority_signature'),
+        )) {
+      throw StateError('connected_coordinator_binding_rejected');
+    }
+    return ConnectedSiteApprovedBinding(
+      bindingDigest: bindingDigest,
+      workspaceId: workspaceId,
+      siteId: siteId,
+      coordinatorDeviceId: row.read<String>('coordinator_device_id'),
+      clientDeviceId: clientDeviceId,
+      clientFingerprint: clientFingerprint,
+      clientSigningKeyId: clientSigningKeyId,
+      address: row.read<String>('address'),
+      port: row.read<int>('port'),
+      certificateSha256: row.read<String>('certificate_sha256'),
+    );
+  }
 
   Future<String> importApproval(ConnectedCoordinatorApprovalV1 approval) async {
     _requireEnabled();
@@ -351,6 +568,7 @@ class ShopConnectedSiteAttemptStore {
     return revocation.evidenceDigest;
   }
 
+  @override
   Future<PreparedConnectedCommandV28> prepare({
     required SiteCommandV1 command,
     required String bindingDigest,
@@ -480,7 +698,8 @@ class ShopConnectedSiteAttemptStore {
     });
   }
 
-  Future<int> beginTransmission({
+  @override
+  Future<PreparedConnectedTransmissionV29> beginTransmission({
     required String commandId,
     required CoordinatorRequestProof proof,
     required String requestSignature,
@@ -491,6 +710,7 @@ class ShopConnectedSiteAttemptStore {
           .customSelect(
             'SELECT attempt.*, binding.coordinator_device_id, '
             'binding.client_fingerprint, binding.expires_at_millis, '
+            'binding.address, binding.port, binding.certificate_sha256, '
             'binding.authority_key_id, binding.evidence_json, '
             'binding.authority_signature, binding.enrollment_evidence_digest '
             'FROM shop_site_command_attempts attempt '
@@ -594,6 +814,21 @@ class ShopConnectedSiteAttemptStore {
           .getSingle();
       final sequence = count.read<int>('count') + 1;
       final proofJson = canonicalConnectedSiteJson(proof.signingPayload);
+      final headers = <String, String>{
+        HttpHeaders.acceptHeader: ContentType.json.mimeType,
+        HttpHeaders.contentTypeHeader: ContentType.json.mimeType,
+        'x-supermega-client-fingerprint': proof.clientFingerprint,
+        'x-supermega-device-id': proof.claimedDeviceId,
+        'x-supermega-issued-at': proof.issuedAt.toUtc().toIso8601String(),
+        'x-supermega-request-nonce': proof.nonce,
+        'x-supermega-request-signature': requestSignature,
+      };
+      final headersJson = canonicalConnectedSiteJson(headers);
+      final endpoint = Uri(
+        scheme: 'https',
+        host: attempt.read<String>('address'),
+        port: attempt.read<int>('port'),
+      ).resolve(proof.canonicalTarget);
       await database.customStatement(
         'INSERT INTO shop_site_command_transmissions (command_id, '
         'transmission_sequence, request_nonce, issued_at_millis, method, '
@@ -613,11 +848,53 @@ class ShopConnectedSiteAttemptStore {
           now().millisecondsSinceEpoch,
         ],
       );
+      await database.customStatement(
+        'INSERT INTO shop_site_request_envelopes (command_id, '
+        'transmission_sequence, endpoint, certificate_sha256, headers_json, '
+        'body_json, envelope_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+          commandId,
+          sequence,
+          endpoint.toString(),
+          attempt.read<String>('certificate_sha256'),
+          headersJson,
+          attempt.read<String>('command_json'),
+          connectedSiteSha256({
+            'commandId': commandId,
+            'transmissionSequence': sequence,
+            'endpoint': endpoint.toString(),
+            'certificateSha256': attempt.read<String>('certificate_sha256'),
+            'headers': headers,
+            'body': attempt.read<String>('command_json'),
+          }),
+        ],
+      );
       await database.verifyConnectedAttemptEvidence();
-      return sequence;
+      final retained = await database
+          .customSelect(
+            'SELECT * FROM shop_site_request_envelopes WHERE command_id = ? '
+            'AND transmission_sequence = ?',
+            variables: [
+              Variable.withString(commandId),
+              Variable.withInt(sequence),
+            ],
+          )
+          .getSingle();
+      return PreparedConnectedTransmissionV29(
+        commandId: commandId,
+        transmissionSequence: sequence,
+        uri: Uri.parse(retained.read<String>('endpoint')),
+        headers: (jsonDecode(retained.read<String>('headers_json')) as Map)
+            .cast<String, String>(),
+        body: Uint8List.fromList(
+          utf8.encode(retained.read<String>('body_json')),
+        ),
+        certificateSha256: retained.read<String>('certificate_sha256'),
+      );
     });
   }
 
+  @override
   Future<SiteCommandAckV1> recordTerminal({
     required String commandId,
     required int transmissionSequence,
@@ -641,12 +918,15 @@ class ShopConnectedSiteAttemptStore {
       }
       final existing = await database
           .customSelect(
-            'SELECT ack_json FROM shop_site_command_results WHERE command_id = ?',
+            'SELECT ack_json, transmission_sequence FROM '
+            'shop_site_command_results WHERE command_id = ?',
             variables: [Variable.withString(commandId)],
           )
           .getSingleOrNull();
       if (existing != null) {
-        if (existing.read<String>('ack_json') != ackJson) {
+        if (existing.read<String>('ack_json') != ackJson ||
+            existing.read<int>('transmission_sequence') !=
+                transmissionSequence) {
           throw StateError('connected_command_ack_substituted');
         }
         return;
@@ -673,6 +953,7 @@ class ShopConnectedSiteAttemptStore {
     return acknowledgement;
   }
 
+  @override
   Future<List<PreparedConnectedCommandV28>> recoverUnresolved({
     required String bindingDigest,
   }) async {

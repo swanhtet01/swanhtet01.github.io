@@ -6,11 +6,14 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_site_client.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
 
 const _now = '2026-10-31T12:00:00.000Z';
 const _certificate =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _binding =
+    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
 
 void main() {
   late _Signer signer;
@@ -146,7 +149,7 @@ void main() {
       ConnectedSiteCommandOutcome.retryableUnknown,
     );
     expect(
-      (await client.sendCommand(command)).outcome,
+      (await client.retryCommand(command.commandId)).outcome,
       ConnectedSiteCommandOutcome.acknowledged,
     );
     expect(transport.requests[0].body, transport.requests[1].body);
@@ -213,18 +216,81 @@ void main() {
           ConnectedSiteCommandOutcome.retryableUnknown,
         );
       }
-      await expectLater(
-        client.sendCommand(command),
-        throwsA(
-          isA<ConnectedSiteTransportException>().having(
-            (error) => error.ambiguous,
-            'ambiguous',
-            isFalse,
-          ),
-        ),
+      expect(
+        (await client.sendCommand(command)).outcome,
+        ConnectedSiteCommandOutcome.retryableUnknown,
       );
     },
   );
+
+  test('valid denied acknowledgement is terminal even on HTTP 403', () async {
+    final command = await _command(signer);
+    transport.handler = (_) async => ConnectedSiteHttpResponse(
+      statusCode: 403,
+      contentType: 'application/json',
+      body: Uint8List.fromList(
+        utf8.encode(
+          canonicalConnectedSiteJson(
+            SiteCommandAckV1(
+              commandId: command.commandId,
+              commandDigest: command.commandDigest,
+              state: SiteCommandAckState.denied,
+              canonicalVersion: 0,
+              reason: 'authorization_denied',
+            ).toJson(),
+          ),
+        ),
+      ),
+    );
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+    );
+    expect(
+      (await client.sendCommand(command)).outcome,
+      ConnectedSiteCommandOutcome.rejected,
+    );
+    expect(transport.requests, hasLength(1));
+    expect(
+      (await client.sendCommand(command)).outcome,
+      ConnectedSiteCommandOutcome.rejected,
+    );
+    expect(transport.requests, hasLength(1));
+  });
+
+  test('operational requests ignore substituted QR endpoint and pin', () async {
+    final discovery = CoordinatorPairingV1(
+      workspaceId: pairing.workspaceId,
+      siteId: pairing.siteId,
+      coordinatorDeviceId: pairing.coordinatorDeviceId,
+      certificateSha256: 'b' * 64,
+      address: '192.168.10.99',
+      port: 10443,
+      nonce: pairing.nonce,
+      issuedAt: pairing.issuedAt,
+      expiresAt: pairing.expiresAt,
+    );
+    transport.handler = (request) async {
+      expect(request.uri, Uri.parse('https://192.168.10.4:9443/v1/health'));
+      expect(request.certificateSha256, _certificate);
+      return _jsonResponse({
+        'schema': 'supermega.connected-site.health.v1',
+        'protocolVersion': connectedSiteProtocolVersion,
+        'status': 'alive',
+      });
+    };
+    expect(
+      (await _client(
+        pairing: discovery,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      ).readHealth())['status'],
+      'alive',
+    );
+  });
 
   test('delta and snapshot reject coordinator scope substitution', () async {
     transport.handler = (request) async {
@@ -317,6 +383,30 @@ void main() {
       'https://192.168.10.4:9443/v1/health',
     ]);
   });
+
+  test('revoked durable binding blocks every operational read', () async {
+    transport.handler = (_) async => throw StateError('must not send');
+    attempts.active = false;
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+    );
+    await expectLater(
+      client.readDelta(0),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+    await expectLater(
+      client.readSnapshot(),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+    await expectLater(
+      client.readHealth(),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+    expect(transport.requests, isEmpty);
+  });
 }
 
 SiteCoordinatorClient _client({
@@ -327,6 +417,7 @@ SiteCoordinatorClient _client({
   String Function()? nonce,
 }) => SiteCoordinatorClient(
   pairing: pairing,
+  bindingDigest: _binding,
   signer: signer,
   attempts: attempts,
   transport: transport,
@@ -462,15 +553,99 @@ class _Transport implements ConnectedSiteHttpTransport {
 }
 
 class _Attempts implements ConnectedSiteCommandAttemptStore {
-  final bindings = <String, String>{};
+  final commands = <String, PreparedConnectedCommandV28>{};
+  final results = <String, SiteCommandAckV1>{};
+  var transmissions = 0;
+  var active = true;
 
   @override
-  Future<bool> bind({required String commandId, required String digest}) async {
-    final existing = bindings[commandId];
-    if (existing != null) return existing == digest;
-    bindings[commandId] = digest;
-    return true;
+  Future<PreparedConnectedCommandV28> prepare({
+    required SiteCommandV1 command,
+    required String bindingDigest,
+    required String clientFingerprint,
+  }) async {
+    if (bindingDigest != _binding) throw StateError('binding');
+    final raw = canonicalConnectedSiteJson(command.toJson());
+    final prepared = PreparedConnectedCommandV28(
+      commandId: command.commandId,
+      commandJson: raw,
+      bodySha256: crypto.sha256.convert(utf8.encode(raw)).toString(),
+      terminalAcknowledgement: results[command.commandId],
+    );
+    final existing = commands[command.commandId];
+    if (existing != null && existing.commandJson != raw) {
+      throw StateError('substituted');
+    }
+    commands[command.commandId] = prepared;
+    return prepared;
   }
+
+  @override
+  Future<ConnectedSiteApprovedBinding> resolveActiveBinding({
+    required String bindingDigest,
+    required String workspaceId,
+    required String siteId,
+    required String clientDeviceId,
+    required String clientFingerprint,
+    required String clientSigningKeyId,
+  }) async {
+    if (!active) throw StateError('revoked');
+    return ConnectedSiteApprovedBinding(
+      bindingDigest: bindingDigest,
+      workspaceId: workspaceId,
+      siteId: siteId,
+      coordinatorDeviceId: 'counter-1',
+      clientDeviceId: clientDeviceId,
+      clientFingerprint: clientFingerprint,
+      clientSigningKeyId: clientSigningKeyId,
+      address: '192.168.10.4',
+      port: 9443,
+      certificateSha256: _certificate,
+    );
+  }
+
+  @override
+  Future<PreparedConnectedTransmissionV29> beginTransmission({
+    required String commandId,
+    required CoordinatorRequestProof proof,
+    required String requestSignature,
+  }) async {
+    final prepared = commands[commandId]!;
+    transmissions += 1;
+    return PreparedConnectedTransmissionV29(
+      commandId: commandId,
+      transmissionSequence: transmissions,
+      uri: Uri.parse('https://192.168.10.4:9443${proof.canonicalTarget}'),
+      headers: {
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'x-supermega-client-fingerprint': proof.clientFingerprint,
+        'x-supermega-device-id': proof.claimedDeviceId,
+        'x-supermega-issued-at': proof.issuedAt.toIso8601String(),
+        'x-supermega-request-nonce': proof.nonce,
+        'x-supermega-request-signature': requestSignature,
+      },
+      body: Uint8List.fromList(utf8.encode(prepared.commandJson)),
+      certificateSha256: _certificate,
+    );
+  }
+
+  @override
+  Future<SiteCommandAckV1> recordTerminal({
+    required String commandId,
+    required int transmissionSequence,
+    required SiteCommandAckV1 acknowledgement,
+  }) async {
+    results[commandId] = acknowledgement;
+    return acknowledgement;
+  }
+
+  @override
+  Future<List<PreparedConnectedCommandV28>> recoverUnresolved({
+    required String bindingDigest,
+  }) async => commands.values
+      .where((item) => !results.containsKey(item.commandId))
+      .toList(growable: false);
 }
 
 class _Signer implements ConnectedSiteDeviceSigner {

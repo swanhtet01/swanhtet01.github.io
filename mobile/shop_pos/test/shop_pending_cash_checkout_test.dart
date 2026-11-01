@@ -89,7 +89,7 @@ void main() {
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
       final receipt = (await database.readRecentSales()).single;
-      expect(database.schemaVersion, 28);
+      expect(database.schemaVersion, 29);
       expect(receipt.cashTenderedMmk, isNull);
       expect(receipt.cashChangeMmk, isNull);
       expect((await database.readActiveProducts()).single.onHand, 1);
@@ -1241,6 +1241,19 @@ void main() {
 }
 
 Future<void> _dropConnectedSiteSchema(ShopDatabase database) async {
+  for (final entry
+      in shopConnectedEnvelopeSchemaDefinitionsV29().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(entry.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${entry.key}',
+    );
+  }
   for (final entry
       in shopConnectedSiteSchemaDefinitionsV28().entries.toList().reversed) {
     final type = shopSchemaObjectTypeForDefinition(entry.value);

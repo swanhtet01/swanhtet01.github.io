@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
@@ -145,14 +147,30 @@ void main() {
         ),
         throwsStateError,
       );
-      expect(
-        await store.beginTransmission(
-          commandId: command.commandId,
-          proof: proof,
-          requestSignature: 'R' * 86,
-        ),
-        1,
+      final transmission = await store.beginTransmission(
+        commandId: command.commandId,
+        proof: proof,
+        requestSignature: 'R' * 86,
       );
+      expect(transmission.transmissionSequence, 1);
+      expect(
+        transmission.uri,
+        Uri.parse('https://192.168.1.2:9443/v1/commands'),
+      );
+      expect(
+        utf8.decode(transmission.body),
+        canonicalConnectedSiteJson(command.toJson()),
+      );
+      expect(transmission.headers.keys.toSet(), {
+        'accept',
+        'content-type',
+        'x-supermega-client-fingerprint',
+        'x-supermega-device-id',
+        'x-supermega-issued-at',
+        'x-supermega-request-nonce',
+        'x-supermega-request-signature',
+      });
+      expect(transmission.certificateSha256, approval.certificateSha256);
       final ack = SiteCommandAckV1(
         commandId: command.commandId,
         commandDigest: command.commandDigest,
@@ -164,6 +182,14 @@ void main() {
         commandId: command.commandId,
         transmissionSequence: 1,
         acknowledgement: ack,
+      );
+      await expectLater(
+        store.recordTerminal(
+          commandId: command.commandId,
+          transmissionSequence: 2,
+          acknowledgement: ack,
+        ),
+        throwsStateError,
       );
       await expectLater(
         store.beginTransmission(
@@ -342,8 +368,91 @@ void main() {
     },
   );
 
-  test('v28 snapshot verification shares immutable attempt checks', () async {
-    final directory = await Directory.systemTemp.createTemp('shop-v28-');
+  test('enrollment revocation immediately blocks binding resolution', () async {
+    final approval = await _seedEnrollment(database, clock);
+    final binding = await store.importApproval(approval);
+    expect(
+      (await store.resolveActiveBinding(
+        bindingDigest: binding,
+        workspaceId: approval.workspaceId,
+        siteId: approval.siteId,
+        clientDeviceId: approval.clientDeviceId,
+        clientFingerprint: approval.clientFingerprint,
+        clientSigningKeyId: approval.clientSigningKeyId,
+      )).bindingDigest,
+      binding,
+    );
+    await _revokeEnrollment(
+      database,
+      approval,
+      clock.add(const Duration(minutes: 1)),
+    );
+    await expectLater(
+      store.resolveActiveBinding(
+        bindingDigest: binding,
+        workspaceId: approval.workspaceId,
+        siteId: approval.siteId,
+        clientDeviceId: approval.clientDeviceId,
+        clientFingerprint: approval.clientFingerprint,
+        clientSigningKeyId: approval.clientSigningKeyId,
+      ),
+      throwsStateError,
+    );
+  });
+
+  test(
+    'recomputed envelope endpoint substitution fails verification',
+    () async {
+      final approval = await _seedEnrollment(database, clock);
+      final binding = await store.importApproval(approval);
+      final command = _command();
+      final prepared = await store.prepare(
+        command: command,
+        bindingDigest: binding,
+        clientFingerprint: approval.clientFingerprint,
+      );
+      await store.beginTransmission(
+        commandId: command.commandId,
+        proof: _proof(command, approval, prepared.bodySha256, clock),
+        requestSignature: 'R' * 86,
+      );
+      final retained = await database
+          .customSelect(
+            'SELECT * FROM shop_site_request_envelopes WHERE command_id = ?',
+            variables: [Variable.withString(command.commandId)],
+          )
+          .getSingle();
+      const substituted = 'https://192.168.1.99:9443/v1/commands';
+      final headers = jsonDecode(retained.read<String>('headers_json')) as Map;
+      final body = retained.read<String>('body_json');
+      await database.customStatement(
+        'DROP TRIGGER shop_site_request_envelopes_no_update',
+      );
+      await database.customStatement(
+        'UPDATE shop_site_request_envelopes SET endpoint = ?, '
+        'envelope_digest = ? WHERE command_id = ?',
+        [
+          substituted,
+          connectedSiteSha256({
+            'commandId': command.commandId,
+            'transmissionSequence': 1,
+            'endpoint': substituted,
+            'certificateSha256': approval.certificateSha256,
+            'headers': headers,
+            'body': body,
+          }),
+          command.commandId,
+        ],
+      );
+      await expectLater(
+        database.verifyConnectedAttemptEvidence(),
+        throwsStateError,
+      );
+    },
+  );
+
+  test('v29 snapshot verification shares immutable attempt checks', () async {
+    final directory = await Directory.systemTemp.createTemp('shop-v29-');
     final file = File('${directory.path}/shop.sqlite');
     final persisted = ShopDatabase(NativeDatabase(file));
     try {
@@ -367,9 +476,66 @@ void main() {
   });
 
   test(
+    'populated v28 preview fails closed instead of inventing envelopes',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'shop-v28-filled-',
+      );
+      final file = File('${directory.path}/shop.sqlite');
+      var persisted = ShopDatabase(NativeDatabase(file));
+      try {
+        final approval = await _seedEnrollment(persisted, clock);
+        final persistedStore = ShopConnectedSiteAttemptStore(
+          database: persisted,
+          approvalVerifier: const _ApprovalVerifier(),
+          runtimeEnabled: true,
+          now: () => clock,
+        );
+        final binding = await persistedStore.importApproval(approval);
+        final command = _command();
+        final prepared = await persistedStore.prepare(
+          command: command,
+          bindingDigest: binding,
+          clientFingerprint: approval.clientFingerprint,
+        );
+        await persistedStore.beginTransmission(
+          commandId: command.commandId,
+          proof: _proof(command, approval, prepared.bodySha256, clock),
+          requestSignature: 'R' * 86,
+        );
+        await persisted.close();
+
+        final raw = sqlite.sqlite3.open(file.path);
+        try {
+          raw.execute('DROP TABLE shop_site_request_envelopes');
+          raw.execute('PRAGMA user_version = 28');
+        } finally {
+          raw.close();
+        }
+
+        persisted = ShopDatabase(NativeDatabase(file));
+        await expectLater(
+          persisted.verifyReadyForUse(),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('cannot migrate to v29'),
+            ),
+          ),
+        );
+      } finally {
+        await persisted.close();
+        if (file.existsSync()) file.deleteSync();
+        directory.deleteSync(recursive: true);
+      }
+    },
+  );
+
+  test(
     'populated attempt chain survives encrypted fresh-target restore',
     () async {
-      final root = await Directory.systemTemp.createTemp('shop-v28-restore-');
+      final root = await Directory.systemTemp.createTemp('shop-v29-restore-');
       final source = File('${root.path}/source.sqlite');
       final archive = File('${root.path}/attempts.smbak');
       final restored = File('${root.path}/restored.sqlite');

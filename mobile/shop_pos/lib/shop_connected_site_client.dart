@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_attempt_store.dart';
 import 'shop_site_coordinator.dart';
 
 abstract interface class ConnectedSiteDeviceSigner {
@@ -34,21 +35,6 @@ class UnavailableConnectedSiteDeviceSigner
   String get signingKeyId => _unavailable();
   @override
   Future<String> sign(List<int> message) async => _unavailable();
-}
-
-abstract interface class ConnectedSiteCommandAttemptStore {
-  Future<bool> bind({required String commandId, required String digest});
-}
-
-class UnavailableConnectedSiteCommandAttemptStore
-    implements ConnectedSiteCommandAttemptStore {
-  const UnavailableConnectedSiteCommandAttemptStore();
-
-  @override
-  Future<bool> bind({
-    required String commandId,
-    required String digest,
-  }) async => false;
 }
 
 class ConnectedSiteHttpResponse {
@@ -165,13 +151,16 @@ class DartIoConnectedSiteHttpTransport implements ConnectedSiteHttpTransport {
   }
 }
 
-enum ConnectedSiteCommandOutcome { acknowledged, retryableUnknown }
+enum ConnectedSiteCommandOutcome { acknowledged, rejected, retryableUnknown }
 
 class ConnectedSiteCommandResult {
   const ConnectedSiteCommandResult._(this.outcome, this.acknowledgement);
 
   const ConnectedSiteCommandResult.acknowledged(SiteCommandAckV1 ack)
     : this._(ConnectedSiteCommandOutcome.acknowledged, ack);
+
+  const ConnectedSiteCommandResult.rejected(SiteCommandAckV1 ack)
+    : this._(ConnectedSiteCommandOutcome.rejected, ack);
 
   const ConnectedSiteCommandResult.retryableUnknown()
     : this._(ConnectedSiteCommandOutcome.retryableUnknown, null);
@@ -183,6 +172,7 @@ class ConnectedSiteCommandResult {
 class SiteCoordinatorClient {
   SiteCoordinatorClient({
     required this.pairing,
+    this.bindingDigest = '',
     this.signer = const UnavailableConnectedSiteDeviceSigner(),
     this.attempts = const UnavailableConnectedSiteCommandAttemptStore(),
     this.transport = const DartIoConnectedSiteHttpTransport(),
@@ -193,6 +183,7 @@ class SiteCoordinatorClient {
        nonce = nonce ?? _secureNonce;
 
   final CoordinatorPairingV1 pairing;
+  final String bindingDigest;
   final ConnectedSiteDeviceSigner signer;
   final ConnectedSiteCommandAttemptStore attempts;
   final ConnectedSiteHttpTransport transport;
@@ -249,37 +240,123 @@ class SiteCoordinatorClient {
     if (command.workspaceId != pairing.workspaceId ||
         command.siteId != pairing.siteId ||
         command.deviceId != signer.deviceId ||
-        command.signingKeyId != signer.signingKeyId ||
-        !await attempts.bind(
-          commandId: command.commandId,
-          digest: command.commandDigest,
-        )) {
+        command.signingKeyId != signer.signingKeyId) {
       throw const ConnectedSiteTransportException('command_binding_rejected');
     }
-    final body = _jsonBody(command.toJson());
+    late final PreparedConnectedCommandV28 prepared;
     try {
-      final response = await _send(
-        path: connectedSiteCommandsPath,
+      prepared = await attempts.prepare(
+        command: command,
+        bindingDigest: bindingDigest,
+        clientFingerprint: signer.clientFingerprint,
+      );
+    } on StateError {
+      throw const ConnectedSiteTransportException('command_binding_rejected');
+    }
+    if (prepared.terminalAcknowledgement case final ack?) {
+      return _terminalResult(ack);
+    }
+    return _transmitPrepared(command, prepared);
+  }
+
+  Future<ConnectedSiteCommandResult> retryCommand(String commandId) async {
+    _requireEnabled();
+    _requireSignerIdentity();
+    final pending = await attempts.recoverUnresolved(
+      bindingDigest: bindingDigest,
+    );
+    PreparedConnectedCommandV28? prepared;
+    for (final item in pending) {
+      if (item.commandId == commandId) prepared = item;
+    }
+    if (prepared == null) {
+      throw const ConnectedSiteTransportException('command_retry_unavailable');
+    }
+    final decoded = jsonDecode(prepared.commandJson);
+    if (decoded is! Map) {
+      throw const ConnectedSiteTransportException('command_retry_invalid');
+    }
+    return _transmitPrepared(SiteCommandV1.fromJson(decoded), prepared);
+  }
+
+  Future<ConnectedSiteCommandResult> _transmitPrepared(
+    SiteCommandV1 command,
+    PreparedConnectedCommandV28 prepared,
+  ) async {
+    final binding = await _approvedBinding();
+    final body = Uint8List.fromList(utf8.encode(prepared.commandJson));
+    if (crypto.sha256.convert(body).toString() != prepared.bodySha256) {
+      throw const ConnectedSiteTransportException('command_retry_invalid');
+    }
+    final issuedAt = now().toUtc();
+    final requestNonce = nonce();
+    final proof = CoordinatorRequestProof(
+      workspaceId: binding.workspaceId,
+      siteId: binding.siteId,
+      coordinatorDeviceId: binding.coordinatorDeviceId,
+      clientFingerprint: signer.clientFingerprint,
+      claimedDeviceId: signer.deviceId,
+      issuedAt: issuedAt,
+      nonce: requestNonce,
+      method: 'POST',
+      canonicalTarget: connectedSiteCommandsPath,
+      bodySha256: prepared.bodySha256,
+      signature: '',
+    );
+    final signature = await signer.sign(proof.signingBytes);
+    final signedProof = CoordinatorRequestProof(
+      workspaceId: proof.workspaceId,
+      siteId: proof.siteId,
+      coordinatorDeviceId: proof.coordinatorDeviceId,
+      clientFingerprint: proof.clientFingerprint,
+      claimedDeviceId: proof.claimedDeviceId,
+      issuedAt: proof.issuedAt,
+      nonce: proof.nonce,
+      method: proof.method,
+      canonicalTarget: proof.canonicalTarget,
+      bodySha256: proof.bodySha256,
+      signature: signature,
+    );
+    final envelope = await attempts.beginTransmission(
+      commandId: command.commandId,
+      proof: signedProof,
+      requestSignature: signature,
+    );
+    try {
+      final response = await transport.send(
+        uri: envelope.uri,
         method: 'POST',
-        body: body,
+        headers: envelope.headers,
+        body: envelope.body,
+        certificateSha256: envelope.certificateSha256,
       );
       try {
-        final ack = SiteCommandAckV1.fromJson(_responseJson(response));
+        final ack = SiteCommandAckV1.fromJson(
+          _responseJson(response, canonical: true),
+        );
         if (ack.commandId != command.commandId ||
             ack.commandDigest != command.commandDigest) {
           throw const FormatException('command ack binding');
         }
-        return ConnectedSiteCommandResult.acknowledged(ack);
+        await attempts.recordTerminal(
+          commandId: command.commandId,
+          transmissionSequence: envelope.transmissionSequence,
+          acknowledgement: ack,
+        );
+        return _terminalResult(ack);
       } on Object {
         return const ConnectedSiteCommandResult.retryableUnknown();
       }
-    } on ConnectedSiteTransportException catch (error) {
-      if (error.ambiguous) {
-        return const ConnectedSiteCommandResult.retryableUnknown();
-      }
-      rethrow;
+    } on ConnectedSiteTransportException {
+      return const ConnectedSiteCommandResult.retryableUnknown();
     }
   }
+
+  ConnectedSiteCommandResult _terminalResult(SiteCommandAckV1 ack) =>
+      ack.state == SiteCommandAckState.accepted ||
+          ack.state == SiteCommandAckState.replayed
+      ? ConnectedSiteCommandResult.acknowledged(ack)
+      : ConnectedSiteCommandResult.rejected(ack);
 
   Future<SiteDeltaV1> readDelta(int after) async {
     if (after < 0) {
@@ -343,6 +420,7 @@ class SiteCoordinatorClient {
     bool authenticate = true,
   }) async {
     _requireEnabled();
+    final binding = authenticate ? await _approvedBinding() : null;
     final headers = <String, String>{
       HttpHeaders.acceptHeader: ContentType.json.mimeType,
       if (body.isNotEmpty)
@@ -357,9 +435,9 @@ class SiteCoordinatorClient {
         throw const ConnectedSiteTransportException('request_nonce_invalid');
       }
       final proof = CoordinatorRequestProof(
-        workspaceId: pairing.workspaceId,
-        siteId: pairing.siteId,
-        coordinatorDeviceId: pairing.coordinatorDeviceId,
+        workspaceId: binding!.workspaceId,
+        siteId: binding.siteId,
+        coordinatorDeviceId: binding.coordinatorDeviceId,
         clientFingerprint: signer.clientFingerprint,
         claimedDeviceId: signer.deviceId,
         issuedAt: issuedAt,
@@ -379,11 +457,12 @@ class SiteCoordinatorClient {
       });
     }
     final response = await transport.send(
-      uri: _origin.resolve(path),
+      uri: binding?.endpoint(path) ?? _origin.resolve(path),
       method: method,
       headers: headers,
       body: body,
-      certificateSha256: pairing.certificateSha256,
+      certificateSha256:
+          binding?.certificateSha256 ?? pairing.certificateSha256,
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ConnectedSiteTransportException(
@@ -394,7 +473,10 @@ class SiteCoordinatorClient {
     return response;
   }
 
-  Map<String, Object?> _responseJson(ConnectedSiteHttpResponse response) {
+  Map<String, Object?> _responseJson(
+    ConnectedSiteHttpResponse response, {
+    bool canonical = false,
+  }) {
     if (response.contentType?.split(';').first.trim().toLowerCase() !=
             ContentType.json.mimeType ||
         response.body.isEmpty) {
@@ -404,10 +486,37 @@ class SiteCoordinatorClient {
       final value = jsonDecode(
         utf8.decode(response.body, allowMalformed: false),
       );
-      if (value is! Map) throw const FormatException('object');
+      if (value is! Map ||
+          (canonical &&
+              canonicalConnectedSiteJson(value) !=
+                  utf8.decode(response.body))) {
+        throw const FormatException('object');
+      }
       return value.cast<String, Object?>();
     } on FormatException {
       throw const ConnectedSiteTransportException('response_invalid');
+    }
+  }
+
+  Future<ConnectedSiteApprovedBinding> _approvedBinding() async {
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(bindingDigest)) {
+      throw const ConnectedSiteTransportException(
+        'coordinator_binding_unavailable',
+      );
+    }
+    try {
+      return await attempts.resolveActiveBinding(
+        bindingDigest: bindingDigest,
+        workspaceId: pairing.workspaceId,
+        siteId: pairing.siteId,
+        clientDeviceId: signer.deviceId,
+        clientFingerprint: signer.clientFingerprint,
+        clientSigningKeyId: signer.signingKeyId,
+      );
+    } on StateError {
+      throw const ConnectedSiteTransportException(
+        'coordinator_binding_unavailable',
+      );
     }
   }
 
