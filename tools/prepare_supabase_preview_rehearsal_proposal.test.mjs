@@ -7,6 +7,7 @@ import {
   buildSupabasePreviewRehearsalProposal,
   validateSupabasePreviewRehearsalProposal,
   validatePreviewMigrationEntries,
+  validatePreviewSourceOnlyMigrationEntries,
 } from './prepare_supabase_preview_rehearsal_proposal.mjs'
 
 const sourceReceipts = [
@@ -67,11 +68,15 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
   assert.equal(built.migrationPlan.migrationCount, 25)
   assert.equal(built.migrationPlan.privateMigrationCount, 24)
+  assert.equal(built.migrationPlan.sourceOnlyMigrationCount, 1)
   assert.equal(built.migrationPlan.schemaVersion, 14)
   assert.equal(built.migrationPlan.schemaProfile, 'v14-shop-correction')
   assert.equal(built.migrationPlan.databaseContract, 'supermega_private_trial_database_v14_shop_correction_v1')
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
   assert.equal(built.migrationPlan.finalMigration, '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql')
+  assert.equal(built.migrationPlan.sourceOnlyMigrations[0].name, '20261101090000_private_trial_backend_v15_connected_site.sql')
+  assert.match(built.migrationPlan.sourceOnlyChainDigest, /^sha256:[0-9a-f]{64}$/)
+  assert.match(built.migrationPlan.sourceInventoryDigest, /^sha256:[0-9a-f]{64}$/)
   assert.equal(built.migrationPlan.sourceAheadOfLiveProduction, true)
   assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
   assert.equal(built.productionBaseline.currentStateRevalidated, false)
@@ -115,8 +120,29 @@ test('binds exact ordered public baseline and twenty-four private migrations thr
   }
 })
 
+test('binds connected-site v15 as source-only without adding it to the executable v14 chain', async () => {
+  const built = await proposal()
+  const entries = built.migrationPlan.sourceOnlyMigrations
+  assert.equal(validatePreviewSourceOnlyMigrationEntries(entries), entries)
+  assert.equal(built.migrationPlan.migrations.at(-1).name, '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql')
+  assert.equal(entries[0].name, '20261101090000_private_trial_backend_v15_connected_site.sql')
+  for (const mutate of [list => list.pop(), list => list.push({ ...list[0] }),
+    list => { list[0].name = '20261101090000_unreviewed.sql' },
+    list => { list[0].path = '../unreviewed.sql' },
+    list => { list[0].digest = '' }, list => { list[0].execute = true }]) {
+    const altered = structuredClone(entries)
+    mutate(altered)
+    assert.throws(
+      () => validatePreviewSourceOnlyMigrationEntries(altered),
+      /supabase_preview_rehearsal_source_only_migration_inventory_invalid/,
+    )
+  }
+})
+
 test('rehashing cannot hide omitted budget or Website evidence or turn historical audit into current proof', async () => {
   for (const mutate of [p => { p.migrationPlan.migrations.at(-1).digest = `sha256:${'1'.repeat(64)}` },
+    p => { p.migrationPlan.sourceOnlyMigrations[0].digest = `sha256:${'1'.repeat(64)}` },
+    p => { p.migrationPlan.sourceOnlyMigrations = [] },
     p => { p.migrationPlan.schemaProfile = 'v13-self-serve' },
     p => { p.migrationPlan.databaseContract = 'supermega_private_trial_database_v13_billing_entitlement_v1' },
     p => { p.productionBaseline.currentCandidateProven = true },
@@ -130,7 +156,7 @@ test('rehashing cannot hide omitted budget or Website evidence or turn historica
     mutate(altered)
     const { digest: ignored, ...body } = altered
     altered.digest = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`
-    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(migration_(digest|plan)_invalid|production_baseline_invalid|evidence_missing)/)
+    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(migration_(digest|plan)_invalid|source_only_migrations_invalid|source_only_migration_digest_invalid|production_baseline_invalid|evidence_missing)/)
   }
 })
 

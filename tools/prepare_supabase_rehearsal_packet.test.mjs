@@ -37,9 +37,12 @@ test('binds the complete candidate chain without granting baseline or migration 
   assert.equal(packet.release.databaseContract, 'supermega_private_trial_database_v14_shop_correction_v1')
   assert.equal(packet.release.migrationCount, 25)
   assert.equal(packet.release.privateMigrationCount, 24)
+  assert.equal(packet.release.sourceOnlyMigrationCount, 1)
   assert.deepEqual(packet.release.review, releaseReview)
   assert.equal(packet.release.migrations[0].name, '20260711081300_public_legacy_baseline.sql')
   assert.equal(packet.release.migrations.at(-1).name, '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql')
+  assert.equal(packet.release.sourceOnlyMigrations[0].name, '20261101090000_private_trial_backend_v15_connected_site.sql')
+  assert.match(packet.release.sourceOnlyMigrations[0].sha256, /^[0-9a-f]{64}$/)
   assert.equal(packet.release.schemaVersionScope, 'private-core-v14-plus-explicit-source-migrations')
   assert.equal(packet.preflight.baselinePrerequisite.applyAutomatically, false)
   assert.equal(packet.preflight.baselinePrerequisite.freshTargetOnly, true)
@@ -72,13 +75,24 @@ test('binds the complete candidate chain without granting baseline or migration 
 
 test('rejects every omitted migration, unknown SQL, duplicate and reordered inventories', async () => {
   const packet = await buildSupabaseRehearsalPacket({ repositoryRoot, targetProjectRef, releaseCommit, releaseReview, generatedAt })
-  const names = packet.release.migrations.map(({ name }) => name)
+  const names = [
+    ...packet.release.migrations,
+    ...packet.release.sourceOnlyMigrations,
+  ].map(({ name }) => name)
   validateRehearsalMigrationNames(names)
   for (let i = 0; i < names.length; i++) {
     assert.throws(() => validateRehearsalMigrationNames(names.filter((_, j) => i !== j)), /full_migration_inventory_mismatch/)
     const altered = structuredClone(packet)
-    altered.release.migrations.splice(i, 1)
-    altered.release.migrationCount--
+    if (i < altered.release.migrations.length) {
+      altered.release.migrations.splice(i, 1)
+      altered.release.migrationCount--
+    } else {
+      altered.release.sourceOnlyMigrations.splice(
+        i - altered.release.migrations.length,
+        1,
+      )
+      altered.release.sourceOnlyMigrationCount--
+    }
     await assert.rejects(validateSupabaseRehearsalPacket(altered, { repositoryRoot }), /packet_evidence_stale/)
   }
   for (const invalid of [[...names, '20260920000000_new_feature.sql'], [...names, names[0]], [...names].reverse()]) {

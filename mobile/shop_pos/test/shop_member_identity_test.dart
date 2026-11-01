@@ -526,7 +526,7 @@ void main() {
           await source.exportVerifiedLocalSnapshot(snapshot);
           final raw = sqlite3.open(snapshot.path);
           try {
-            _removeV17CorrectionConsumptionObjects(raw);
+            _removePostV15SchemaObjects(raw);
             for (final table in const [
               'shop_wallet_checkout_member_links',
               'shop_sale_member_links',
@@ -598,7 +598,7 @@ void main() {
           await source.exportVerifiedLocalSnapshot(snapshot);
           final raw = sqlite3.open(snapshot.path);
           try {
-            _removeV17CorrectionConsumptionObjects(raw);
+            _removePostV15SchemaObjects(raw);
             raw.execute(
               "UPDATE shop_products SET sku = 'smc1.legacy-merchant-code' "
               "WHERE id = 'legacy-prefix'",
@@ -694,7 +694,7 @@ void main() {
         await source.exportVerifiedLocalSnapshot(snapshot);
         final raw = sqlite3.open(snapshot.path);
         try {
-          _removeV17CorrectionConsumptionObjects(raw);
+          _removePostV15SchemaObjects(raw);
           raw.execute(
             "UPDATE shop_products SET sku = ?, archived = 1 "
             "WHERE id = 'legacy-collision'",
@@ -824,7 +824,7 @@ void main() {
           await source.exportVerifiedLocalSnapshot(snapshot);
           final raw = sqlite3.open(snapshot.path);
           try {
-            _removeV17CorrectionConsumptionObjects(raw);
+            _removePostV15SchemaObjects(raw);
             for (final table in const [
               'shop_wallet_checkout_member_links',
               'shop_sale_member_links',
@@ -1482,7 +1482,68 @@ String _syntheticStaticMmqr() {
   return '$body${_crc16(utf8.encode(body))}';
 }
 
-void _removeV17CorrectionConsumptionObjects(Database connection) {
+void _removePostV15SchemaObjects(Database connection) {
+  for (final definition
+      in shopConnectedCloudProofSchemaDefinitionsV35().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedReplicaSchemaDefinitionsV33().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedReplicaSchemaDefinitionsV32().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedReservationSessionSchemaDefinitionsV31().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedAuthorityPayloadSchemaDefinitionsV30().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   for (final definition
       in shopConnectedEnvelopeSchemaDefinitionsV29().entries
           .toList()
