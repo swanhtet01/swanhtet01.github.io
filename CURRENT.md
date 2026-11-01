@@ -106,6 +106,17 @@
   or a separately authorized/provenance-reviewed v11 dependency plus narrow
   jsx-a11y adaptation and cross-platform matcher regression suite. No override,
   suppression, downgrade, exception or source patch was made.
+- Cloud remains the sole Shop integration writer. Local owns independent
+  Windows, installed-device and physical-hardware evidence only when those
+  gates become executable. Recovery after an interruption starts by reading
+  this section and the exact remote PR/ref, then checking the named worktree
+  and live processes before resuming; an in-progress label without a process,
+  source identity or receipt is not evidence. The verified native test
+  preflight uses Flutter `3.47.8`, PUB cache `/home/agent/.pub-cache`, and LLVM
+  tools at `/workspace/.toolchains/llvm-21.1.8-local/usr/lib/llvm-21/bin`.
+  Every handoff retains exact commit/tree/environment and labels each gate
+  **PASS**, **FAIL**, **BLOCKED** or **NOT RUN** without promoting evidence
+  between source, CI, installed device, hardware, merchant or production.
 - Release remains **BLOCKED** on a genuine authenticated PostgreSQL 17 Windows
   rehearsal and fresh receipt, a compatible dependency-security resolution,
   both GitGuardian findings, production signing, exact installed
