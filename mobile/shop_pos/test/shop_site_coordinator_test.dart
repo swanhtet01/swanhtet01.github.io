@@ -14,6 +14,9 @@ late SimpleKeyPair _clientKeyPair;
 late SimplePublicKey _clientPublicKey;
 late String _encodedClientPublicKey;
 late String _fingerprint;
+late Directory _tlsFixtureDirectory;
+late String _testCertificatePem;
+late String _testPrivateKeyPem;
 final _now = DateTime.utc(2026, 10, 31, 12);
 const _digest =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -28,7 +31,12 @@ void main() {
         .encode(_clientPublicKey.bytes)
         .replaceAll('=', '');
     _fingerprint = crypto.sha256.convert(_clientPublicKey.bytes).toString();
+    final fixture = await _createEphemeralTlsFixture();
+    _tlsFixtureDirectory = fixture.directory;
+    _testCertificatePem = fixture.certificatePem;
+    _testPrivateKeyPem = fixture.privateKeyPem;
   });
+  tearDownAll(() async => _tlsFixtureDirectory.delete(recursive: true));
   group('coordinator bind policy', () {
     test('accepts private addresses and rejects wildcard/public addresses', () {
       expect(
@@ -71,8 +79,9 @@ void main() {
         );
         expect(
           identity.leafCertificateSha256,
-          'dfd45ce47c50edef74bec617deb396e3f7cba3f8ddbbecf594515faa8ff6e321',
+          matches(RegExp(r'^[0-9a-f]{64}$')),
         );
+        expect(identity.leafCertificateSha256, isNot(_digest));
         final keys = _ClientKeys();
         final server = SiteCoordinatorServer(
           runtimeEnabled: true,
@@ -1267,55 +1276,49 @@ class _StationPolicy implements CoordinatorStationReadPolicy {
       request.siteId == 'site_1';
 }
 
-// Synthetic self-signed fixture used only to prove leaf-byte binding. It is
-// not a trusted coordinator identity and is never used by product code.
-const _testCertificatePem = '''-----BEGIN CERTIFICATE-----
-MIIDIzCCAgugAwIBAgIUBhuLGrsidvQtY1tW4XGeY86I0dYwDQYJKoZIhvcNAQEL
-BQAwITEfMB0GA1UEAwwWc3VwZXJtZWdhLXRlc3QuaW52YWxpZDAeFw0yNjEwMzEx
-NzEyMDNaFw0yNjExMDIxNzEyMDNaMCExHzAdBgNVBAMMFnN1cGVybWVnYS10ZXN0
-LmludmFsaWQwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDt0f5kEG9I
-31HQN/ZAyWOH35ngsI1L2M0C63KKeOGCpHLw0XtvDG4x050qQE7wsP9ttFdwN+YX
-hioHdM05a9Mh/4JY6Pojn9BWIMeMfj0GAphWIe07ybYXeszf57dPG3T+vUVwTKxI
-3QQv2GqVFc4n1stFRYPdPppSOHjT84bzfaqsV/Km8BBNEtOx3HN47TNdY1GdD4RI
-ERslJoehYg7sS7+BsYvdNBr5mlszQGbF91b02XfsCm+QrOUTGkzrrozgozjOxCXw
-tqT5c+0Trl7xwioM0yUBA2r0P9J8P69WfZSy8cG/dTUYQjvrgvuSKsEHe3qHZW/1
-DFfI8LM4r1PnAgMBAAGjUzBRMB0GA1UdDgQWBBS4XPmIThUUU1L7U+PtDw2m5U51
-FTAfBgNVHSMEGDAWgBS4XPmIThUUU1L7U+PtDw2m5U51FTAPBgNVHRMBAf8EBTAD
-AQH/MA0GCSqGSIb3DQEBCwUAA4IBAQBAQle2VLn7QZuA9gI5FsICrkJ5FfNIHBDW
-mUkPzAPsRUzv8oye4pBkttQIwo+6/yTlZYZpXQxUPpro5hjPqVgTs9oJFNwOkjjE
-r8A1ZNBio0f1m/pvVtt8KQDK9WCp1B0vwQAD0pCNMySl/JYFN3TBp3hRVAR0NSgJ
-3VbGtWAnam4PK8BtQ6CKlui8FOYQI9iWTCBM1WxUGo0nYRAnICFfNbQzbJ73tmj2
-0SOMs0+tm43Gp8aEFz1ARKqvkFzCIuf3dfuyg5/cIU5spljvbWeoi7trd9D0Th5/
-AK7SKLD+QHChHQnsA/EXCVCnOg5meSMAH/4yuy249ZfRA4znSH8u
------END CERTIFICATE-----
-''';
+class _TlsFixture {
+  const _TlsFixture({
+    required this.directory,
+    required this.certificatePem,
+    required this.privateKeyPem,
+  });
 
-const _testPrivateKeyPem = '''-----BEGIN PRIVATE KEY-----
-MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDt0f5kEG9I31HQ
-N/ZAyWOH35ngsI1L2M0C63KKeOGCpHLw0XtvDG4x050qQE7wsP9ttFdwN+YXhioH
-dM05a9Mh/4JY6Pojn9BWIMeMfj0GAphWIe07ybYXeszf57dPG3T+vUVwTKxI3QQv
-2GqVFc4n1stFRYPdPppSOHjT84bzfaqsV/Km8BBNEtOx3HN47TNdY1GdD4RIERsl
-JoehYg7sS7+BsYvdNBr5mlszQGbF91b02XfsCm+QrOUTGkzrrozgozjOxCXwtqT5
-c+0Trl7xwioM0yUBA2r0P9J8P69WfZSy8cG/dTUYQjvrgvuSKsEHe3qHZW/1DFfI
-8LM4r1PnAgMBAAECggEAP+emRqg95ySPPPbUtqsHEktM85otlbx/tnGjOT9rRao/
-8qMv2nLKJ5x4BpL6Q2YkdQu5VT/IFfko0REbVns5ZFDe61pLYQhAOOydAo0ng7Zt
-zfNW5rJ4uk12wRHoaZr0sMEWaCtKPlgZmGu8lCwkVgM7YvVfjjOUz1Q6b6XoVQQi
-jbjaBjLeQsgnuU/Q7/8Az5c/xBsWlPj8xKGVrv8IaKIXkjknafUM2o7NLA/hjnTO
-riXhYVd5t7eBm6AreKeFAey8eqRuD45JgLh3iz8ysL++laHy/wB+7KRbczyepOXD
-Dg6hFZjvaKuy2kkS3+P9qUr3trRZRrKnGk+o3zvxeQKBgQD+cvjLYtKYhPOY0rij
-2ar3+VJx9JujbBDBjtMGyH+K6aPGsoaZmcnxo0EMG5cQnXB0tw20HiSqNxtKLzcp
-wpsuZRBHxhki0iAmawLv5tvHKMBu4eiUg5YdPs010Rj7B2g8dB/W4RojxqbscNQY
-k6tdL5xUl7JLoiq4t+Xrr+WDqQKBgQDvRRM++Y65fF1hw+lzEbNNSMeNXg42b8CQ
-+ldlA+6vMIFQzZZVtxHh4VNUvBQ3bg7sm1T93kSfXqdEc9sChyaMSfaznEacZx00
-s8H6D6TPaxBSOnhatF5tHQ31PWPkMV1CRLZENVYWtduoPbWuKSSqSqjU1yOTsHo5
-YAJldMnVDwKBgDLoXc6TXv8U2ofg4QAnNIWYZF5YSitQG6oeISpiQuJQDGxcm4Fv
-u2+U8hayDm9MkItJdHxs63kCvXsCJ087mECYB8HUaIMG91e4YUYOMjqOdLG6kQXl
-rcr8HaJ+yziuKrStpxEeyFQQEqWLjWO9Z7OlKunhz9JCB7odUOrurkTBAoGAfnbF
-AGEI5dLszHKvHgm5+lxAVODkpDMW1cnrjVGxw1jg0KOJFQ7o3bmpwLyT9uQt8TL8
-jh3/qThvMkgF9uUWI8ooIbC0xY/eqO9l1FSWaKcO/lc3K8Hvsr5LlVZ4SLEquI72
-w0BpmyFN0zOipkXKwlMpvy1i+XmqcE7llVhQIVMCgYAiKK0uH0uoKdElC/zj/xLX
-WbhCRRLg5yX5Pthab0p4GBZU/hoc+TB1Eih51gFojWn9TsMG452+7yC4UhVp3s1B
-JWVHle7FdlMRq4gIyjjmbzw0f0mMaHjJ7jOnEnyn6/YqZmCOIc62T4oVwcfKnwXg
-4N7psOh/cFIYjsO53GsDcA==
------END PRIVATE KEY-----
-''';
+  final Directory directory;
+  final String certificatePem;
+  final String privateKeyPem;
+}
+
+/// Creates a fresh self-signed identity for this process. Keeping private key
+/// bytes out of source control prevents a test fixture from being mistaken for
+/// a reusable credential while still exercising the platform TLS parser.
+Future<_TlsFixture> _createEphemeralTlsFixture() async {
+  final directory = await Directory.systemTemp.createTemp(
+    'supermega-coordinator-tls-',
+  );
+  final certificate = File('${directory.path}/certificate.pem');
+  final privateKey = File('${directory.path}/private-key.pem');
+  final result = await Process.run('openssl', <String>[
+    'req',
+    '-x509',
+    '-newkey',
+    'rsa:2048',
+    '-nodes',
+    '-keyout',
+    privateKey.path,
+    '-out',
+    certificate.path,
+    '-subj',
+    '/CN=supermega-test.invalid',
+    '-days',
+    '1',
+  ]);
+  if (result.exitCode != 0) {
+    await directory.delete(recursive: true);
+    throw StateError('openssl_test_identity_failed:${result.exitCode}');
+  }
+  return _TlsFixture(
+    directory: directory,
+    certificatePem: await certificate.readAsString(),
+    privateKeyPem: await privateKey.readAsString(),
+  );
+}
