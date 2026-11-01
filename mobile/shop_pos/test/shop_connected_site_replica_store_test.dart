@@ -582,7 +582,7 @@ void main() {
     final raw = sqlite.sqlite3.open(file.path);
     try {
       for (final definition
-          in shopConnectedCloudProofSchemaDefinitionsV34().entries
+          in shopConnectedCloudProofSchemaDefinitionsV35().entries
               .toList()
               .reversed) {
         final type = shopSchemaObjectTypeForDefinition(definition.value);
@@ -670,7 +670,7 @@ void main() {
     final raw = sqlite.sqlite3.open(file.path);
     try {
       for (final definition
-          in shopConnectedCloudProofSchemaDefinitionsV34().entries
+          in shopConnectedCloudProofSchemaDefinitionsV35().entries
               .toList()
               .reversed) {
         final type = shopSchemaObjectTypeForDefinition(definition.value);
