@@ -644,6 +644,319 @@ void main() {
     }
   });
 
+  test(
+    'repriced cafe product records a durable conflict and replays after reopen',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'cafe-product-conflict-',
+      );
+      final file = File('${root.path}/shop.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await _seed(database);
+        var store = ShopCafeOrderStore(
+          database,
+          clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+          kitchenEntitlement: const _AllowKitchenEntitlement(),
+        );
+        var handler = ShopConnectedSiteDatabaseCommandHandler(
+          database: database,
+          timeAuthority: const _FixedTime(_now),
+          cafeStore: store,
+          connectedSiteEnabled: true,
+        );
+        final reserve = _cafeReserveCommand('repriced-reserve');
+        await handler.handle(_fingerprint, reserve);
+        await database.customUpdate(
+          'UPDATE shop_products SET price_mmk = 1100 WHERE id = ?',
+          variables: [const Variable<String>('adapter-item')],
+        );
+        final put = _cafePutCommand(
+          'repriced-put',
+          reservationBinding: _cafeReservationBinding(reserve),
+        );
+        final first = await handler.handle(_fingerprint, put);
+        expect(first.state, SiteCommandAckState.conflict);
+        expect(first.reason, 'cafe_product_repriced');
+        expect(await store.read('connected-cafe-ticket'), isNull);
+        expect(await database.countSales(), 0);
+        await database.close();
+
+        database = ShopDatabase(NativeDatabase(file));
+        await database.verifyReadyForUse();
+        store = ShopCafeOrderStore(database);
+        handler = ShopConnectedSiteDatabaseCommandHandler(
+          database: database,
+          timeAuthority: const _FixedTime(_now),
+          cafeStore: store,
+          connectedSiteEnabled: true,
+        );
+        final replay = await handler.handle(_fingerprint, put);
+        expect(replay.state, SiteCommandAckState.conflict);
+        expect(replay.reason, 'cafe_product_repriced');
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS total FROM shop_site_conflicts '
+                    "WHERE reason_code = 'cafe_product_repriced'",
+                  )
+                  .getSingle())
+              .read<int>('total'),
+          1,
+        );
+        expect(await store.read('connected-cafe-ticket'), isNull);
+        expect(await database.readReservedStockQuantity('adapter-item'), 1);
+        expect(await database.countSales(), 0);
+      } finally {
+        await database.close();
+        if (await root.exists()) await root.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'archived cafe product records a terminal conflict without projection',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seed(database);
+        final store = ShopCafeOrderStore(
+          database,
+          clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+          kitchenEntitlement: const _AllowKitchenEntitlement(),
+        );
+        final handler = ShopConnectedSiteDatabaseCommandHandler(
+          database: database,
+          timeAuthority: const _FixedTime(_now),
+          cafeStore: store,
+          connectedSiteEnabled: true,
+        );
+        final reserve = _cafeReserveCommand('archived-reserve');
+        await handler.handle(_fingerprint, reserve);
+        await database.customUpdate(
+          'UPDATE shop_products SET archived = 1 WHERE id = ?',
+          variables: [const Variable<String>('adapter-item')],
+        );
+        final put = _cafePutCommand(
+          'archived-put',
+          reservationBinding: _cafeReservationBinding(reserve),
+        );
+        final first = await handler.handle(_fingerprint, put);
+        final replay = await handler.handle(_fingerprint, put);
+        expect(first.state, SiteCommandAckState.conflict);
+        expect(first.reason, 'cafe_product_archived');
+        expect(replay.state, SiteCommandAckState.conflict);
+        expect(replay.reason, first.reason);
+        expect(await store.read('connected-cafe-ticket'), isNull);
+        expect(await database.readReservedStockQuantity('adapter-item'), 1);
+        expect(await database.countSales(), 0);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test('legacy cafe route conflict is quarantined without a partial update', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seed(database);
+      final store = ShopCafeOrderStore(
+        database,
+        clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+        kitchenEntitlement: const _AllowKitchenEntitlement(),
+      );
+      final handler = ShopConnectedSiteDatabaseCommandHandler(
+        database: database,
+        timeAuthority: const _FixedTime(_now),
+        cafeStore: store,
+        connectedSiteEnabled: true,
+      );
+      final reserve = _cafeReserveCommand('route-reserve');
+      final binding = _cafeReservationBinding(reserve);
+      await handler.handle(_fingerprint, reserve);
+      await handler.handle(
+        _fingerprint,
+        _cafePutCommand('route-put', reservationBinding: binding),
+      );
+      final conflictingTicket = applyCafeOrderCommand(
+        null,
+        CafeOrderCommand(
+          id: 'conflicting-route-command',
+          ticketId: 'connected-cafe-ticket',
+          expectedVersion: 0,
+          lines: [
+            CafeOrderLine(
+              id: 'connected-cafe-line',
+              productId: 'adapter-item',
+              productName: 'Adapter item',
+              quantity: 1,
+              baseUnitPriceMmk: 1000,
+              remark: '',
+              modifiers: const [],
+              preparationStation: 'bar',
+            ),
+          ],
+        ),
+        const {},
+      );
+      final conflictingPayload = cafeKitchenDispatchPayload(conflictingTicket, [
+        CafeKitchenDispatchLine(
+          lineId: 'connected-cafe-line',
+          ticketId: cafeKitchenTicketId(
+            'connected-cafe-ticket',
+            'connected-cafe-line',
+          ),
+          sequence: 1,
+          preparationStation: 'bar',
+        ),
+      ], 1);
+      await database.customInsert(
+        'INSERT INTO shop_sync_outbox '
+        '(operation_id, event_type, payload_json, state, created_at_millis) '
+        "VALUES (?, 'shop.cafe_kitchen_dispatch.recorded.v1', ?, 'pending', ?)",
+        variables: [
+          const Variable<String>('conflicting-route-history'),
+          Variable<String>(jsonEncode(conflictingPayload)),
+          const Variable<int>(_now),
+        ],
+      );
+      final update = _cafePutCommand(
+        'route-update',
+        expectedVersion: 2,
+        ticketExpectedVersion: 1,
+        remark: 'safe update',
+        reservationBinding: binding,
+      );
+      final first = await handler.handle(_fingerprint, update);
+      final replay = await handler.handle(_fingerprint, update);
+      expect(first.state, SiteCommandAckState.conflict);
+      expect(first.reason, 'cafe_kitchen_route_conflict');
+      expect(replay.state, SiteCommandAckState.conflict);
+      expect(replay.reason, first.reason);
+      final order = await database
+          .customSelect(
+            'SELECT ticket_version, ticket_json FROM shop_cafe_orders WHERE id = ?',
+            variables: [const Variable<String>('connected-cafe-ticket')],
+          )
+          .getSingle();
+      expect(order.read<int>('ticket_version'), 1);
+      expect(
+        CafeOrderTicket.fromJson(jsonDecode(order.read<String>('ticket_json')))
+            .lines
+            .single
+            .remark,
+        isEmpty,
+      );
+      expect(await database.countSales(), 0);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test(
+    'cafe reservation acknowledgement and basket digests fail closed',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seed(database);
+        final store = ShopCafeOrderStore(
+          database,
+          clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+          kitchenEntitlement: const _AllowKitchenEntitlement(),
+        );
+        final handler = ShopConnectedSiteDatabaseCommandHandler(
+          database: database,
+          timeAuthority: const _FixedTime(_now),
+          cafeStore: store,
+          connectedSiteEnabled: true,
+        );
+        final reserve = _cafeReserveCommand('digest-reserve');
+        await handler.handle(_fingerprint, reserve);
+        final wrongAck = Map<String, Object?>.from(
+          _cafeReservationBinding(reserve),
+        )..['reservationAckDigest'] = _digest('altered-reservation-ack');
+        final ackConflict = await handler.handle(
+          _fingerprint,
+          _cafePutCommand('digest-ack-put', reservationBinding: wrongAck),
+        );
+        expect(ackConflict.state, SiteCommandAckState.conflict);
+        expect(ackConflict.reason, 'reservation_not_acknowledged');
+
+        final wrongBasket = Map<String, Object?>.from(
+          _cafeReservationBinding(reserve),
+        )..['basketDigest'] = _digest('altered-reservation-basket');
+        await expectLater(
+          handler.handle(
+            _fingerprint,
+            _cafePutCommand(
+              'digest-basket-put',
+              reservationBinding: wrongBasket,
+            ),
+          ),
+          throwsStateError,
+        );
+        expect(await _siteCommandCount(database), 2);
+        expect(await store.read('connected-cafe-ticket'), isNull);
+        expect(await database.readReservedStockQuantity('adapter-item'), 1);
+        expect(await database.countSales(), 0);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test(
+    'cafe cancellation cannot substitute a later reservation binding',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await _seed(database, openingStock: 2);
+        final store = ShopCafeOrderStore(
+          database,
+          clock: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+          kitchenEntitlement: const _AllowKitchenEntitlement(),
+        );
+        final handler = ShopConnectedSiteDatabaseCommandHandler(
+          database: database,
+          timeAuthority: const _FixedTime(_now),
+          cafeStore: store,
+          connectedSiteEnabled: true,
+        );
+        final firstReserve = _cafeReserveCommand('cancel-first-reserve');
+        await handler.handle(_fingerprint, firstReserve);
+        await handler.handle(
+          _fingerprint,
+          _cafePutCommand(
+            'cancel-bound-put',
+            reservationBinding: _cafeReservationBinding(firstReserve),
+          ),
+        );
+        final laterReserve = _cafeReserveCommand(
+          'cancel-later-reserve',
+          expectedVersion: 2,
+        );
+        expect(
+          (await handler.handle(_fingerprint, laterReserve)).state,
+          SiteCommandAckState.accepted,
+        );
+        final cancel = _cafeCancelCommand(
+          'cancel-substituted-binding',
+          expectedVersion: 3,
+          expectedStateRevision: 0,
+          reservationBinding: _cafeReservationBinding(laterReserve),
+        );
+        final conflict = await handler.handle(_fingerprint, cancel);
+        expect(conflict.state, SiteCommandAckState.conflict);
+        expect(conflict.reason, 'reservation_order_binding_mismatch');
+        expect((await store.read('connected-cafe-ticket'))!.state, 'open');
+        expect(await database.readReservedStockQuantity('adapter-item'), 2);
+        expect(await database.countSales(), 0);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
   test('accepted put authority cannot authorize another cafe action', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
@@ -1174,12 +1487,13 @@ Future<void> _seed(
   ShopDatabase database, {
   String? clientFingerprint,
   bool includeKitchenCapability = true,
+  int openingStock = 1,
 }) async {
   await database.addProduct(
     id: 'adapter-item',
     name: 'Adapter item',
     priceMmk: 1000,
-    openingStock: 1,
+    openingStock: openingStock,
   );
   await database.customInsert(
     'INSERT INTO shop_site_devices '
@@ -1433,6 +1747,7 @@ SiteCommandV1 _cafeCancelCommand(
 SiteCommandV1 _cafeReserveCommand(
   String id, {
   String subjectId = 'connected-cafe-ticket',
+  int expectedVersion = 0,
 }) {
   final reservation = ConnectedStockReservationV1.held(
     reservationId: 'reservation:$id',
@@ -1461,7 +1776,7 @@ SiteCommandV1 _cafeReserveCommand(
     deviceId: _device,
     aggregateType: 'cafeOrder',
     aggregateId: subjectId,
-    expectedVersion: 0,
+    expectedVersion: expectedVersion,
     commandType: shopCafeStockReserveCommandType,
     payload: payload,
     payloadDigest: connectedSiteSha256(payload),

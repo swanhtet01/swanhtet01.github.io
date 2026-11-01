@@ -258,14 +258,21 @@ class ShopCafeOrderStore {
         rethrow;
       }
     }
-    await _requireCurrentProducts(ticket);
+    await _requireCurrentProducts(ticket, connectedProjection: !authorizeLocal);
     final now = _now();
     final json = jsonEncode(ticket.toJson());
     final total = _ticketTotal(ticket);
     if (prior != null) {
-      await _ensureLegacyDispatchBoundary(prior.ticket, now);
+      await _ensureLegacyDispatchBoundary(
+        prior.ticket,
+        now,
+        connectedProjection: !authorizeLocal,
+      );
     }
-    final dispatch = await _nextKitchenDispatchLines(ticket);
+    final dispatch = await _nextKitchenDispatchLines(
+      ticket,
+      connectedProjection: !authorizeLocal,
+    );
     if (prior == null) {
       await database.customInsert(
         'INSERT INTO shop_cafe_orders '
@@ -413,6 +420,7 @@ class ShopCafeOrderStore {
       order.ticket,
       now,
       allowUntrackedLegacyCompletion: true,
+      connectedProjection: connectedContext != null,
     );
     await _insertStateEvent(
       operationId: cleanOperationId,
@@ -576,6 +584,7 @@ class ShopCafeOrderStore {
       order.ticket,
       now,
       allowUntrackedLegacyCompletion: true,
+      connectedProjection: connectedContext != null,
     );
     await database.customInsert(
       'INSERT INTO shop_cafe_order_cancellations '
@@ -1600,7 +1609,10 @@ class ShopCafeOrderStore {
     return _receipt(cleanOperationId);
   });
 
-  Future<void> _requireCurrentProducts(CafeOrderTicket ticket) async {
+  Future<void> _requireCurrentProducts(
+    CafeOrderTicket ticket, {
+    bool connectedProjection = false,
+  }) async {
     for (final line in ticket.lines) {
       final product = await database
           .customSelect(
@@ -1608,10 +1620,26 @@ class ShopCafeOrderStore {
             variables: [Variable<String>(line.productId)],
           )
           .getSingleOrNull();
-      if (product == null ||
-          product.read<bool>('archived') ||
-          product.read<int>('price_mmk') != line.baseUnitPriceMmk) {
-        throw StateError('Review the café product and price again.');
+      if (product == null) {
+        _throwProjectionConflict(
+          connectedProjection: connectedProjection,
+          code: 'cafe_product_missing',
+          message: 'Review the café product and price again.',
+        );
+      }
+      if (product.read<bool>('archived')) {
+        _throwProjectionConflict(
+          connectedProjection: connectedProjection,
+          code: 'cafe_product_archived',
+          message: 'Review the café product and price again.',
+        );
+      }
+      if (product.read<int>('price_mmk') != line.baseUnitPriceMmk) {
+        _throwProjectionConflict(
+          connectedProjection: connectedProjection,
+          code: 'cafe_product_repriced',
+          message: 'Review the café product and price again.',
+        );
       }
     }
   }
@@ -1738,7 +1766,10 @@ class ShopCafeOrderStore {
   }
 
   Future<({List<CafeKitchenDispatchLine> lines, int historyStartVersion})>
-  _nextKitchenDispatchLines(CafeOrderTicket ticket) async {
+  _nextKitchenDispatchLines(
+    CafeOrderTicket ticket, {
+    bool connectedProjection = false,
+  }) async {
     final rows = await database
         .customSelect(
           "SELECT payload_json FROM shop_sync_outbox WHERE event_type = "
@@ -1755,7 +1786,11 @@ class ShopCafeOrderStore {
       if (dispatch.ticket.id != ticket.id) continue;
       historyStartVersion ??= dispatch.historyStartVersion;
       if (historyStartVersion != dispatch.historyStartVersion) {
-        throw StateError('The café kitchen dispatch history is inconsistent.');
+        _throwProjectionConflict(
+          connectedProjection: connectedProjection,
+          code: 'cafe_kitchen_dispatch_history_conflict',
+          message: 'The café kitchen dispatch history is inconsistent.',
+        );
       }
       for (final line in dispatch.lines) {
         final existing = prior[line.lineId];
@@ -1763,7 +1798,11 @@ class ShopCafeOrderStore {
             (existing.ticketId != line.ticketId ||
                 existing.sequence != line.sequence ||
                 existing.preparationStation != line.preparationStation)) {
-          throw StateError('A café kitchen route changed after dispatch.');
+          _throwProjectionConflict(
+            connectedProjection: connectedProjection,
+            code: 'cafe_kitchen_route_conflict',
+            message: 'A café kitchen route changed after dispatch.',
+          );
         }
         prior[line.lineId] = line;
         if (line.sequence > maxSequence) maxSequence = line.sequence;
@@ -1775,7 +1814,11 @@ class ShopCafeOrderStore {
       final existing = prior[line.id];
       if (existing != null &&
           existing.preparationStation != line.preparationStation) {
-        throw StateError('A café kitchen route changed after dispatch.');
+        _throwProjectionConflict(
+          connectedProjection: connectedProjection,
+          code: 'cafe_kitchen_route_conflict',
+          message: 'A café kitchen route changed after dispatch.',
+        );
       }
       result.add(
         existing ??
@@ -1794,6 +1837,7 @@ class ShopCafeOrderStore {
     CafeOrderTicket prior,
     int now, {
     bool allowUntrackedLegacyCompletion = false,
+    bool connectedProjection = false,
   }) async {
     final existing = await database
         .customSelect(
@@ -1807,13 +1851,17 @@ class ShopCafeOrderStore {
           !prior.lines.any((line) => line.hasPreparationRoute)) {
         return;
       }
-      throw StateError(
-        'This legacy café order cannot be routed. Complete it locally or start a new order.',
+      _throwProjectionConflict(
+        connectedProjection: connectedProjection,
+        code: 'cafe_legacy_dispatch_conflict',
+        message: 'This legacy café order cannot be routed. Complete it locally or start a new order.',
       );
     }
     if (prior.lines.any((line) => line.hasPreparationRoute)) {
-      throw StateError(
-        'This legacy café order cannot be routed. Complete it locally or start a new order.',
+      _throwProjectionConflict(
+        connectedProjection: connectedProjection,
+        code: 'cafe_legacy_dispatch_conflict',
+        message: 'This legacy café order cannot be routed. Complete it locally or start a new order.',
       );
     }
     await database.customInsert(
@@ -1828,6 +1876,17 @@ class ShopCafeOrderStore {
         Variable<int>(now),
       ],
     );
+  }
+
+  Never _throwProjectionConflict({
+    required bool connectedProjection,
+    required String code,
+    required String message,
+  }) {
+    if (connectedProjection) {
+      throw ShopCafeConnectedConflictException(code);
+    }
+    throw StateError(message);
   }
 
   Future<StoredCafeOrder> _attachKitchenDispatch(
