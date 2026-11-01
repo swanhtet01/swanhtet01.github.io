@@ -69,6 +69,31 @@
   decisions. No workflow or PostgreSQL process has run from this candidate,
   and path allowlisting alone is not proof that future generated contents are
   sanitized.
+- Swan subsequently authorized publication of that exact one-file candidate.
+  Draft PR [#753](https://github.com/swanhtet01/swanhtet01.github.io/pull/753)
+  is open and unmerged at head `6e3d1511`, base `5479c5d1`, with one changed
+  file and 94 additions. Automatic App run `41358488806`, Kernel run
+  `41358498488`, GitGuardian and platform audit are **PASS**. Dependency run
+  `41358498515` is **FAIL / BLOCKED** on pre-existing default-branch findings:
+  app minimatch plus Vite/source-map/Zod advisories, kernel minimatch, and
+  Python OpenTelemetry. The PR remains draft and merge-blocked; the manual
+  workflow was not dispatched and no PostgreSQL process ran.
+- Separate local default-branch dependency candidate
+  `92733fbafd3827fb83476fae8ab270e1f16bb04d`, tree
+  `5f5bf5bd3245ff5e77efeeb3f871934d54c51f14`, contains only five manifest and
+  lock files. It replays previously reviewed exact fixes for Vite `7.3.7`,
+  source-map-js `1.2.2`, Zod `4.6.7`, and the coherent OpenTelemetry
+  `1.45.1`/instrumentation `0.66b1` family. JSON/TOML parsing, offline npm
+  package-lock dry-run, `uv lock --check --offline`, TypeScript and lint are
+  **PASS**; independent review **ACCEPTS** the bounded candidate. A clean
+  offline npm install succeeded. The production build transformed and emitted
+  assets but correctly failed its release seal because the isolated checkout
+  lacked generated `dist/sw.js`; the required release-metadata precursor was
+  not run. Clean Python environment installation is **BLOCKED / NOT RUN**
+  because an unrelated wheel is absent from the offline cache. Exact-head PR
+  #752 evidence already showed these four advisories clear, but minimatch
+  remains deliberately unchanged and **BLOCKED**. This dependency candidate
+  is unpublished and is not part of PR #753.
 - Release remains **BLOCKED** on a genuine authenticated PostgreSQL 17 Windows
   rehearsal and fresh receipt, a compatible dependency-security resolution,
   both GitGuardian findings, production signing, exact installed
