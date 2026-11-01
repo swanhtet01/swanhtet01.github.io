@@ -94,6 +94,18 @@
   #752 evidence already showed these four advisories clear, but minimatch
   remains deliberately unchanged and **BLOCKED**. This dependency candidate
   is unpublished and is not part of PR #753.
+- A fresh security-boundary investigation confirms no safe minimatch repair can
+  be built from existing trusted bytes. Modern ESLint/config-array and
+  typescript-estree consumers require the v10 class/named APIs, while
+  `eslint-plugin-jsx-a11y@6.10.2` has two callable-default v3 call sites that a
+  blanket v11 override breaks. Cached minimatch `11.0.1` is a full matcher
+  rewrite and requires `@isaacs/nonrecursive-glob-match@^1.0.1`, whose source,
+  tests and provenance bytes are unavailable locally. A v10/v3-labelled
+  backport would remain scanner-visible and cannot be called fixed. The gate
+  therefore remains **BLOCKED** pending a compatible upstream jsx-a11y release
+  or a separately authorized/provenance-reviewed v11 dependency plus narrow
+  jsx-a11y adaptation and cross-platform matcher regression suite. No override,
+  suppression, downgrade, exception or source patch was made.
 - Release remains **BLOCKED** on a genuine authenticated PostgreSQL 17 Windows
   rehearsal and fresh receipt, a compatible dependency-security resolution,
   both GitGuardian findings, production signing, exact installed
