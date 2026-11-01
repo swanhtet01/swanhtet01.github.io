@@ -200,12 +200,33 @@ val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
             "sticky_when_ready",
             "ACTION_START",
             "ACTION_STOP",
+            "coordinatorIdentityFailure",
+            "IdentityRecord.fromJson",
+            "record.isValid()",
+            "sha256(certificateBytes) != record.certificateChainSha256",
+            "sha256(leaf.publicKey.encoded) != record.tlsFingerprint",
+            "Signature.getInstance(\"SHA256withECDSA\")",
+            "identity_custody_invalid",
+            "notificationPermissionStatus",
+            "requestNotificationPermission",
+            "requestPermissions(",
+            "arrayOf(Manifest.permission.POST_NOTIFICATIONS)",
+            "request_pending",
+            "supermega.connected-coordinator-notification-permission.v1",
         )
         check(coordinatorRequired.all(text::contains)) {
             "connected_coordinator_service_contract_missing"
         }
         check(!text.contains("ServerSocket") && !text.contains("DatagramSocket")) {
             "connected_coordinator_listener_forbidden"
+        }
+        check(!text.contains("hasCommittedIdentity")) {
+            "connected_coordinator_shallow_identity_check_forbidden"
+        }
+        check(text.contains(
+            "ConnectedPlatformSecurityAndroid.coordinatorIdentityFailure(context, alias)",
+        )) {
+            "connected_coordinator_custody_readiness_binding_missing"
         }
         check(manifestText.contains("android:foregroundServiceType=\"connectedDevice\"") &&
             manifestText.contains("android:exported=\"false\"") &&

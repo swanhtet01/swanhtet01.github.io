@@ -40,7 +40,7 @@ class MainActivity : FlutterActivity() {
                 flutterEngine.dartExecutor.binaryMessenger,
             ).register()
             ConnectedCoordinatorServiceChannel(
-                applicationContext,
+                this,
                 flutterEngine.dartExecutor.binaryMessenger,
             ).register()
         }
@@ -202,6 +202,8 @@ internal class ConnectedPlatformSecurityAndroid(
             nonceBase64Url = base64Url(nonce),
             encryptedTlsPrivate = base64(sealed.ciphertext),
             encryptedTlsIv = base64(sealed.iv),
+            issuerKeyId = "",
+            certificateChainSha256 = "",
         )
         if (!writeRecord(record)) {
             deleteKeyMaterial(alias)
@@ -342,8 +344,10 @@ internal class ConnectedPlatformSecurityAndroid(
         val committed = record.copy(
             state = STATE_COMMITTED,
             certificateChainPem = base64(certificateBytes),
+            certificateChainSha256 = bundlePayload["certificateChainSha256"] as String,
             certificateFingerprint = bundlePayload["tlsCertificateFingerprintSha256"] as String,
             bundleDigest = bundleDigest,
+            issuerKeyId = issuerKeyId,
         )
         if (!writeRecord(committed)) throw PlatformSecurityError(OPERATION_FAILED)
         return completion(committed, replayed = false)
@@ -606,72 +610,6 @@ internal class ConnectedPlatformSecurityAndroid(
         if (args[key] != expected) throw PlatformSecurityError(OPERATION_FAILED)
     }
 
-    private fun rawEd25519PublicKey(encoded: ByteArray): ByteArray {
-        val prefix = byteArrayOf(0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00)
-        if (encoded.size != prefix.size + 32 || !encoded.copyOfRange(0, prefix.size).contentEquals(prefix)) {
-            throw PlatformSecurityError(OPERATION_FAILED)
-        }
-        return encoded.copyOfRange(prefix.size, encoded.size)
-    }
-
-    private fun parseCertificateChain(bytes: ByteArray): List<X509Certificate> {
-        val certificates = CertificateFactory.getInstance("X.509")
-            .generateCertificates(ByteArrayInputStream(bytes))
-            .mapNotNull { it as? X509Certificate }
-        if (certificates.size < 2) {
-            throw PlatformSecurityError("platform_certificate_chain_invalid")
-        }
-        return certificates
-    }
-
-    private fun validateCertificateChain(
-        certificates: List<X509Certificate>,
-        currentTime: Instant,
-        expectedRootDerSha256: String,
-    ) {
-        if (!DIGEST.matches(expectedRootDerSha256)) {
-            throw PlatformSecurityError(UNAVAILABLE)
-        }
-        val validationDate = Date.from(currentTime)
-        try {
-            certificates.forEach { it.checkValidity(validationDate) }
-            val certificateDigests = certificates.map { sha256(it.encoded) }
-            if (certificateDigests.toSet().size != certificateDigests.size) {
-                throw PlatformSecurityError("platform_certificate_chain_invalid")
-            }
-            if (certificates.first().basicConstraints >= 0) {
-                throw PlatformSecurityError("platform_certificate_chain_invalid")
-            }
-            for (index in 0 until certificates.lastIndex) {
-                val certificate = certificates[index]
-                val issuer = certificates[index + 1]
-                if (certificate.issuerX500Principal != issuer.subjectX500Principal ||
-                    issuer.basicConstraints < index || !canSignCertificates(issuer)) {
-                    throw PlatformSecurityError("platform_certificate_chain_invalid")
-                }
-                certificate.verify(issuer.publicKey)
-            }
-            val root = certificates.last()
-            if (root.subjectX500Principal != root.issuerX500Principal ||
-                root.basicConstraints < 0 || !canSignCertificates(root)) {
-                throw PlatformSecurityError("platform_certificate_chain_invalid")
-            }
-            root.verify(root.publicKey)
-            if (sha256(root.encoded) != expectedRootDerSha256) {
-                throw PlatformSecurityError("platform_certificate_root_mismatch")
-            }
-        } catch (error: PlatformSecurityError) {
-            throw error
-        } catch (_: Throwable) {
-            throw PlatformSecurityError("platform_certificate_chain_invalid")
-        }
-    }
-
-    private fun canSignCertificates(certificate: X509Certificate): Boolean {
-        val usage = certificate.keyUsage ?: return false
-        return usage.size > KEY_CERT_SIGN_INDEX && usage[KEY_CERT_SIGN_INDEX]
-    }
-
     private fun digestCanonical(value: Map<String, Any>): String = sha256(
         canonicalJson(value).toByteArray(StandardCharsets.UTF_8),
     )
@@ -690,22 +628,11 @@ internal class ConnectedPlatformSecurityAndroid(
         else -> throw PlatformSecurityError(OPERATION_FAILED)
     }
 
-    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
-        .digest(bytes)
-        .joinToString("") { "%02x".format(it) }
-
     private fun encrypt(key: SecretKey, plaintext: ByteArray, aad: ByteArray): SealedBytes =
         Cipher.getInstance("AES/GCM/NoPadding").run {
             init(Cipher.ENCRYPT_MODE, key)
             updateAAD(aad)
             SealedBytes(iv.copyOf(), doFinal(plaintext))
-        }
-
-    private fun decrypt(key: SecretKey, ciphertext: ByteArray, iv: ByteArray, aad: ByteArray): ByteArray =
-        Cipher.getInstance("AES/GCM/NoPadding").run {
-            init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
-            updateAAD(aad)
-            doFinal(ciphertext)
         }
 
     private fun randomToken(size: Int) = base64Url(randomBytes(size))
@@ -795,7 +722,9 @@ internal class ConnectedPlatformSecurityAndroid(
         val nonceBase64Url: String,
         val encryptedTlsPrivate: String,
         val encryptedTlsIv: String,
+        val issuerKeyId: String,
         val certificateChainPem: String = "",
+        val certificateChainSha256: String = "",
         val certificateFingerprint: String = "",
         val bundleDigest: String = "",
         val cleanupEvidenceJson: String = "",
@@ -820,7 +749,9 @@ internal class ConnectedPlatformSecurityAndroid(
                 when (state) {
                     STATE_PENDING -> encryptedTlsPrivate.isNotEmpty() && encryptedTlsIv.isNotEmpty()
                     STATE_COMMITTED -> certificateChainPem.isNotEmpty() &&
-                        DIGEST.matches(certificateFingerprint) && DIGEST.matches(bundleDigest)
+                        DIGEST.matches(certificateChainSha256) &&
+                        DIGEST.matches(certificateFingerprint) && DIGEST.matches(bundleDigest) &&
+                        TOKEN.matches(issuerKeyId)
                     else -> encryptedTlsPrivate.isEmpty() && encryptedTlsIv.isEmpty() &&
                         cleanupEvidenceJson.isNotEmpty()
                 }
@@ -849,7 +780,9 @@ internal class ConnectedPlatformSecurityAndroid(
             put("nonceBase64Url", nonceBase64Url)
             put("encryptedTlsPrivate", encryptedTlsPrivate)
             put("encryptedTlsIv", encryptedTlsIv)
+            put("issuerKeyId", issuerKeyId)
             put("certificateChainPem", certificateChainPem)
+            put("certificateChainSha256", certificateChainSha256)
             put("certificateFingerprint", certificateFingerprint)
             put("bundleDigest", bundleDigest)
             put("cleanupEvidenceJson", cleanupEvidenceJson)
@@ -867,7 +800,8 @@ internal class ConnectedPlatformSecurityAndroid(
                     "pendingExpiresAt", "workspaceId", "siteId", "deviceId", "sessionGeneration",
                     "signingKeyId", "signingPublicKey", "signingFingerprint", "tlsPublicSpki",
                     "tlsFingerprint", "tlsKeyId", "sealedTlsMaterialId", "nonceBase64Url", "encryptedTlsPrivate",
-                    "encryptedTlsIv", "certificateChainPem", "certificateFingerprint", "bundleDigest",
+                    "encryptedTlsIv", "issuerKeyId", "certificateChainPem", "certificateChainSha256",
+                    "certificateFingerprint", "bundleDigest",
                     "cleanupEvidenceJson",
                 )
                 if (json.keys().asSequence().toSet() != expected) {
@@ -893,7 +827,9 @@ internal class ConnectedPlatformSecurityAndroid(
                     nonceBase64Url = json.getString("nonceBase64Url"),
                     encryptedTlsPrivate = json.optString("encryptedTlsPrivate"),
                     encryptedTlsIv = json.optString("encryptedTlsIv"),
+                    issuerKeyId = json.optString("issuerKeyId"),
                     certificateChainPem = json.optString("certificateChainPem"),
+                    certificateChainSha256 = json.optString("certificateChainSha256"),
                     certificateFingerprint = json.optString("certificateFingerprint"),
                     bundleDigest = json.optString("bundleDigest"),
                     cleanupEvidenceJson = json.optString("cleanupEvidenceJson"),
@@ -908,29 +844,219 @@ internal class ConnectedPlatformSecurityAndroid(
         internal fun hasApprovedIssuerTrust(): Boolean =
             APPROVED_ISSUERS.isNotEmpty()
 
-        internal fun hasCommittedIdentity(context: Context, alias: String): Boolean {
+        /**
+         * Revalidates the complete persisted custody boundary before a
+         * coordinator lifecycle may report ready. A null result is the only
+         * success value; all malformed, stale, missing, or substituted state
+         * fails closed without repairing it.
+         */
+        internal fun coordinatorIdentityFailure(
+            context: Context,
+            alias: String,
+            currentTime: Instant = Instant.now().truncatedTo(ChronoUnit.MILLIS),
+        ): String? {
             if (!TOKEN.matches(alias) || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                return false
+                return "identity_unavailable"
             }
             return try {
                 val preferences = context.applicationContext.getSharedPreferences(
                     PREFERENCES,
                     Context.MODE_PRIVATE,
                 )
-                val raw = preferences.getString("$RECORD_PREFIX$alias", null) ?: return false
-                val record = JSONObject(raw)
-                if (record.getString("schema") != RECORD_SCHEMA ||
-                    record.getString("state") != STATE_COMMITTED) {
-                    return false
+                val raw = preferences.getString("$RECORD_PREFIX$alias", null)
+                    ?: return "identity_unavailable"
+                val record = IdentityRecord.fromJson(JSONObject(raw))
+                if (record.alias != alias || record.state != STATE_COMMITTED || !record.isValid()) {
+                    return "identity_custody_invalid"
                 }
-                KeyStore.getInstance(ANDROID_KEYSTORE).run {
+                val trust = APPROVED_ISSUERS[record.issuerKeyId]
+                    ?: return "issuer_trust_unavailable"
+                val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply {
                     load(null)
-                    containsAlias("supermega-connected-signing-$alias") &&
-                        containsAlias("supermega-connected-seal-$alias")
                 }
+                val signingCertificate = keyStore.getCertificate(signingAliasFor(alias))
+                    ?: return "identity_custody_invalid"
+                val signingPublic = rawEd25519PublicKey(signingCertificate.publicKey.encoded)
+                try {
+                    if (base64(signingPublic) != record.signingPublicKey ||
+                        sha256(signingPublic) != record.signingFingerprint) {
+                        return "identity_custody_invalid"
+                    }
+                } finally {
+                    signingPublic.fill(0)
+                }
+
+                val certificateBytes = decodeBase64(record.certificateChainPem)
+                try {
+                    if (sha256(certificateBytes) != record.certificateChainSha256) {
+                        return "identity_custody_invalid"
+                    }
+                    val certificates = parseCertificateChain(certificateBytes)
+                    validateCertificateChain(
+                        certificates,
+                        currentTime,
+                        trust.rootCertificateDerSha256,
+                    )
+                    val leaf = certificates.first()
+                    if (sha256(leaf.encoded) != record.certificateFingerprint ||
+                        sha256(leaf.publicKey.encoded) != record.tlsFingerprint) {
+                        return "identity_custody_invalid"
+                    }
+                } finally {
+                    certificateBytes.fill(0)
+                }
+                val tlsSpki = decodeBase64(record.tlsPublicSpki)
+                try {
+                    if (sha256(tlsSpki) != record.tlsFingerprint) {
+                        return "identity_custody_invalid"
+                    }
+                } finally {
+                    tlsSpki.fill(0)
+                }
+
+                val aesKey = keyStore.getKey(aesAliasFor(alias), null) as? SecretKey
+                    ?: return "identity_custody_invalid"
+                val ciphertext = decodeBase64(record.encryptedTlsPrivate)
+                val iv = decodeBase64(record.encryptedTlsIv)
+                val aad = alias.toByteArray(StandardCharsets.UTF_8)
+                val privateBytes = try {
+                    decrypt(aesKey, ciphertext, iv, aad)
+                } finally {
+                    ciphertext.fill(0)
+                    iv.fill(0)
+                    aad.fill(0)
+                }
+                try {
+                    val privateKey = KeyFactory.getInstance("EC")
+                        .generatePrivate(PKCS8EncodedKeySpec(privateBytes))
+                    val certificateBytesAgain = decodeBase64(record.certificateChainPem)
+                    try {
+                        val leaf = parseCertificateChain(certificateBytesAgain).first()
+                        val challenge = MessageDigest.getInstance("SHA-256").digest(
+                            "supermega.coordinator-custody.v1:$alias:${record.requestDigest}"
+                                .toByteArray(StandardCharsets.UTF_8),
+                        )
+                        try {
+                            val proof = Signature.getInstance("SHA256withECDSA").run {
+                                initSign(privateKey)
+                                update(
+                                    challenge,
+                                )
+                                sign()
+                            }
+                            try {
+                                val verified = Signature.getInstance("SHA256withECDSA").run {
+                                    initVerify(leaf.publicKey)
+                                    update(challenge)
+                                    verify(proof)
+                                }
+                                if (!verified) return "identity_custody_invalid"
+                            } finally {
+                                proof.fill(0)
+                            }
+                        } finally {
+                            challenge.fill(0)
+                        }
+                    } finally {
+                        certificateBytesAgain.fill(0)
+                    }
+                } finally {
+                    privateBytes.fill(0)
+                }
+                null
             } catch (_: Throwable) {
-                false
+                "identity_custody_invalid"
             }
+        }
+
+        private fun signingAliasFor(alias: String) = "supermega-connected-signing-$alias"
+        private fun aesAliasFor(alias: String) = "supermega-connected-seal-$alias"
+
+        private fun rawEd25519PublicKey(encoded: ByteArray): ByteArray {
+            val prefix = byteArrayOf(
+                0x30, 0x2a, 0x30, 0x05, 0x06, 0x03,
+                0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+            )
+            if (encoded.size != prefix.size + 32 ||
+                !encoded.copyOfRange(0, prefix.size).contentEquals(prefix)) {
+                throw PlatformSecurityError(OPERATION_FAILED)
+            }
+            return encoded.copyOfRange(prefix.size, encoded.size)
+        }
+
+        private fun parseCertificateChain(bytes: ByteArray): List<X509Certificate> {
+            val certificates = CertificateFactory.getInstance("X.509")
+                .generateCertificates(ByteArrayInputStream(bytes))
+                .mapNotNull { it as? X509Certificate }
+            if (certificates.size < 2) {
+                throw PlatformSecurityError("platform_certificate_chain_invalid")
+            }
+            return certificates
+        }
+
+        private fun validateCertificateChain(
+            certificates: List<X509Certificate>,
+            currentTime: Instant,
+            expectedRootDerSha256: String,
+        ) {
+            if (!DIGEST.matches(expectedRootDerSha256)) throw PlatformSecurityError(UNAVAILABLE)
+            val validationDate = Date.from(currentTime)
+            try {
+                certificates.forEach { it.checkValidity(validationDate) }
+                val certificateDigests = certificates.map { sha256(it.encoded) }
+                if (certificateDigests.toSet().size != certificateDigests.size ||
+                    certificates.first().basicConstraints >= 0) {
+                    throw PlatformSecurityError("platform_certificate_chain_invalid")
+                }
+                for (index in 0 until certificates.lastIndex) {
+                    val certificate = certificates[index]
+                    val issuer = certificates[index + 1]
+                    if (certificate.issuerX500Principal != issuer.subjectX500Principal ||
+                        issuer.basicConstraints < index || !canSignCertificates(issuer)) {
+                        throw PlatformSecurityError("platform_certificate_chain_invalid")
+                    }
+                    certificate.verify(issuer.publicKey)
+                }
+                val root = certificates.last()
+                if (root.subjectX500Principal != root.issuerX500Principal ||
+                    root.basicConstraints < 0 || !canSignCertificates(root)) {
+                    throw PlatformSecurityError("platform_certificate_chain_invalid")
+                }
+                root.verify(root.publicKey)
+                if (sha256(root.encoded) != expectedRootDerSha256) {
+                    throw PlatformSecurityError("platform_certificate_root_mismatch")
+                }
+            } catch (error: PlatformSecurityError) {
+                throw error
+            } catch (_: Throwable) {
+                throw PlatformSecurityError("platform_certificate_chain_invalid")
+            }
+        }
+
+        private fun canSignCertificates(certificate: X509Certificate): Boolean {
+            val usage = certificate.keyUsage ?: return false
+            return usage.size > KEY_CERT_SIGN_INDEX && usage[KEY_CERT_SIGN_INDEX]
+        }
+
+        private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+
+        private fun base64(bytes: ByteArray): String =
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+        private fun decodeBase64(value: String): ByteArray =
+            Base64.decode(value, Base64.NO_WRAP)
+
+        private fun decrypt(
+            key: SecretKey,
+            ciphertext: ByteArray,
+            iv: ByteArray,
+            aad: ByteArray,
+        ): ByteArray = Cipher.getInstance("AES/GCM/NoPadding").run {
+            init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+            updateAAD(aad)
+            doFinal(ciphertext)
         }
 
         const val CHANNEL = "dev.supermega.supermega_shop/connected_security_v1"

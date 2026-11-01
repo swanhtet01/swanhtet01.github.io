@@ -167,9 +167,11 @@ internal class ConnectedCoordinatorForegroundService : Service() {
             if (!ConnectedPlatformSecurityAndroid.hasApprovedIssuerTrust()) {
                 return Readiness(false, "issuer_trust_unavailable")
             }
-            if (alias == null || !ALIAS.matches(alias) ||
-                !ConnectedPlatformSecurityAndroid.hasCommittedIdentity(context, alias)) {
+            if (alias == null || !ALIAS.matches(alias)) {
                 return Readiness(false, "identity_unavailable")
+            }
+            ConnectedPlatformSecurityAndroid.coordinatorIdentityFailure(context, alias)?.let {
+                return Readiness(false, it)
             }
             return Readiness(true, "ready")
         }
@@ -186,9 +188,10 @@ internal class ConnectedCoordinatorForegroundService : Service() {
 }
 
 internal class ConnectedCoordinatorServiceChannel(
-    private val context: Context,
+    private val activity: MainActivity,
     messenger: BinaryMessenger,
 ) {
+    private val context = activity.applicationContext
     private val channel = MethodChannel(messenger, ConnectedCoordinatorForegroundService.CHANNEL)
 
     fun register() = channel.setMethodCallHandler(::handle)
@@ -200,32 +203,75 @@ internal class ConnectedCoordinatorServiceChannel(
                 result.error("platform_coordinator_request_invalid", null, null)
                 return
             }
-            val status = when (call.method) {
+            val response: Any = when (call.method) {
                 "start" -> {
                     if (args.keys != setOf("schema", "coordinatorAlias")) {
                         throw IllegalArgumentException()
                     }
                     val alias = args["coordinatorAlias"] as? String
                         ?: throw IllegalArgumentException()
-                    ConnectedCoordinatorForegroundService.requestStart(context, alias)
+                    ConnectedCoordinatorForegroundService.requestStart(context, alias).toMap()
                 }
                 "stop" -> {
                     if (args.keys != setOf("schema")) throw IllegalArgumentException()
-                    ConnectedCoordinatorForegroundService.requestStop(context)
+                    ConnectedCoordinatorForegroundService.requestStop(context).toMap()
                 }
                 "status" -> {
                     if (args.keys != setOf("schema")) throw IllegalArgumentException()
-                    ConnectedCoordinatorForegroundService.currentStatus(context)
+                    ConnectedCoordinatorForegroundService.currentStatus(context).toMap()
+                }
+                "notificationPermissionStatus" -> {
+                    if (args.keys != setOf("schema")) throw IllegalArgumentException()
+                    notificationPermissionStatus(requestPending = false)
+                }
+                "requestNotificationPermission" -> {
+                    if (args.keys != setOf("schema")) throw IllegalArgumentException()
+                    requestNotificationPermission()
                 }
                 else -> {
                     result.notImplemented()
                     return
                 }
             }
-            result.success(status.toMap())
+            result.success(response)
         } catch (_: Throwable) {
             result.error("platform_coordinator_request_invalid", null, null)
         }
+    }
+
+    private fun requestNotificationPermission(): Map<String, Any?> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED) {
+            return notificationPermissionStatus(requestPending = false)
+        }
+        activity.requestPermissions(
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            NOTIFICATION_PERMISSION_REQUEST_CODE,
+        )
+        // Android owns the prompt and result. The caller must poll status (or
+        // retry start) after the Activity callback; this path never assumes a
+        // grant merely because a prompt was requested.
+        return notificationPermissionStatus(requestPending = true)
+    }
+
+    private fun notificationPermissionStatus(requestPending: Boolean): Map<String, Any?> {
+        val required = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        val granted = !required || activity.checkSelfPermission(
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        return mapOf(
+            "schema" to NOTIFICATION_PERMISSION_SCHEMA,
+            "required" to required,
+            "state" to when {
+                granted -> "granted"
+                requestPending -> "request_pending"
+                else -> "not_granted"
+            },
+            "canRequest" to (required && !granted),
+            "updatedAt" to Instant.now()
+                .truncatedTo(java.time.temporal.ChronoUnit.MILLIS).toString(),
+        )
     }
 
     private fun arguments(call: MethodCall): Map<String, Any?> {
@@ -233,6 +279,12 @@ internal class ConnectedCoordinatorServiceChannel(
         if (raw.keys.any { it !is String }) throw IllegalArgumentException()
         @Suppress("UNCHECKED_CAST")
         return raw as Map<String, Any?>
+    }
+
+    companion object {
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 41018
+        private const val NOTIFICATION_PERMISSION_SCHEMA =
+            "supermega.connected-coordinator-notification-permission.v1"
     }
 }
 
