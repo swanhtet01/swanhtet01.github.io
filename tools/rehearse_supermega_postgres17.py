@@ -81,6 +81,13 @@ CURRENT_MIGRATIONS = (
     *V13_MIGRATIONS,
     "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql",
 )
+# Connected-site v15 is source-verified and deliberately excluded from the
+# authoritative v14 rehearsal until its separate PostgreSQL 17 catalog review
+# is complete. It is still part of the exact source inventory and digest, so a
+# v14 receipt can never silently attest a tree that contains untracked schema.
+SOURCE_ONLY_MIGRATIONS = (
+    "20261101090000_private_trial_backend_v15_connected_site.sql",
+)
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
@@ -144,6 +151,9 @@ IMPLEMENTATION_PATHS = (
 IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "kernel/database-rehearsal-evidence.mjs",
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
+    *(f"supabase/migrations/{name}" for name in SOURCE_ONLY_MIGRATIONS),
+    "supermega_runtime/connected_site_v15.py",
+    "tools/verify_connected_site_v15.mjs",
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
     "supermega_runtime/website_acceptance_schema.py",
@@ -248,7 +258,7 @@ def _source_identity(expected_head: str | None, git_executable: Path) -> dict[st
     try:
         observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
             if path.name != "20260711081300_public_legacy_baseline.sql"))
-        if observed != CURRENT_MIGRATIONS:
+        if observed != (*CURRENT_MIGRATIONS, *SOURCE_ONLY_MIGRATIONS):
             raise RehearsalFailure("private_migration_inventory_mismatch")
         return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
                 "implementation_digest": _implementation_digest()}

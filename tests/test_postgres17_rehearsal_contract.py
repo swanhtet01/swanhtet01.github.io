@@ -179,7 +179,10 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name != "20260711081300_public_legacy_baseline.sql"))
-        self.assertEqual(module.CURRENT_MIGRATIONS, observed)
+        self.assertEqual((*module.CURRENT_MIGRATIONS, *module.SOURCE_ONLY_MIGRATIONS), observed)
+        self.assertEqual(module.SOURCE_ONLY_MIGRATIONS, (
+            "20261101090000_private_trial_backend_v15_connected_site.sql",
+        ))
 
     def test_account_restore_inventory_includes_website_review_history(self) -> None:
         from tools import rehearse_self_serve_v13 as account
@@ -412,7 +415,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         result = lambda text: SimpleNamespace(returncode=0, stdout=text)
         with tempfile.TemporaryDirectory() as folder:
             migrations = Path(folder)
-            for name in module.CURRENT_MIGRATIONS:
+            for name in (*module.CURRENT_MIGRATIONS, *module.SOURCE_ONLY_MIGRATIONS):
                 (migrations / name).write_text("-- synthetic\n", encoding="utf-8")
             with patch.object(module, "MIGRATION_DIRECTORY", migrations), \
                     patch.object(module.subprocess, "run", side_effect=[

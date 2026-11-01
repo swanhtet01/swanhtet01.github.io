@@ -718,6 +718,7 @@
     "billing:invoice:prepare": "node tools/prepare_managed_invoice.mjs",
     "billing:invoice:self-test": "node tools/prepare_managed_invoice.mjs --self-test",
     "database:migrations:verify": "node tools/verify_private_trial_migrations.mjs && node tools/verify_public_legacy_baseline.mjs",
+    "database:connected-site-v15:verify": "node tools/verify_connected_site_v15.mjs",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "npm run public:prebuilt",
     "client:prepare": "node tools/prepare_client_demo.mjs",

@@ -1,8 +1,18 @@
 import { createHash } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 
-import { PGlite } from '@electric-sql/pglite'
+const loadPGlite = async () => {
+  try {
+    return (await import('@electric-sql/pglite')).PGlite
+  } catch (error) {
+    const moduleRoot = process.env.SUPERMEGA_NODE_MODULES
+    if (!moduleRoot) throw error
+    return createRequire(resolve(moduleRoot, 'package.json'))('@electric-sql/pglite').PGlite
+  }
+}
+const PGlite = await loadPGlite()
 import { verifySelfServeAttemptBudget } from './verify_self_serve_attempt_budget.mjs'
 import { verifyWebsiteReviewMigrationCatalog, verifyCatalogEntitlementMutations, verifyCatalogStorageMutations } from './verify_website_review_migration_catalog.mjs'
 
@@ -15,6 +25,12 @@ const migrationDirectory = resolve(root, 'supabase', 'migrations')
 // pgvector, which PGlite does not provide — applying it here would fail for reasons
 // unrelated to what is being verified.
 const outOfScopeMigrations = ['20260711081300_public_legacy_baseline.sql']
+// Source-only connected-site v15 is verified independently. The canonical
+// PostgreSQL 17 rehearsal remains pinned to v14 until a genuine fresh receipt
+// is produced; including it in expectedMigrations would misrepresent that gate.
+const sourceOnlyMigrations = [
+  '20261101090000_private_trial_backend_v15_connected_site.sql',
+]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',
   '20260722005134_private_trial_backend_foundation.sql',
@@ -639,7 +655,11 @@ const allMigrationNames = (await readdir(migrationDirectory))
 // named out-of-scope one, so a new file can never enter the directory unnoticed.
 requireCheck(
   'exact migration inventory',
-  JSON.stringify(allMigrationNames) === JSON.stringify([...outOfScopeMigrations, ...expectedMigrations].sort()),
+  JSON.stringify(allMigrationNames) === JSON.stringify([
+    ...outOfScopeMigrations,
+    ...expectedMigrations,
+    ...sourceOnlyMigrations,
+  ].sort()),
 )
 const migrationNames = allMigrationNames.filter((name) => !outOfScopeMigrations.includes(name))
 
