@@ -78,7 +78,7 @@
   app minimatch plus Vite/source-map/Zod advisories, kernel minimatch, and
   Python OpenTelemetry. The PR remains draft and merge-blocked; the manual
   workflow was not dispatched and no PostgreSQL process ran.
-- Separate local default-branch dependency candidate
+- Separate default-branch dependency candidate
   `92733fbafd3827fb83476fae8ab270e1f16bb04d`, tree
   `5f5bf5bd3245ff5e77efeeb3f871934d54c51f14`, contains only five manifest and
   lock files. It replays previously reviewed exact fixes for Vite `7.3.7`,
@@ -93,22 +93,32 @@
   because an unrelated wheel is absent from the offline cache. Exact-head PR
   #752 evidence already showed these four advisories clear, but minimatch
   remains deliberately unchanged and **BLOCKED**. This dependency candidate
-  is unpublished and is not part of PR #753.
-- Publication preflight for that dependency candidate is **PASS / NOT
-  AUTHORIZED**: remote `main` remains exact base `5479c5d1`, `92733fba` is a
-  clean three-commit descendant, its binary patch SHA-256 is
-  `daf17609553a2e30907443c463dab8647b45e7695eb2d68ac080b45abe8d8e82`,
-  and no overlapping open PR was found. A future publication must be one new
-  draft main-based PR containing only those five files and automatic checks;
-  this receipt authorizes neither publication nor merge and does not clear
-  minimatch.
+  is not part of PR #753.
+- Swan subsequently authorized publication of that exact five-file candidate.
+  Draft PR [#754](https://github.com/swanhtet01/swanhtet01.github.io/pull/754)
+  is open, unmerged and source-exact at head `92733fba`, tree `5f5bf5bd`,
+  based on `main` at `5479c5d1`. Its binary patch SHA-256 remains
+  `daf17609553a2e30907443c463dab8647b45e7695eb2d68ac080b45abe8d8e82`.
+  Automatic App run `41360921212`, Kernel run `41360925760`, GitGuardian,
+  platform audit and Python audit are **PASS**. App CI passed the exact-source
+  guard, canonical contracts, disposable PostgreSQL checks, RLS/release
+  guards, lint, deployment contract, canonical production build and desktop
+  plus 390px journeys. Dependency run `41360925744` remains **FAIL / BLOCKED**
+  only for the deliberately unchanged app and Kernel minimatch advisory: the
+  app reports 10 moderate records and Kernel reports 5. The reviewed Vite,
+  source-map-js, Zod and OpenTelemetry advisories are absent. No forced fix,
+  merge, deployment or manual workflow dispatch occurred.
 - A fresh security-boundary investigation confirms no safe minimatch repair can
   be built from existing trusted bytes. Modern ESLint/config-array and
   typescript-estree consumers require the v10 class/named APIs, while
   `eslint-plugin-jsx-a11y@6.10.2` has two callable-default v3 call sites that a
   blanket v11 override breaks. Cached minimatch `11.0.1` is a full matcher
   rewrite and requires `@isaacs/nonrecursive-glob-match@^1.0.1`, whose source,
-  tests and provenance bytes are unavailable locally. A v10/v3-labelled
+  tests and provenance bytes are unavailable locally. Its
+  `brace-expansion@5.0.12` dependency requires Node `20 || >=22` and in turn
+  requires `balanced-match@^4.0.2`, so the proposed acquisition closure was
+  incomplete and contradicts minimatch's advertised Node 18 support. A
+  v10/v3-labelled
   backport would remain scanner-visible and cannot be called fixed. The gate
   therefore remains **BLOCKED** pending a compatible upstream jsx-a11y release
   or a separately authorized/provenance-reviewed v11 dependency plus narrow
