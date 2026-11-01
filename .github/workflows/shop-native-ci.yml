@@ -136,7 +136,7 @@ jobs:
           }
           trap cleanup EXIT
           (
-            TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
+            TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
               test/connected_orders_test.dart \
               test/shop_add_product_test.dart \
               test/shop_cafe_order_screen_test.dart \
@@ -156,7 +156,7 @@ jobs:
           ) &
           behavior_pid="$!"
           (
-            TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
+            TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
               test/shop_backup_test.dart \
               test/shop_cafe_kitchen_entitlement_test.dart \
               test/shop_cafe_order_contract_test.dart \
@@ -168,7 +168,7 @@ jobs:
           ) &
           persistence_a_pid="$!"
           (
-            TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
+            TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
               test/shop_correction_consumption_test.dart \
               test/shop_member_identity_test.dart \
               test/shop_mmk_input_test.dart \
@@ -181,7 +181,7 @@ jobs:
           ) &
           persistence_b_pid="$!"
           (
-            TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
+            TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
               test/shop_connected_application_boundary_test.dart \
               test/shop_connected_coordinator_host_test.dart \
               test/shop_connected_onboarding_test.dart \

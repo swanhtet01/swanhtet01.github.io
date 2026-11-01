@@ -564,7 +564,7 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
 
   const unboundedPersistenceA = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+      'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
@@ -577,7 +577,7 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
 
   const unboundedPersistenceB = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+      'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
@@ -590,7 +590,7 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
 
   const unboundedConnected = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+      'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
@@ -603,7 +603,7 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
 
   const unboundedBehavior = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+      'TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
@@ -613,6 +613,22 @@ test('default-profile test shards share one evidence-backed aggregate budget', (
       'native_behavior_shard_not_bounded_or_sequential',
     ),
   )
+
+  for (const [shard, failure] of [
+    ['behavior', 'native_behavior_shard_not_bounded_or_sequential'],
+    ['persistence_a', 'native_persistence_a_shard_not_bounded_or_sequential'],
+    ['persistence_b', 'native_persistence_b_shard_not_bounded_or_sequential'],
+    ['connected', 'native_connected_shard_not_bounded_or_sequential'],
+  ]) {
+    const missingNoPub = verifyShopNativeCiContract(
+      workflow.replace(
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1`,
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1`,
+      ),
+      gradleWrapper,
+    )
+    assert.ok(missingNoPub.failures.includes(failure), `${shard} must require --no-pub`)
+  }
 
   const missingElapsedGuard = verifyShopNativeCiContract(
     workflow.replace(

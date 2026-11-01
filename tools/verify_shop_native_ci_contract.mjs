@@ -291,25 +291,25 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+    'TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
     'native_behavior_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
     source,
-    'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+    'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
     'native_persistence_a_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
     source,
-    'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+    'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
     'native_persistence_b_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
     source,
-    'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+    'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --no-pub --concurrency=1',
     'native_connected_shard_not_bounded_or_sequential',
     failures,
   )
