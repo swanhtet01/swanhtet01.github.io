@@ -37,6 +37,7 @@ function probeFixture() {
     tools: {
       wpr: tool('wpr.exe'),
       tracerpt: tool('tracerpt.exe'),
+      parent: tool('cmd.exe'),
       probe: tool('where.exe'),
     },
     traceStartedBeforeProbe: true,
@@ -48,6 +49,11 @@ function probeFixture() {
     imageEventObserved: true,
     processEndObserved: true,
     stableProcessKeyObserved: true,
+    parentChildCorrelationObserved: true,
+    exitStatusObserved: true,
+    fullImagePathObserved: true,
+    moduleEventObserved: true,
+    completeOrderingObserved: true,
     probeExitCode: 0,
     drainComplete: true,
     temporaryDataRemoved: true,
@@ -58,24 +64,39 @@ function probeFixture() {
   }
 }
 
-const probeImage = 'supermega-observer-probe.exe'
-function traceEvent({ task, opcode, pid, image = probeImage, key = 'key-1',
+const parentImage = 'C:\\Windows\\System32\\cmd.exe'
+const probeImage = 'C:\\Temp\\supermega-observer-probe.exe'
+const moduleImage = 'C:\\Windows\\System32\\kernel32.dll'
+function traceEvent({ task, opcode, pid, image = probeImage, key = 'key-child',
+  parentPid = null, parentKey = null, exitStatus = null,
   time = '2026-11-01T00:00:00.0000000Z' }) {
   const data = [
     `<Data Name="ProcessID">${pid}</Data>`,
     `<Data Name="ImageName">${image}</Data>`,
     key === null ? '' : `<Data Name="ProcessKey">${key}</Data>`,
+    parentPid === null ? '' : `<Data Name="ParentProcessID">${parentPid}</Data>`,
+    parentKey === null ? '' : `<Data Name="ParentProcessKey">${parentKey}</Data>`,
+    exitStatus === null ? '' : `<Data Name="ExitStatus">${exitStatus}</Data>`,
   ].join('')
   return `<Event><System><Task Name="${task}"/><Opcode Name="${opcode}"/>`
     + `<TimeCreated SystemTime="${time}"/></System><EventData>${data}</EventData></Event>`
 }
 
 function validTrace() {
-  return `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
+  return `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 40,
+    image: parentImage, key: 'key-parent' })}`
+    + `${traceEvent({ task: 'ImageLoad', opcode: 'Load', pid: 40,
+      image: parentImage, key: 'key-parent', time: '2026-11-01T00:00:00.050Z' })}`
+    + `${traceEvent({ task: 'Process', opcode: 'Start', pid: 41, parentPid: 40,
+      parentKey: 'key-parent', time: '2026-11-01T00:00:00.100Z' })}`
     + `${traceEvent({ task: 'ImageLoad', opcode: 'Load', pid: 41,
       time: '2026-11-01T00:00:00.100Z' })}`
+    + `${traceEvent({ task: 'ImageLoad', opcode: 'Load', pid: 41, image: moduleImage,
+      time: '2026-11-01T00:00:00.150Z' })}`
     + `${traceEvent({ task: 'Process', opcode: 'End', pid: 41,
-      time: '2026-11-01T00:00:00.200Z' })}</Events>`
+      exitStatus: '0', time: '2026-11-01T00:00:00.200Z' })}`
+    + `${traceEvent({ task: 'Process', opcode: 'End', pid: 40, image: parentImage,
+      key: 'key-parent', exitStatus: '0', time: '2026-11-01T00:00:00.250Z' })}</Events>`
 }
 
 test('manual workflow exposes an exact-SHA observer probe without automatic triggers', async () => {
@@ -116,6 +137,7 @@ test('probe uses fixed signed Windows tools, explicit loss checks, and no Postgr
   for (const token of [
     'C:\\Windows\\System32\\wpr.exe',
     'C:\\Windows\\System32\\tracerpt.exe',
+    'C:\\Windows\\System32\\cmd.exe',
     'C:\\Windows\\System32\\where.exe',
     'requiredSignerOrganization',
     "& $wpr -start",
@@ -127,6 +149,11 @@ test('probe uses fixed signed Windows tools, explicit loss checks, and no Postgr
     '$probePolicy.parserPath',
     'stableProcessKeyObserved',
     'processEndObserved',
+    'parentChildCorrelationObserved',
+    'exitStatusObserved',
+    'fullImagePathObserved',
+    'moduleEventObserved',
+    'completeOrderingObserved',
     'postgresDownloaded = $false',
     'postgresExecuted = $false',
     'databaseStarted = $false',
@@ -144,12 +171,17 @@ test('probe uses fixed signed Windows tools, explicit loss checks, and no Postgr
 })
 
 test('production parser accepts one stable start, image, and end lifetime', () => {
-  assert.deepEqual(correlateTraceXml(validTrace(), probeImage), {
-    contract: 'supermega.windows-process-image-correlation.v1',
+  assert.deepEqual(correlateTraceXml(validTrace(), parentImage, probeImage), {
+    contract: 'supermega.windows-process-image-correlation.v2',
     processEventObserved: true,
     imageEventObserved: true,
     processEndObserved: true,
     stableProcessKeyObserved: true,
+    parentChildCorrelationObserved: true,
+    exitStatusObserved: true,
+    fullImagePathObserved: true,
+    moduleEventObserved: true,
+    completeOrderingObserved: true,
   })
 })
 
@@ -159,7 +191,7 @@ test('PowerShell bridge reads the exact production parser property names', async
   assert.match(source, /\$processObserved = \$correlation\.processEventObserved/)
   assert.match(source, /\$imageObserved = \$correlation\.imageEventObserved/)
   assert.doesNotMatch(source, /\$correlation\.(?:ProcessObserved|ImageObserved)/)
-  const parsed = correlateTraceXml(validTrace(), probeImage)
+  const parsed = correlateTraceXml(validTrace(), parentImage, probeImage)
   assert.equal(parsed.processEventObserved, true)
   assert.equal(parsed.imageEventObserved, true)
 })
@@ -167,17 +199,28 @@ test('PowerShell bridge reads the exact production parser property names', async
 test('production parser rejects process-only and image-only evidence', () => {
   assert.throws(() => correlateTraceXml(`<Events>${traceEvent({
     task: 'Process', opcode: 'Start', pid: 41,
-  })}</Events>`, probeImage), /correlation_ambiguous/)
+  })}</Events>`, parentImage, probeImage), /correlation_ambiguous/)
   assert.throws(() => correlateTraceXml(`<Events>${traceEvent({
     task: 'Image', opcode: 'Load', pid: 41,
-  })}</Events>`, probeImage), /correlation_ambiguous/)
+  })}</Events>`, parentImage, probeImage), /correlation_ambiguous/)
 })
 
 test('production parser rejects unrelated process and image records', () => {
   const xml = `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
     + `${traceEvent({ task: 'Image', opcode: 'Load', pid: 99,
       image: 'unrelated.exe', time: '2026-11-01T00:00:00.100Z' })}</Events>`
-  assert.throws(() => correlateTraceXml(xml, probeImage), /correlation_ambiguous/)
+  assert.throws(() => correlateTraceXml(xml, parentImage, probeImage), /correlation_ambiguous/)
+})
+
+test('production parser ignores unrelated recognized events without process keys', () => {
+  const background = traceEvent({
+    task: 'ImageLoad', opcode: 'Load', pid: 99, key: null,
+    image: 'C:\\Windows\\System32\\background.dll',
+    time: '2026-11-01T00:00:00.125Z',
+  })
+  const noisyTrace = validTrace().replace('<Events>', `<Events>${background}`)
+  assert.equal(correlateTraceXml(noisyTrace, parentImage, probeImage)
+    .parentChildCorrelationObserved, true)
 })
 
 test('production parser rejects PID reuse and duplicate starts', () => {
@@ -188,40 +231,79 @@ test('production parser rejects PID reuse and duplicate starts', () => {
       key: 'key-2', time: '2026-11-01T00:00:00.100Z' })}`
     + `${traceEvent({ task: 'Process', opcode: 'End', pid: 41,
       key: 'key-2', time: '2026-11-01T00:00:00.200Z' })}</Events>`
-  assert.throws(() => correlateTraceXml(xml, probeImage), /correlation_ambiguous/)
+  assert.throws(() => correlateTraceXml(xml, parentImage, probeImage), /correlation_ambiguous/)
 })
 
 test('production parser rejects missing stable key and missing end', () => {
-  const missingKey = validTrace().replace('<Data Name="ProcessKey">key-1</Data>', '')
-  assert.throws(() => correlateTraceXml(missingKey, probeImage), /process_key_missing/)
+  const missingKey = validTrace().replace('<Data Name="ProcessKey">key-child</Data>', '')
+  assert.throws(() => correlateTraceXml(missingKey, parentImage, probeImage), /process_key_missing/)
   const missingEnd = validTrace().replace(
     traceEvent({ task: 'Process', opcode: 'End', pid: 41,
-      time: '2026-11-01T00:00:00.200Z' }), '')
-  assert.throws(() => correlateTraceXml(missingEnd, probeImage), /correlation_ambiguous/)
+      exitStatus: '0', time: '2026-11-01T00:00:00.200Z' }), '')
+  assert.throws(() => correlateTraceXml(missingEnd, parentImage, probeImage), /correlation_ambiguous/)
 })
 
 test('production parser rejects wrong key and end before image', () => {
   const wrongKey = validTrace().replace(
-    '<Data Name="ProcessKey">key-1</Data></EventData></Event></Events>',
-    '<Data Name="ProcessKey">key-2</Data></EventData></Event></Events>')
-  assert.throws(() => correlateTraceXml(wrongKey, probeImage), /correlation_mismatch/)
+    traceEvent({ task: 'Process', opcode: 'End', pid: 41,
+      exitStatus: '0', time: '2026-11-01T00:00:00.200Z' }),
+    traceEvent({ task: 'Process', opcode: 'End', pid: 41, key: 'key-other',
+      exitStatus: '0', time: '2026-11-01T00:00:00.200Z' }))
+  assert.throws(() => correlateTraceXml(wrongKey, parentImage, probeImage), /correlation_mismatch/)
   const earlyEnd = validTrace().replace('2026-11-01T00:00:00.200Z',
     '2026-11-01T00:00:00.050Z')
-  assert.throws(() => correlateTraceXml(earlyEnd, probeImage), /correlation_mismatch/)
+  assert.throws(() => correlateTraceXml(earlyEnd, parentImage, probeImage), /correlation_mismatch/)
+})
+
+test('production parser rejects incomplete tree, exit, path, and module capability', () => {
+  const wrongParent = validTrace().replace(
+    '<Data Name="ParentProcessKey">key-parent</Data>',
+    '<Data Name="ParentProcessKey">key-other</Data>')
+  assert.throws(() => correlateTraceXml(wrongParent, parentImage, probeImage),
+    /correlation_mismatch/)
+  const missingExit = validTrace().replace('<Data Name="ExitStatus">0</Data>', '')
+  assert.throws(() => correlateTraceXml(missingExit, parentImage, probeImage),
+    /correlation_mismatch/)
+  const missingModule = validTrace().replace(traceEvent({
+    task: 'ImageLoad', opcode: 'Load', pid: 41, image: moduleImage,
+    time: '2026-11-01T00:00:00.150Z',
+  }), '')
+  assert.throws(() => correlateTraceXml(missingModule, parentImage, probeImage),
+    /module_event_missing/)
+  const unkeyedModule = validTrace().replace(
+    '<Data Name="ImageName">C:\\Windows\\System32\\kernel32.dll</Data>'
+      + '<Data Name="ProcessKey">key-child</Data>',
+    '<Data Name="ImageName">C:\\Windows\\System32\\kernel32.dll</Data>')
+  assert.throws(() => correlateTraceXml(unkeyedModule, parentImage, probeImage),
+    /process_key_missing/)
+  const leafOnly = validTrace().replaceAll(probeImage, 'supermega-observer-probe.exe')
+  assert.throws(() => correlateTraceXml(leafOnly, parentImage, probeImage),
+    /correlation_ambiguous/)
+})
+
+test('production parser accepts padded zero exit statuses and rejects nonzero', () => {
+  const padded = validTrace()
+    .replace('<Data Name="ExitStatus">0</Data>', '<Data Name="ExitStatus">000</Data>')
+    .replace('<Data Name="ExitStatus">0</Data>', '<Data Name="ExitStatus">0x000</Data>')
+  assert.equal(correlateTraceXml(padded, parentImage, probeImage).exitStatusObserved, true)
+  const nonzero = validTrace().replace(
+    '<Data Name="ExitStatus">0</Data>', '<Data Name="ExitStatus">1</Data>')
+  assert.throws(() => correlateTraceXml(nonzero, parentImage, probeImage),
+    /exit_status_nonzero/)
 })
 
 test('production parser rejects unknown task or opcode for the probe image', () => {
   for (const changed of [
     validTrace().replace('<Task Name="ImageLoad"/>', '<Task Name="Process"/>'),
     validTrace().replace('<Opcode Name="Load"/>', '<Opcode Name="Unknown"/>'),
-  ]) assert.throws(() => correlateTraceXml(changed, probeImage), /task_opcode_unknown/)
+  ]) assert.throws(() => correlateTraceXml(changed, parentImage, probeImage), /task_opcode_unknown/)
 })
 
 test('production parser rejects DTDs and entities', () => {
   assert.throws(() => correlateTraceXml(
-    '<!DOCTYPE Events [<!ENTITY x "probe">]><Events></Events>', probeImage), /xml_unsafe/)
+    '<!DOCTYPE Events [<!ENTITY x "probe">]><Events></Events>', parentImage, probeImage), /xml_unsafe/)
   assert.throws(() => correlateTraceXml(
-    validTrace().replace(probeImage, '&probe;'), probeImage), /xml_unsafe/)
+    validTrace().replace(probeImage, '&probe;'), parentImage, probeImage), /xml_unsafe/)
 })
 
 test('observer probe contract rejects incomplete, lossy, authoritative, or unsafe evidence', () => {
@@ -235,6 +317,11 @@ test('observer probe contract rejects incomplete, lossy, authoritative, or unsaf
     (value) => { value.imageEventObserved = false },
     (value) => { value.processEndObserved = false },
     (value) => { value.stableProcessKeyObserved = false },
+    (value) => { value.parentChildCorrelationObserved = false },
+    (value) => { value.exitStatusObserved = false },
+    (value) => { value.fullImagePathObserved = false },
+    (value) => { value.moduleEventObserved = false },
+    (value) => { value.completeOrderingObserved = false },
     (value) => { value.drainComplete = false },
     (value) => { value.temporaryDataRemoved = false },
     (value) => { value.postgresDownloaded = true },

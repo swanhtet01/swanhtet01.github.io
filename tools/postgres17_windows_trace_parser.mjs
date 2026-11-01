@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { basename, resolve } from 'node:path'
+import { resolve, win32 } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const MAX_XML_BYTES = 64 * 1024 * 1024
@@ -133,9 +133,38 @@ function parsePid(fields, system) {
   return raw
 }
 
-export function correlateTraceXml(xml, expectedImagePath) {
-  const expectedLeaf = basename(expectedImagePath ?? '')
-  if (!expectedLeaf || expectedLeaf === '.' || expectedLeaf === '..') {
+function parseOptionalPid(fields, names) {
+  const raw = exactlyOneField(fields, names)
+  if (raw === null) return null
+  if (!/^[1-9]\d*$/.test(raw)) fail('observer_probe_trace_identity_missing')
+  return raw
+}
+
+function parseExitStatus(fields) {
+  const raw = exactlyOneField(fields, ['ExitStatus', 'ExitCode'])
+  if (raw === null) return null
+  if (!/^(?:0+|0x0+)$/i.test(raw)) fail('observer_probe_trace_exit_status_nonzero')
+  return raw
+}
+
+function canonicalWindowsPath(value) {
+  if (typeof value !== 'string' || !/^[A-Za-z]:\\[^\0]+$/.test(value)
+    || value.includes('/') || value.split('\\').some((part) => part === '..')) {
+    return null
+  }
+  return value.toLowerCase()
+}
+
+export function correlateTraceXml(xml, expectedParentPath, expectedChildPath) {
+  const expectedParent = canonicalWindowsPath(expectedParentPath)
+  const expectedChild = canonicalWindowsPath(expectedChildPath)
+  const expectedLeaves = new Set([
+    win32.basename(expectedParentPath ?? '').toLowerCase(),
+    win32.basename(expectedChildPath ?? '').toLowerCase(),
+  ])
+  if (!expectedParent || !expectedChild || expectedParent === expectedChild
+    || expectedLeaves.size !== 2 || expectedLeaves.has('')
+    || expectedLeaves.has('.') || expectedLeaves.has('..')) {
     fail('observer_probe_trace_expected_image_invalid')
   }
   const document = parseXml(xml)
@@ -144,7 +173,7 @@ export function correlateTraceXml(xml, expectedImagePath) {
     const system = one(event, 'System')
     const fields = dataFields(event)
     const imageName = exactlyOneField(fields, ['ImageName', 'ImageFileName', 'FileName'])
-    if (!imageName || basename(imageName).toLowerCase() !== expectedLeaf.toLowerCase()) continue
+    if (!imageName) continue
     const task = attributeOrText(one(system, 'Task'))?.toLowerCase()
     const opcode = attributeOrText(one(system, 'Opcode'))?.toLowerCase()
     let kind
@@ -152,43 +181,85 @@ export function correlateTraceXml(xml, expectedImagePath) {
     else if (task === 'process' && ['end', 'dcend', 'stop'].includes(opcode)) kind = 'end'
     else if (['image', 'imageload', 'loader'].includes(task)
       && ['load', 'start', 'dcstart'].includes(opcode)) kind = 'image'
-    else fail('observer_probe_trace_task_opcode_unknown')
+    else {
+      if (expectedLeaves.has(win32.basename(imageName).toLowerCase())) {
+        fail('observer_probe_trace_task_opcode_unknown')
+      }
+      continue
+    }
     const processKey = exactlyOneField(fields, ['ProcessKey', 'UniqueProcessKey'])
-    if (!processKey) fail('observer_probe_trace_process_key_missing')
     records.push({
       kind,
       pid: parsePid(fields, system),
       processKey,
       timestamp: parseTimestamp(system),
+      imagePath: canonicalWindowsPath(imageName),
+      parentPid: parseOptionalPid(fields, ['ParentID', 'ParentId', 'ParentProcessID', 'ParentProcessId']),
+      parentProcessKey: exactlyOneField(fields, ['ParentProcessKey', 'ParentUniqueProcessKey']),
+      exitStatus: kind === 'end' ? parseExitStatus(fields) : null,
     })
   }
-  const starts = records.filter(({ kind }) => kind === 'start')
-  const images = records.filter(({ kind }) => kind === 'image')
-  const ends = records.filter(({ kind }) => kind === 'end')
-  if (starts.length !== 1 || images.length !== 1 || ends.length !== 1) {
-    fail('observer_probe_trace_correlation_ambiguous')
+
+  const lifecycle = (expectedPath) => {
+    const matching = records.filter(({ imagePath }) => imagePath === expectedPath)
+    const starts = matching.filter(({ kind }) => kind === 'start')
+    const images = matching.filter(({ kind }) => kind === 'image')
+    const ends = matching.filter(({ kind }) => kind === 'end')
+    if (starts.length !== 1 || images.length !== 1 || ends.length !== 1) {
+      fail('observer_probe_trace_correlation_ambiguous')
+    }
+    const [start] = starts; const [image] = images; const [end] = ends
+    if (!start.processKey || !image.processKey || !end.processKey) {
+      fail('observer_probe_trace_process_key_missing')
+    }
+    if (start.pid !== image.pid || start.pid !== end.pid
+      || start.processKey !== image.processKey || start.processKey !== end.processKey
+      || image.timestamp < start.timestamp || end.timestamp <= image.timestamp
+      || end.exitStatus === null) {
+      fail('observer_probe_trace_correlation_mismatch')
+    }
+    return { start, image, end }
   }
-  const [start] = starts; const [image] = images; const [end] = ends
-  if (start.pid !== image.pid || start.pid !== end.pid
-    || start.processKey !== image.processKey || start.processKey !== end.processKey
-    || image.timestamp < start.timestamp || end.timestamp <= image.timestamp) {
+
+  const parent = lifecycle(expectedParent)
+  const child = lifecycle(expectedChild)
+  if (child.start.parentPid !== parent.start.pid
+    || child.start.parentProcessKey !== parent.start.processKey
+    || child.start.timestamp <= parent.start.timestamp
+    || child.end.timestamp > parent.end.timestamp
+    || child.start.processKey === parent.start.processKey) {
     fail('observer_probe_trace_correlation_mismatch')
   }
+  const childLifetimeImages = records.filter(({ kind, pid, imagePath, timestamp }) => kind === 'image'
+    && pid === child.start.pid && imagePath !== null && imagePath !== expectedChild
+    && timestamp >= child.start.timestamp && timestamp <= child.end.timestamp)
+  if (childLifetimeImages.some(({ processKey }) => !processKey)) {
+    fail('observer_probe_trace_process_key_missing')
+  }
+  const childModules = childLifetimeImages.filter(({ processKey }) =>
+    processKey === child.start.processKey)
+  if (childModules.length < 1) fail('observer_probe_trace_module_event_missing')
   return {
-    contract: 'supermega.windows-process-image-correlation.v1',
+    contract: 'supermega.windows-process-image-correlation.v2',
     processEventObserved: true,
     imageEventObserved: true,
     processEndObserved: true,
     stableProcessKeyObserved: true,
+    parentChildCorrelationObserved: true,
+    exitStatusObserved: true,
+    fullImagePathObserved: true,
+    moduleEventObserved: true,
+    completeOrderingObserved: true,
   }
 }
 
 async function main() {
-  if (process.argv.length !== 4) fail('observer_probe_trace_parser_arguments_invalid')
+  if (process.argv.length !== 5) fail('observer_probe_trace_parser_arguments_invalid')
   const xmlPath = resolve(process.argv[2])
   const bytes = await readFile(xmlPath)
   if (bytes.length < 1 || bytes.length > MAX_XML_BYTES) fail('observer_probe_trace_xml_unsafe')
-  process.stdout.write(`${JSON.stringify(correlateTraceXml(bytes.toString('utf8'), process.argv[3]))}\n`)
+  process.stdout.write(`${JSON.stringify(correlateTraceXml(
+    bytes.toString('utf8'), process.argv[3], process.argv[4]))}\n`)
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

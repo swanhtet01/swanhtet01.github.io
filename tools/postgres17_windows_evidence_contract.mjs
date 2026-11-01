@@ -34,6 +34,8 @@ export function validateObserverProbe(probe, expectedSha) {
     'osBuild', 'profileSha256', 'tools', 'traceStartedBeforeProbe', 'traceStopped',
     'traceParsed', 'droppedEvents', 'droppedBuffers', 'processEventObserved',
     'imageEventObserved', 'processEndObserved', 'stableProcessKeyObserved',
+    'parentChildCorrelationObserved', 'exitStatusObserved', 'fullImagePathObserved',
+    'moduleEventObserved', 'completeOrderingObserved',
     'probeExitCode', 'drainComplete', 'temporaryDataRemoved',
     'postgresDownloaded', 'postgresExecuted', 'databaseStarted', 'secretValuesExposed']
   if (!exact(probe, keys)
@@ -44,11 +46,14 @@ export function validateObserverProbe(probe, expectedSha) {
     || probe.runner !== 'windows-2025'
     || typeof probe.osBuild !== 'string' || !/^\d+(?:\.\d+){1,3}$/.test(probe.osBuild)
     || !SHA256.test(probe.profileSha256 || '')
-    || !exact(probe.tools, ['wpr', 'tracerpt', 'probe'])
+    || !exact(probe.tools, ['wpr', 'tracerpt', 'parent', 'probe'])
     || probe.traceStartedBeforeProbe !== true || probe.traceStopped !== true
     || probe.traceParsed !== true || probe.droppedEvents !== 0 || probe.droppedBuffers !== 0
     || probe.processEventObserved !== true || probe.imageEventObserved !== true
     || probe.processEndObserved !== true || probe.stableProcessKeyObserved !== true
+    || probe.parentChildCorrelationObserved !== true || probe.exitStatusObserved !== true
+    || probe.fullImagePathObserved !== true || probe.moduleEventObserved !== true
+    || probe.completeOrderingObserved !== true
     || probe.probeExitCode !== 0 || probe.drainComplete !== true
     || probe.temporaryDataRemoved !== true || probe.postgresDownloaded !== false
     || probe.postgresExecuted !== false || probe.databaseStarted !== false
@@ -62,7 +67,7 @@ export function validateObserverProbe(probe, expectedSha) {
       || !integer(tool.bytes, 1, Number.MAX_SAFE_INTEGER)
       || !SHA256.test(tool.sha256 || '') || tool.signatureStatus !== 'Valid'
       || !SHA256.test(tool.signerCertificateSha256 || '')
-      || ({ wpr: 'wpr.exe', tracerpt: 'tracerpt.exe', probe: 'where.exe' })[name]
+      || ({ wpr: 'wpr.exe', tracerpt: 'tracerpt.exe', parent: 'cmd.exe', probe: 'where.exe' })[name]
         !== tool.fileName.toLowerCase()) {
       fail('bootstrap_observer_probe_invalid')
     }

@@ -102,6 +102,7 @@ if ($null -eq $probePolicy -or $probePolicy.status -ne 'source-only'
   -or $probePolicy.authoritative -ne $false
   -or $probePolicy.wprPath -ne 'C:\Windows\System32\wpr.exe'
   -or $probePolicy.tracerptPath -ne 'C:\Windows\System32\tracerpt.exe'
+  -or $probePolicy.probeParentExecutablePath -ne 'C:\Windows\System32\cmd.exe'
   -or $probePolicy.probeExecutablePath -ne 'C:\Windows\System32\where.exe'
   -or $probePolicy.requiredSignerOrganization -ne 'Microsoft Corporation'
   -or $probePolicy.requiresEventsLost -ne 0 -or $probePolicy.requiresBuffersLost -ne 0
@@ -109,6 +110,11 @@ if ($null -eq $probePolicy -or $probePolicy.status -ne 'source-only'
   -or $probePolicy.requiresImageEvent -ne $true
   -or $probePolicy.requiresProcessEndEvent -ne $true
   -or $probePolicy.requiresStableProcessKey -ne $true
+  -or $probePolicy.requiresParentChildCorrelation -ne $true
+  -or $probePolicy.requiresExitStatus -ne $true
+  -or $probePolicy.requiresFullImagePath -ne $true
+  -or $probePolicy.requiresModuleEvent -ne $true
+  -or $probePolicy.requiresCompleteOrdering -ne $true
   -or $probePolicy.requiresDrain -ne $true) {
   Fail 'observer_probe_policy_invalid'
 }
@@ -131,10 +137,12 @@ if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { Fail 'observer_probe_source_tr
 
 $wpr = $probePolicy.wprPath
 $tracerpt = $probePolicy.tracerptPath
+$probeParentExecutable = $probePolicy.probeParentExecutablePath
 $probeExecutable = $probePolicy.probeExecutablePath
 $inspector = Join-Path $root 'tools\inspect_windows_authenticode.ps1'
 Assert-RegularFile $wpr 'observer_probe_wpr_missing' | Out-Null
 Assert-RegularFile $tracerpt 'observer_probe_tracerpt_missing' | Out-Null
+Assert-RegularFile $probeParentExecutable 'observer_probe_parent_executable_missing' | Out-Null
 Assert-RegularFile $probeExecutable 'observer_probe_executable_missing' | Out-Null
 Assert-RegularFile $inspector 'observer_probe_inspector_missing' | Out-Null
 Assert-RegularFile $parserPath 'observer_probe_parser_missing' | Out-Null
@@ -146,6 +154,7 @@ Assert-RegularFile $node 'observer_probe_node_invalid' | Out-Null
 $tools = [ordered]@{
   wpr = Inspect-SignedTool $wpr $inspector $probePolicy.requiredSignerOrganization
   tracerpt = Inspect-SignedTool $tracerpt $inspector $probePolicy.requiredSignerOrganization
+  parent = Inspect-SignedTool $probeParentExecutable $inspector $probePolicy.requiredSignerOrganization
   probe = Inspect-SignedTool $probeExecutable $inspector $probePolicy.requiredSignerOrganization
 }
 
@@ -157,6 +166,9 @@ $copiedProbePath = Join-Path $workRoot 'supermega-observer-probe.exe'
 $traceStarted = $false; $traceStopped = $false; $parsed = $false
 $eventsLost = $null; $buffersLost = $null
 $processObserved = $false; $imageObserved = $false; $probeExitCode = $null
+$parentChildObserved = $false; $exitStatusObserved = $false
+$fullImagePathObserved = $false; $moduleEventObserved = $false
+$completeOrderingObserved = $false
 $cleanupComplete = $false
 try {
   [System.IO.Directory]::CreateDirectory($workRoot) | Out-Null
@@ -165,8 +177,9 @@ try {
   & $wpr -start "$profilePath!SuperMegaProcessImage" -filemode
   if ($LASTEXITCODE -ne 0) { Fail 'observer_probe_trace_start_failed' }
   $traceStarted = $true
-  $probeProcess = Start-Process -FilePath $copiedProbePath `
-    -ArgumentList @('/Q', 'C:\Windows\System32\where.exe') `
+  $probeCommand = ('""{0}" /Q "{1}""' -f $copiedProbePath, $probeExecutable)
+  $probeProcess = Start-Process -FilePath $probeParentExecutable `
+    -ArgumentList @('/d', '/s', '/c', $probeCommand) `
     -NoNewWindow -PassThru -Wait
   $probeExitCode = [int]$probeProcess.ExitCode
   if ($probeExitCode -ne 0) { Fail 'observer_probe_process_failed' }
@@ -186,22 +199,34 @@ try {
     Fail 'observer_probe_loss_counter_unavailable'
   }
   if ($eventsLost -ne 0 -or $buffersLost -ne 0) { Fail 'observer_probe_trace_loss_detected' }
-  $correlationText = & $node $parserPath $traceXmlPath $copiedProbePath
+  $correlationText = & $node $parserPath $traceXmlPath $probeParentExecutable $copiedProbePath
   if ($LASTEXITCODE -ne 0) { Fail 'observer_probe_trace_correlation_failed' }
   $correlation = $correlationText | ConvertFrom-Json
   $correlationProperties = @($correlation.PSObject.Properties.Name | Sort-Object)
   $expectedCorrelationProperties = @('contract', 'imageEventObserved',
-    'processEndObserved', 'processEventObserved', 'stableProcessKeyObserved') | Sort-Object
+    'processEndObserved', 'processEventObserved', 'stableProcessKeyObserved',
+    'parentChildCorrelationObserved', 'exitStatusObserved', 'fullImagePathObserved',
+    'moduleEventObserved', 'completeOrderingObserved') | Sort-Object
   if (($correlationProperties -join "`0") -ne ($expectedCorrelationProperties -join "`0")
-    -or $correlation.contract -ne 'supermega.windows-process-image-correlation.v1'
+    -or $correlation.contract -ne 'supermega.windows-process-image-correlation.v2'
     -or $correlation.processEventObserved -ne $true
     -or $correlation.imageEventObserved -ne $true
     -or $correlation.processEndObserved -ne $true
-    -or $correlation.stableProcessKeyObserved -ne $true) {
+    -or $correlation.stableProcessKeyObserved -ne $true
+    -or $correlation.parentChildCorrelationObserved -ne $true
+    -or $correlation.exitStatusObserved -ne $true
+    -or $correlation.fullImagePathObserved -ne $true
+    -or $correlation.moduleEventObserved -ne $true
+    -or $correlation.completeOrderingObserved -ne $true) {
     Fail 'observer_probe_trace_correlation_failed'
   }
   $processObserved = $correlation.processEventObserved
   $imageObserved = $correlation.imageEventObserved
+  $parentChildObserved = $correlation.parentChildCorrelationObserved
+  $exitStatusObserved = $correlation.exitStatusObserved
+  $fullImagePathObserved = $correlation.fullImagePathObserved
+  $moduleEventObserved = $correlation.moduleEventObserved
+  $completeOrderingObserved = $correlation.completeOrderingObserved
   if (-not $processObserved -or -not $imageObserved) { Fail 'observer_probe_trace_coverage_incomplete' }
 } finally {
   $cancelFailed = $false
@@ -236,6 +261,11 @@ $evidencePath = Join-Path $output 'postgres17-observer-probe.json'
   imageEventObserved = $imageObserved
   processEndObserved = $correlation.processEndObserved
   stableProcessKeyObserved = $correlation.stableProcessKeyObserved
+  parentChildCorrelationObserved = $parentChildObserved
+  exitStatusObserved = $exitStatusObserved
+  fullImagePathObserved = $fullImagePathObserved
+  moduleEventObserved = $moduleEventObserved
+  completeOrderingObserved = $completeOrderingObserved
   probeExitCode = [int]$probeExitCode
   drainComplete = $traceStopped -and $parsed
   temporaryDataRemoved = $cleanupComplete
