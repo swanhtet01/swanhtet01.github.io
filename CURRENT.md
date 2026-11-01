@@ -5,6 +5,34 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 exact-head CI repair checkpoint
+
+- Published draft PR #752 remains at `5c69ebd942e5cbc1260187416cb01a7b975352d6`,
+  tree `4f6d8b52ae3af32373bf967f2f448ff511c947cb`; it is not merged or deployed.
+- App CI run `41336319981` passed checks 1--637/668 and now fails only at the
+  intended PostgreSQL gate, `database_rehearsal_evidence_stale`; the migration
+  inventory repair is verified while the genuine Windows PostgreSQL 17
+  rehearsal remains **BLOCKED / NOT RUN**.
+- Native run `41336324219` proved the prior member-identity snapshot repair,
+  then exposed three test-fixture/contract defects. Local implementation
+  `524b8cb2d7886626478a2e82048c18af958bb3f8`, tree
+  `df9d684c06e2e89a052c2340b6196b8253d0b074`, removes v30--v35 objects before
+  fabricating v15/v5 legacy databases and restores the documented
+  `readRecentSales(limit: 31)` expectation to 31. Production migration,
+  export, pagination, scanner and printer code is unchanged.
+- Verification for `524b8cb2`: all three formerly failing focused tests
+  **PASS**; complete operational-export database file **3/3 PASS**; Flutter
+  foundation suite **77/77 PASS**; analyzer **PASS**; format and diff checks
+  **PASS**; independent review
+  **ACCEPT** with no findings. The provider workflow is terminal **FAIL** only
+  because the Android job contains these now-repaired failures; both isolated
+  Android/iOS QA jobs, iPad/iOS, isolated Windows QA and Windows PC jobs are
+  terminal **PASS**. A successor provider run is **NOT RUN**.
+- Dependency security remains **FAIL / BLOCKED** on the upstream ESLint-chain
+  minimatch range. GitGuardian's historical test-literal incident remains an
+  external disposition gate. This local successor is unpublished; automatic
+  CI, installed-device, hardware and merchant acceptance are **NOT RUN**.
+
 This is the one volatile status record. It cannot authorize publication,
 spending, credentials, signing, merge, deployment, provider mutation, live
 database work, billing activation, or production use. Verify remote facts
