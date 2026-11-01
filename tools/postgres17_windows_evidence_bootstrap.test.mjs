@@ -28,6 +28,7 @@ function closureFixture() {
   return {
     contract: 'supermega.windows-process-image-observer.v1', exactSha: 'b'.repeat(40),
     captureStartedBeforeSpawn: true, rehearsalObserved: true, droppedEvents: 0,
+    droppedBuffers: 0,
     descendantCorrelationComplete: true, runtimeModulesComplete: true,
     processTreeComplete: true, allProcessesExited: true, serviceInventoryUnchanged: true,
     allSelectedPortsClosed: true, selectedPorts: [54321], temporaryDataRemoved: true,
@@ -151,6 +152,8 @@ test('bootstrap policy pins exact installer and documented service-free flags bu
   ])
   assert.equal(policy.execution.serviceInstallationAllowed, false)
   assert.equal(policy.closureObserver.status, 'pending')
+  assert.equal(policy.closureObserver.requiresDroppedEvents, 0)
+  assert.equal(policy.closureObserver.requiresDroppedBuffers, 0)
   assert.equal(policy.approval.status, 'pending')
 })
 
@@ -166,7 +169,8 @@ test('PowerShell bootstrap separates non-executing capture from reviewed full-re
     'control-plane-only', 'bootstrap_source_tree_invalid',
     'bootstrap_ambient_override_rejected_', 'bootstrap_source_identity_mismatch',
     'bootstrap_authenticode_identity_mismatch', 'captureStartedBeforeSpawn', 'rehearsalObserved',
-    'droppedEvents', 'descendantCorrelationComplete', 'runtimeModulesComplete',
+    'droppedEvents', 'droppedBuffers', 'requiresDroppedBuffers',
+    'descendantCorrelationComplete', 'runtimeModulesComplete',
     'runtimeClosureEvidenceSha256', 'receiptSha256', 'rawReceiptSha256',
     'bootstrap_closure_inventory_incomplete', 'bootstrap_closure_inventory_invalid',
     'bootstrap_service_cleanup_failed', 'bootstrap_data_cleanup_failed',
@@ -712,6 +716,7 @@ test('sanitized closure schema rejects omissions, wrong types, surplus fields, a
     (value) => { delete value.systemModules[0].bytes },
     (value) => { value.processCount = '1' },
     (value) => { value.selectedPorts = [54321, 54321] },
+    (value) => { value.droppedBuffers = 1 },
     (value) => { value.runtimeFiles[0].relativePath = '/absolute/node.exe' },
     (value) => { value.runtimeFiles[0].relativePath = '\\server\\share\\node.exe' },
     (value) => { value.runtimeFiles[0].relativePath = '\\?\\C:\\node.exe' },

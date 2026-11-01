@@ -72,7 +72,7 @@ export function validateObserverProbe(probe, expectedSha) {
 
 export function validateSanitizedClosure(closure, expectedSha) {
   const keys = ['contract', 'exactSha', 'captureStartedBeforeSpawn', 'rehearsalObserved',
-    'droppedEvents', 'descendantCorrelationComplete', 'runtimeModulesComplete',
+    'droppedEvents', 'droppedBuffers', 'descendantCorrelationComplete', 'runtimeModulesComplete',
     'processTreeComplete', 'allProcessesExited', 'serviceInventoryUnchanged',
     'allSelectedPortsClosed', 'selectedPorts', 'temporaryDataRemoved', 'profileId',
     'runtimeClosureEvidenceSha256', 'sourceDigest', 'bindingDigest', 'receiptSha256',
@@ -81,7 +81,8 @@ export function validateSanitizedClosure(closure, expectedSha) {
   if (!exact(closure, keys) || closure.contract !== 'supermega.windows-process-image-observer.v1'
     || closure.exactSha !== expectedSha || !EXACT_SHA.test(expectedSha)
     || closure.captureStartedBeforeSpawn !== true || closure.rehearsalObserved !== true
-    || closure.droppedEvents !== 0 || closure.descendantCorrelationComplete !== true
+    || closure.droppedEvents !== 0 || closure.droppedBuffers !== 0
+    || closure.descendantCorrelationComplete !== true
     || closure.runtimeModulesComplete !== true || closure.processTreeComplete !== true
     || closure.allProcessesExited !== true || closure.serviceInventoryUnchanged !== true
     || closure.allSelectedPortsClosed !== true || closure.temporaryDataRemoved !== true

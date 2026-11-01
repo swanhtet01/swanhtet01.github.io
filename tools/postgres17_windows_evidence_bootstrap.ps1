@@ -238,6 +238,7 @@ try {
       -or $policy.closureObserver.captureMethod -ne 'windows-kernel-process-image-events-v1'
       -or $policy.closureObserver.requiresCaptureBeforeSpawn -ne $true
       -or $policy.closureObserver.requiresDroppedEvents -ne 0
+      -or $policy.closureObserver.requiresDroppedBuffers -ne 0
       -or $policy.closureObserver.requiresCompleteDescendantCorrelation -ne $true
       -or [string]::IsNullOrWhiteSpace($policy.closureObserver.command)
       -or $policy.closureObserver.sha256 -notmatch '^[0-9a-f]{64}$') {
@@ -312,7 +313,8 @@ try {
     if ($closure.contract -ne 'supermega.windows-process-image-observer.v1'
       -or $closure.exactSha -ne $ExactSha
       -or $closure.captureStartedBeforeSpawn -ne $true -or $closure.rehearsalObserved -ne $true
-      -or $closure.droppedEvents -ne 0 -or $closure.descendantCorrelationComplete -ne $true
+      -or $closure.droppedEvents -ne 0 -or $closure.droppedBuffers -ne 0
+      -or $closure.descendantCorrelationComplete -ne $true
       -or $closure.runtimeModulesComplete -ne $true -or $closure.processTreeComplete -ne $true
       -or $closure.allProcessesExited -ne $true -or $closure.serviceInventoryUnchanged -ne $true
       -or $closure.allSelectedPortsClosed -ne $true -or @($closure.selectedPorts).Count -lt 1
@@ -350,7 +352,7 @@ try {
       Fail 'bootstrap_closure_inventory_invalid'
     }
     $allowedClosureKeys = @('contract', 'exactSha', 'captureStartedBeforeSpawn',
-      'rehearsalObserved', 'droppedEvents', 'descendantCorrelationComplete',
+      'rehearsalObserved', 'droppedEvents', 'droppedBuffers', 'descendantCorrelationComplete',
       'runtimeModulesComplete', 'processTreeComplete', 'allProcessesExited',
       'serviceInventoryUnchanged', 'allSelectedPortsClosed', 'selectedPorts',
       'temporaryDataRemoved', 'profileId', 'runtimeClosureEvidenceSha256',

@@ -33,6 +33,7 @@
     "captureMethod": "windows-kernel-process-image-events-v1",
     "requiresCaptureBeforeSpawn": true,
     "requiresDroppedEvents": 0,
+    "requiresDroppedBuffers": 0,
     "requiresCompleteDescendantCorrelation": true,
     "command": null,
     "sha256": null,
