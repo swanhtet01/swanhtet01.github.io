@@ -28,6 +28,7 @@ class ShopRuntimeCapabilities {
   final bool correctionAuthorization;
   final bool cashMovementAuthorization;
   final bool connectedOrders;
+
   /// Multi-device site coordination remains unavailable until the signed
   /// lease issuer, LAN coordinator, reconciliation service, and release gates
   /// are independently verified for one exact candidate.

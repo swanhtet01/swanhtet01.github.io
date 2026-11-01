@@ -26,7 +26,10 @@ class FullChainProofContractTests(unittest.TestCase):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
                         if p.name != "20260711081300_public_legacy_baseline.sql")
         self.assertEqual(proof.MIGRATIONS, proof.pg.V13_MIGRATIONS)
-        self.assertEqual(list(proof.pg.CURRENT_MIGRATIONS), actual)
+        self.assertEqual(
+            [*proof.pg.CURRENT_MIGRATIONS, *proof.pg.SOURCE_ONLY_MIGRATIONS],
+            actual,
+        )
         self.assertEqual(len(proof.MIGRATIONS), 23)
         self.assertEqual(proof.MIGRATIONS[-8:], (
             "20260915184728_website_customer_review_storage.sql",
@@ -61,6 +64,30 @@ class FullChainProofContractTests(unittest.TestCase):
         with patch.object(proof.subprocess, "check_output", return_value=" M file"):
             with self.assertRaisesRegex(proof.pg.RehearsalFailure, "source_dirty"):
                 proof.source_identity("a" * 40)
+
+    def test_clean_source_identity_covers_source_only_migrations(self):
+        head = "a" * 40
+        tree = "b" * 40
+
+        def git(command, **_kwargs):
+            args = command[1:]
+            if args == ["status", "--porcelain"]:
+                return ""
+            if args == ["rev-parse", "HEAD"]:
+                return head
+            if args == ["rev-parse", "HEAD^{tree}"]:
+                return tree
+            self.fail(f"unexpected git command: {args}")
+
+        with patch.object(proof.subprocess, "check_output", side_effect=git):
+            identity = proof.source_identity(head)
+
+        self.assertEqual(identity["head"], head)
+        self.assertEqual(identity["tree"], tree)
+        self.assertIn(
+            "supabase/migrations/20261101090000_private_trial_backend_v15_connected_site.sql",
+            {item["path"] for item in identity["files"]},
+        )
 
     def test_existing_output_causes_no_database_work(self):
         with tempfile.TemporaryDirectory(prefix="supermega-proof-contract-") as temp:

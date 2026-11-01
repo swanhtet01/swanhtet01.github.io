@@ -88,7 +88,10 @@ def source_identity(expected_head):
     # migration inventory.  The outer PostgreSQL 17 rehearsal owns that
     # current inventory while MIGRATIONS remains the v13 subset below.
     require(MIGRATIONS == pg.V13_MIGRATIONS, "v13_migration_contract_mismatch")
-    require(observed == pg.CURRENT_MIGRATIONS, "private_migration_inventory_mismatch")
+    require(
+        observed == (*pg.CURRENT_MIGRATIONS, *pg.SOURCE_ONLY_MIGRATIONS),
+        "private_migration_inventory_mismatch",
+    )
     paths = sorted(set([
         "tools/rehearse_self_serve_v13.py", "tools/run_python_tool.mjs",
         "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
