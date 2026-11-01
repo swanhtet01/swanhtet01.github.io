@@ -8,10 +8,11 @@ on:
         required: true
         type: string
       stage:
-        description: Non-authoritative capture or separately reviewed rehearsal
+        description: Non-authoritative observer probe, capture, or separately reviewed rehearsal
         required: true
         type: choice
         options:
+          - observer-probe
           - capture
           - rehearsal
 
@@ -36,7 +37,7 @@ jobs:
         run: |
           if ($env:EXACT_SHA -notmatch '^[0-9a-f]{40}$') { throw 'exact_sha_invalid' }
           if ($env:DISPATCH_SHA -ne $env:EXACT_SHA) { throw 'dispatch_ref_not_exact_sha' }
-          if ($env:EVIDENCE_STAGE -notin @('capture', 'rehearsal')) { throw 'evidence_stage_invalid' }
+          if ($env:EVIDENCE_STAGE -notin @('observer-probe', 'capture', 'rehearsal')) { throw 'evidence_stage_invalid' }
       - name: Checkout exact source without persisted credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,16 +56,24 @@ jobs:
           cache: npm
       - name: Verify source contracts
         shell: pwsh
-        run: node --test tools/postgres17_windows_evidence_bootstrap.test.mjs tools/postgres17_toolchain_profile.test.mjs
+        run: node --test tools/postgres17_windows_evidence_bootstrap.test.mjs tools/postgres17_windows_trace_observer.test.mjs tools/postgres17_toolchain_profile.test.mjs
       - name: Run manual evidence stage
         shell: pwsh
         run: |
-          $stage = if ($env:EVIDENCE_STAGE -eq 'capture') { 'Capture' } else { 'Rehearsal' }
-          & ./tools/postgres17_windows_evidence_bootstrap.ps1 `
-            -Stage $stage `
-            -ExactSha $env:EXACT_SHA `
-            -RepositoryRoot '${{ github.workspace }}' `
-            -OutputDirectory '${{ runner.temp }}\supermega-sanitized-evidence'
+          if ($env:EVIDENCE_STAGE -eq 'observer-probe') {
+            & ./tools/postgres17_windows_trace_observer.ps1 `
+              -Mode Probe `
+              -ExactSha $env:EXACT_SHA `
+              -RepositoryRoot '${{ github.workspace }}' `
+              -OutputDirectory '${{ runner.temp }}\supermega-sanitized-evidence'
+          } else {
+            $stage = if ($env:EVIDENCE_STAGE -eq 'capture') { 'Capture' } else { 'Rehearsal' }
+            & ./tools/postgres17_windows_evidence_bootstrap.ps1 `
+              -Stage $stage `
+              -ExactSha $env:EXACT_SHA `
+              -RepositoryRoot '${{ github.workspace }}' `
+              -OutputDirectory '${{ runner.temp }}\supermega-sanitized-evidence'
+          }
       - name: Verify exact sanitized evidence contract
         shell: pwsh
         run: node tools/postgres17_windows_evidence_contract.mjs '${{ runner.temp }}\supermega-sanitized-evidence' $env:EVIDENCE_STAGE $env:EXACT_SHA
@@ -74,6 +83,7 @@ jobs:
         with:
           name: postgres17-sanitized-evidence-${{ github.sha }}
           path: |
+            ${{ runner.temp }}\supermega-sanitized-evidence\postgres17-observer-probe.json
             ${{ runner.temp }}\supermega-sanitized-evidence\postgres17-stage1-candidate.json
             ${{ runner.temp }}\supermega-sanitized-evidence\postgres17-stage2-cleanup.json
             ${{ runner.temp }}\supermega-sanitized-evidence\postgres17-stage2-closure.json

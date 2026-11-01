@@ -35,7 +35,26 @@
     "requiresDroppedEvents": 0,
     "requiresCompleteDescendantCorrelation": true,
     "command": null,
-    "sha256": null
+    "sha256": null,
+    "capabilityProbe": {
+      "status": "source-only",
+      "contract": "supermega.windows-process-image-observer-probe.v1",
+      "captureMethod": "windows-wpr-etw-process-image-probe-v1",
+      "authoritative": false,
+      "scriptPath": "tools/postgres17_windows_trace_observer.ps1",
+      "scriptSha256": "cf441798398947a6345ab3783351f2e95ae8b2462e3dd28d3771b81fe4d1609e",
+      "profilePath": "hq/research/postgres17-process-image.wprp",
+      "profileSha256": "ad64780da3422ec18e67a782e7607dcdec638b7ed8d55a41c6627191cb8b1d4c",
+      "wprPath": "C:\\Windows\\System32\\wpr.exe",
+      "tracerptPath": "C:\\Windows\\System32\\tracerpt.exe",
+      "probeExecutablePath": "C:\\Windows\\System32\\where.exe",
+      "requiredSignerOrganization": "Microsoft Corporation",
+      "requiresEventsLost": 0,
+      "requiresBuffersLost": 0,
+      "requiresProcessEvent": true,
+      "requiresImageEvent": true,
+      "requiresDrain": true
+    }
   },
   "trustedBoundary": {
     "singlePurposeEphemeralRunner": true,
@@ -46,7 +65,7 @@
   "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
   "blockers": [
     "The service-free extract-only flags are bound to the retained authoritative EDB documentation digest, but the policy is not independently approved.",
-    "No dependency-free loss-aware Windows kernel process/image observer is committed and independently reviewed; installer execution therefore remains disabled.",
+    "A dependency-free WPR/tracerpt capability probe is source-controlled but has not run on windows-2025 or received independent evidence review; installer execution therefore remains disabled.",
     "Stage 2 remains disabled until a complete reviewed profile, source policies and retained evidence are committed at the exact rehearsal SHA."
   ]
 }

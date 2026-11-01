@@ -29,6 +29,45 @@ function safeJson(bytes) {
 }
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
+export function validateObserverProbe(probe, expectedSha) {
+  const keys = ['contract', 'authoritative', 'exactSha', 'captureMethod', 'runner',
+    'osBuild', 'profileSha256', 'tools', 'traceStartedBeforeProbe', 'traceStopped',
+    'traceParsed', 'droppedEvents', 'droppedBuffers', 'processEventObserved',
+    'imageEventObserved', 'probeExitCode', 'drainComplete', 'temporaryDataRemoved',
+    'postgresDownloaded', 'postgresExecuted', 'databaseStarted', 'secretValuesExposed']
+  if (!exact(probe, keys)
+    || probe.contract !== 'supermega.windows-process-image-observer-probe.v1'
+    || probe.authoritative !== false || probe.exactSha !== expectedSha
+    || !EXACT_SHA.test(expectedSha)
+    || probe.captureMethod !== 'windows-wpr-etw-process-image-probe-v1'
+    || probe.runner !== 'windows-2025'
+    || typeof probe.osBuild !== 'string' || !/^\d+(?:\.\d+){1,3}$/.test(probe.osBuild)
+    || !SHA256.test(probe.profileSha256 || '')
+    || !exact(probe.tools, ['wpr', 'tracerpt', 'probe'])
+    || probe.traceStartedBeforeProbe !== true || probe.traceStopped !== true
+    || probe.traceParsed !== true || probe.droppedEvents !== 0 || probe.droppedBuffers !== 0
+    || probe.processEventObserved !== true || probe.imageEventObserved !== true
+    || probe.probeExitCode !== 0 || probe.drainComplete !== true
+    || probe.temporaryDataRemoved !== true || probe.postgresDownloaded !== false
+    || probe.postgresExecuted !== false || probe.databaseStarted !== false
+    || probe.secretValuesExposed !== false) {
+    fail('bootstrap_observer_probe_invalid')
+  }
+  for (const [name, tool] of Object.entries(probe.tools)) {
+    if (!exact(tool, ['fileName', 'bytes', 'sha256', 'signatureStatus',
+      'signerCertificateSha256'])
+      || tool.fileName !== basename(tool.fileName || '')
+      || !integer(tool.bytes, 1, Number.MAX_SAFE_INTEGER)
+      || !SHA256.test(tool.sha256 || '') || tool.signatureStatus !== 'Valid'
+      || !SHA256.test(tool.signerCertificateSha256 || '')
+      || ({ wpr: 'wpr.exe', tracerpt: 'tracerpt.exe', probe: 'where.exe' })[name]
+        !== tool.fileName.toLowerCase()) {
+      fail('bootstrap_observer_probe_invalid')
+    }
+  }
+  return { stage: 'observer-probe', exactSha: expectedSha, authoritative: false }
+}
+
 export function validateSanitizedClosure(closure, expectedSha) {
   const keys = ['contract', 'exactSha', 'captureStartedBeforeSpawn', 'rehearsalObserved',
     'droppedEvents', 'descendantCorrelationComplete', 'runtimeModulesComplete',
@@ -87,13 +126,15 @@ export function validateSanitizedClosure(closure, expectedSha) {
 }
 
 export async function verifyEvidenceDirectory(directory, stage, expectedSha) {
-  if (!EXACT_SHA.test(expectedSha || '') || !['capture', 'rehearsal'].includes(stage)) {
+  if (!EXACT_SHA.test(expectedSha || '')
+    || !['observer-probe', 'capture', 'rehearsal'].includes(stage)) {
     fail('bootstrap_evidence_arguments_invalid')
   }
-  const expected = stage === 'capture'
-    ? ['postgres17-stage1-candidate.json']
-    : ['postgres17-rehearsal.json', 'postgres17-rehearsal.json.raw.json',
-      'postgres17-stage2-cleanup.json', 'postgres17-stage2-closure.json']
+  const expected = stage === 'observer-probe'
+    ? ['postgres17-observer-probe.json']
+    : stage === 'capture' ? ['postgres17-stage1-candidate.json']
+      : ['postgres17-rehearsal.json', 'postgres17-rehearsal.json.raw.json',
+        'postgres17-stage2-cleanup.json', 'postgres17-stage2-closure.json']
   const actual = (await readdir(directory)).sort()
   if (actual.join('\0') !== expected.sort().join('\0')) fail('bootstrap_evidence_file_set_invalid')
   const values = {}
@@ -101,6 +142,9 @@ export async function verifyEvidenceDirectory(directory, stage, expectedSha) {
   for (const name of expected) {
     bytes[name] = await readFile(join(directory, name))
     values[name] = safeJson(bytes[name])
+  }
+  if (stage === 'observer-probe') {
+    return validateObserverProbe(values['postgres17-observer-probe.json'], expectedSha)
   }
   if (stage === 'capture') {
     const candidate = values[expected[0]]
