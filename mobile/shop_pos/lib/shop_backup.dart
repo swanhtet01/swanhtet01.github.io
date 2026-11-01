@@ -3729,6 +3729,19 @@ abstract final class ShopBackup {
   static bool _v34ConnectedCloudProofRowsValid(Database connection) {
     try {
       final schemaVersion = connection.userVersion;
+      if (schemaVersion == 34) {
+        List<Map<String, Object?>> rows(String table) => connection
+            .select('SELECT * FROM $table')
+            .map((row) => Map<String, Object?>.from(row))
+            .toList(growable: false);
+        return shopHistoricalCloudProofRowsValidV34(
+          commands: rows('shop_site_commands'),
+          requirements: rows('shop_site_cloud_proof_requirements'),
+          proofs: rows('shop_site_cloud_proofs'),
+          retainedLeases: rows('shop_site_offline_lease_payloads'),
+          leases: rows('shop_site_offline_leases'),
+        );
+      }
       final missingRequirement = connection
           .select(
             'SELECT COUNT(*) AS total FROM shop_site_commands command '

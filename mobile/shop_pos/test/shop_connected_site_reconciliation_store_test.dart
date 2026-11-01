@@ -521,97 +521,182 @@ void main() {
     }
   });
 
-  test(
-    'v34 proof rows migrate as local-only without inventing issuer evidence',
-    () async {
-      final root = await Directory.systemTemp.createTemp('cloud-proof-v34-');
-      final file = File('${root.path}/legacy.sqlite');
-      var database = ShopDatabase(NativeDatabase(file));
-      try {
-        await _seedAuthority(database);
-        await _appendEvent(database, 'v34-command', 'v34-aggregate');
-        await database.customStatement(
-          'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_update',
-        );
-        await database.customStatement(
-          'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_delete',
-        );
-        await database.customStatement(
-          'DROP TABLE shop_site_cloud_proof_legacy_boundary',
-        );
-        await database.customStatement(
-          'DROP TRIGGER shop_site_lease_issuer_evidence_no_update',
-        );
-        await database.customStatement(
-          'DROP TRIGGER shop_site_lease_issuer_evidence_no_delete',
-        );
-        await database.customStatement(
-          'DROP TABLE shop_site_lease_issuer_evidence',
-        );
-        await database.customStatement('PRAGMA user_version = 34');
-        await database.close();
-
-        database = ShopDatabase(NativeDatabase(file));
-        await database.verifyReadyForUse();
-        final retained = await database
-            .customSelect(
-              'SELECT command.command_id, requirement.proof_state, '
-              'boundary.command_id AS boundary_command_id, '
-              'proof.command_id AS proof_command_id '
-              'FROM shop_site_commands command '
-              'JOIN shop_site_cloud_proof_requirements requirement '
-              'ON requirement.command_id = command.command_id '
-              'LEFT JOIN shop_site_cloud_proof_legacy_boundary boundary '
-              'ON boundary.command_id = command.command_id '
-              'LEFT JOIN shop_site_cloud_proofs proof '
-              'ON proof.command_id = command.command_id '
-              "WHERE command.command_id = 'v34-command'",
+  test('v34 proof rows migrate as local-only without inventing issuer evidence', () async {
+    final root = await Directory.systemTemp.createTemp('cloud-proof-v34-');
+    final file = File('${root.path}/legacy.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      await _seedAuthority(database);
+      await _appendEvent(database, 'v34-command', 'v34-aggregate');
+      final currentProof = await database
+          .customSelect(
+            "SELECT proof_json FROM shop_site_cloud_proofs WHERE command_id = 'v34-command'",
+          )
+          .getSingle();
+      final historicalProof =
+          Map<String, Object?>.from(
+              jsonDecode(currentProof.read<String>('proof_json')) as Map,
             )
-            .getSingle();
-        expect(retained.read<String>('proof_state'), 'legacyUnverifiable');
-        expect(retained.read<String>('boundary_command_id'), 'v34-command');
-        expect(retained.readNullable<String>('proof_command_id'), isNull);
-        await expectLater(
-          database.customUpdate(
-            "UPDATE shop_site_cloud_proof_requirements SET proof_state = 'proofRequired' "
-            "WHERE command_id = 'v34-command'",
+            ..remove('coordinatorBindingDigest')
+            ..remove('eventBinding')
+            ..remove('eventBindingDigest');
+      final historicalProofJson = canonicalConnectedSiteJson(historicalProof);
+      await database.customStatement(
+        'DROP TRIGGER shop_site_cloud_proofs_no_update',
+      );
+      await database.customUpdate(
+        'UPDATE shop_site_cloud_proofs SET proof_json = ?, proof_digest = ? '
+        "WHERE command_id = 'v34-command'",
+        variables: [
+          Variable<String>(historicalProofJson),
+          Variable<String>(connectedSiteSha256(historicalProof)),
+        ],
+      );
+      await database.customStatement(
+        shopConnectedCloudProofSchemaDefinitionsV34()['shop_site_cloud_proofs_no_update']!,
+      );
+      await database.customStatement(
+        'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_update',
+      );
+      await database.customStatement(
+        'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_delete',
+      );
+      await database.customStatement(
+        'DROP TABLE shop_site_cloud_proof_legacy_boundary',
+      );
+      await database.customStatement(
+        'DROP TRIGGER shop_site_lease_issuer_evidence_no_update',
+      );
+      await database.customStatement(
+        'DROP TRIGGER shop_site_lease_issuer_evidence_no_delete',
+      );
+      await database.customStatement(
+        'DROP TABLE shop_site_lease_issuer_evidence',
+      );
+      Future<List<Map<String, Object?>>> fixtureRows(String table) async =>
+          (await database.customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      final commands = await fixtureRows('shop_site_commands');
+      final requirements = await fixtureRows(
+        'shop_site_cloud_proof_requirements',
+      );
+      final proofs = await fixtureRows('shop_site_cloud_proofs');
+      final retainedLeases = await fixtureRows(
+        'shop_site_offline_lease_payloads',
+      );
+      final leases = await fixtureRows('shop_site_offline_leases');
+      expect(
+        shopHistoricalCloudProofRowsValidV34(
+          commands: commands,
+          requirements: requirements,
+          proofs: proofs,
+          retainedLeases: retainedLeases,
+          leases: leases,
+        ),
+        isTrue,
+      );
+      final tampered = Map<String, Object?>.from(proofs.single)
+        ..['proof_json'] = historicalProofJson.replaceFirst(
+          'v34-command',
+          'v34-changed',
+        );
+      expect(
+        shopHistoricalCloudProofRowsValidV34(
+          commands: commands,
+          requirements: requirements,
+          proofs: [tampered],
+          retainedLeases: retainedLeases,
+          leases: leases,
+        ),
+        isFalse,
+      );
+      expect(
+        shopHistoricalCloudProofRowsValidV34(
+          commands: commands,
+          requirements: requirements,
+          proofs: const [],
+          retainedLeases: retainedLeases,
+          leases: leases,
+        ),
+        isFalse,
+      );
+      final orphan = Map<String, Object?>.from(proofs.single)
+        ..['command_id'] = 'v34-orphan';
+      expect(
+        shopHistoricalCloudProofRowsValidV34(
+          commands: commands,
+          requirements: requirements,
+          proofs: [...proofs, orphan],
+          retainedLeases: retainedLeases,
+          leases: leases,
+        ),
+        isFalse,
+      );
+      await database.customStatement('PRAGMA user_version = 34');
+      await database.close();
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 34);
+
+      database = ShopDatabase(NativeDatabase(file));
+      await database.verifyReadyForUse();
+      final retained = await database
+          .customSelect(
+            'SELECT command.command_id, requirement.proof_state, '
+            'boundary.command_id AS boundary_command_id, '
+            'proof.command_id AS proof_command_id '
+            'FROM shop_site_commands command '
+            'JOIN shop_site_cloud_proof_requirements requirement '
+            'ON requirement.command_id = command.command_id '
+            'LEFT JOIN shop_site_cloud_proof_legacy_boundary boundary '
+            'ON boundary.command_id = command.command_id '
+            'LEFT JOIN shop_site_cloud_proofs proof '
+            'ON proof.command_id = command.command_id '
+            "WHERE command.command_id = 'v34-command'",
+          )
+          .getSingle();
+      expect(retained.read<String>('proof_state'), 'legacyUnverifiable');
+      expect(retained.read<String>('boundary_command_id'), 'v34-command');
+      expect(retained.readNullable<String>('proof_command_id'), isNull);
+      await expectLater(
+        database.customUpdate(
+          "UPDATE shop_site_cloud_proof_requirements SET proof_state = 'proofRequired' "
+          "WHERE command_id = 'v34-command'",
+        ),
+        throwsA(anything),
+      );
+      await expectLater(
+        database.customUpdate(
+          "DELETE FROM shop_site_cloud_proof_legacy_boundary WHERE command_id = 'v34-command'",
+        ),
+        throwsA(anything),
+      );
+      expect(
+        (await database
+                .customSelect('SELECT COUNT(*) AS n FROM shop_site_events')
+                .getSingle())
+            .read<int>('n'),
+        1,
+      );
+      await expectLater(
+        ShopConnectedSiteReconciliationStore(
+          database: database,
+          nowMillis: () => _now + 1000,
+        ).pendingEvents(
+          ConnectedSiteScope(
+            workspaceId: _workspace,
+            siteId: _site,
+            deviceId: _device,
           ),
-          throwsA(anything),
-        );
-        await expectLater(
-          database.customUpdate(
-            "DELETE FROM shop_site_cloud_proof_legacy_boundary WHERE command_id = 'v34-command'",
-          ),
-          throwsA(anything),
-        );
-        expect(
-          (await database
-                  .customSelect('SELECT COUNT(*) AS n FROM shop_site_events')
-                  .getSingle())
-              .read<int>('n'),
-          1,
-        );
-        await expectLater(
-          ShopConnectedSiteReconciliationStore(
-            database: database,
-            nowMillis: () => _now + 1000,
-          ).pendingEvents(
-            ConnectedSiteScope(
-              workspaceId: _workspace,
-              siteId: _site,
-              deviceId: _device,
-            ),
-            afterCursor: 0,
-            limit: 10,
-          ),
-          throwsStateError,
-        );
-      } finally {
-        await database.close();
-        await root.delete(recursive: true);
-      }
-    },
-  );
+          afterCursor: 0,
+          limit: 10,
+        ),
+        throwsStateError,
+      );
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
 
   test(
     'revoked current authority blocks upload without corrupting history',

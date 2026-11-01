@@ -2658,6 +2658,244 @@ Map<String, String> shopConnectedCloudProofSchemaDefinitionsV35() => {
   ),
 };
 
+/// Verifies the exact proof shape emitted by the unreleased v34 checkpoint.
+///
+/// V34 did not retain issuer evidence bytes, coordinator-binding evidence, or
+/// event bindings. This verifier is therefore used only to authenticate the
+/// old rows structurally before v35 retires their upload eligibility. It must
+/// never be used to authorize upload or to synthesize a v35 proof.
+bool shopHistoricalCloudProofRowsValidV34({
+  required Iterable<Map<String, Object?>> commands,
+  required Iterable<Map<String, Object?>> requirements,
+  required Iterable<Map<String, Object?>> proofs,
+  required Iterable<Map<String, Object?>> retainedLeases,
+  required Iterable<Map<String, Object?>> leases,
+}) {
+  try {
+    final digest = RegExp(r'^[0-9a-f]{64}$');
+    bool exact(Map value, Set<String> keys) =>
+        value.length == keys.length && value.keys.every(keys.contains);
+    final commandById = <String, Map<String, Object?>>{
+      for (final row in commands) row['command_id']! as String: row,
+    };
+    final requirementById = <String, Map<String, Object?>>{
+      for (final row in requirements) row['command_id']! as String: row,
+    };
+    final proofById = <String, Map<String, Object?>>{
+      for (final row in proofs) row['command_id']! as String: row,
+    };
+    final retainedByDigest = <String, Map<String, Object?>>{
+      for (final row in retainedLeases) row['payload_digest']! as String: row,
+    };
+    final leaseByDigest = <String, Map<String, Object?>>{
+      for (final row in leases) row['payload_digest']! as String: row,
+    };
+    if (commandById.length != commands.length ||
+        requirementById.length != requirements.length ||
+        proofById.length != proofs.length ||
+        retainedByDigest.length != retainedLeases.length ||
+        leaseByDigest.length != leases.length ||
+        commandById.keys
+            .toSet()
+            .difference(requirementById.keys.toSet())
+            .isNotEmpty ||
+        requirementById.keys
+            .toSet()
+            .difference(commandById.keys.toSet())
+            .isNotEmpty ||
+        proofById.keys
+            .toSet()
+            .difference(commandById.keys.toSet())
+            .isNotEmpty) {
+      return false;
+    }
+    for (final command in commandById.values) {
+      final commandId = command['command_id']! as String;
+      final requirement = requirementById[commandId]!;
+      final state = requirement['proof_state'];
+      if (requirement['recorded_at_millis'] != command['received_at_millis'] ||
+          (state == 'proofRequired' && !proofById.containsKey(commandId)) ||
+          (state == 'legacyUnverifiable' && proofById.containsKey(commandId)) ||
+          (state != 'proofRequired' && state != 'legacyUnverifiable')) {
+        return false;
+      }
+    }
+    for (final retained in retainedByDigest.values) {
+      final encoded = retained['lease_json'];
+      final leaseRow = leaseByDigest[retained['payload_digest']];
+      if (encoded is! String || leaseRow == null) return false;
+      final decoded = jsonDecode(encoded);
+      final lease = OfflineStaffLeaseV1.fromJson(decoded);
+      if (canonicalConnectedSiteJson(decoded) != encoded ||
+          connectedSiteSha256(decoded) != retained['lease_bytes_digest'] ||
+          retained['issuer_evidence_digest'] is! String ||
+          !digest.hasMatch(retained['issuer_evidence_digest']! as String) ||
+          lease.payloadDigest != retained['payload_digest'] ||
+          lease.leaseId != leaseRow['lease_id'] ||
+          lease.workspaceId != leaseRow['tenant_id'] ||
+          lease.siteId != leaseRow['site_id'] ||
+          lease.actorId != leaseRow['actor_id'] ||
+          lease.role != leaseRow['actor_role'] ||
+          canonicalConnectedSiteJson(lease.capabilities) !=
+              canonicalConnectedSiteJson(
+                jsonDecode(leaseRow['capabilities_json']! as String),
+              ) ||
+          lease.deviceId != leaseRow['device_id'] ||
+          lease.sessionGeneration != leaseRow['session_generation'] ||
+          lease.revocationGeneration != leaseRow['revocation_generation'] ||
+          lease.issuedAtMillis != leaseRow['issued_at_millis'] ||
+          lease.expiresAtMillis != leaseRow['expires_at_millis'] ||
+          lease.issuerKeyId != leaseRow['key_id'] ||
+          lease.signature != leaseRow['signature']) {
+        return false;
+      }
+    }
+
+    Map<String, Object?> parseProof(Object? value) {
+      if (value is! Map) throw const FormatException('historical proof');
+      final source = Map<String, Object?>.from(value);
+      if (source['contract'] !=
+          'supermega.shop.connected-site-cloud-proof.v1') {
+        throw const FormatException('historical proof contract');
+      }
+      if (source['proofKind'] == 'signedClientCommand') {
+        if (!exact(source, const {
+          'contract',
+          'proofKind',
+          'command',
+          'commandBytesDigest',
+          'lease',
+          'leaseBytesDigest',
+          'clientFingerprint',
+          'enrollmentEvidenceDigest',
+          'authorityPayloadDigest',
+        })) {
+          throw const FormatException('historical signed proof shape');
+        }
+        final command = SiteCommandV1.fromJson(source['command']);
+        final lease = OfflineStaffLeaseV1.fromJson(source['lease']);
+        if (source['commandBytesDigest'] !=
+                connectedSiteSha256(command.toJson()) ||
+            source['leaseBytesDigest'] != connectedSiteSha256(lease.toJson()) ||
+            command.workspaceId != lease.workspaceId ||
+            command.siteId != lease.siteId ||
+            command.actorId != lease.actorId ||
+            command.deviceId != lease.deviceId ||
+            command.leaseDigest != lease.payloadDigest ||
+            source['clientFingerprint'] is! String ||
+            !digest.hasMatch(source['clientFingerprint']! as String) ||
+            source['enrollmentEvidenceDigest'] is! String ||
+            !digest.hasMatch(source['enrollmentEvidenceDigest']! as String) ||
+            source['authorityPayloadDigest'] is! String ||
+            !digest.hasMatch(source['authorityPayloadDigest']! as String)) {
+          throw const FormatException('historical signed proof binding');
+        }
+      } else if (source['proofKind'] == 'coordinatorDerived') {
+        if (!exact(source, const {
+          'contract',
+          'proofKind',
+          'commandId',
+          'commandDigest',
+          'workspaceId',
+          'siteId',
+          'deviceId',
+          'leaseDigest',
+          'sourceProof',
+          'sourceProofDigest',
+          'derivation',
+          'derivationDigest',
+        })) {
+          throw const FormatException('historical derived proof shape');
+        }
+        final sourceProof = parseProof(source['sourceProof']);
+        if (sourceProof['proofKind'] != 'signedClientCommand' ||
+            source['sourceProofDigest'] != connectedSiteSha256(sourceProof) ||
+            source['derivation'] is! Map ||
+            source['derivationDigest'] !=
+                connectedSiteSha256(source['derivation']) ||
+            source['workspaceId'] !=
+                SiteCommandV1.fromJson(sourceProof['command']).workspaceId ||
+            source['siteId'] !=
+                SiteCommandV1.fromJson(sourceProof['command']).siteId ||
+            source['deviceId'] !=
+                SiteCommandV1.fromJson(sourceProof['command']).deviceId ||
+            source['leaseDigest'] !=
+                SiteCommandV1.fromJson(sourceProof['command']).leaseDigest) {
+          throw const FormatException('historical derived proof binding');
+        }
+      } else {
+        throw const FormatException('historical proof kind');
+      }
+      return source;
+    }
+
+    final decodedProofById = <String, Map<String, Object?>>{};
+    for (final row in proofById.values) {
+      final encoded = row['proof_json'];
+      if (encoded is! String) return false;
+      final decoded = parseProof(jsonDecode(encoded));
+      if (canonicalConnectedSiteJson(decoded) != encoded ||
+          connectedSiteSha256(decoded) != row['proof_digest'] ||
+          decoded['proofKind'] != row['proof_kind']) {
+        return false;
+      }
+      decodedProofById[row['command_id']! as String] = decoded;
+    }
+    for (final entry in decodedProofById.entries) {
+      final commandRow = commandById[entry.key]!;
+      final proof = entry.value;
+      late final String commandId;
+      late final String commandDigest;
+      late final String workspaceId;
+      late final String siteId;
+      late final String deviceId;
+      late final String leaseDigest;
+      if (proof['proofKind'] == 'signedClientCommand') {
+        final command = SiteCommandV1.fromJson(proof['command']);
+        commandId = command.commandId;
+        commandDigest = command.commandDigest;
+        workspaceId = command.workspaceId;
+        siteId = command.siteId;
+        deviceId = command.deviceId;
+        leaseDigest = command.leaseDigest;
+        final retained = retainedByDigest[leaseDigest];
+        if (retained == null ||
+            retained['lease_json'] !=
+                canonicalConnectedSiteJson(proof['lease']) ||
+            retained['issuer_evidence_digest'] !=
+                proof['authorityPayloadDigest']) {
+          return false;
+        }
+      } else {
+        commandId = proof['commandId']! as String;
+        commandDigest = proof['commandDigest']! as String;
+        workspaceId = proof['workspaceId']! as String;
+        siteId = proof['siteId']! as String;
+        deviceId = proof['deviceId']! as String;
+        leaseDigest = proof['leaseDigest']! as String;
+        final source = Map<String, Object?>.from(proof['sourceProof']! as Map);
+        final sourceCommand = SiteCommandV1.fromJson(source['command']);
+        final retainedSource = decodedProofById[sourceCommand.commandId];
+        if (retainedSource == null ||
+            connectedSiteSha256(retainedSource) != proof['sourceProofDigest']) {
+          return false;
+        }
+      }
+      if (commandId != entry.key ||
+          commandDigest != commandRow['command_digest'] ||
+          workspaceId != commandRow['tenant_id'] ||
+          siteId != commandRow['site_id'] ||
+          deviceId != commandRow['device_id'] ||
+          leaseDigest != commandRow['lease_digest']) {
+        return false;
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
 bool shopConnectedAuthorityPayloadRowsValidV30({
   required Iterable<Map<String, Object?>> payloads,
   required Iterable<Map<String, Object?>> members,
@@ -5531,7 +5769,7 @@ class ShopDatabase extends _$ShopDatabase {
       // be silently relabelled or partially repaired.
       if (from == 34) {
         await _createConnectedCloudProofSchemaV34();
-        await _requireUnifiedV34Schema();
+        await _requireUnifiedV34Schema(historical4d9Proofs: true);
         await _createConnectedCloudProofBoundaryV35(
           quarantineUnverifiableV34Proofs: true,
         );
@@ -8882,7 +9120,9 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<void> _requireUnifiedV34Schema() async {
+  Future<void> _requireUnifiedV34Schema({
+    bool historical4d9Proofs = false,
+  }) async {
     await _requireUnifiedV33Schema();
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedCloudProofSchemaDefinitionsV34();
@@ -8891,11 +9131,27 @@ class ShopDatabase extends _$ShopDatabase {
           definitions,
           definitions.keys.toSet(),
         ) ||
-        !await _v34ConnectedCloudProofRowsValid()) {
+        !(historical4d9Proofs
+            ? await _historicalV34ConnectedCloudProofRowsValid()
+            : await _v34ConnectedCloudProofRowsValid())) {
       throw StateError(
         'The unified Shop v34 cloud-proof schema failed verification.',
       );
     }
+  }
+
+  Future<bool> _historicalV34ConnectedCloudProofRowsValid() async {
+    Future<List<Map<String, Object?>>> rows(String table) async =>
+        (await customSelect('SELECT * FROM $table').get())
+            .map((row) => Map<String, Object?>.from(row.data))
+            .toList(growable: false);
+    return shopHistoricalCloudProofRowsValidV34(
+      commands: await rows('shop_site_commands'),
+      requirements: await rows('shop_site_cloud_proof_requirements'),
+      proofs: await rows('shop_site_cloud_proofs'),
+      retainedLeases: await rows('shop_site_offline_lease_payloads'),
+      leases: await rows('shop_site_offline_leases'),
+    );
   }
 
   Future<void> _requireUnifiedV35Schema() async {
