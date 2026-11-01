@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'shop_connected_platform_security.dart';
 import 'shop_runtime_profile.dart';
+import 'shop_site_coordinator.dart';
 
 enum ConnectedRuntimeState {
   stopped,
@@ -64,6 +65,65 @@ abstract interface class ConnectedSharedWriteGate {
   Future<void> pause(String reason);
 
   Future<void> resume();
+}
+
+/// One in-process gate shared by the application runtime and coordinator
+/// dispatcher. It starts paused, so binding a listener can never make commands
+/// writable before runtime authority and enrollment checks have completed.
+class ShopConnectedSharedWriteGate
+    implements ConnectedSharedWriteGate, CoordinatorSharedWriteAvailability {
+  bool _available = false;
+  String _pauseReason = 'connected_runtime_not_started';
+  int _activeWrites = 0;
+  Completer<void>? _drained;
+
+  @override
+  bool get sharedWritesAvailable => _available;
+
+  String get pauseReason => _pauseReason;
+
+  int get activeWrites => _activeWrites;
+
+  @override
+  bool tryBeginSharedWrite() {
+    if (!_available) return false;
+    _activeWrites += 1;
+    return true;
+  }
+
+  @override
+  void endSharedWrite() {
+    if (_activeWrites <= 0) {
+      throw StateError('connected_site_shared_write_not_started');
+    }
+    _activeWrites -= 1;
+    if (_activeWrites == 0 && _drained != null && !_drained!.isCompleted) {
+      _drained!.complete();
+      _drained = null;
+    }
+  }
+
+  @override
+  Future<void> pause(String reason) async {
+    final normalized = reason.trim();
+    if (normalized.isEmpty || normalized.length > 160) {
+      throw ArgumentError.value(reason, 'reason', 'invalid pause reason');
+    }
+    _available = false;
+    _pauseReason = normalized;
+    if (_activeWrites > 0) {
+      await (_drained ??= Completer<void>()).future;
+    }
+  }
+
+  @override
+  Future<void> resume() async {
+    if (_activeWrites != 0) {
+      throw StateError('connected_site_shared_write_drain_incomplete');
+    }
+    _available = true;
+    _pauseReason = '';
+  }
 }
 
 abstract interface class ConnectedCoordinatorHost {

@@ -9,6 +9,38 @@ import 'package:supermega_shop/shop_connected_runtime.dart';
 import 'package:supermega_shop/shop_runtime_profile.dart';
 
 void main() {
+  test(
+    'production write gate starts paused and tracks runtime transitions',
+    () async {
+      final gate = ShopConnectedSharedWriteGate();
+      expect(gate.sharedWritesAvailable, isFalse);
+      expect(gate.pauseReason, 'connected_runtime_not_started');
+
+      await gate.resume();
+      expect(gate.sharedWritesAvailable, isTrue);
+      expect(gate.pauseReason, isEmpty);
+
+      expect(gate.tryBeginSharedWrite(), isTrue);
+      var pauseCompleted = false;
+      final pause = gate
+          .pause('connected_runtime_revalidating')
+          .then((_) => pauseCompleted = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(pauseCompleted, isFalse);
+      expect(gate.sharedWritesAvailable, isFalse);
+      expect(gate.activeWrites, 1);
+      gate.endSharedWrite();
+      await pause;
+      expect(pauseCompleted, isTrue);
+      expect(gate.activeWrites, 0);
+
+      await gate.pause('connected_runtime_authority_expired');
+      expect(gate.sharedWritesAvailable, isFalse);
+      expect(gate.pauseReason, 'connected_runtime_authority_expired');
+      await expectLater(gate.pause('  '), throwsArgumentError);
+      expect(gate.sharedWritesAvailable, isFalse);
+    },
+  );
   late _Security security;
   late _Readiness readiness;
   late _Writes writes;

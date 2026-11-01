@@ -536,6 +536,29 @@ abstract interface class CoordinatorHealthProvider {
   Future<CoordinatorHealthV1> readHealth();
 }
 
+abstract interface class CoordinatorSharedWriteAvailability {
+  bool get sharedWritesAvailable;
+
+  bool tryBeginSharedWrite();
+
+  void endSharedWrite();
+}
+
+class CoordinatorSharedWritesUnavailable
+    implements CoordinatorSharedWriteAvailability {
+  const CoordinatorSharedWritesUnavailable();
+
+  @override
+  bool get sharedWritesAvailable => false;
+
+  @override
+  bool tryBeginSharedWrite() => false;
+
+  @override
+  void endSharedWrite() =>
+      throw StateError('connected_site_shared_write_not_started');
+}
+
 /// Default-off, TLS-only coordinator core shared by the Android and Windows
 /// adapters. This class deliberately does not discover peers, elect leaders,
 /// issue staff authority, or store private keys.
@@ -547,6 +570,7 @@ class SiteCoordinatorServer {
     required this.replication,
     required this.health,
     required this.pairingResponse,
+    this.sharedWriteAvailability = const CoordinatorSharedWritesUnavailable(),
     this.commandSignatureVerifier,
     this.deviceEnrollment = const CoordinatorDeviceEnrollmentUnavailable(),
     this.siteAuthorization = const CoordinatorSiteAuthorizationUnavailable(),
@@ -569,6 +593,7 @@ class SiteCoordinatorServer {
   final SiteCommandCapabilityResolver commandCapabilities;
   final SiteReplicationReader replication;
   final CoordinatorHealthProvider health;
+  final CoordinatorSharedWriteAvailability sharedWriteAvailability;
   final CoordinatorPairingV1 pairingResponse;
   final DateTime Function() now;
   final bool runtimeEnabled;
@@ -835,6 +860,12 @@ class SiteCoordinatorServer {
     SiteCoordinatorRequest request,
     Uri uri,
   ) async {
+    if (!sharedWriteAvailability.sharedWritesAvailable) {
+      return _error(
+        HttpStatus.serviceUnavailable,
+        'connected_site_shared_writes_paused',
+      );
+    }
     final command = SiteCommandV1.fromJson(_decodeJsonRequest(request));
     if (command.workspaceId != pairingResponse.workspaceId ||
         command.siteId != pairingResponse.siteId) {
@@ -879,9 +910,23 @@ class SiteCoordinatorServer {
             .timeout(requestTimeout)) {
       return _error(HttpStatus.forbidden, 'site_authorization_denied');
     }
-    final ack = await commands
-        .handle(authenticated.fingerprint, command)
-        .timeout(requestTimeout);
+    if (!sharedWriteAvailability.tryBeginSharedWrite()) {
+      return _error(
+        HttpStatus.serviceUnavailable,
+        'connected_site_shared_writes_paused',
+      );
+    }
+    late final Future<SiteCommandAckV1> rawHandler;
+    try {
+      rawHandler = commands.handle(authenticated.fingerprint, command);
+    } catch (_) {
+      sharedWriteAvailability.endSharedWrite();
+      rethrow;
+    }
+    final trackedHandler = rawHandler.whenComplete(
+      sharedWriteAvailability.endSharedWrite,
+    );
+    final ack = await trackedHandler.timeout(requestTimeout);
     if (ack.commandId != command.commandId ||
         ack.commandDigest != command.commandDigest) {
       return _error(

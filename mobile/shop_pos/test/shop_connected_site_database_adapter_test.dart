@@ -1647,6 +1647,7 @@ void main() {
         final authorization = _AdapterSiteAuthorizer();
         final coordinator = SiteCoordinatorServer(
           runtimeEnabled: true,
+          sharedWriteAvailability: const _AdapterWriteAvailability(),
           pairing: const _AdapterPairingNonceStore(),
           requestAuthenticator: Ed25519CoordinatorRequestAuthenticator(
             clients: clientKeys,
@@ -2786,6 +2787,19 @@ class _AdapterHealthProvider implements CoordinatorHealthProvider {
     backupCurrent: true,
     pendingConflictCount: 0,
   );
+}
+
+class _AdapterWriteAvailability implements CoordinatorSharedWriteAvailability {
+  const _AdapterWriteAvailability();
+
+  @override
+  bool get sharedWritesAvailable => true;
+
+  @override
+  bool tryBeginSharedWrite() => true;
+
+  @override
+  void endSharedWrite() {}
 }
 
 String _digest(String value) => sha256.convert(utf8.encode(value)).toString();

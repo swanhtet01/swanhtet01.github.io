@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -6,6 +7,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_runtime.dart';
 import 'package:supermega_shop/shop_offline_staff_lease.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
@@ -176,6 +178,7 @@ void main() {
     late _Enrollment enrollment;
     late _SiteAuthorization siteAuthorization;
     late _Capabilities capabilities;
+    late _WriteAvailability writes;
     late _Commands commands;
     late _Replication replication;
     late SiteCoordinatorServer coordinator;
@@ -194,8 +197,10 @@ void main() {
       enrollment = _Enrollment();
       siteAuthorization = _SiteAuthorization();
       capabilities = _Capabilities();
+      writes = _WriteAvailability()..available = true;
       coordinator = SiteCoordinatorServer(
         runtimeEnabled: true,
+        sharedWriteAvailability: writes,
         pairing: nonces,
         requestAuthenticator: authenticator,
         commands: commands,
@@ -233,6 +238,139 @@ void main() {
       expect(result.statusCode, HttpStatus.serviceUnavailable);
       expect(result.body['error'], 'connected_site_disabled');
     });
+
+    test(
+      'command dispatch stays paused until runtime resumes writes',
+      () async {
+        _enroll(clientKeys);
+        writes.available = false;
+        final command = await _command();
+
+        final response = await coordinator.dispatch(
+          await _signedJsonRequest(
+            'POST',
+            connectedSiteCommandsPath,
+            command.toJson(),
+            nonce: 'request_nonce_gate_paused_01',
+          ),
+        );
+
+        expect(response.statusCode, HttpStatus.serviceUnavailable);
+        expect(response.body['error'], 'connected_site_shared_writes_paused');
+        expect(siteAuthorization.calls, 0);
+        expect(commands.handled, 0);
+      },
+    );
+
+    test('omitting the application write gate fails closed', () async {
+      _enroll(clientKeys);
+      final command = await _command();
+      final server = SiteCoordinatorServer(
+        runtimeEnabled: true,
+        pairing: nonces,
+        requestAuthenticator: authenticator,
+        commands: commands,
+        commandSignatureVerifier: Ed25519SiteCommandSignatureVerifier(
+          clients: clientKeys,
+          coordinatorDeviceId: 'device_counter',
+        ),
+        deviceEnrollment: enrollment,
+        siteAuthorization: siteAuthorization,
+        commandCapabilities: capabilities,
+        replication: replication,
+        health: _Health(),
+        pairingResponse: _pairing(),
+        now: () => _now,
+      );
+
+      final response = await server.dispatch(
+        await _signedJsonRequest(
+          'POST',
+          connectedSiteCommandsPath,
+          command.toJson(),
+          nonce: 'request_nonce_gate_default_01',
+        ),
+      );
+
+      expect(response.statusCode, HttpStatus.serviceUnavailable);
+      expect(response.body['error'], 'connected_site_shared_writes_paused');
+      expect(siteAuthorization.calls, 0);
+      expect(commands.handled, 0);
+    });
+
+    test('pause during authorization prevents database mutation', () async {
+      _enroll(clientKeys);
+      siteAuthorization.onAuthorize = () => writes.available = false;
+      final command = await _command();
+
+      final response = await coordinator.dispatch(
+        await _signedJsonRequest(
+          'POST',
+          connectedSiteCommandsPath,
+          command.toJson(),
+          nonce: 'request_nonce_gate_race_0001',
+        ),
+      );
+
+      expect(response.statusCode, HttpStatus.serviceUnavailable);
+      expect(response.body['error'], 'connected_site_shared_writes_paused');
+      expect(siteAuthorization.calls, 1);
+      expect(commands.handled, 0);
+    });
+
+    test(
+      'timed out command keeps write lease until raw handler completes',
+      () async {
+        _enroll(clientKeys);
+        final gate = ShopConnectedSharedWriteGate();
+        await gate.resume();
+        final delayedCommands = _Commands()..barrier = Completer<void>();
+        final server = SiteCoordinatorServer(
+          runtimeEnabled: true,
+          sharedWriteAvailability: gate,
+          requestTimeout: const Duration(milliseconds: 100),
+          pairing: nonces,
+          requestAuthenticator: authenticator,
+          commands: delayedCommands,
+          commandSignatureVerifier: Ed25519SiteCommandSignatureVerifier(
+            clients: clientKeys,
+            coordinatorDeviceId: 'device_counter',
+          ),
+          deviceEnrollment: enrollment,
+          siteAuthorization: siteAuthorization,
+          commandCapabilities: capabilities,
+          replication: replication,
+          health: _Health(),
+          pairingResponse: _pairing(),
+          now: () => _now,
+        );
+        final command = await _command();
+
+        final response = await server.dispatch(
+          await _signedJsonRequest(
+            'POST',
+            connectedSiteCommandsPath,
+            command.toJson(),
+            nonce: 'request_nonce_gate_timeout_01',
+          ),
+        );
+        expect(response.statusCode, HttpStatus.gatewayTimeout);
+        expect(delayedCommands.handled, 1);
+        expect(gate.activeWrites, 1);
+
+        var pauseCompleted = false;
+        final pause = gate
+            .pause('connected_runtime_stopping')
+            .then((_) => pauseCompleted = true);
+        await Future<void>.delayed(Duration.zero);
+        expect(pauseCompleted, isFalse);
+
+        delayedCommands.barrier!.complete();
+        await pause;
+        expect(pauseCompleted, isTrue);
+        expect(gate.activeWrites, 0);
+      },
+    );
 
     test(
       'consumes pairing nonce once and returns no issuer authority',
@@ -513,6 +651,7 @@ void main() {
         _enroll(clientKeys);
         final unsignedServer = SiteCoordinatorServer(
           runtimeEnabled: true,
+          sharedWriteAvailability: _WriteAvailability()..available = true,
           pairing: nonces,
           requestAuthenticator: authenticator,
           commands: commands,
@@ -1144,11 +1283,34 @@ class _Enrollment implements CoordinatorDeviceEnrollmentAuthorizer {
 class _SiteAuthorization implements CoordinatorSiteAuthorizer {
   bool allowed = true;
   int calls = 0;
+  void Function()? onAuthorize;
 
   @override
   Future<bool> authorize(CoordinatorSiteAuthorizationRequest request) async {
     calls += 1;
+    onAuthorize?.call();
     return allowed;
+  }
+}
+
+class _WriteAvailability implements CoordinatorSharedWriteAvailability {
+  bool available = false;
+  int active = 0;
+
+  @override
+  bool get sharedWritesAvailable => available;
+
+  @override
+  bool tryBeginSharedWrite() {
+    if (!available) return false;
+    active += 1;
+    return true;
+  }
+
+  @override
+  void endSharedWrite() {
+    if (active <= 0) throw StateError('write_not_started');
+    active -= 1;
   }
 }
 
@@ -1161,6 +1323,7 @@ class _Capabilities implements SiteCommandCapabilityResolver {
 class _Commands implements SiteCommandHandler {
   var handled = 0;
   var bindCorrectly = true;
+  Completer<void>? barrier;
 
   @override
   Future<SiteCommandAckV1> handle(
@@ -1168,6 +1331,7 @@ class _Commands implements SiteCommandHandler {
     SiteCommandV1 command,
   ) async {
     handled += 1;
+    await barrier?.future;
     return SiteCommandAckV1(
       commandId: command.commandId,
       commandDigest: bindCorrectly ? command.commandDigest : _digest,
