@@ -2863,7 +2863,14 @@ bool shopHistoricalCloudProofRowsValidV34({
             retained['lease_json'] !=
                 canonicalConnectedSiteJson(proof['lease']) ||
             retained['issuer_evidence_digest'] !=
-                proof['authorityPayloadDigest']) {
+                proof['authorityPayloadDigest'] ||
+            command.actorId != commandRow['actor_id'] ||
+            command.aggregateType != commandRow['aggregate_type'] ||
+            command.aggregateId != commandRow['aggregate_id'] ||
+            command.expectedVersion != commandRow['expected_version'] ||
+            command.payloadDigest != commandRow['payload_digest'] ||
+            DateTime.parse(command.issuedAt).millisecondsSinceEpoch !=
+                commandRow['received_at_millis']) {
           return false;
         }
       } else {
@@ -2886,7 +2893,9 @@ bool shopHistoricalCloudProofRowsValidV34({
           workspaceId != commandRow['tenant_id'] ||
           siteId != commandRow['site_id'] ||
           deviceId != commandRow['device_id'] ||
-          leaseDigest != commandRow['lease_digest']) {
+          leaseDigest != commandRow['lease_digest'] ||
+          proofById[entry.key]!['created_at_millis'] !=
+              commandRow['received_at_millis']) {
         return false;
       }
     }
@@ -5768,7 +5777,6 @@ class ShopDatabase extends _$ShopDatabase {
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
       if (from == 34) {
-        await _createConnectedCloudProofSchemaV34();
         await _requireUnifiedV34Schema(historical4d9Proofs: true);
         await _createConnectedCloudProofBoundaryV35(
           quarantineUnverifiableV34Proofs: true,

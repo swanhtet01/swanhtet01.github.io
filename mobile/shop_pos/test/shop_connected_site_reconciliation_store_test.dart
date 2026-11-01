@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
@@ -621,6 +622,30 @@ void main() {
         ),
         isFalse,
       );
+      final substitutedCommand = Map<String, Object?>.from(commands.single)
+        ..['actor_id'] = 'substituted-actor';
+      expect(
+        shopHistoricalCloudProofRowsValidV34(
+          commands: [substitutedCommand],
+          requirements: requirements,
+          proofs: proofs,
+          retainedLeases: retainedLeases,
+          leases: leases,
+        ),
+        isFalse,
+      );
+      final substitutedCreatedAt = Map<String, Object?>.from(proofs.single)
+        ..['created_at_millis'] = _now + 1;
+      expect(
+        shopHistoricalCloudProofRowsValidV34(
+          commands: commands,
+          requirements: requirements,
+          proofs: [substitutedCreatedAt],
+          retainedLeases: retainedLeases,
+          leases: leases,
+        ),
+        isFalse,
+      );
       final orphan = Map<String, Object?>.from(proofs.single)
         ..['command_id'] = 'v34-orphan';
       expect(
@@ -636,6 +661,69 @@ void main() {
       await database.customStatement('PRAGMA user_version = 34');
       await database.close();
       ShopBackup.verifySnapshot(file, expectedSchemaVersion: 34);
+
+      Future<void> expectMalformedV34Rejected({
+        required String name,
+        required void Function(sqlite.Database) corrupt,
+        required void Function(sqlite.Database) verifyUnrepaired,
+      }) async {
+        final malformedFile = File('${root.path}/$name.sqlite');
+        await file.copy(malformedFile.path);
+        final rawMalformed = sqlite.sqlite3.open(malformedFile.path);
+        corrupt(rawMalformed);
+        rawMalformed.close();
+        final malformed = ShopDatabase(NativeDatabase(malformedFile));
+        await expectLater(malformed.verifyReadyForUse(), throwsStateError);
+        await malformed.close();
+        final rawUnrepaired = sqlite.sqlite3.open(malformedFile.path);
+        verifyUnrepaired(rawUnrepaired);
+        rawUnrepaired.close();
+      }
+
+      await expectMalformedV34Rejected(
+        name: 'missing-requirement',
+        corrupt: (raw) {
+          raw.execute(
+            'DROP TRIGGER shop_site_cloud_proof_requirements_no_delete',
+          );
+          raw.execute(
+            "DELETE FROM shop_site_cloud_proof_requirements WHERE command_id = 'v34-command'",
+          );
+        },
+        verifyUnrepaired: (raw) => expect(
+          raw
+              .select(
+                "SELECT COUNT(*) AS total FROM shop_site_cloud_proof_requirements WHERE command_id = 'v34-command'",
+              )
+              .single['total'],
+          0,
+        ),
+      );
+      await expectMalformedV34Rejected(
+        name: 'missing-trigger',
+        corrupt: (raw) =>
+            raw.execute('DROP TRIGGER shop_site_cloud_proofs_no_update'),
+        verifyUnrepaired: (raw) => expect(
+          raw
+              .select(
+                "SELECT COUNT(*) AS total FROM sqlite_master WHERE type = 'trigger' AND name = 'shop_site_cloud_proofs_no_update'",
+              )
+              .single['total'],
+          0,
+        ),
+      );
+      await expectMalformedV34Rejected(
+        name: 'missing-table',
+        corrupt: (raw) => raw.execute('DROP TABLE shop_site_cloud_proofs'),
+        verifyUnrepaired: (raw) => expect(
+          raw
+              .select(
+                "SELECT COUNT(*) AS total FROM sqlite_master WHERE type = 'table' AND name = 'shop_site_cloud_proofs'",
+              )
+              .single['total'],
+          0,
+        ),
+      );
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
