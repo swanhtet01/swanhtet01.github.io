@@ -2563,6 +2563,46 @@ Map<String, String> shopConnectedReplicaSchemaDefinitionsV33() => {
   },
 };
 
+const shopSiteCloudProofsV34Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_proofs (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_commands(command_id),
+    proof_kind TEXT NOT NULL CHECK (proof_kind IN ('signedClientCommand','coordinatorDerived')),
+    proof_json TEXT NOT NULL CHECK (json_valid(proof_json)),
+    proof_digest TEXT NOT NULL UNIQUE CHECK (length(proof_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0)
+  )
+''';
+
+const shopSiteOfflineLeasePayloadsV34Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_offline_lease_payloads (
+    payload_digest TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_offline_leases(payload_digest),
+    lease_json TEXT NOT NULL CHECK (json_valid(lease_json)),
+    lease_bytes_digest TEXT NOT NULL UNIQUE CHECK (length(lease_bytes_digest) = 64),
+    issuer_evidence_digest TEXT NOT NULL CHECK (length(issuer_evidence_digest) = 64),
+    retained_at_millis INTEGER NOT NULL CHECK (retained_at_millis > 0)
+  )
+''';
+
+Map<String, String> shopConnectedCloudProofSchemaDefinitionsV34() => {
+  'shop_site_offline_lease_payloads': shopSiteOfflineLeasePayloadsV34Sql,
+  'shop_site_cloud_proofs': shopSiteCloudProofsV34Sql,
+  for (final table in const [
+    'shop_site_offline_lease_payloads',
+    'shop_site_cloud_proofs',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected cloud authority evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected cloud authority evidence is immutable',
+    ),
+  },
+};
+
 bool shopConnectedAuthorityPayloadRowsValidV30({
   required Iterable<Map<String, Object?>> payloads,
   required Iterable<Map<String, Object?>> members,
@@ -4289,7 +4329,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 33) return const {};
+  if (schemaVersion < 5 || schemaVersion > 34) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -5191,6 +5231,8 @@ class ShopConnectedSiteCommandInput {
     required this.payloadDigest,
     required this.leaseDigest,
     required this.commandDigest,
+    required this.cloudProofJson,
+    required this.cloudProofDigest,
     required this.eventId,
     required this.eventType,
     required this.eventPayloadJson,
@@ -5221,6 +5263,8 @@ class ShopConnectedSiteCommandInput {
   final String payloadDigest;
   final String leaseDigest;
   final String commandDigest;
+  final String cloudProofJson;
+  final String cloudProofDigest;
   final String eventId;
   final String eventType;
   final String eventPayloadJson;
@@ -5375,7 +5419,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 33;
+  int get schemaVersion => 34;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5421,16 +5465,26 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV32Schema();
       await _createConnectedReplicaDeliverySchemaV33();
       await _requireUnifiedV33Schema();
+      await _createConnectedCloudProofSchemaV34();
+      await _requireUnifiedV34Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 33) {
+        await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
+        return;
+      }
       if (from == 32) {
         await _requireUnifiedV32Schema();
         await _rebaseConnectedReplicaCacheForV33();
         await _createConnectedReplicaDeliverySchemaV33();
         await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
         return;
       }
       if (from == 31) {
@@ -5439,6 +5493,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV32Schema();
         await _createConnectedReplicaDeliverySchemaV33();
         await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
         return;
       }
       if (from == 30) {
@@ -5450,6 +5506,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV32Schema();
         await _createConnectedReplicaDeliverySchemaV33();
         await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
         return;
       }
       final origin = await _classifyUpgradeOrigin(from);
@@ -5464,6 +5522,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV32Schema();
         await _createConnectedReplicaDeliverySchemaV33();
         await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
         return;
       }
       if (from == 28) {
@@ -5492,6 +5552,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV32Schema();
         await _createConnectedReplicaDeliverySchemaV33();
         await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
         return;
       }
       if (from < 2) {
@@ -5716,20 +5778,93 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV32Schema();
       await _createConnectedReplicaDeliverySchemaV33();
       await _requireUnifiedV33Schema();
+      await _createConnectedCloudProofSchemaV34();
+      await _requireUnifiedV34Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV33Schema();
+      await _requireUnifiedV34Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV33Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV34Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
         !await _v33ConnectedReplicaDeliveryRowsValid()) {
       throw StateError('Connected replica evidence is invalid.');
     }
+  }
+
+  /// Retains the exact signed lease bytes needed by later cloud verification.
+  /// Existing pre-v34 leases are intentionally not reconstructed from columns.
+  Future<void> retainConnectedLeasePayloadV34(
+    OfflineStaffLeaseV1 lease, {
+    required int retainedAtMillis,
+    required String issuerEvidenceDigest,
+  }) async {
+    if (retainedAtMillis <= 0 ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(issuerEvidenceDigest)) {
+      throw ArgumentError('Connected lease retention time is invalid.');
+    }
+    final encoded = canonicalConnectedSiteJson(lease.toJson());
+    await transaction(() async {
+      final stored = await customSelect(
+        'SELECT lease_id, tenant_id, site_id, actor_id, actor_role, '
+        'capabilities_json, device_id, session_generation, '
+        'revocation_generation, issued_at_millis, expires_at_millis, key_id, '
+        'signature FROM '
+        'shop_site_offline_leases WHERE payload_digest = ?',
+        variables: [Variable<String>(lease.payloadDigest)],
+      ).getSingleOrNull();
+      if (stored == null ||
+          stored.read<String>('tenant_id') != lease.workspaceId ||
+          stored.read<String>('site_id') != lease.siteId ||
+          stored.read<String>('actor_id') != lease.actorId ||
+          stored.read<String>('lease_id') != lease.leaseId ||
+          stored.read<String>('actor_role') != lease.role ||
+          canonicalConnectedSiteJson(
+                jsonDecode(stored.read<String>('capabilities_json')),
+              ) !=
+              canonicalConnectedSiteJson(lease.capabilities) ||
+          stored.read<String>('device_id') != lease.deviceId ||
+          stored.read<int>('session_generation') != lease.sessionGeneration ||
+          stored.read<int>('revocation_generation') !=
+              lease.revocationGeneration ||
+          stored.read<int>('issued_at_millis') != lease.issuedAtMillis ||
+          stored.read<int>('expires_at_millis') != lease.expiresAtMillis ||
+          stored.read<String>('key_id') != lease.issuerKeyId ||
+          stored.read<String>('signature') != lease.signature) {
+        throw StateError('Connected lease columns do not match signed bytes.');
+      }
+      final existing = await customSelect(
+        'SELECT lease_json, lease_bytes_digest, issuer_evidence_digest FROM '
+        'shop_site_offline_lease_payloads WHERE payload_digest = ?',
+        variables: [Variable<String>(lease.payloadDigest)],
+      ).getSingleOrNull();
+      final bytesDigest = connectedSiteSha256(lease.toJson());
+      if (existing != null) {
+        if (existing.read<String>('lease_json') != encoded ||
+            existing.read<String>('lease_bytes_digest') != bytesDigest ||
+            existing.read<String>('issuer_evidence_digest') !=
+                issuerEvidenceDigest) {
+          throw StateError('Connected lease payload was substituted.');
+        }
+        return;
+      }
+      await customInsert(
+        'INSERT INTO shop_site_offline_lease_payloads '
+        '(payload_digest, lease_json, lease_bytes_digest, issuer_evidence_digest, retained_at_millis) '
+        'VALUES (?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(lease.payloadDigest),
+          Variable<String>(encoded),
+          Variable<String>(bytesDigest),
+          Variable<String>(issuerEvidenceDigest),
+          Variable<int>(retainedAtMillis),
+        ],
+      );
+    });
   }
 
   Future<Map<String, Object?>> readConnectedReplicaProjectionV2({
@@ -6064,6 +6199,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedReplicaDeliverySchemaV33() async {
     for (final definition
         in shopConnectedReplicaSchemaDefinitionsV33().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedCloudProofSchemaV34() async {
+    for (final definition
+        in shopConnectedCloudProofSchemaDefinitionsV34().values) {
       await customStatement(definition);
     }
   }
@@ -7713,6 +7855,8 @@ class ShopDatabase extends _$ShopDatabase {
     final hasReplicaV33 = shopConnectedReplicaSchemaDefinitionsV33().keys.every(
       objects.containsKey,
     );
+    final hasCloudProofV34 = shopConnectedCloudProofSchemaDefinitionsV34().keys
+        .every(objects.containsKey);
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -7777,6 +7921,11 @@ class ShopDatabase extends _$ShopDatabase {
         for (final entry in shopConnectedReplicaSchemaDefinitionsV33().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasCloudProofV34)
+        for (final entry
+            in shopConnectedCloudProofSchemaDefinitionsV34().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -7810,6 +7959,8 @@ class ShopDatabase extends _$ShopDatabase {
         ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
       if (hasReplicaV32) ...shopConnectedReplicaSchemaDefinitionsV32().keys,
       if (hasReplicaV33) ...shopConnectedReplicaSchemaDefinitionsV33().keys,
+      if (hasCloudProofV34)
+        ...shopConnectedCloudProofSchemaDefinitionsV34().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -8000,6 +8151,8 @@ class ShopDatabase extends _$ShopDatabase {
     final hasReplicaV33 = shopConnectedReplicaSchemaDefinitionsV33().keys.every(
       objects.containsKey,
     );
+    final hasCloudProofV34 = shopConnectedCloudProofSchemaDefinitionsV34().keys
+        .every(objects.containsKey);
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -8037,6 +8190,8 @@ class ShopDatabase extends _$ShopDatabase {
         ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
       if (hasReplicaV32) ...shopConnectedReplicaSchemaDefinitionsV32().keys,
       if (hasReplicaV33) ...shopConnectedReplicaSchemaDefinitionsV33().keys,
+      if (hasCloudProofV34)
+        ...shopConnectedCloudProofSchemaDefinitionsV34().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -8552,6 +8707,93 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v33 replica-delivery schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV34Schema() async {
+    await _requireUnifiedV33Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedCloudProofSchemaDefinitionsV34();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v34ConnectedCloudProofRowsValid()) {
+      throw StateError(
+        'The unified Shop v34 cloud-proof schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v34ConnectedCloudProofRowsValid() async {
+    try {
+      final leaseRows = await customSelect(
+        'SELECT retained.payload_digest, retained.lease_json, '
+        'retained.lease_bytes_digest, retained.issuer_evidence_digest, '
+        'lease.lease_id, lease.tenant_id, lease.site_id, lease.actor_id, '
+        'lease.actor_role, lease.capabilities_json, lease.device_id, '
+        'lease.session_generation, lease.revocation_generation, '
+        'lease.issued_at_millis, lease.expires_at_millis, lease.key_id, '
+        'lease.signature FROM shop_site_offline_lease_payloads retained '
+        'LEFT JOIN shop_site_offline_leases lease '
+        'ON lease.payload_digest = retained.payload_digest '
+        'ORDER BY retained.payload_digest',
+      ).get();
+      for (final row in leaseRows) {
+        final encoded = row.read<String>('lease_json');
+        final decoded = jsonDecode(encoded);
+        final lease = OfflineStaffLeaseV1.fromJson(decoded);
+        if (canonicalConnectedSiteJson(decoded) != encoded ||
+            lease.payloadDigest != row.read<String>('payload_digest') ||
+            connectedSiteSha256(decoded) !=
+                row.read<String>('lease_bytes_digest') ||
+            !RegExp(r'^[0-9a-f]{64}$')
+                .hasMatch(row.read<String>('issuer_evidence_digest')) ||
+            lease.workspaceId != row.read<String>('tenant_id') ||
+            lease.siteId != row.read<String>('site_id') ||
+            lease.actorId != row.read<String>('actor_id') ||
+            lease.leaseId != row.read<String>('lease_id') ||
+            lease.role != row.read<String>('actor_role') ||
+            canonicalConnectedSiteJson(lease.capabilities) !=
+                canonicalConnectedSiteJson(
+                  jsonDecode(row.read<String>('capabilities_json')),
+                ) ||
+            lease.deviceId != row.read<String>('device_id') ||
+            lease.sessionGeneration != row.read<int>('session_generation') ||
+            lease.revocationGeneration !=
+                row.read<int>('revocation_generation') ||
+            lease.issuedAtMillis != row.read<int>('issued_at_millis') ||
+            lease.expiresAtMillis != row.read<int>('expires_at_millis') ||
+            lease.issuerKeyId != row.read<String>('key_id') ||
+            lease.signature != row.read<String>('signature')) {
+          return false;
+        }
+      }
+      final rows = await customSelect(
+        'SELECT proof.command_id, proof.proof_kind, proof.proof_json, '
+        'proof.proof_digest, command.command_digest, command.tenant_id, '
+        'command.site_id FROM shop_site_cloud_proofs proof '
+        'LEFT JOIN shop_site_commands command ON command.command_id = proof.command_id '
+        'ORDER BY proof.command_id',
+      ).get();
+      for (final row in rows) {
+        final encoded = row.read<String>('proof_json');
+        final decoded = jsonDecode(encoded);
+        final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
+        if (canonicalConnectedSiteJson(decoded) != encoded ||
+            proof.proofKind != row.read<String>('proof_kind') ||
+            proof.proofDigest != row.read<String>('proof_digest') ||
+            proof.commandId != row.read<String>('command_id') ||
+            proof.commandDigest != row.read<String>('command_digest') ||
+            proof.workspaceId != row.read<String>('tenant_id') ||
+            proof.siteId != row.read<String>('site_id')) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
     }
   }
 
@@ -10468,12 +10710,14 @@ class ShopDatabase extends _$ShopDatabase {
         'command.expected_version, command.payload_digest, command.lease_digest, '
         'command.received_at_millis, ack.status, '
         'ack.site_sequence, ack.canonical_version, ack.ack_digest, '
-        'event.event_digest, conflict.reason_code '
+        'event.event_digest, conflict.reason_code, proof.proof_json, '
+        'proof.proof_digest '
         'FROM shop_site_commands command '
         'JOIN shop_site_command_acks ack '
         'ON ack.command_id = command.command_id '
         'LEFT JOIN shop_site_events event ON event.command_id = command.command_id '
         'LEFT JOIN shop_site_conflicts conflict ON conflict.command_id = command.command_id '
+        'LEFT JOIN shop_site_cloud_proofs proof ON proof.command_id = command.command_id '
         'WHERE command.command_id = ?',
         variables: [Variable<String>(input.commandId)],
       ).getSingleOrNull();
@@ -10490,6 +10734,10 @@ class ShopDatabase extends _$ShopDatabase {
             existing.read<String>('payload_digest') != input.payloadDigest ||
             existing.read<String>('lease_digest') != input.leaseDigest ||
             existing.read<int>('received_at_millis') != input.createdAtMillis ||
+            existing.readNullable<String>('proof_json') !=
+                input.cloudProofJson ||
+            existing.readNullable<String>('proof_digest') !=
+                input.cloudProofDigest ||
             (existing.read<String>('state') == 'accepted' &&
                 existing.readNullable<String>('event_digest') !=
                     input.eventDigest)) {
@@ -10762,6 +11010,12 @@ class ShopDatabase extends _$ShopDatabase {
             Variable<int>(input.createdAtMillis),
           ],
         );
+        await _insertConnectedCloudProof(
+          commandId: input.commandId,
+          proofJson: input.cloudProofJson,
+          proofDigest: input.cloudProofDigest,
+          createdAtMillis: input.createdAtMillis,
+        );
         final nextSiteSequenceRow = await customSelect(
           'SELECT COALESCE(MAX(site_sequence), 0) + 1 AS next_sequence '
           'FROM shop_site_events WHERE tenant_id = ? AND site_id = ?',
@@ -10971,6 +11225,12 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<int>(input.createdAtMillis),
       ],
     );
+    await _insertConnectedCloudProof(
+      commandId: input.commandId,
+      proofJson: input.cloudProofJson,
+      proofDigest: input.cloudProofDigest,
+      createdAtMillis: input.createdAtMillis,
+    );
     await customInsert(
       'INSERT INTO shop_site_conflicts '
       '(conflict_id, command_id, reason_code, detail_digest, state, '
@@ -11016,6 +11276,33 @@ class ShopDatabase extends _$ShopDatabase {
     );
   }
 
+  Future<void> _insertConnectedCloudProof({
+    required String commandId,
+    required String proofJson,
+    required String proofDigest,
+    required int createdAtMillis,
+  }) async {
+    final decoded = jsonDecode(proofJson);
+    final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
+    if (canonicalConnectedSiteJson(decoded) != proofJson ||
+        proof.commandId != commandId ||
+        proof.proofDigest != proofDigest) {
+      throw StateError('Connected-site cloud proof changed before storage.');
+    }
+    await customInsert(
+      'INSERT INTO shop_site_cloud_proofs '
+      '(command_id, proof_kind, proof_json, proof_digest, created_at_millis) '
+      'VALUES (?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(commandId),
+        Variable<String>(proof.proofKind),
+        Variable<String>(proofJson),
+        Variable<String>(proofDigest),
+        Variable<int>(createdAtMillis),
+      ],
+    );
+  }
+
   /// Reconstructs strict wire events from immutable database rows.
   ///
   /// [tenantId] is the local persistence name for the wire `workspaceId`.
@@ -11039,9 +11326,11 @@ class ShopDatabase extends _$ShopDatabase {
       'SELECT event.site_sequence, event.event_id, event.aggregate_type, '
       'event.aggregate_id, event.aggregate_version, event.event_type, '
       'event.payload_json, event.event_digest, event.created_at_millis, '
-      'command.command_id, command.command_digest '
+      'command.command_id, command.command_digest, proof.proof_json, '
+      'proof.proof_digest '
       'FROM shop_site_events event '
       'JOIN shop_site_commands command ON command.command_id = event.command_id '
+      'LEFT JOIN shop_site_cloud_proofs proof ON proof.command_id = command.command_id '
       'WHERE event.tenant_id = ? AND event.site_id = ? '
       'AND event.site_sequence > ? ORDER BY event.site_sequence LIMIT ?',
       variables: [
@@ -11069,12 +11358,24 @@ class ShopDatabase extends _$ShopDatabase {
             ),
             'payload': payload,
           };
+          final proofJson = row.readNullable<String>('proof_json');
+          final proofDigest = row.readNullable<String>('proof_digest');
+          if (proofJson == null || proofDigest == null) {
+            throw StateError('connected_site_cloud_proof_unavailable');
+          }
+          final proofDecoded = jsonDecode(proofJson);
+          final proof = ConnectedSiteCloudProofV1.fromJson(proofDecoded);
+          if (canonicalConnectedSiteJson(proofDecoded) != proofJson ||
+              proof.proofDigest != proofDigest) {
+            throw StateError('connected_site_cloud_proof_invalid');
+          }
           return ConnectedSitePendingEvent(
             cursor: row.read<int>('site_sequence'),
             commandId: row.read<String>('command_id'),
             commandDigest: row.read<String>('command_digest'),
             event: event,
             eventDigest: row.read<String>('event_digest'),
+            cloudProof: proof,
           );
         })
         .toList(growable: false);
@@ -11999,9 +12300,11 @@ class ShopDatabase extends _$ShopDatabase {
     final source = await customSelect(
       'SELECT header.tenant_id, header.site_id, header.actor_id, '
       'header.device_id, header.capability, header.workflow_type, '
-      'header.subject_id, command.lease_digest, command.received_at_millis '
+      'header.subject_id, command.lease_digest, command.received_at_millis, '
+      'proof.proof_json, proof.proof_digest '
       'FROM shop_connected_stock_reservation_headers header '
       'JOIN shop_site_commands command ON command.command_id = header.command_id '
+      'JOIN shop_site_cloud_proofs proof ON proof.command_id = command.command_id '
       'WHERE header.reservation_id = ? AND header.legacy_source = 0',
       variables: [Variable<String>(transition.before.reservationId)],
     ).getSingleOrNull();
@@ -12113,6 +12416,37 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<String>(commandDigest),
         Variable<int>(source.read<int>('received_at_millis')),
       ],
+    );
+    final sourceProofDecoded = jsonDecode(source.read<String>('proof_json'));
+    final sourceProof = ConnectedSiteCloudProofV1.fromJson(sourceProofDecoded);
+    if (canonicalConnectedSiteJson(sourceProofDecoded) !=
+            source.read<String>('proof_json') ||
+        sourceProof.proofDigest != source.read<String>('proof_digest')) {
+      throw StateError('Connected reservation source proof is invalid.');
+    }
+    final derivation = <String, Object?>{
+      'contract': 'supermega.shop.connected-stock-terminal-derivation.v1',
+      'operationId': operationId,
+      'reservationId': transition.before.reservationId,
+      'transitionDigest': transition.transitionDigest,
+      'state': state.name,
+      'eventDigest': eventDigest,
+    };
+    final derivedProof = ConnectedSiteCloudProofV1.coordinatorDerived(
+      commandId: commandId,
+      commandDigest: commandDigest,
+      workspaceId: tenantId,
+      siteId: siteId,
+      deviceId: source.read<String>('device_id'),
+      leaseDigest: source.read<String>('lease_digest'),
+      sourceProof: sourceProof,
+      derivation: derivation,
+    );
+    await _insertConnectedCloudProof(
+      commandId: commandId,
+      proofJson: canonicalConnectedSiteJson(derivedProof.toJson()),
+      proofDigest: derivedProof.proofDigest,
+      createdAtMillis: occurredAtMillis,
     );
     final sequenceRow = await customSelect(
       'SELECT COALESCE(MAX(site_sequence), 0) + 1 AS next_sequence '
@@ -12493,10 +12827,26 @@ class ShopDatabase extends _$ShopDatabase {
         !digest.hasMatch(input.payloadDigest) ||
         !digest.hasMatch(input.leaseDigest) ||
         !digest.hasMatch(input.commandDigest) ||
+        !digest.hasMatch(input.cloudProofDigest) ||
         !digest.hasMatch(input.eventDigest) ||
         !digest.hasMatch(input.ackDigest) ||
         !digest.hasMatch(input.auditMetadataDigest)) {
       throw ArgumentError('Connected-site command values are invalid.');
+    }
+    final proofDecoded = jsonDecode(input.cloudProofJson);
+    final proof = ConnectedSiteCloudProofV1.fromJson(proofDecoded)
+        .requireEventBinding(
+          workspaceId: input.tenantId,
+          siteId: input.siteId,
+          commandId: input.commandId,
+          commandDigest: input.commandDigest,
+        );
+    if (canonicalConnectedSiteJson(proofDecoded) != input.cloudProofJson ||
+        proof.proofDigest != input.cloudProofDigest ||
+        proof.proofKind != 'signedClientCommand' ||
+        proof.leaseDigest != input.leaseDigest ||
+        proof.deviceId != input.deviceId) {
+      throw ArgumentError('Connected-site cloud proof is invalid.');
     }
     _connectedSiteEventPayload(input.eventPayloadJson);
     final reservationFields = [

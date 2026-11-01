@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'shop_connected_site_contracts.dart';
 
 /// Source-only reconciliation contract. Production remains unavailable until
@@ -71,6 +73,7 @@ class ConnectedSitePendingEvent {
     required String commandDigest,
     required Map<String, Object?> event,
     required String eventDigest,
+    required ConnectedSiteCloudProofV1 cloudProof,
   }) {
     if (cursor < 1 ||
         !_isIdentifier(commandId) ||
@@ -97,6 +100,12 @@ class ConnectedSitePendingEvent {
       commandDigest: commandDigest,
       event: immutableEvent,
       eventDigest: eventDigest,
+      cloudProof: cloudProof.requireEventBinding(
+        workspaceId: event['workspaceId'] as String,
+        siteId: event['siteId'] as String,
+        commandId: commandId,
+        commandDigest: commandDigest,
+      ),
     );
   }
 
@@ -106,6 +115,7 @@ class ConnectedSitePendingEvent {
     required this.commandDigest,
     required this.event,
     required this.eventDigest,
+    required this.cloudProof,
   });
 
   final int cursor;
@@ -113,6 +123,193 @@ class ConnectedSitePendingEvent {
   final String commandDigest;
   final Map<String, Object?> event;
   final String eventDigest;
+  final ConnectedSiteCloudProofV1 cloudProof;
+}
+
+/// Immutable authority bytes retained for independent cloud verification.
+///
+/// This is deliberately separate from the local ACK and event digest. A cloud
+/// service must be able to reparse the exact signed command and lease rather
+/// than trusting coordinator-authored columns. Coordinator-derived terminal
+/// stock events carry the complete signed source proof plus a deterministic
+/// derivation binding; they never masquerade as client-signed commands.
+class ConnectedSiteCloudProofV1 {
+  ConnectedSiteCloudProofV1.signed({
+    required SiteCommandV1 command,
+    required OfflineStaffLeaseV1 lease,
+    required String clientFingerprint,
+    required String enrollmentEvidenceDigest,
+    required String authorityPayloadDigest,
+  }) : this._fromStrict({
+         'contract': 'supermega.shop.connected-site-cloud-proof.v1',
+         'proofKind': 'signedClientCommand',
+         'command': command.toJson(),
+         'commandBytesDigest': connectedSiteSha256(command.toJson()),
+         'lease': lease.toJson(),
+         'leaseBytesDigest': connectedSiteSha256(lease.toJson()),
+         'clientFingerprint': clientFingerprint,
+         'enrollmentEvidenceDigest': enrollmentEvidenceDigest,
+         'authorityPayloadDigest': authorityPayloadDigest,
+       });
+
+  ConnectedSiteCloudProofV1.coordinatorDerived({
+    required String commandId,
+    required String commandDigest,
+    required String workspaceId,
+    required String siteId,
+    required String deviceId,
+    required String leaseDigest,
+    required ConnectedSiteCloudProofV1 sourceProof,
+    required Map<String, Object?> derivation,
+  }) : this._fromStrict({
+         'contract': 'supermega.shop.connected-site-cloud-proof.v1',
+         'proofKind': 'coordinatorDerived',
+         'commandId': commandId,
+         'commandDigest': commandDigest,
+         'workspaceId': workspaceId,
+         'siteId': siteId,
+         'deviceId': deviceId,
+         'leaseDigest': leaseDigest,
+         'sourceProof': sourceProof.toJson(),
+         'sourceProofDigest': sourceProof.proofDigest,
+         'derivation': derivation,
+         'derivationDigest': connectedSiteSha256(derivation),
+       });
+
+  factory ConnectedSiteCloudProofV1.fromJson(Object? value) {
+    if (value is! Map) {
+      throw const FormatException('connected_site_cloud_proof_invalid');
+    }
+    return ConnectedSiteCloudProofV1._fromStrict(
+      Map<String, Object?>.from(value),
+    );
+  }
+
+  ConnectedSiteCloudProofV1._fromStrict(Map<String, Object?> source)
+    : _encoded = canonicalConnectedSiteJson(_validate(source));
+
+  final String _encoded;
+
+  Map<String, Object?> get _json =>
+      Map<String, Object?>.from(jsonDecode(_encoded) as Map);
+
+  String get proofKind => _json['proofKind']! as String;
+  String get commandId => proofKind == 'signedClientCommand'
+      ? SiteCommandV1.fromJson(_json['command']).commandId
+      : _json['commandId']! as String;
+  String get commandDigest => proofKind == 'signedClientCommand'
+      ? SiteCommandV1.fromJson(_json['command']).commandDigest
+      : _json['commandDigest']! as String;
+  String get workspaceId => proofKind == 'signedClientCommand'
+      ? SiteCommandV1.fromJson(_json['command']).workspaceId
+      : _json['workspaceId']! as String;
+  String get siteId => proofKind == 'signedClientCommand'
+      ? SiteCommandV1.fromJson(_json['command']).siteId
+      : _json['siteId']! as String;
+  String get deviceId => proofKind == 'signedClientCommand'
+      ? SiteCommandV1.fromJson(_json['command']).deviceId
+      : _json['deviceId']! as String;
+  String get leaseDigest => proofKind == 'signedClientCommand'
+      ? SiteCommandV1.fromJson(_json['command']).leaseDigest
+      : _json['leaseDigest']! as String;
+  String get proofDigest => connectedSiteSha256(_json);
+
+  /// Returns a detached copy so callers cannot mutate the validated proof.
+  Map<String, Object?> toJson() => _json;
+
+  ConnectedSiteCloudProofV1 requireEventBinding({
+    required String workspaceId,
+    required String siteId,
+    required String commandId,
+    required String commandDigest,
+  }) {
+    if (this.workspaceId != workspaceId ||
+        this.siteId != siteId ||
+        this.commandId != commandId ||
+        this.commandDigest != commandDigest) {
+      throw const FormatException('connected_site_cloud_proof_binding');
+    }
+    return this;
+  }
+
+  static Map<String, Object?> _validate(Map<String, Object?> source) {
+    bool exact(Set<String> keys) =>
+        source.length == keys.length && source.keys.every(keys.contains);
+    if (source['contract'] != 'supermega.shop.connected-site-cloud-proof.v1') {
+      throw const FormatException('connected_site_cloud_proof_contract');
+    }
+    if (source['proofKind'] == 'signedClientCommand') {
+      if (!exact(const {
+        'contract',
+        'proofKind',
+        'command',
+        'commandBytesDigest',
+        'lease',
+        'leaseBytesDigest',
+        'clientFingerprint',
+        'enrollmentEvidenceDigest',
+        'authorityPayloadDigest',
+      })) {
+        throw const FormatException('connected_site_cloud_proof_shape');
+      }
+      final command = SiteCommandV1.fromJson(source['command']);
+      final lease = OfflineStaffLeaseV1.fromJson(source['lease']);
+      if (source['commandBytesDigest'] !=
+              connectedSiteSha256(command.toJson()) ||
+          source['leaseBytesDigest'] != connectedSiteSha256(lease.toJson()) ||
+          command.workspaceId != lease.workspaceId ||
+          command.siteId != lease.siteId ||
+          command.actorId != lease.actorId ||
+          command.deviceId != lease.deviceId ||
+          command.leaseDigest != lease.payloadDigest ||
+          source['clientFingerprint'] is! String ||
+          !_isDigest(source['clientFingerprint']! as String) ||
+          source['enrollmentEvidenceDigest'] is! String ||
+          !_isDigest(source['enrollmentEvidenceDigest']! as String) ||
+          source['authorityPayloadDigest'] is! String ||
+          !_isDigest(source['authorityPayloadDigest']! as String)) {
+        throw const FormatException('connected_site_cloud_proof_binding');
+      }
+    } else if (source['proofKind'] == 'coordinatorDerived') {
+      if (!exact(const {
+        'contract',
+        'proofKind',
+        'commandId',
+        'commandDigest',
+        'workspaceId',
+        'siteId',
+        'deviceId',
+        'leaseDigest',
+        'sourceProof',
+        'sourceProofDigest',
+        'derivation',
+        'derivationDigest',
+      })) {
+        throw const FormatException('connected_site_cloud_proof_shape');
+      }
+      final sourceProof = ConnectedSiteCloudProofV1.fromJson(
+        source['sourceProof'],
+      );
+      if (sourceProof.proofKind != 'signedClientCommand' ||
+          source['sourceProofDigest'] != sourceProof.proofDigest ||
+          source['workspaceId'] != sourceProof.workspaceId ||
+          source['siteId'] != sourceProof.siteId ||
+          source['deviceId'] != sourceProof.deviceId ||
+          source['leaseDigest'] != sourceProof.leaseDigest ||
+          source['commandId'] is! String ||
+          !_isIdentifier(source['commandId']! as String) ||
+          source['commandDigest'] is! String ||
+          !_isDigest(source['commandDigest']! as String) ||
+          source['derivation'] is! Map ||
+          source['derivationDigest'] !=
+              connectedSiteSha256(source['derivation'])) {
+        throw const FormatException('connected_site_cloud_proof_binding');
+      }
+    } else {
+      throw const FormatException('connected_site_cloud_proof_kind');
+    }
+    return Map.unmodifiable(source);
+  }
 }
 
 abstract interface class ConnectedSiteEventRepository {

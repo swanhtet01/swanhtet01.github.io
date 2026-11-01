@@ -25,7 +25,54 @@ const _site = 'site-adapter';
 const _actor = 'actor-adapter';
 const _device = 'device-adapter';
 final _fingerprint = _digest('adapter-device-key');
-final _leaseDigest = _digest('adapter-lease');
+const _adapterCapabilities = <String>[
+  'cafeKitchenStatus',
+  'cafeOrderWrite',
+  'counterSale',
+];
+final _leaseDigest = connectedSiteSha256(
+  _adapterLeaseUnsigned(_adapterCapabilities),
+);
+
+Map<String, Object> _adapterLeaseUnsigned(List<String> capabilities) => {
+  'protocolVersion': connectedSiteProtocolVersion,
+  'leaseId': 'adapter-lease',
+  'workspaceId': _workspace,
+  'siteId': _site,
+  'actorId': _actor,
+  'role': 'cashierCounter',
+  'capabilities': capabilities,
+  'deviceId': _device,
+  'sessionGeneration': 1,
+  'revocationGeneration': 1,
+  'issuedAt': DateTime.fromMillisecondsSinceEpoch(
+    _now - 1000,
+    isUtc: true,
+  ).toIso8601String(),
+  'expiresAt': DateTime.fromMillisecondsSinceEpoch(
+    _now + 60000,
+    isUtc: true,
+  ).toIso8601String(),
+  'issuerKeyId': 'test-key',
+};
+
+OfflineStaffLeaseV1 _adapterLease(List<String> capabilities) =>
+    OfflineStaffLeaseV1(
+      leaseId: 'adapter-lease',
+      workspaceId: _workspace,
+      siteId: _site,
+      actorId: _actor,
+      role: 'cashierCounter',
+      capabilities: capabilities,
+      deviceId: _device,
+      sessionGeneration: 1,
+      revocationGeneration: 1,
+      issuedAt: _adapterLeaseUnsigned(capabilities)['issuedAt']! as String,
+      expiresAt: _adapterLeaseUnsigned(capabilities)['expiresAt']! as String,
+      issuerKeyId: 'test-key',
+      payloadDigest: connectedSiteSha256(_adapterLeaseUnsigned(capabilities)),
+      signature: List.filled(64, 's').join(),
+    );
 
 void main() {
   test('resolver exposes only the reviewed connected command vocabulary', () {
@@ -460,7 +507,7 @@ void main() {
       }
       expect(
         () =>
-            ShopBackup.verifySnapshot(scopeTampered, expectedSchemaVersion: 33),
+            ShopBackup.verifySnapshot(scopeTampered, expectedSchemaVersion: 34),
         throwsFormatException,
       );
       raw = sqlite.sqlite3.open(gapTampered.path);
@@ -473,7 +520,7 @@ void main() {
         raw.close();
       }
       expect(
-        () => ShopBackup.verifySnapshot(gapTampered, expectedSchemaVersion: 33),
+        () => ShopBackup.verifySnapshot(gapTampered, expectedSchemaVersion: 34),
         throwsFormatException,
       );
     } finally {
@@ -1330,19 +1377,31 @@ void main() {
         cafeStore: store,
         connectedSiteEnabled: true,
       );
-      final reserve = _cafeReserveCommand('capability-reserve');
+      final limitedLeaseDigest = _adapterLease(const [
+        'cafeOrderWrite',
+        'counterSale',
+      ]).payloadDigest;
+      final reserve = _cafeReserveCommand(
+        'capability-reserve',
+        leaseDigest: limitedLeaseDigest,
+      );
       await handler.handle(_fingerprint, reserve);
       await handler.handle(
         _fingerprint,
         _cafePutCommand(
           'capability-put',
           reservationBinding: _cafeReservationBinding(reserve),
+          leaseDigest: limitedLeaseDigest,
         ),
       );
       await expectLater(
         handler.handle(
           _fingerprint,
-          _cafeKitchenCommand('capability-kitchen', expectedVersion: 2),
+          _cafeKitchenCommand(
+            'capability-kitchen',
+            expectedVersion: 2,
+            leaseDigest: limitedLeaseDigest,
+          ),
         ),
         throwsStateError,
       );
@@ -1634,6 +1693,7 @@ Future<void> _expectNoConnectedMutation(ShopDatabase database) async {
     'shop_connected_stock_reservation_lines',
     'shop_connected_stock_reservation_transitions',
     'shop_connected_trusted_time',
+    'shop_site_cloud_proofs',
   ]) {
     final count =
         (await database
@@ -1671,7 +1731,7 @@ Future<void> _seedForeignAcceptedCafeMarker(
     '(lease_id, tenant_id, site_id, actor_id, actor_role, capabilities_json, '
     'device_id, session_generation, revocation_generation, issued_at_millis, '
     'expires_at_millis, key_id, payload_digest, signature) '
-        "VALUES (?, ?, ?, ?, 'cafeWaiter', ?, ?, 1, 1, ?, ?, 'foreign-key', ?, ?)",
+    "VALUES (?, ?, ?, ?, 'cafeWaiter', ?, ?, 1, 1, ?, ?, 'foreign-key', ?, ?)",
     [
       'foreign-lease',
       _workspace,
@@ -1763,6 +1823,12 @@ Future<void> _seed(
   bool includeKitchenCapability = true,
   int openingStock = 1,
 }) async {
+  final capabilities = <String>[
+    if (includeKitchenCapability) 'cafeKitchenStatus',
+    'cafeOrderWrite',
+    'counterSale',
+  ];
+  final lease = _adapterLease(capabilities);
   await database.addProduct(
     id: 'adapter-item',
     name: 'Adapter item',
@@ -1804,19 +1870,18 @@ Future<void> _seed(
       const Variable<String>(_workspace),
       const Variable<String>(_site),
       const Variable<String>(_actor),
-      Variable<String>(
-        jsonEncode([
-          'counterSale',
-          'cafeOrderWrite',
-          if (includeKitchenCapability) 'cafeKitchenStatus',
-        ]),
-      ),
+      Variable<String>(jsonEncode(capabilities)),
       const Variable<String>(_device),
       const Variable<int>(_now - 1000),
       const Variable<int>(_now + 60000),
-      Variable<String>(_leaseDigest),
+      Variable<String>(lease.payloadDigest),
       Variable<String>(List.filled(64, 's').join()),
     ],
+  );
+  await database.retainConnectedLeasePayloadV34(
+    lease,
+    retainedAtMillis: _now - 500,
+    issuerEvidenceDigest: _digest('adapter-issuer-evidence'),
   );
   await database.bindConnectedStockScopeForEnrollment(
     tenantId: _workspace,
@@ -1936,6 +2001,7 @@ SiteCommandV1 _cafePutCommand(
   String remark = '',
   List<CafeModifierSnapshot> modifiers = const [],
   Map<String, Object?>? reservationBinding,
+  String? leaseDigest,
 }) {
   final command = CafeOrderCommand(
     id: id,
@@ -1964,6 +2030,7 @@ SiteCommandV1 _cafePutCommand(
       'reservationBinding':
           reservationBinding ?? _fakeCafeReservationBinding(command),
     },
+    leaseDigest: leaseDigest,
   );
 }
 
@@ -1985,20 +2052,24 @@ SiteCommandV1 _cafeStateCommand(
   },
 );
 
-SiteCommandV1 _cafeKitchenCommand(String id, {required int expectedVersion}) =>
-    _cafeSiteCommand(
-      id: id,
-      expectedVersion: expectedVersion,
-      commandType: shopCafeKitchenStatusCommandType,
-      payload: {
-        'contract': 'supermega.shop.connected-cafe-kitchen-status.v1',
-        'orderId': 'connected-cafe-ticket',
-        'lineId': 'connected-cafe-line',
-        'operationId': id,
-        'expectedTicketVersion': 1,
-        'expectedStatus': 'pending_local',
-      },
-    );
+SiteCommandV1 _cafeKitchenCommand(
+  String id, {
+  required int expectedVersion,
+  String? leaseDigest,
+}) => _cafeSiteCommand(
+  id: id,
+  expectedVersion: expectedVersion,
+  commandType: shopCafeKitchenStatusCommandType,
+  payload: {
+    'contract': 'supermega.shop.connected-cafe-kitchen-status.v1',
+    'orderId': 'connected-cafe-ticket',
+    'lineId': 'connected-cafe-line',
+    'operationId': id,
+    'expectedTicketVersion': 1,
+    'expectedStatus': 'pending_local',
+  },
+  leaseDigest: leaseDigest,
+);
 
 SiteCommandV1 _cafeCancelCommand(
   String id, {
@@ -2022,6 +2093,7 @@ SiteCommandV1 _cafeReserveCommand(
   String id, {
   String subjectId = 'connected-cafe-ticket',
   int expectedVersion = 0,
+  String? leaseDigest,
 }) {
   final reservation = ConnectedStockReservationV1.held(
     reservationId: 'reservation:$id',
@@ -2054,7 +2126,7 @@ SiteCommandV1 _cafeReserveCommand(
     commandType: shopCafeStockReserveCommandType,
     payload: payload,
     payloadDigest: connectedSiteSha256(payload),
-    leaseDigest: _leaseDigest,
+    leaseDigest: leaseDigest ?? _leaseDigest,
     issuedAt: '2033-05-18T03:33:20.000Z',
     signingKeyId: 'test-key',
     signatureAlgorithm: 'ed25519',
@@ -2108,6 +2180,7 @@ SiteCommandV1 _cafeSiteCommand({
   required int expectedVersion,
   required String commandType,
   required Map<String, Object?> payload,
+  String? leaseDigest,
 }) => SiteCommandV1(
   commandId: id,
   workspaceId: _workspace,
@@ -2120,7 +2193,7 @@ SiteCommandV1 _cafeSiteCommand({
   commandType: commandType,
   payload: payload,
   payloadDigest: connectedSiteSha256(payload),
-  leaseDigest: _leaseDigest,
+  leaseDigest: leaseDigest ?? _leaseDigest,
   issuedAt: '2033-05-18T03:33:20.000Z',
   signingKeyId: 'test-key',
   signatureAlgorithm: 'ed25519',

@@ -147,7 +147,7 @@ void main() {
       final memberToken = _memberToken(17);
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 33);
+        expect(database.schemaVersion, 34);
         final storeRef = await database.readStoreRef();
         await _seedPseudonymousMember(
           database,

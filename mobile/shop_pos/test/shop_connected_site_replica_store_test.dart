@@ -449,7 +449,7 @@ void main() {
       raw.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 33),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 34),
       throwsFormatException,
     );
   });
@@ -582,6 +582,19 @@ void main() {
     final raw = sqlite.sqlite3.open(file.path);
     try {
       for (final definition
+          in shopConnectedCloudProofSchemaDefinitionsV34().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(definition.value);
+        raw.execute(
+          'DROP ${type == 'table'
+              ? 'TABLE'
+              : type == 'index'
+              ? 'INDEX'
+              : 'TRIGGER'} IF EXISTS ${definition.key}',
+        );
+      }
+      for (final definition
           in shopConnectedReplicaSchemaDefinitionsV33().entries
               .toList()
               .reversed) {
@@ -614,7 +627,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 33);
+    expect(migrated.schemaVersion, 34);
     await migrated.verifyConnectedReplicaEvidence();
   });
 
@@ -656,6 +669,19 @@ void main() {
     await source.close();
     final raw = sqlite.sqlite3.open(file.path);
     try {
+      for (final definition
+          in shopConnectedCloudProofSchemaDefinitionsV34().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(definition.value);
+        raw.execute(
+          'DROP ${type == 'table'
+              ? 'TABLE'
+              : type == 'index'
+              ? 'INDEX'
+              : 'TRIGGER'} IF EXISTS ${definition.key}',
+        );
+      }
       for (final definition
           in shopConnectedReplicaSchemaDefinitionsV33().entries
               .toList()
@@ -705,7 +731,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 33);
+    expect(migrated.schemaVersion, 34);
     expect(
       await migrated
           .customSelect(

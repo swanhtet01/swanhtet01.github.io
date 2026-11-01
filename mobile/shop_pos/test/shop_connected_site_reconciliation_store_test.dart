@@ -16,7 +16,45 @@ const _workspace = 'workspace-cloud-store';
 const _site = 'site-cloud-store';
 const _device = 'device-cloud-store';
 const _actor = 'actor-cloud-store';
-final _leaseDigest = _digest('cloud-store-lease');
+final _leaseUnsigned = <String, Object>{
+  'protocolVersion': connectedSiteProtocolVersion,
+  'leaseId': 'cloud-store-lease',
+  'workspaceId': _workspace,
+  'siteId': _site,
+  'actorId': _actor,
+  'role': 'cashierCounter',
+  'capabilities': const ['counterSale'],
+  'deviceId': _device,
+  'sessionGeneration': 1,
+  'revocationGeneration': 1,
+  'issuedAt': DateTime.fromMillisecondsSinceEpoch(
+    _now - 1000,
+    isUtc: true,
+  ).toIso8601String(),
+  'expiresAt': DateTime.fromMillisecondsSinceEpoch(
+    _now + 60000,
+    isUtc: true,
+  ).toIso8601String(),
+  'issuerKeyId': 'test-key',
+};
+final _leaseDigest = connectedSiteSha256(_leaseUnsigned);
+
+OfflineStaffLeaseV1 _lease() => OfflineStaffLeaseV1(
+  leaseId: 'cloud-store-lease',
+  workspaceId: _workspace,
+  siteId: _site,
+  actorId: _actor,
+  role: 'cashierCounter',
+  capabilities: const ['counterSale'],
+  deviceId: _device,
+  sessionGeneration: 1,
+  revocationGeneration: 1,
+  issuedAt: _leaseUnsigned['issuedAt']! as String,
+  expiresAt: _leaseUnsigned['expiresAt']! as String,
+  issuerKeyId: 'test-key',
+  payloadDigest: _leaseDigest,
+  signature: 's' * 64,
+);
 
 void main() {
   test('cloud dispositions are durable, ordered and idempotent', () async {
@@ -334,6 +372,115 @@ void main() {
       await root.delete(recursive: true);
     }
   });
+
+  test('stored proof binds exact command lease and scope bytes', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seedAuthority(database);
+      await _appendEvent(database, 'command-proof', 'aggregate-proof');
+      final store = ShopConnectedSiteReconciliationStore(
+        database: database,
+        nowMillis: () => _now + 1000,
+      );
+      final scope = ConnectedSiteScope(
+        workspaceId: _workspace,
+        siteId: _site,
+        deviceId: _device,
+      );
+      final pending = await store.pendingEvents(
+        scope,
+        afterCursor: 0,
+        limit: 10,
+      );
+      expect(pending.single.cloudProof.proofKind, 'signedClientCommand');
+      expect(pending.single.cloudProof.workspaceId, _workspace);
+      expect(pending.single.cloudProof.siteId, _site);
+      expect(pending.single.cloudProof.leaseDigest, _leaseDigest);
+
+      final retainedProof = pending.single.cloudProof;
+      final proof = retainedProof.toJson();
+      (proof['command']! as Map<String, Object?>)['siteId'] = 'site-mutated';
+      expect(retainedProof.siteId, _site);
+      final cleanProof = retainedProof.toJson();
+      final alteredLease = Map<String, Object?>.from(
+        cleanProof['lease']! as Map,
+      )..['actorId'] = 'actor-foreign';
+      final altered = Map<String, Object?>.from(cleanProof)
+        ..['lease'] = alteredLease;
+      expect(
+        () => ConnectedSiteCloudProofV1.fromJson(altered),
+        throwsFormatException,
+      );
+      final foreign = Map<String, Object?>.from(cleanProof);
+      final command = Map<String, Object?>.from(foreign['command']! as Map)
+        ..['siteId'] = 'site-foreign';
+      foreign['command'] = command;
+      expect(
+        () => ConnectedSiteCloudProofV1.fromJson(foreign),
+        throwsFormatException,
+      );
+    } finally {
+      await database.close();
+    }
+  });
+
+  test(
+    'v33 events remain local and refuse cloud upload after v34 migration',
+    () async {
+      final root = await Directory.systemTemp.createTemp('cloud-proof-v33-');
+      final file = File('${root.path}/legacy.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await _seedAuthority(database);
+        await _appendEvent(database, 'legacy-command', 'legacy-aggregate');
+        await database.customStatement(
+          'DROP TRIGGER shop_site_cloud_proofs_no_update',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_cloud_proofs_no_delete',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_offline_lease_payloads_no_update',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_offline_lease_payloads_no_delete',
+        );
+        await database.customStatement('DROP TABLE shop_site_cloud_proofs');
+        await database.customStatement(
+          'DROP TABLE shop_site_offline_lease_payloads',
+        );
+        await database.customStatement('PRAGMA user_version = 33');
+        await database.close();
+
+        database = ShopDatabase(NativeDatabase(file));
+        await database.verifyReadyForUse();
+        expect(await database.countSales(), 0);
+        final store = ShopConnectedSiteReconciliationStore(
+          database: database,
+          nowMillis: () => _now + 1000,
+        );
+        final scope = ConnectedSiteScope(
+          workspaceId: _workspace,
+          siteId: _site,
+          deviceId: _device,
+        );
+        await expectLater(
+          store.pendingEvents(scope, afterCursor: 0, limit: 10),
+          throwsStateError,
+        );
+        expect(
+          (await database
+                  .customSelect('SELECT COUNT(*) AS n FROM shop_site_events')
+                  .getSingle())
+              .read<int>('n'),
+          1,
+        );
+      } finally {
+        await database.close();
+        await root.delete(recursive: true);
+      }
+    },
+  );
 }
 
 Future<void> _seedAuthority(ShopDatabase database) async {
@@ -380,6 +527,11 @@ Future<void> _seedAuthority(ShopDatabase database) async {
       Variable<String>('s' * 64),
     ],
   );
+  await database.retainConnectedLeasePayloadV34(
+    _lease(),
+    retainedAtMillis: _now - 500,
+    issuerEvidenceDigest: _digest('cloud-store-issuer'),
+  );
 }
 
 Future<({String commandId, String commandDigest, String eventDigest})>
@@ -404,7 +556,32 @@ _appendEvent(
     'occurredAt': occurredAt,
     'payload': payload,
   };
-  final commandDigest = _digest('command:$commandId');
+  final command = SiteCommandV1(
+    commandId: commandId,
+    workspaceId: _workspace,
+    siteId: _site,
+    actorId: _actor,
+    deviceId: _device,
+    aggregateType: 'retailCart',
+    aggregateId: aggregateId,
+    expectedVersion: 0,
+    commandType: 'retail.synthetic.accept.v1',
+    payload: payload,
+    payloadDigest: connectedSiteSha256(payload),
+    leaseDigest: _leaseDigest,
+    issuedAt: occurredAt,
+    signingKeyId: 'device-key',
+    signatureAlgorithm: 'ed25519',
+    signature: 's' * 64,
+  );
+  final proof = ConnectedSiteCloudProofV1.signed(
+    command: command,
+    lease: _lease(),
+    clientFingerprint: _digest('cloud-store-device'),
+    enrollmentEvidenceDigest: _digest('cloud-store-enrollment'),
+    authorityPayloadDigest: _digest('cloud-store-issuer'),
+  );
+  final commandDigest = command.commandDigest;
   final result = await database.applyConnectedSiteCommand(
     ShopConnectedSiteCommandInput(
       commandId: commandId,
@@ -419,6 +596,8 @@ _appendEvent(
       payloadDigest: connectedSiteSha256(payload),
       leaseDigest: _leaseDigest,
       commandDigest: commandDigest,
+      cloudProofJson: canonicalConnectedSiteJson(proof.toJson()),
+      cloudProofDigest: proof.proofDigest,
       eventId: 'event:$commandId',
       eventType: 'retail.synthetic.accepted.v1',
       eventPayloadJson: canonicalConnectedSiteJson(payload),

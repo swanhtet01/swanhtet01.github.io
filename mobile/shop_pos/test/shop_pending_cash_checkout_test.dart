@@ -89,7 +89,7 @@ void main() {
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
       final receipt = (await database.readRecentSales()).single;
-      expect(database.schemaVersion, 33);
+      expect(database.schemaVersion, 34);
       expect(receipt.cashTenderedMmk, isNull);
       expect(receipt.cashChangeMmk, isNull);
       expect((await database.readActiveProducts()).single.onHand, 1);

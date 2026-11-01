@@ -12,6 +12,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'shop_database.dart';
 import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
 
 enum ShopStorePresence { empty, existing, interrupted, unsafe }
@@ -63,7 +64,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 33;
+  static const supportedSchemaVersion = 34;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1922,6 +1923,9 @@ abstract final class ShopBackup {
     final replicaDeliveryDefinitions = schemaVersion >= 33
         ? shopConnectedReplicaSchemaDefinitionsV33()
         : const <String, String>{};
+    final cloudProofDefinitions = schemaVersion >= 34
+        ? shopConnectedCloudProofSchemaDefinitionsV34()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1941,7 +1945,8 @@ abstract final class ShopBackup {
             schemaVersion == 30 ||
             schemaVersion == 31 ||
             schemaVersion == 32 ||
-            schemaVersion == 33) &&
+            schemaVersion == 33 ||
+            schemaVersion == 34) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -2008,6 +2013,7 @@ abstract final class ShopBackup {
             )) &&
         (schemaVersion < 33 ||
             _v33ConnectedReplicaDeliveryRowsValid(connection)) &&
+        (schemaVersion < 34 || _v34ConnectedCloudProofRowsValid(connection)) &&
         _snapshotDefinitionGroupExact(
           objects,
           const {
@@ -2037,6 +2043,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 31) reservationSessionDefinitions,
           if (schemaVersion >= 32) replicaDefinitions,
           if (schemaVersion >= 33) replicaDeliveryDefinitions,
+          if (schemaVersion >= 34) cloudProofDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2055,6 +2062,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 31) ...reservationSessionDefinitions.keys,
           if (schemaVersion >= 32) ...replicaDefinitions.keys,
           if (schemaVersion >= 33) ...replicaDeliveryDefinitions.keys,
+          if (schemaVersion >= 34) ...cloudProofDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3707,6 +3715,68 @@ abstract final class ShopBackup {
               row['payload_digest'] != value.$3) {
             return false;
           }
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v34ConnectedCloudProofRowsValid(Database connection) {
+    try {
+      for (final row in connection.select(
+        'SELECT retained.*, lease.lease_id, lease.tenant_id, lease.site_id, '
+        'lease.actor_id, lease.actor_role, lease.capabilities_json, '
+        'lease.device_id, lease.session_generation, lease.revocation_generation, '
+        'lease.issued_at_millis, lease.expires_at_millis, lease.key_id, '
+        'lease.signature FROM shop_site_offline_lease_payloads retained '
+        'LEFT JOIN shop_site_offline_leases lease '
+        'ON lease.payload_digest = retained.payload_digest',
+      )) {
+        final decoded = jsonDecode(row['lease_json'] as String);
+        final lease = OfflineStaffLeaseV1.fromJson(decoded);
+        if (canonicalConnectedSiteJson(decoded) != row['lease_json'] ||
+            connectedSiteSha256(decoded) != row['lease_bytes_digest'] ||
+            row['issuer_evidence_digest'] is! String ||
+            !RegExp(r'^[0-9a-f]{64}$')
+                .hasMatch(row['issuer_evidence_digest']! as String) ||
+            lease.payloadDigest != row['payload_digest'] ||
+            lease.workspaceId != row['tenant_id'] ||
+            lease.siteId != row['site_id'] ||
+            lease.actorId != row['actor_id'] ||
+            lease.leaseId != row['lease_id'] ||
+            lease.role != row['actor_role'] ||
+            canonicalConnectedSiteJson(lease.capabilities) !=
+                canonicalConnectedSiteJson(
+                  jsonDecode(row['capabilities_json'] as String),
+                ) ||
+            lease.deviceId != row['device_id'] ||
+            lease.sessionGeneration != row['session_generation'] ||
+            lease.revocationGeneration != row['revocation_generation'] ||
+            lease.issuedAtMillis != row['issued_at_millis'] ||
+            lease.expiresAtMillis != row['expires_at_millis'] ||
+            lease.issuerKeyId != row['key_id'] ||
+            lease.signature != row['signature']) {
+          return false;
+        }
+      }
+      for (final row in connection.select(
+        'SELECT proof.*, command.command_digest, command.tenant_id, '
+        'command.site_id FROM shop_site_cloud_proofs proof '
+        'LEFT JOIN shop_site_commands command ON command.command_id = proof.command_id',
+      )) {
+        final encoded = row['proof_json'] as String;
+        final decoded = jsonDecode(encoded);
+        final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
+        if (canonicalConnectedSiteJson(decoded) != encoded ||
+            proof.proofKind != row['proof_kind'] ||
+            proof.proofDigest != row['proof_digest'] ||
+            proof.commandId != row['command_id'] ||
+            proof.commandDigest != row['command_digest'] ||
+            proof.workspaceId != row['tenant_id'] ||
+            proof.siteId != row['site_id']) {
+          return false;
         }
       }
       return true;

@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'shop_cafe_order_contract.dart';
 import 'shop_cafe_order_store.dart';
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
 import 'shop_database.dart';
 import 'shop_site_coordinator.dart';
@@ -76,6 +77,7 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
       throw StateError('Connected-site database commands are disabled.');
     }
     await _requireActiveClient(clientFingerprint, command);
+    final cloudProof = await _cloudProofFor(clientFingerprint, command);
     final mapping = await _mapping(command);
     final issuedAtMillis = DateTime.parse(command.issuedAt)
         .toUtc()
@@ -110,6 +112,8 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
         payloadDigest: command.payloadDigest,
         leaseDigest: command.leaseDigest,
         commandDigest: command.commandDigest,
+        cloudProofJson: canonicalConnectedSiteJson(cloudProof.toJson()),
+        cloudProofDigest: cloudProof.proofDigest,
         eventId: eventId,
         eventType: mapping.eventType,
         eventPayloadJson: canonicalConnectedSiteJson(command.payload),
@@ -172,6 +176,54 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
     if (row == null) {
       throw StateError('Connected-site client is not enrolled and active.');
     }
+  }
+
+  Future<ConnectedSiteCloudProofV1> _cloudProofFor(
+    String clientFingerprint,
+    SiteCommandV1 command,
+  ) async {
+    final leaseRow = await database
+        .customSelect(
+          'SELECT retained.lease_json, retained.issuer_evidence_digest '
+          'FROM shop_site_offline_lease_payloads retained '
+          'JOIN shop_site_offline_leases lease '
+          'ON lease.payload_digest = retained.payload_digest '
+          'WHERE retained.payload_digest = ? AND lease.tenant_id = ? '
+          'AND lease.site_id = ? AND lease.actor_id = ? AND lease.device_id = ?',
+          variables: [
+            Variable<String>(command.leaseDigest),
+            Variable<String>(command.workspaceId),
+            Variable<String>(command.siteId),
+            Variable<String>(command.actorId),
+            Variable<String>(command.deviceId),
+          ],
+        )
+        .getSingleOrNull();
+    final deviceAuthority = await database
+        .customSelect(
+          'SELECT enrollment_evidence_digest FROM shop_connected_scope_binding '
+          'WHERE singleton = 1 AND tenant_id = ? AND site_id = ?',
+          variables: [
+            Variable<String>(command.workspaceId),
+            Variable<String>(command.siteId),
+          ],
+        )
+        .getSingleOrNull();
+    if (leaseRow == null || deviceAuthority == null) {
+      throw StateError('connected_site_cloud_authority_evidence_unavailable');
+    }
+    final lease = OfflineStaffLeaseV1.fromJson(
+      jsonDecode(leaseRow.read<String>('lease_json')),
+    );
+    return ConnectedSiteCloudProofV1.signed(
+      command: command,
+      lease: lease,
+      clientFingerprint: clientFingerprint,
+      enrollmentEvidenceDigest: deviceAuthority.read<String>(
+        'enrollment_evidence_digest',
+      ),
+      authorityPayloadDigest: leaseRow.read<String>('issuer_evidence_digest'),
+    );
   }
 
   Future<_CommandMapping> _mapping(SiteCommandV1 command) async {

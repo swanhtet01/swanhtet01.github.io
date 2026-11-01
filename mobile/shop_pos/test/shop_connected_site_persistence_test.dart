@@ -10,6 +10,7 @@ import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_cafe_order_contract.dart';
 import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_connected_stock_reservation.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
@@ -20,13 +21,13 @@ const _tenant = 'tenant-1';
 const _site = 'site-1';
 const _actor = 'actor-1';
 const _device = 'device-1';
-final _leaseDigest = _digest('lease:$_tenant:$_site:$_device');
+final _leaseDigest = _leaseFor().payloadDigest;
 
 void main() {
   test('connected-site persistence is default-off and schema is v31', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 33);
+      expect(database.schemaVersion, 34);
       final tables =
           (await database
                   .customSelect(
@@ -155,7 +156,7 @@ void main() {
             ),
             connectedSiteEnabled: true,
           ),
-          throwsStateError,
+          throwsFormatException,
         );
         await expectLater(
           database.applyConnectedSiteCommandForTest(
@@ -1543,7 +1544,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 33);
+        expect(database.schemaVersion, 34);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(
@@ -2095,7 +2096,13 @@ Future<String> _seedAuthority(
   String deviceId = _device,
   bool bindStockScope = true,
 }) async {
-  final leaseDigest = _digest('lease:$tenantId:$siteId:$deviceId');
+  final lease = _leaseFor(
+    tenantId: tenantId,
+    siteId: siteId,
+    actorId: actorId,
+    deviceId: deviceId,
+  );
+  final leaseDigest = lease.payloadDigest;
   await database.customInsert(
     'INSERT INTO shop_site_devices '
     '(device_id, tenant_id, site_id, public_key_fingerprint, '
@@ -2131,13 +2138,18 @@ Future<String> _seedAuthority(
       Variable<String>(tenantId),
       Variable<String>(siteId),
       Variable<String>(actorId),
-      Variable<String>(jsonEncode(const ['counterSale', 'cafeOrderWrite'])),
+      Variable<String>(jsonEncode(lease.capabilities)),
       Variable<String>(deviceId),
       Variable<int>(_now - 1000),
       Variable<int>(_now + 60000),
       Variable<String>(leaseDigest),
       Variable<String>(List.filled(64, 's').join()),
     ],
+  );
+  await database.retainConnectedLeasePayloadV34(
+    lease,
+    retainedAtMillis: _now - 500,
+    issuerEvidenceDigest: _digest('issuer:$tenantId:$siteId:$deviceId'),
   );
   if (bindStockScope) {
     await database.bindConnectedStockScopeForEnrollment(
@@ -2231,6 +2243,42 @@ ShopConnectedSiteCommandInput _command(
     ).toIso8601String(),
     'payload': payload,
   };
+  final lease = _leaseFor(
+    tenantId: tenantId,
+    siteId: siteId,
+    actorId: actorId,
+    deviceId: deviceId,
+  );
+  final signedCommand = SiteCommandV1(
+    commandId: id,
+    workspaceId: tenantId,
+    siteId: siteId,
+    actorId: actorId,
+    deviceId: deviceId,
+    aggregateType: aggregateType,
+    aggregateId: aggregateId,
+    expectedVersion: expectedVersion,
+    commandType: eventType,
+    payload: payload,
+    payloadDigest: connectedSiteSha256(payload),
+    leaseDigest: lease.payloadDigest,
+    issuedAt: DateTime.fromMillisecondsSinceEpoch(
+      createdAtMillis,
+      isUtc: true,
+    ).toIso8601String(),
+    signingKeyId: 'device-key',
+    signatureAlgorithm: 'ed25519',
+    signature: 's' * 64,
+  );
+  final proof = ConnectedSiteCloudProofV1.signed(
+    command: signedCommand,
+    lease: lease,
+    clientFingerprint: _digest('device-key:$deviceId'),
+    enrollmentEvidenceDigest: _digest('enrollment:$tenantId:$siteId'),
+    authorityPayloadDigest: _digest('issuer:$tenantId:$siteId:$deviceId'),
+  );
+  final effectiveLeaseDigest = leaseDigest ?? lease.payloadDigest;
+  final effectiveCommandDigest = commandDigest ?? signedCommand.commandDigest;
   return ShopConnectedSiteCommandInput(
     commandId: id,
     tenantId: tenantId,
@@ -2242,8 +2290,10 @@ ShopConnectedSiteCommandInput _command(
     capability: capability.name,
     expectedVersion: expectedVersion,
     payloadDigest: connectedSiteSha256(payload),
-    leaseDigest: leaseDigest ?? _leaseDigest,
-    commandDigest: commandDigest ?? _digest('command:$id'),
+    leaseDigest: effectiveLeaseDigest,
+    commandDigest: effectiveCommandDigest,
+    cloudProofJson: canonicalConnectedSiteJson(proof.toJson()),
+    cloudProofDigest: proof.proofDigest,
     eventId: 'event:$id',
     eventType: eventType,
     eventPayloadJson: jsonEncode(payload),
@@ -2254,6 +2304,51 @@ ShopConnectedSiteCommandInput _command(
     createdAtMillis: createdAtMillis,
     stockReservation: selectedReservation,
     stockReservationLifecycle: stockReservationLifecycle,
+  );
+}
+
+OfflineStaffLeaseV1 _leaseFor({
+  String tenantId = _tenant,
+  String siteId = _site,
+  String actorId = _actor,
+  String deviceId = _device,
+}) {
+  final unsigned = <String, Object>{
+    'protocolVersion': connectedSiteProtocolVersion,
+    'leaseId': 'lease:$tenantId:$siteId:$deviceId',
+    'workspaceId': tenantId,
+    'siteId': siteId,
+    'actorId': actorId,
+    'role': 'cashierCounter',
+    'capabilities': const ['cafeOrderWrite', 'counterSale'],
+    'deviceId': deviceId,
+    'sessionGeneration': 1,
+    'revocationGeneration': 3,
+    'issuedAt': DateTime.fromMillisecondsSinceEpoch(
+      _now - 1000,
+      isUtc: true,
+    ).toIso8601String(),
+    'expiresAt': DateTime.fromMillisecondsSinceEpoch(
+      _now + 60000,
+      isUtc: true,
+    ).toIso8601String(),
+    'issuerKeyId': 'test-key',
+  };
+  return OfflineStaffLeaseV1(
+    leaseId: unsigned['leaseId']! as String,
+    workspaceId: tenantId,
+    siteId: siteId,
+    actorId: actorId,
+    role: 'cashierCounter',
+    capabilities: const ['cafeOrderWrite', 'counterSale'],
+    deviceId: deviceId,
+    sessionGeneration: 1,
+    revocationGeneration: 3,
+    issuedAt: unsigned['issuedAt']! as String,
+    expiresAt: unsigned['expiresAt']! as String,
+    issuerKeyId: 'test-key',
+    payloadDigest: connectedSiteSha256(unsigned),
+    signature: 's' * 64,
   );
 }
 

@@ -191,12 +191,14 @@ void main() {
         'occurredAt': '2026-10-31T12:00:00.000Z',
         'payload': <String, Object?>{'details': details},
       };
+      final proof = _proof(fixture.scopeA, 'command-nested');
       final pending = ConnectedSitePendingEvent(
         cursor: 1,
         commandId: 'command-nested',
-        commandDigest: connectedSiteSha256({'commandId': 'command-nested'}),
+        commandDigest: proof.commandDigest,
         event: event,
         eventDigest: connectedSiteSha256(event),
+        cloudProof: proof,
       );
 
       (lines.single as Map<String, Object?>)['quantity'] = 99;
@@ -228,15 +230,17 @@ void main() {
       };
 
       expect(
-        () => ConnectedSitePendingEvent(
-          cursor: 1,
-          commandId: 'command-incomplete',
-          commandDigest: connectedSiteSha256({
-            'commandId': 'command-incomplete',
-          }),
-          event: incomplete,
-          eventDigest: connectedSiteSha256(incomplete),
-        ),
+        () {
+          final proof = _proof(fixture.scopeA, 'command-incomplete');
+          return ConnectedSitePendingEvent(
+            cursor: 1,
+            commandId: 'command-incomplete',
+            commandDigest: proof.commandDigest,
+            event: incomplete,
+            eventDigest: connectedSiteSha256(incomplete),
+            cloudProof: proof,
+          );
+        },
         throwsA(
           isA<FormatException>().having(
             (error) => error.message,
@@ -668,6 +672,7 @@ ConnectedSitePendingEvent _event({
   required int sequence,
 }) {
   final commandId = 'command-$sequence';
+  final proof = _proof(scope, commandId);
   final event = <String, Object?>{
     'eventId': 'event-$sequence',
     'workspaceId': scope.workspaceId,
@@ -682,9 +687,70 @@ ConnectedSitePendingEvent _event({
   return ConnectedSitePendingEvent(
     cursor: cursor,
     commandId: commandId,
-    commandDigest: connectedSiteSha256({'commandId': commandId}),
+    commandDigest: proof.commandDigest,
     event: event,
     eventDigest: connectedSiteSha256(event),
+    cloudProof: proof,
+  );
+}
+
+ConnectedSiteCloudProofV1 _proof(ConnectedSiteScope scope, String commandId) {
+  final leaseUnsigned = <String, Object>{
+    'protocolVersion': connectedSiteProtocolVersion,
+    'leaseId': 'lease-$commandId',
+    'workspaceId': scope.workspaceId,
+    'siteId': scope.siteId,
+    'actorId': 'actor-test',
+    'role': 'cashierCounter',
+    'capabilities': const ['counterSale'],
+    'deviceId': scope.deviceId,
+    'sessionGeneration': 1,
+    'revocationGeneration': 0,
+    'issuedAt': '2026-10-31T11:00:00.000Z',
+    'expiresAt': '2026-11-01T11:00:00.000Z',
+    'issuerKeyId': 'issuer-test',
+  };
+  final lease = OfflineStaffLeaseV1(
+    leaseId: 'lease-$commandId',
+    workspaceId: scope.workspaceId,
+    siteId: scope.siteId,
+    actorId: 'actor-test',
+    role: 'cashierCounter',
+    capabilities: const ['counterSale'],
+    deviceId: scope.deviceId,
+    sessionGeneration: 1,
+    revocationGeneration: 0,
+    issuedAt: '2026-10-31T11:00:00.000Z',
+    expiresAt: '2026-11-01T11:00:00.000Z',
+    issuerKeyId: 'issuer-test',
+    payloadDigest: connectedSiteSha256(leaseUnsigned),
+    signature: List.filled(64, 's').join(),
+  );
+  final payload = <String, Object?>{'totalMmk': 1000};
+  final command = SiteCommandV1(
+    commandId: commandId,
+    workspaceId: scope.workspaceId,
+    siteId: scope.siteId,
+    actorId: 'actor-test',
+    deviceId: scope.deviceId,
+    aggregateType: 'sale',
+    aggregateId: 'sale-$commandId',
+    expectedVersion: 0,
+    commandType: 'sale.accept.v1',
+    payload: payload,
+    payloadDigest: connectedSiteSha256(payload),
+    leaseDigest: lease.payloadDigest,
+    issuedAt: '2026-10-31T12:00:00.000Z',
+    signingKeyId: 'device-key',
+    signatureAlgorithm: 'ed25519',
+    signature: List.filled(64, 's').join(),
+  );
+  return ConnectedSiteCloudProofV1.signed(
+    command: command,
+    lease: lease,
+    clientFingerprint: connectedSiteSha256({'device': scope.deviceId}),
+    enrollmentEvidenceDigest: connectedSiteSha256({'enrollment': commandId}),
+    authorityPayloadDigest: connectedSiteSha256({'authority': commandId}),
   );
 }
 
