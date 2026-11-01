@@ -17,6 +17,7 @@ from supermega_runtime.connected_site_lease_issuer import (
     LeaseIssuanceError,
     MemoryLeaseIssuanceStore,
     OfflineStaffLeaseIssuer,
+    RetainedLeaseIssuance,
 )
 from supermega_runtime.connected_site_v15 import (
     ConnectedSiteV15Adapter,
@@ -86,6 +87,26 @@ class _ConcurrentSigner(_Signer):
         return super().sign(message)
 
 
+class _ReturningStore:
+    def __init__(self, retained: RetainedLeaseIssuance, *, return_on_load: bool) -> None:
+        self.retained = retained
+        self.return_on_load = return_on_load
+
+    def load(
+        self, workspace_id: str, site_id: str, command_id: str
+    ) -> RetainedLeaseIssuance | None:
+        return self.retained if self.return_on_load else None
+
+    def append(
+        self,
+        workspace_id: str,
+        site_id: str,
+        command_id: str,
+        retained: RetainedLeaseIssuance,
+    ) -> tuple[RetainedLeaseIssuance, bool]:
+        return self.retained, False
+
+
 AUTHORITY = _Signer(21, "authority-key-1")
 ISSUER = _Signer(22, "issuer-key-1")
 DEVICE = _Signer(23, "device-key-1")
@@ -105,6 +126,7 @@ def _authority(
     device_generation: int | None = None,
     lease_issuer_key_id: str = ISSUER.key_id,
     issuer_public_key: str = ISSUER.public_key,
+    second_owner: bool = False,
 ) -> SiteAuthority:
     members = {
         "owner-1": CurrentMember("owner-1", owner_role, OWNER_CAPABILITIES, 4),
@@ -112,6 +134,10 @@ def _authority(
             staff_actor_id, staff_role, staff_capabilities, staff_generation
         ),
     }
+    if second_owner:
+        members["owner-2"] = CurrentMember(
+            "owner-2", "owner", OWNER_CAPABILITIES, 5
+        )
     device = DeviceAuthority(
         device_id=device_id,
         signing_key_id="device-key-1",
@@ -193,6 +219,35 @@ def _issuer(store: MemoryLeaseIssuanceStore | None = None, *, enabled: bool = Tr
         enabled=enabled,
         now=lambda: NOW,
     )
+
+
+def _valid_retained() -> RetainedLeaseIssuance:
+    result = _issuer().issue(
+        principal=_principal(), authority=_authority(), request=_request()
+    )
+    return RetainedLeaseIssuance(
+        request_digest=digest({
+            **_request().canonical_request(),
+            "ownerActorId": _principal().actor_id,
+        }),
+        lease=dict(result.lease),
+        audit=dict(result.audit),
+    )
+
+
+def _mutated_retained(
+    *,
+    lease_change: tuple[str, object] | None = None,
+    audit_change: tuple[str, object] | None = None,
+) -> RetainedLeaseIssuance:
+    retained = _valid_retained()
+    lease = dict(retained.lease)
+    audit = dict(retained.audit)
+    if lease_change is not None:
+        lease[lease_change[0]] = lease_change[1]
+    if audit_change is not None:
+        audit[audit_change[0]] = audit_change[1]
+    return RetainedLeaseIssuance(retained.request_digest, lease, audit)
 
 
 class OfflineStaffLeaseIssuerTests(unittest.TestCase):
@@ -328,6 +383,131 @@ class OfflineStaffLeaseIssuerTests(unittest.TestCase):
         with self.assertRaisesRegex(LeaseIssuanceError, "replay_authority_changed"):
             issuer.issue(
                 principal=_principal(), authority=_authority(revocation_generation=13), request=_request()
+            )
+
+    def test_rejects_corrupt_or_extra_retained_store_fields(self) -> None:
+        cases = (
+            (
+                _mutated_retained(lease_change=("actorId", "forged-actor")),
+                "retained_lease_binding_invalid",
+            ),
+            (
+                _mutated_retained(lease_change=("signature", _encode(bytes(64)))),
+                "retained_lease_signature_invalid",
+            ),
+            (
+                _mutated_retained(lease_change=("payloadDigest", "0" * 64)),
+                "retained_lease_digest_invalid",
+            ),
+            (
+                _mutated_retained(audit_change=("auditDigest", "0" * 64)),
+                "retained_audit_digest_invalid",
+            ),
+            (
+                _mutated_retained(lease_change=("unexpected", "value")),
+                "retained_lease_shape_invalid",
+            ),
+            (
+                _mutated_retained(audit_change=("unexpected", "value")),
+                "retained_audit_shape_invalid",
+            ),
+        )
+        for retained, code in cases:
+            with self.subTest(code=code), self.assertRaisesRegex(
+                LeaseIssuanceError, code
+            ):
+                OfflineStaffLeaseIssuer(
+                    signer=ISSUER,
+                    store=_ReturningStore(retained, return_on_load=True),
+                    enabled=True,
+                    now=lambda: NOW,
+                ).issue(
+                    principal=_principal(),
+                    authority=_authority(),
+                    request=_request(),
+                )
+
+    def test_rejects_future_retained_record_even_when_resigned(self) -> None:
+        retained = _valid_retained()
+        lease = dict(retained.lease)
+        lease["issuedAt"] = "2026-11-01T13:00:00.000Z"
+        lease["expiresAt"] = "2026-11-08T13:00:00.000Z"
+        unsigned = {
+            key: value
+            for key, value in lease.items()
+            if key not in {"payloadDigest", "signature"}
+        }
+        lease["payloadDigest"] = digest(unsigned)
+        lease["signature"] = ISSUER.sign(canonical_json(unsigned).encode())
+        audit = dict(retained.audit)
+        audit.update({
+            "issuedAt": lease["issuedAt"],
+            "expiresAt": lease["expiresAt"],
+            "leaseDigest": lease["payloadDigest"],
+        })
+        audit_unsigned = {
+            key: value for key, value in audit.items() if key != "auditDigest"
+        }
+        audit["auditDigest"] = digest(audit_unsigned)
+        future = RetainedLeaseIssuance(retained.request_digest, lease, audit)
+        with self.assertRaisesRegex(LeaseIssuanceError, "retained_lease_time_invalid"):
+            OfflineStaffLeaseIssuer(
+                signer=ISSUER,
+                store=_ReturningStore(future, return_on_load=True),
+                enabled=True,
+                now=lambda: NOW,
+            ).issue(
+                principal=_principal(), authority=_authority(), request=_request()
+            )
+
+    def test_revalidates_substituted_append_return(self) -> None:
+        substituted = _mutated_retained(
+            audit_change=("ownerActorId", "substituted-owner")
+        )
+        with self.assertRaisesRegex(LeaseIssuanceError, "retained_audit_binding_invalid"):
+            OfflineStaffLeaseIssuer(
+                signer=ISSUER,
+                store=_ReturningStore(substituted, return_on_load=False),
+                enabled=True,
+                now=lambda: NOW,
+            ).issue(
+                principal=_principal(), authority=_authority(), request=_request()
+            )
+
+    def test_owner_attribution_is_bound_to_signed_lease_identity(self) -> None:
+        retained = _valid_retained()
+        owner_two = AuthenticatedOwnerSession(
+            "workspace-1", "site-1", "owner-2", 5
+        )
+        owner_two_digest = digest({
+            **_request().canonical_request(),
+            "ownerActorId": owner_two.actor_id,
+        })
+        audit = dict(retained.audit)
+        audit["ownerActorId"] = owner_two.actor_id
+        audit["requestDigest"] = owner_two_digest
+        audit_without_digest = {
+            key: value for key, value in audit.items() if key != "auditDigest"
+        }
+        audit["auditDigest"] = digest(audit_without_digest)
+        substituted = RetainedLeaseIssuance(
+            request_digest=owner_two_digest,
+            lease=dict(retained.lease),
+            audit=audit,
+        )
+
+        with self.assertRaisesRegex(
+            LeaseIssuanceError, "retained_lease_binding_invalid"
+        ):
+            OfflineStaffLeaseIssuer(
+                signer=ISSUER,
+                store=_ReturningStore(substituted, return_on_load=True),
+                enabled=True,
+                now=lambda: NOW,
+            ).issue(
+                principal=owner_two,
+                authority=_authority(second_owner=True),
+                request=_request(),
             )
 
     def test_cross_language_golden_vector_verifies_in_python(self) -> None:

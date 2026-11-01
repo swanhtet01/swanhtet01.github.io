@@ -29,7 +29,22 @@ MAXIMUM_LEASE_SECONDS = 7 * 24 * 60 * 60
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$")
 _KEY_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,31}$")
+_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _SIGNATURE = re.compile(r"^[A-Za-z0-9_-]{86}$")
+_CANONICAL_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
+)
+_LEASE_KEYS = frozenset({
+    "protocolVersion", "leaseId", "workspaceId", "siteId", "actorId", "role",
+    "capabilities", "deviceId", "sessionGeneration", "revocationGeneration",
+    "issuedAt", "expiresAt", "issuerKeyId", "payloadDigest", "signature",
+})
+_AUDIT_KEYS = frozenset({
+    "contract", "commandId", "requestDigest", "leaseId", "workspaceId", "siteId",
+    "ownerActorId", "actorId", "role", "capabilities", "deviceId",
+    "sessionGeneration", "revocationGeneration", "issuedAt", "expiresAt",
+    "issuerKeyId", "leaseDigest", "auditDigest",
+})
 _ROLE_CAPABILITIES = {
     "owner": frozenset({
         "counterSale", "stockChange", "productDetailsWrite", "cashShiftManage",
@@ -77,6 +92,18 @@ def _timestamp(value: datetime) -> str:
     if value.tzinfo is None:
         _fail("clock_invalid")
     return value.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _parse_timestamp(value: object, code: str) -> datetime:
+    if not isinstance(value, str) or not _CANONICAL_TIMESTAMP.fullmatch(value):
+        _fail(code)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        _fail(code)
+    if _timestamp(parsed) != value:
+        _fail(code)
+    return parsed
 
 
 def _signature(value: object) -> str:
@@ -153,6 +180,14 @@ class LeaseIssueRequest:
             "deviceId": self.device_id,
             "validForSeconds": self.valid_for_seconds,
         }
+
+
+def _issuance_request_digest(
+    request: LeaseIssueRequest, principal: AuthenticatedOwnerSession
+) -> str:
+    """Bind idempotency and the signed lease identity to the issuing owner."""
+
+    return digest({**request.canonical_request(), "ownerActorId": principal.actor_id})
 
 
 class OfflineLeaseSigner(Protocol):
@@ -298,23 +333,25 @@ class OfflineStaffLeaseIssuer:
         ):
             _fail("current_authority_mismatch")
 
-        request_digest = digest(request.canonical_request())
+        request_digest = _issuance_request_digest(request, principal)
+        now = self._current_time()
         retained = self._store.load(request.workspace_id, request.site_id, request.command_id)
         if retained is not None:
             if retained.request_digest != request_digest:
                 _fail("command_reused")
-            lease = retained.lease
-            if (
-                lease.get("sessionGeneration") != member.session_generation
-                or lease.get("revocationGeneration") != authority.revocation_generation
-            ):
-                _fail("replay_authority_changed")
-            return LeaseIssueResult(lease=lease, audit=retained.audit, replayed=True)
+            verified = self._validate_retained(
+                retained=retained,
+                principal=principal,
+                authority=authority,
+                request=request,
+                request_digest=request_digest,
+                now=now,
+            )
+            return LeaseIssueResult(
+                lease=verified.lease, audit=verified.audit, replayed=True
+            )
 
-        issued = self._now()
-        if not isinstance(issued, datetime) or issued.tzinfo is None:
-            _fail("clock_invalid")
-        issued = issued.astimezone(timezone.utc)
+        issued = now
         expires = issued + timedelta(seconds=request.valid_for_seconds)
         unsigned = {
             "protocolVersion": PROTOCOL_VERSION,
@@ -370,4 +407,129 @@ class OfflineStaffLeaseIssuer:
             request.command_id,
             RetainedLeaseIssuance(request_digest=request_digest, lease=lease, audit=audit),
         )
-        return LeaseIssueResult(lease=recorded.lease, audit=recorded.audit, replayed=replayed)
+        verified = self._validate_retained(
+            retained=recorded,
+            principal=principal,
+            authority=authority,
+            request=request,
+            request_digest=request_digest,
+            now=now,
+        )
+        return LeaseIssueResult(
+            lease=verified.lease, audit=verified.audit, replayed=replayed
+        )
+
+    def _current_time(self) -> datetime:
+        value = self._now()
+        if not isinstance(value, datetime) or value.tzinfo is None:
+            _fail("clock_invalid")
+        return value.astimezone(timezone.utc)
+
+    def _validate_retained(
+        self,
+        *,
+        retained: RetainedLeaseIssuance,
+        principal: AuthenticatedOwnerSession,
+        authority: SiteAuthority,
+        request: LeaseIssueRequest,
+        request_digest: str,
+        now: datetime,
+    ) -> RetainedLeaseIssuance:
+        """Treat every store return as untrusted and reconstruct its authority."""
+
+        if not isinstance(retained, RetainedLeaseIssuance):
+            _fail("retained_shape_invalid")
+        if retained.request_digest != request_digest or not _DIGEST.fullmatch(
+            retained.request_digest
+        ):
+            _fail("retained_request_mismatch")
+        if not isinstance(retained.lease, Mapping) or set(retained.lease) != _LEASE_KEYS:
+            _fail("retained_lease_shape_invalid")
+        if not isinstance(retained.audit, Mapping) or set(retained.audit) != _AUDIT_KEYS:
+            _fail("retained_audit_shape_invalid")
+        lease = dict(retained.lease)
+        audit = dict(retained.audit)
+        expected_lease_values = {
+            "protocolVersion": PROTOCOL_VERSION,
+            "leaseId": f"lease-{request_digest[:32]}",
+            "workspaceId": request.workspace_id,
+            "siteId": request.site_id,
+            "actorId": request.actor_id,
+            "role": request.role,
+            "capabilities": list(request.capabilities),
+            "deviceId": request.device_id,
+            "sessionGeneration": authority.members[request.actor_id].session_generation,
+            "revocationGeneration": authority.revocation_generation,
+            "issuerKeyId": self._signer.key_id,
+        }
+        if (
+            lease.get("sessionGeneration") != expected_lease_values["sessionGeneration"]
+            or lease.get("revocationGeneration")
+            != expected_lease_values["revocationGeneration"]
+        ):
+            _fail("replay_authority_changed")
+        if any(lease.get(key) != value for key, value in expected_lease_values.items()):
+            _fail("retained_lease_binding_invalid")
+        issued = _parse_timestamp(lease["issuedAt"], "retained_lease_time_invalid")
+        expires = _parse_timestamp(lease["expiresAt"], "retained_lease_time_invalid")
+        if (
+            issued > now
+            or expires <= now
+            or expires <= issued
+            or expires - issued > timedelta(seconds=MAXIMUM_LEASE_SECONDS)
+            or expires - issued != timedelta(seconds=request.valid_for_seconds)
+        ):
+            _fail("retained_lease_time_invalid")
+        unsigned = {key: lease[key] for key in _LEASE_KEYS - {"payloadDigest", "signature"}}
+        if (
+            not isinstance(lease["payloadDigest"], str)
+            or not _DIGEST.fullmatch(lease["payloadDigest"])
+            or digest(unsigned) != lease["payloadDigest"]
+        ):
+            _fail("retained_lease_digest_invalid")
+        signature = _signature(lease["signature"])
+        try:
+            Ed25519PublicKey.from_public_bytes(self._public_key_bytes).verify(
+                base64.b64decode(signature + "==", altchars=b"-_", validate=True),
+                canonical_json(unsigned).encode("utf-8"),
+            )
+        except (InvalidSignature, ValueError):
+            _fail("retained_lease_signature_invalid")
+
+        expected_audit_values = {
+            "contract": LEASE_AUDIT_CONTRACT,
+            "commandId": request.command_id,
+            "requestDigest": request_digest,
+            "leaseId": lease["leaseId"],
+            "workspaceId": request.workspace_id,
+            "siteId": request.site_id,
+            "ownerActorId": principal.actor_id,
+            "actorId": request.actor_id,
+            "role": request.role,
+            "capabilities": list(request.capabilities),
+            "deviceId": request.device_id,
+            "sessionGeneration": lease["sessionGeneration"],
+            "revocationGeneration": lease["revocationGeneration"],
+            "issuedAt": lease["issuedAt"],
+            "expiresAt": lease["expiresAt"],
+            "issuerKeyId": lease["issuerKeyId"],
+            "leaseDigest": lease["payloadDigest"],
+        }
+        if any(audit.get(key) != value for key, value in expected_audit_values.items()):
+            _fail("retained_audit_binding_invalid")
+        audit_without_digest = {
+            key: audit[key] for key in _AUDIT_KEYS - {"auditDigest"}
+        }
+        if (
+            not isinstance(audit["auditDigest"], str)
+            or not _DIGEST.fullmatch(audit["auditDigest"])
+            or digest(audit_without_digest) != audit["auditDigest"]
+        ):
+            _fail("retained_audit_digest_invalid")
+        return _copy_retained(
+            RetainedLeaseIssuance(
+                request_digest=request_digest,
+                lease=lease,
+                audit=audit,
+            )
+        )
