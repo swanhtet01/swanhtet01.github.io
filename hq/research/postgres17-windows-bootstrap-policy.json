@@ -42,7 +42,9 @@
       "captureMethod": "windows-wpr-etw-process-image-probe-v1",
       "authoritative": false,
       "scriptPath": "tools/postgres17_windows_trace_observer.ps1",
-      "scriptSha256": "c76a355573734b01ec89af93ea78aaf60f095f551b31ac6478cadcbc1e2ef7c8",
+      "scriptSha256": "514105fee85851ebcdeecec8e6ca5c3d3a9ba853b2231f1f3d4b3586dca72e10",
+      "parserPath": "tools/postgres17_windows_trace_parser.mjs",
+      "parserSha256": "f8ce4c039f412b39f5932c3de949c8b9b6fb840e095f25f8d2124ac283ab80bd",
       "profilePath": "hq/research/postgres17-process-image.wprp",
       "profileSha256": "ad64780da3422ec18e67a782e7607dcdec638b7ed8d55a41c6627191cb8b1d4c",
       "wprPath": "C:\\Windows\\System32\\wpr.exe",
@@ -53,6 +55,8 @@
       "requiresBuffersLost": 0,
       "requiresProcessEvent": true,
       "requiresImageEvent": true,
+      "requiresProcessEndEvent": true,
+      "requiresStableProcessKey": true,
       "requiresDrain": true
     }
   },

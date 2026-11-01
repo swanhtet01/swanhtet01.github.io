@@ -9,6 +9,7 @@ import {
   validateObserverProbe,
   verifyEvidenceDirectory,
 } from './postgres17_windows_evidence_contract.mjs'
+import { correlateTraceXml } from './postgres17_windows_trace_parser.mjs'
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const exactSha = 'b'.repeat(40)
@@ -45,6 +46,8 @@ function probeFixture() {
     droppedBuffers: 0,
     processEventObserved: true,
     imageEventObserved: true,
+    processEndObserved: true,
+    stableProcessKeyObserved: true,
     probeExitCode: 0,
     drainComplete: true,
     temporaryDataRemoved: true,
@@ -67,29 +70,12 @@ function traceEvent({ task, opcode, pid, image = probeImage, key = 'key-1',
     + `<TimeCreated SystemTime="${time}"/></System><EventData>${data}</EventData></Event>`
 }
 
-// Independent fixture oracle for the source-level correlation contract. The Windows
-// implementation uses XmlDocument/SelectNodes rather than this test-only tokenizer.
-function fixtureCorrelates(xml) {
-  const records = [...xml.matchAll(/<Event>([\s\S]*?)<\/Event>/g)].map(([, body]) => {
-    const field = (pattern) => body.match(pattern)?.[1] ?? null
-    return {
-      task: field(/<Task Name="([^"]+)"\/>/),
-      opcode: field(/<Opcode Name="([^"]+)"\/>/),
-      pid: field(/<Data Name="ProcessID">(\d+)<\/Data>/),
-      image: field(/<Data Name="ImageName">([^<]+)<\/Data>/),
-      key: field(/<Data Name="ProcessKey">([^<]+)<\/Data>/),
-      time: field(/<TimeCreated SystemTime="([^"]+)"\/>/),
-    }
-  }).filter((record) => record.image === probeImage)
-  if (records.some((record) => !record.pid || !record.time)) return false
-  const starts = records.filter((record) => record.task === 'Process'
-    && ['Start', 'DCStart'].includes(record.opcode))
-  const images = records.filter((record) => ['Image', 'ImageLoad', 'Loader'].includes(record.task)
-    && ['Load', 'Start', 'DCStart'].includes(record.opcode))
-  if (starts.length !== 1 || images.length !== 1) return false
-  const [start] = starts; const [image] = images
-  return start.pid === image.pid && Date.parse(image.time) >= Date.parse(start.time)
-    && (!start.key || !image.key || start.key === image.key)
+function validTrace() {
+  return `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
+    + `${traceEvent({ task: 'ImageLoad', opcode: 'Load', pid: 41,
+      time: '2026-11-01T00:00:00.100Z' })}`
+    + `${traceEvent({ task: 'Process', opcode: 'End', pid: 41,
+      time: '2026-11-01T00:00:00.200Z' })}</Events>`
 }
 
 test('manual workflow exposes an exact-SHA observer probe without automatic triggers', async () => {
@@ -107,10 +93,11 @@ test('manual workflow exposes an exact-SHA observer probe without automatic trig
 
 test('observer probe policy binds exact source and remains non-authoritative', async () => {
   const root = new URL('../', import.meta.url)
-  const [policyBytes, scriptBytes, profileBytes] = await Promise.all([
+  const [policyBytes, scriptBytes, profileBytes, parserBytes] = await Promise.all([
     readFile(new URL('hq/research/postgres17-windows-bootstrap-policy.json', root)),
     readFile(new URL('tools/postgres17_windows_trace_observer.ps1', root)),
     readFile(new URL('hq/research/postgres17-process-image.wprp', root)),
+    readFile(new URL('tools/postgres17_windows_trace_parser.mjs', root)),
   ])
   const policy = JSON.parse(policyBytes)
   const probe = policy.closureObserver.capabilityProbe
@@ -118,6 +105,7 @@ test('observer probe policy binds exact source and remains non-authoritative', a
   assert.equal(probe.authoritative, false)
   assert.equal(probe.scriptSha256, sha256(scriptBytes))
   assert.equal(probe.profileSha256, sha256(profileBytes))
+  assert.equal(probe.parserSha256, sha256(parserBytes))
   assert.equal(policy.closureObserver.status, 'pending')
   assert.equal(policy.closureObserver.command, null)
   assert.equal(policy.approval.status, 'pending')
@@ -136,10 +124,9 @@ test('probe uses fixed signed Windows tools, explicit loss checks, and no Postgr
     'BuffersLost',
     'observer_probe_trace_loss_detected',
     'observer_probe_trace_coverage_incomplete',
-    'Read-ProbeTraceCorrelation',
-    "SelectNodes(\"//*[local-name()='Event']\")",
-    'observer_probe_trace_correlation_ambiguous',
-    'observer_probe_trace_correlation_mismatch',
+    '$probePolicy.parserPath',
+    'stableProcessKeyObserved',
+    'processEndObserved',
     'postgresDownloaded = $false',
     'postgresExecuted = $false',
     'databaseStarted = $false',
@@ -156,47 +143,74 @@ test('probe uses fixed signed Windows tools, explicit loss checks, and no Postgr
   assert.doesNotMatch(source, /Image\.\{0,4096\}/)
 })
 
-test('structured trace fixture accepts one correlated process and image record', () => {
-  const xml = `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
-    + `${traceEvent({ task: 'ImageLoad', opcode: 'Load', pid: 41,
-      time: '2026-11-01T00:00:00.1000000Z' })}</Events>`
-  assert.equal(fixtureCorrelates(xml), true)
+test('production parser accepts one stable start, image, and end lifetime', () => {
+  assert.deepEqual(correlateTraceXml(validTrace(), probeImage), {
+    contract: 'supermega.windows-process-image-correlation.v1',
+    processEventObserved: true,
+    imageEventObserved: true,
+    processEndObserved: true,
+    stableProcessKeyObserved: true,
+  })
 })
 
-test('structured trace fixture rejects process-only evidence', () => {
-  assert.equal(fixtureCorrelates(`<Events>${traceEvent({
+test('production parser rejects process-only and image-only evidence', () => {
+  assert.throws(() => correlateTraceXml(`<Events>${traceEvent({
     task: 'Process', opcode: 'Start', pid: 41,
-  })}</Events>`), false)
-})
-
-test('structured trace fixture rejects image-only evidence', () => {
-  assert.equal(fixtureCorrelates(`<Events>${traceEvent({
+  })}</Events>`, probeImage), /correlation_ambiguous/)
+  assert.throws(() => correlateTraceXml(`<Events>${traceEvent({
     task: 'Image', opcode: 'Load', pid: 41,
-  })}</Events>`), false)
+  })}</Events>`, probeImage), /correlation_ambiguous/)
 })
 
-test('structured trace fixture rejects unrelated process and image records', () => {
+test('production parser rejects unrelated process and image records', () => {
   const xml = `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
     + `${traceEvent({ task: 'Image', opcode: 'Load', pid: 99,
-      image: 'unrelated.exe', time: '2026-11-01T00:00:00.1000000Z' })}</Events>`
-  assert.equal(fixtureCorrelates(xml), false)
+      image: 'unrelated.exe', time: '2026-11-01T00:00:00.100Z' })}</Events>`
+  assert.throws(() => correlateTraceXml(xml, probeImage), /correlation_ambiguous/)
 })
 
-test('structured trace fixture rejects PID reuse and ambiguous starts', () => {
+test('production parser rejects PID reuse and duplicate starts', () => {
   const xml = `<Events>${traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })}`
     + `${traceEvent({ task: 'Process', opcode: 'Start', pid: 41,
-      key: 'key-2', time: '2026-11-01T00:00:00.0500000Z' })}`
+      key: 'key-2', time: '2026-11-01T00:00:00.050Z' })}`
     + `${traceEvent({ task: 'Image', opcode: 'Load', pid: 41,
-      key: 'key-2', time: '2026-11-01T00:00:00.1000000Z' })}</Events>`
-  assert.equal(fixtureCorrelates(xml), false)
+      key: 'key-2', time: '2026-11-01T00:00:00.100Z' })}`
+    + `${traceEvent({ task: 'Process', opcode: 'End', pid: 41,
+      key: 'key-2', time: '2026-11-01T00:00:00.200Z' })}</Events>`
+  assert.throws(() => correlateTraceXml(xml, probeImage), /correlation_ambiguous/)
 })
 
-test('structured trace fixture rejects missing correlation identity fields', () => {
-  const validStart = traceEvent({ task: 'Process', opcode: 'Start', pid: 41 })
-  const missingPid = traceEvent({ task: 'Image', opcode: 'Load', pid: 41,
-    time: '2026-11-01T00:00:00.1000000Z' })
-    .replace('<Data Name="ProcessID">41</Data>', '')
-  assert.equal(fixtureCorrelates(`<Events>${validStart}${missingPid}</Events>`), false)
+test('production parser rejects missing stable key and missing end', () => {
+  const missingKey = validTrace().replace('<Data Name="ProcessKey">key-1</Data>', '')
+  assert.throws(() => correlateTraceXml(missingKey, probeImage), /process_key_missing/)
+  const missingEnd = validTrace().replace(
+    traceEvent({ task: 'Process', opcode: 'End', pid: 41,
+      time: '2026-11-01T00:00:00.200Z' }), '')
+  assert.throws(() => correlateTraceXml(missingEnd, probeImage), /correlation_ambiguous/)
+})
+
+test('production parser rejects wrong key and end before image', () => {
+  const wrongKey = validTrace().replace(
+    '<Data Name="ProcessKey">key-1</Data></EventData></Event></Events>',
+    '<Data Name="ProcessKey">key-2</Data></EventData></Event></Events>')
+  assert.throws(() => correlateTraceXml(wrongKey, probeImage), /correlation_mismatch/)
+  const earlyEnd = validTrace().replace('2026-11-01T00:00:00.200Z',
+    '2026-11-01T00:00:00.050Z')
+  assert.throws(() => correlateTraceXml(earlyEnd, probeImage), /correlation_mismatch/)
+})
+
+test('production parser rejects unknown task or opcode for the probe image', () => {
+  for (const changed of [
+    validTrace().replace('<Task Name="ImageLoad"/>', '<Task Name="Process"/>'),
+    validTrace().replace('<Opcode Name="Load"/>', '<Opcode Name="Unknown"/>'),
+  ]) assert.throws(() => correlateTraceXml(changed, probeImage), /task_opcode_unknown/)
+})
+
+test('production parser rejects DTDs and entities', () => {
+  assert.throws(() => correlateTraceXml(
+    '<!DOCTYPE Events [<!ENTITY x "probe">]><Events></Events>', probeImage), /xml_unsafe/)
+  assert.throws(() => correlateTraceXml(
+    validTrace().replace(probeImage, '&probe;'), probeImage), /xml_unsafe/)
 })
 
 test('observer probe contract rejects incomplete, lossy, authoritative, or unsafe evidence', () => {
@@ -208,6 +222,8 @@ test('observer probe contract rejects incomplete, lossy, authoritative, or unsaf
     (value) => { value.droppedBuffers = 1 },
     (value) => { value.processEventObserved = false },
     (value) => { value.imageEventObserved = false },
+    (value) => { value.processEndObserved = false },
+    (value) => { value.stableProcessKeyObserved = false },
     (value) => { value.drainComplete = false },
     (value) => { value.temporaryDataRemoved = false },
     (value) => { value.postgresDownloaded = true },

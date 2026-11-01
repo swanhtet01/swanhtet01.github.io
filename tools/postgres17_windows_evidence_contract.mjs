@@ -33,7 +33,8 @@ export function validateObserverProbe(probe, expectedSha) {
   const keys = ['contract', 'authoritative', 'exactSha', 'captureMethod', 'runner',
     'osBuild', 'profileSha256', 'tools', 'traceStartedBeforeProbe', 'traceStopped',
     'traceParsed', 'droppedEvents', 'droppedBuffers', 'processEventObserved',
-    'imageEventObserved', 'probeExitCode', 'drainComplete', 'temporaryDataRemoved',
+    'imageEventObserved', 'processEndObserved', 'stableProcessKeyObserved',
+    'probeExitCode', 'drainComplete', 'temporaryDataRemoved',
     'postgresDownloaded', 'postgresExecuted', 'databaseStarted', 'secretValuesExposed']
   if (!exact(probe, keys)
     || probe.contract !== 'supermega.windows-process-image-observer-probe.v1'
@@ -47,6 +48,7 @@ export function validateObserverProbe(probe, expectedSha) {
     || probe.traceStartedBeforeProbe !== true || probe.traceStopped !== true
     || probe.traceParsed !== true || probe.droppedEvents !== 0 || probe.droppedBuffers !== 0
     || probe.processEventObserved !== true || probe.imageEventObserved !== true
+    || probe.processEndObserved !== true || probe.stableProcessKeyObserved !== true
     || probe.probeExitCode !== 0 || probe.drainComplete !== true
     || probe.temporaryDataRemoved !== true || probe.postgresDownloaded !== false
     || probe.postgresExecuted !== false || probe.databaseStarted !== false
