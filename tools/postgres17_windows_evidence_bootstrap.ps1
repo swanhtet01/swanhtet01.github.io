@@ -131,17 +131,18 @@ function Resolve-RuntimeBindingPath([string]$RuntimeRoot, $Binding) {
 }
 function Assert-NoReparsePath([string]$RuntimeRoot, [string]$Path) {
   $rootPath = [System.IO.Path]::GetFullPath($RuntimeRoot)
-  $cursor = Get-Item -LiteralPath $Path -Force
+  $cursorPath = [System.IO.Path]::GetFullPath($Path)
   while ($true) {
+    $cursor = Get-Item -LiteralPath $cursorPath -Force
     if ($cursor.LinkType -or ($cursor.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
       Fail 'bootstrap_runtime_binding_reparse_rejected'
     }
     if ($cursor.FullName -eq $rootPath) { break }
-    $parent = $cursor.Parent
-    if ($null -eq $parent -or -not $cursor.FullName.StartsWith(
+    $parentPath = [System.IO.Path]::GetDirectoryName($cursor.FullName)
+    if ([string]::IsNullOrWhiteSpace($parentPath) -or -not $cursor.FullName.StartsWith(
         $rootPath + [System.IO.Path]::DirectorySeparatorChar,
         [StringComparison]::OrdinalIgnoreCase)) { Fail 'bootstrap_runtime_binding_path_escape' }
-    $cursor = Get-Item -LiteralPath $parent.FullName -Force
+    $cursorPath = $parentPath
   }
 }
 function Assert-MaterializedBinding([string]$RuntimeRoot, $Binding) {
