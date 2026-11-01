@@ -50,6 +50,20 @@
   artifacts, installed recovery, physical hardware, bilingual paper receipts,
   merchant acceptance and joint go/no-go are **NOT RUN**. Connected mode stays
   default-off and no gate is waived by this source checkpoint.
+- Source-only observer capability successor
+  `69d941f2e762a7034308ea964a23cccb02c11f6b`, tree
+  `27b2785cd28a46d50e3c662880e022db5b3a0e02`, enhances only the
+  non-authoritative Windows WPR probe. It requires a fixed signed
+  `cmd.exe` → copied `where.exe` two-level tree and sanitized proof of stable
+  parent/child correlation, zero exit status, full image/module paths, ordered
+  start/image/end lifecycles, zero lost events/buffers and complete drain.
+  Unrelated system-wide events cannot substitute for controlled evidence.
+  PostgreSQL self-tests are **83/83 Node + 30/30 Python PASS**, syntax and diff
+  checks are **PASS**, and independent review **ACCEPTS** the corrected parser.
+  The probe remains `authoritative:false`; closure observer and approval stay
+  pending with command/hash null. Real `windows-2025` WPR/tracerpt execution,
+  installer download/execution, PostgreSQL and authoritative evidence remain
+  **NOT RUN**.
 
 ## 2026-11-02 exact-head CI repair checkpoint
 
