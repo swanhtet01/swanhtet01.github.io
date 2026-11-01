@@ -752,6 +752,14 @@ ConnectedSiteCloudProofV1 _proof(ConnectedSiteScope scope, String commandId) {
     enrollmentEvidenceDigest: connectedSiteSha256({'enrollment': commandId}),
     coordinatorBindingDigest: connectedSiteSha256({'binding': commandId}),
     authorityPayloadDigest: connectedSiteSha256({'authority': commandId}),
+    eventBinding: {
+      'eventId': 'event-$commandId',
+      'eventType': 'sale.accepted.v1',
+      'eventDigest': connectedSiteSha256({'event': commandId}),
+      'capability': 'counterSale',
+      'auditAction': 'sale.accept',
+      'commandType': command.commandType,
+    },
   );
 }
 

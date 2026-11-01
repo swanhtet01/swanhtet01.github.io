@@ -64,7 +64,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 34;
+  static const supportedSchemaVersion = 35;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1923,7 +1923,9 @@ abstract final class ShopBackup {
     final replicaDeliveryDefinitions = schemaVersion >= 33
         ? shopConnectedReplicaSchemaDefinitionsV33()
         : const <String, String>{};
-    final cloudProofDefinitions = schemaVersion >= 34
+    final cloudProofDefinitions = schemaVersion >= 35
+        ? shopConnectedCloudProofSchemaDefinitionsV35()
+        : schemaVersion >= 34
         ? shopConnectedCloudProofSchemaDefinitionsV34()
         : const <String, String>{};
     final connectedSiteExact =
@@ -1946,7 +1948,8 @@ abstract final class ShopBackup {
             schemaVersion == 31 ||
             schemaVersion == 32 ||
             schemaVersion == 33 ||
-            schemaVersion == 34) &&
+            schemaVersion == 34 ||
+            schemaVersion == 35) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -3725,6 +3728,7 @@ abstract final class ShopBackup {
 
   static bool _v34ConnectedCloudProofRowsValid(Database connection) {
     try {
+      final schemaVersion = connection.userVersion;
       final missingRequirement = connection
           .select(
             'SELECT COUNT(*) AS total FROM shop_site_commands command '
@@ -3752,6 +3756,37 @@ abstract final class ShopBackup {
                 row['proof_command_id'] != null)) {
           return false;
         }
+      }
+      if (schemaVersion >= 35) {
+        for (final row in connection.select(
+          'SELECT requirement.command_id, command.command_digest, '
+          'command.received_at_millis, boundary.command_digest AS boundary_command_digest, '
+          'boundary.boundary_digest FROM shop_site_cloud_proof_requirements requirement '
+          'JOIN shop_site_commands command ON command.command_id = requirement.command_id '
+          'LEFT JOIN shop_site_cloud_proof_legacy_boundary boundary '
+          'ON boundary.command_id = requirement.command_id '
+          "WHERE requirement.proof_state = 'legacyUnverifiable'",
+        )) {
+          final expected = connectedSiteSha256({
+            'contract': 'supermega.shop.connected-cloud-legacy-boundary.v1',
+            'commandId': row['command_id'],
+            'commandDigest': row['command_digest'],
+            'receivedAtMillis': row['received_at_millis'],
+          });
+          if (row['boundary_command_digest'] != row['command_digest'] ||
+              row['boundary_digest'] != expected) {
+            return false;
+          }
+        }
+        final invalidBoundary = connection
+            .select(
+              'SELECT COUNT(*) AS total FROM shop_site_cloud_proof_legacy_boundary boundary '
+              'JOIN shop_site_cloud_proof_requirements requirement '
+              'ON requirement.command_id = boundary.command_id '
+              "WHERE requirement.proof_state != 'legacyUnverifiable'",
+            )
+            .single['total'];
+        if (invalidBoundary != 0) return false;
       }
       for (final row in connection.select(
         'SELECT retained.*, lease.lease_id, lease.tenant_id, lease.site_id, '
@@ -3789,19 +3824,29 @@ abstract final class ShopBackup {
           return false;
         }
       }
+      final hasIssuerEvidence = schemaVersion >= 35;
       for (final row in connection.select(
         'SELECT proof.*, command.command_digest, command.tenant_id, '
         'command.site_id, command.actor_id, command.device_id, '
         'command.aggregate_type, command.aggregate_id, command.expected_version, '
         'command.payload_digest, command.lease_digest, command.received_at_millis, '
-        'event.payload_json, event.event_digest FROM shop_site_cloud_proofs proof '
+        'command.capability, event.event_id, event.event_type, event.payload_json, '
+        'event.event_digest, audit.action AS audit_action, '
+        'retained.issuer_evidence_digest, '
+        '${hasIssuerEvidence ? 'issuer.evidence_json' : 'NULL'} AS issuer_evidence_json '
+        'FROM shop_site_cloud_proofs proof '
         'LEFT JOIN shop_site_commands command ON command.command_id = proof.command_id '
-        'LEFT JOIN shop_site_events event ON event.command_id = proof.command_id',
+        'LEFT JOIN shop_site_events event ON event.command_id = proof.command_id '
+        'LEFT JOIN shop_site_audit audit ON audit.command_id = proof.command_id '
+        'LEFT JOIN shop_site_offline_lease_payloads retained '
+        'ON retained.payload_digest = command.lease_digest '
+        '${hasIssuerEvidence ? 'LEFT JOIN shop_site_lease_issuer_evidence issuer ON issuer.evidence_digest = retained.issuer_evidence_digest' : ''}',
       )) {
         final encoded = row['proof_json'] as String;
         final decoded = jsonDecode(encoded);
         final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
         final signed = proof.signedCommand;
+        final eventBinding = decoded is Map ? decoded['eventBinding'] : null;
         final eventPayload = row['payload_json'];
         final derived = decoded is Map ? decoded['derivation'] : null;
         if (canonicalConnectedSiteJson(decoded) != encoded ||
@@ -3823,7 +3868,17 @@ abstract final class ShopBackup {
                         row['received_at_millis'] ||
                     (eventPayload != null &&
                         canonicalConnectedSiteJson(signed.payload) !=
-                            eventPayload))) ||
+                            eventPayload) ||
+                    eventBinding is! Map ||
+                    (eventPayload != null &&
+                        (eventBinding['eventId'] != row['event_id'] ||
+                            eventBinding['eventType'] != row['event_type'] ||
+                            eventBinding['eventDigest'] !=
+                                row['event_digest'])) ||
+                    eventBinding['capability'] != row['capability'] ||
+                    (eventPayload != null &&
+                        eventBinding['auditAction'] != row['audit_action']) ||
+                    eventBinding['commandType'] != signed.commandType)) ||
             (proof.proofKind == 'coordinatorDerived' &&
                 (eventPayload == null ||
                     derived is! Map ||
@@ -3835,6 +3890,13 @@ abstract final class ShopBackup {
           final sourceProof = ConnectedSiteCloudProofV1.fromJson(
             (decoded as Map)['sourceProof'],
           );
+          final sourceCommand = sourceProof.signedCommand;
+          final sourceReservation = sourceCommand?.payload['reservation'];
+          final identityDigest = connectedSiteSha256({
+            'reservationId': derivedMap['reservationId'],
+            'transitionDigest': derivedMap['transitionDigest'],
+            'state': derivedMap['state'],
+          });
           final eventPayloadMap = Map<String, Object?>.from(
             jsonDecode(eventPayload!) as Map,
           );
@@ -3854,11 +3916,69 @@ abstract final class ShopBackup {
             ],
           ).single['total'];
           if (source != 1 ||
+              sourceCommand == null ||
+              sourceReservation is! Map ||
+              sourceReservation['reservationId'] !=
+                  derivedMap['reservationId'] ||
+              proof.commandId != 'terminal:$identityDigest' ||
+              eventPayloadMap['transition'] is! Map ||
               eventPayloadMap['operationId'] != derivedMap['operationId'] ||
               eventPayloadMap['reservationId'] != derivedMap['reservationId'] ||
               eventPayloadMap['transitionDigest'] !=
                   derivedMap['transitionDigest'] ||
               eventPayloadMap['state'] != derivedMap['state']) {
+            return false;
+          }
+        } else {
+          final proofMap = Map<String, Object?>.from(decoded as Map);
+          final command = signed!;
+          final authority = connection.select(
+            'SELECT COUNT(*) AS total FROM shop_site_enrollment_evidence enrollment '
+            'JOIN shop_site_devices device ON device.device_id = enrollment.device_id '
+            'JOIN shop_site_coordinator_bindings binding '
+            'ON binding.enrollment_evidence_digest = enrollment.evidence_digest '
+            'WHERE enrollment.evidence_digest = ? AND enrollment.action = ? '
+            'AND enrollment.tenant_id = ? AND enrollment.site_id = ? '
+            'AND enrollment.device_id = ? AND enrollment.client_fingerprint = ? '
+            'AND device.tenant_id = enrollment.tenant_id '
+            'AND device.site_id = enrollment.site_id '
+            'AND device.public_key_fingerprint = enrollment.client_fingerprint '
+            'AND device.session_generation = enrollment.session_generation '
+            "AND device.state = 'active' AND binding.binding_digest = ? "
+            'AND binding.client_signing_key_id = ? '
+            'AND binding.client_device_id = enrollment.device_id '
+            'AND binding.client_fingerprint = enrollment.client_fingerprint '
+            'AND NOT EXISTS (SELECT 1 FROM shop_site_coordinator_binding_revocations r '
+            'WHERE r.target_binding_digest = binding.binding_digest) '
+            "AND 'approve:' || binding.binding_digest = (SELECT latest.action || ':' || latest.binding_digest FROM ("
+            'SELECT binding_digest, action, approval_generation FROM shop_site_coordinator_bindings '
+            'WHERE workspace_id = enrollment.tenant_id AND site_id = enrollment.site_id '
+            'AND client_device_id = enrollment.device_id UNION ALL '
+            'SELECT target_binding_digest, action, approval_generation FROM '
+            'shop_site_coordinator_binding_revocations WHERE workspace_id = enrollment.tenant_id '
+            'AND site_id = enrollment.site_id AND client_device_id = enrollment.device_id) latest '
+            'ORDER BY latest.approval_generation DESC LIMIT 1)',
+            [
+              proofMap['enrollmentEvidenceDigest'],
+              'approve',
+              proof.workspaceId,
+              proof.siteId,
+              proof.deviceId,
+              proofMap['clientFingerprint'],
+              proofMap['coordinatorBindingDigest'],
+              command.signingKeyId,
+            ],
+          ).single['total'];
+          if (authority != 1 ||
+              proofMap['authorityPayloadDigest'] !=
+                  row['issuer_evidence_digest']) {
+            return false;
+          }
+          final issuerJson = row['issuer_evidence_json'];
+          if (hasIssuerEvidence &&
+              (issuerJson is! String ||
+                  connectedSiteSha256(jsonDecode(issuerJson)) !=
+                      proofMap['authorityPayloadDigest'])) {
             return false;
           }
         }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show Variable;
@@ -7,6 +8,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation_store.dart';
 import 'package:supermega_shop/shop_database.dart';
@@ -16,6 +18,40 @@ const _workspace = 'workspace-cloud-store';
 const _site = 'site-cloud-store';
 const _device = 'device-cloud-store';
 const _actor = 'actor-cloud-store';
+final _cloudStorePublicKey = List<int>.generate(32, (index) => index + 31);
+final _cloudStoreFingerprint = sha256.convert(_cloudStorePublicKey).toString();
+Map<String, Object> get _enrollmentPayload => {
+  'schema': 'supermega.shop.owner-enrollment-evidence.v1',
+  'action': 'approve',
+  'tenantId': _workspace,
+  'siteId': _site,
+  'coordinatorDeviceId': 'coordinator-cloud-store',
+  'deviceId': _device,
+  'clientFingerprint': _cloudStoreFingerprint,
+  'sessionGeneration': 1,
+  'observedAtMillis': _now - 1000,
+  'authorityKeyId': 'owner-test',
+};
+String get _enrollmentEvidenceDigest => connectedSiteSha256(_enrollmentPayload);
+ConnectedCoordinatorApprovalV1 get _cloudStoreApproval =>
+    ConnectedCoordinatorApprovalV1(
+      workspaceId: _workspace,
+      siteId: _site,
+      coordinatorDeviceId: 'coordinator-cloud-store',
+      pairingDigest: _digest('pairing-cloud-store'),
+      enrollmentEvidenceDigest: _enrollmentEvidenceDigest,
+      clientDeviceId: _device,
+      clientFingerprint: _cloudStoreFingerprint,
+      clientSigningKeyId: 'device-key',
+      address: '192.168.50.2',
+      port: 9443,
+      certificateSha256: _digest('certificate-cloud-store'),
+      approvalGeneration: 1,
+      issuedAtMillis: _now - 900,
+      expiresAtMillis: _now + 60000,
+      authorityKeyId: 'owner-test',
+      authoritySignature: 's' * 64,
+    );
 final _leaseUnsigned = <String, Object>{
   'protocolVersion': connectedSiteProtocolVersion,
   'leaseId': 'cloud-store-lease',
@@ -424,8 +460,61 @@ void main() {
     }
   });
 
+  test('restart rejects recomputed event and authority proof substitution', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'cloud-proof-substitute-',
+    );
+    final file = File('${root.path}/substituted.sqlite');
+    final database = ShopDatabase(NativeDatabase(file));
+    try {
+      await _seedAuthority(database);
+      await _appendEvent(
+        database,
+        'command-substitute',
+        'aggregate-substitute',
+      );
+      final row = await database
+          .customSelect(
+            "SELECT proof_json FROM shop_site_cloud_proofs WHERE command_id = 'command-substitute'",
+          )
+          .getSingle();
+      final proof = Map<String, Object?>.from(
+        jsonDecode(row.read<String>('proof_json')) as Map,
+      );
+      final binding = Map<String, Object?>.from(proof['eventBinding']! as Map)
+        ..['eventType'] = 'retail.substituted.v1';
+      proof['eventBinding'] = binding;
+      proof['eventBindingDigest'] = connectedSiteSha256(binding);
+      proof['enrollmentEvidenceDigest'] = _digest('foreign-enrollment');
+      final encoded = canonicalConnectedSiteJson(proof);
+      await database.customStatement(
+        'DROP TRIGGER shop_site_cloud_proofs_no_update',
+      );
+      await database.customUpdate(
+        'UPDATE shop_site_cloud_proofs SET proof_json = ?, proof_digest = ? '
+        "WHERE command_id = 'command-substitute'",
+        variables: [
+          Variable<String>(encoded),
+          Variable<String>(connectedSiteSha256(proof)),
+        ],
+      );
+      await database.customStatement(
+        shopConnectedCloudProofSchemaDefinitionsV34()['shop_site_cloud_proofs_no_update']!,
+      );
+      await expectLater(database.verifyReadyForUse(), throwsStateError);
+      await database.close();
+      expect(
+        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 35),
+        throwsA(anything),
+      );
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
   test(
-    'v33 events remain local and refuse cloud upload after v34 migration',
+    'v33 events remain local and refuse cloud upload after v35 migration',
     () async {
       final root = await Directory.systemTemp.createTemp('cloud-proof-v33-');
       final file = File('${root.path}/legacy.sqlite');
@@ -450,6 +539,24 @@ void main() {
         );
         await database.customStatement(
           'DROP TRIGGER shop_site_cloud_proof_requirements_no_delete',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_update',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_delete',
+        );
+        await database.customStatement(
+          'DROP TABLE shop_site_cloud_proof_legacy_boundary',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_lease_issuer_evidence_no_update',
+        );
+        await database.customStatement(
+          'DROP TRIGGER shop_site_lease_issuer_evidence_no_delete',
+        );
+        await database.customStatement(
+          'DROP TABLE shop_site_lease_issuer_evidence',
         );
         await database.customStatement(
           'DROP TABLE shop_site_cloud_proof_requirements',
@@ -502,7 +609,35 @@ Future<void> _seedAuthority(ShopDatabase database) async {
       const Variable<String>(_device),
       const Variable<String>(_workspace),
       const Variable<String>(_site),
-      Variable<String>(_digest('cloud-store-device')),
+      Variable<String>(_cloudStoreFingerprint),
+      const Variable<int>(_now - 1000),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_site_pairing_nonces '
+    '(nonce, tenant_id, site_id, coordinator_device_id, issued_at_millis, '
+    'expires_at_millis, consumed_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    variables: [
+      const Variable<String>('cloud-store-pairing-nonce'),
+      const Variable<String>(_workspace),
+      const Variable<String>(_site),
+      const Variable<String>('coordinator-cloud-store'),
+      const Variable<int>(_now - 2000),
+      const Variable<int>(_now + 60000),
+      const Variable<int>(_now - 1000),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_site_pending_enrollments '
+    '(client_fingerprint, nonce, tenant_id, site_id, coordinator_device_id, '
+    "public_key, key_algorithm, observed_at_millis) VALUES (?, ?, ?, ?, ?, ?, 'ed25519', ?)",
+    variables: [
+      Variable<String>(_cloudStoreFingerprint),
+      const Variable<String>('cloud-store-pairing-nonce'),
+      const Variable<String>(_workspace),
+      const Variable<String>(_site),
+      const Variable<String>('coordinator-cloud-store'),
+      Variable<Uint8List>(Uint8List.fromList(_cloudStorePublicKey)),
       const Variable<int>(_now - 1000),
     ],
   );
@@ -539,8 +674,55 @@ Future<void> _seedAuthority(ShopDatabase database) async {
   await database.retainConnectedLeasePayloadV34(
     _lease(),
     retainedAtMillis: _now - 500,
-    issuerEvidenceDigest: _digest('cloud-store-issuer'),
+    issuerEvidenceDigest: connectedSiteSha256(const {
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': 'cloud-store',
+    }),
+    issuerEvidenceJson: canonicalConnectedSiteJson(const {
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': 'cloud-store',
+    }),
   );
+  final enrollmentDigest = _enrollmentEvidenceDigest;
+  final enrollmentEvidence = {
+    ..._enrollmentPayload,
+    'signature': 's' * 64,
+    'evidenceDigest': enrollmentDigest,
+  };
+  await database.customInsert(
+    'INSERT INTO shop_site_enrollment_evidence '
+    '(evidence_digest, action, tenant_id, site_id, coordinator_device_id, '
+    'device_id, client_fingerprint, session_generation, observed_at_millis, '
+    "authority_key_id, evidence_json) VALUES (?, 'approve', ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+    variables: [
+      Variable<String>(enrollmentDigest),
+      const Variable<String>(_workspace),
+      const Variable<String>(_site),
+      const Variable<String>('coordinator-cloud-store'),
+      const Variable<String>(_device),
+      Variable<String>(_cloudStoreFingerprint),
+      const Variable<int>(_now - 1000),
+      const Variable<String>('owner-test'),
+      Variable<String>(canonicalConnectedSiteJson(enrollmentEvidence)),
+    ],
+  );
+  final approval = _cloudStoreApproval;
+  await ShopConnectedSiteAttemptStore(
+    database: database,
+    approvalVerifier: const _AllowApprovalVerifier(),
+    runtimeEnabled: true,
+    now: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+  ).importApproval(approval);
+}
+
+class _AllowApprovalVerifier implements ConnectedCoordinatorApprovalVerifier {
+  const _AllowApprovalVerifier();
+  @override
+  Future<bool> verify({
+    required String authorityKeyId,
+    required String canonicalEvidence,
+    required String signature,
+  }) async => true;
 }
 
 Future<({String commandId, String commandDigest, String eventDigest})>
@@ -586,10 +768,21 @@ _appendEvent(
   final proof = ConnectedSiteCloudProofV1.signed(
     command: command,
     lease: _lease(),
-    clientFingerprint: _digest('cloud-store-device'),
-    enrollmentEvidenceDigest: _digest('cloud-store-enrollment'),
-    coordinatorBindingDigest: _digest('cloud-store-binding'),
-    authorityPayloadDigest: _digest('cloud-store-issuer'),
+    clientFingerprint: _cloudStoreFingerprint,
+    enrollmentEvidenceDigest: _enrollmentEvidenceDigest,
+    coordinatorBindingDigest: _cloudStoreApproval.bindingDigest,
+    authorityPayloadDigest: connectedSiteSha256(const {
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': 'cloud-store',
+    }),
+    eventBinding: {
+      'eventId': 'event:$commandId',
+      'eventType': 'retail.synthetic.accepted.v1',
+      'eventDigest': connectedSiteSha256(event),
+      'capability': 'counterSale',
+      'auditAction': 'shop.connected.synthetic',
+      'commandType': command.commandType,
+    },
   );
   final commandDigest = command.commandDigest;
   final result = await database.applyConnectedSiteCommand(

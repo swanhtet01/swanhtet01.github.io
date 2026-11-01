@@ -2088,7 +2088,14 @@ Future<String?> _seed(
   await database.retainConnectedLeasePayloadV34(
     lease,
     retainedAtMillis: _now - 500,
-    issuerEvidenceDigest: _digest('adapter-issuer-evidence'),
+    issuerEvidenceDigest: connectedSiteSha256(const {
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': 'adapter',
+    }),
+    issuerEvidenceJson: canonicalConnectedSiteJson(const {
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': 'adapter',
+    }),
   );
   await database.bindConnectedStockScopeForEnrollment(
     tenantId: _workspace,

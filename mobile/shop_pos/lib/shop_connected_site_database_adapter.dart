@@ -77,7 +77,6 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
       throw StateError('Connected-site database commands are disabled.');
     }
     await _requireActiveClient(clientFingerprint, command);
-    final cloudProof = await _cloudProofFor(clientFingerprint, command);
     final mapping = await _mapping(command);
     final issuedAtMillis = DateTime.parse(command.issuedAt)
         .toUtc()
@@ -98,6 +97,19 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
       ).toIso8601String(),
       'payload': command.payload,
     };
+    final eventBinding = <String, Object?>{
+      'eventId': eventId,
+      'eventType': mapping.eventType,
+      'eventDigest': connectedSiteSha256(event),
+      'capability': mapping.capability.name,
+      'auditAction': mapping.auditAction,
+      'commandType': command.commandType,
+    };
+    final cloudProof = await _cloudProofFor(
+      clientFingerprint,
+      command,
+      eventBinding,
+    );
     final result = await database.applyConnectedSiteCommand(
       ShopConnectedSiteCommandInput(
         commandId: command.commandId,
@@ -181,6 +193,7 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
   Future<ConnectedSiteCloudProofV1> _cloudProofFor(
     String clientFingerprint,
     SiteCommandV1 command,
+    Map<String, Object?> eventBinding,
   ) async {
     final leaseRow = await database
         .customSelect(
@@ -251,7 +264,14 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
           'AND enrollment_evidence_digest = ? AND issued_at_millis <= ? '
           'AND expires_at_millis > ? AND NOT EXISTS ('
           'SELECT 1 FROM shop_site_coordinator_binding_revocations revoked '
-          'WHERE revoked.target_binding_digest = binding.binding_digest)',
+          'WHERE revoked.target_binding_digest = binding.binding_digest) '
+          "AND 'approve:' || binding.binding_digest = (SELECT latest.action || ':' || latest.binding_digest FROM ("
+          'SELECT binding_digest, action, approval_generation FROM '
+          'shop_site_coordinator_bindings WHERE workspace_id = ? AND site_id = ? '
+          'AND client_device_id = ? UNION ALL SELECT target_binding_digest, '
+          'action, approval_generation FROM shop_site_coordinator_binding_revocations '
+          'WHERE workspace_id = ? AND site_id = ? AND client_device_id = ?) latest '
+          'ORDER BY latest.approval_generation DESC LIMIT 1)',
           variables: [
             Variable<String>(command.workspaceId),
             Variable<String>(command.siteId),
@@ -261,6 +281,12 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
             Variable<String>(enrollmentDigest),
             Variable<int>(commandIssuedAt),
             Variable<int>(commandIssuedAt),
+            Variable<String>(command.workspaceId),
+            Variable<String>(command.siteId),
+            Variable<String>(command.deviceId),
+            Variable<String>(command.workspaceId),
+            Variable<String>(command.siteId),
+            Variable<String>(command.deviceId),
           ],
         )
         .get();
@@ -286,6 +312,7 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
       enrollmentEvidenceDigest: enrollmentDigest,
       coordinatorBindingDigest: bindingDigest,
       authorityPayloadDigest: leaseRow.read<String>('issuer_evidence_digest'),
+      eventBinding: eventBinding,
     );
   }
 

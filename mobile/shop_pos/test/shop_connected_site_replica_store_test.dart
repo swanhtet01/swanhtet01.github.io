@@ -627,7 +627,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 34);
+    expect(migrated.schemaVersion, 35);
     await migrated.verifyConnectedReplicaEvidence();
   });
 
@@ -731,7 +731,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 34);
+    expect(migrated.schemaVersion, 35);
     expect(
       await migrated
           .customSelect(

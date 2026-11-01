@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show Variable;
@@ -10,6 +11,7 @@ import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_cafe_order_contract.dart';
 import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_connected_stock_reservation.dart';
 import 'package:supermega_shop/shop_database.dart';
@@ -27,7 +29,7 @@ void main() {
   test('connected-site persistence is default-off and schema is v31', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 34);
+      expect(database.schemaVersion, 35);
       final tables =
           (await database
                   .customSelect(
@@ -1544,7 +1546,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 34);
+        expect(database.schemaVersion, 35);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(
@@ -2088,6 +2090,55 @@ void main() {
   });
 }
 
+Map<String, Object> _enrollmentPayloadFor(
+  String tenantId,
+  String siteId,
+  String deviceId,
+) => {
+  'schema': 'supermega.shop.owner-enrollment-evidence.v1',
+  'action': 'approve',
+  'tenantId': tenantId,
+  'siteId': siteId,
+  'coordinatorDeviceId': 'coordinator:$siteId',
+  'deviceId': deviceId,
+  'clientFingerprint': _deviceFingerprint(deviceId),
+  'sessionGeneration': 1,
+  'observedAtMillis': _now - 1000,
+  'authorityKeyId': 'owner-test',
+};
+
+String _enrollmentDigestFor(String tenantId, String siteId, String deviceId) =>
+    connectedSiteSha256(_enrollmentPayloadFor(tenantId, siteId, deviceId));
+
+List<int> _devicePublicKey(String deviceId) =>
+    sha256.convert(utf8.encode('device-key:$deviceId')).bytes;
+String _deviceFingerprint(String deviceId) =>
+    sha256.convert(_devicePublicKey(deviceId)).toString();
+
+ConnectedCoordinatorApprovalV1 _approvalFor(
+  String tenantId,
+  String siteId,
+  String deviceId,
+  String enrollmentDigest,
+) => ConnectedCoordinatorApprovalV1(
+  workspaceId: tenantId,
+  siteId: siteId,
+  coordinatorDeviceId: 'coordinator:$siteId',
+  pairingDigest: _digest('pairing:$tenantId:$siteId:$deviceId'),
+  enrollmentEvidenceDigest: enrollmentDigest,
+  clientDeviceId: deviceId,
+  clientFingerprint: _deviceFingerprint(deviceId),
+  clientSigningKeyId: 'device-key',
+  address: '192.168.50.2',
+  port: 9443,
+  certificateSha256: _digest('certificate:$tenantId:$siteId:$deviceId'),
+  approvalGeneration: 1,
+  issuedAtMillis: _now - 900,
+  expiresAtMillis: _now + 60000,
+  authorityKeyId: 'owner-test',
+  authoritySignature: 's' * 64,
+);
+
 Future<String> _seedAuthority(
   ShopDatabase database, {
   String tenantId = _tenant,
@@ -2112,7 +2163,35 @@ Future<String> _seedAuthority(
       Variable<String>(deviceId),
       Variable<String>(tenantId),
       Variable<String>(siteId),
-      Variable<String>(_digest('device-key:$deviceId')),
+      Variable<String>(_deviceFingerprint(deviceId)),
+      Variable<int>(_now - 1000),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_site_pairing_nonces '
+    '(nonce, tenant_id, site_id, coordinator_device_id, issued_at_millis, '
+    'expires_at_millis, consumed_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    variables: [
+      Variable<String>('pairing-nonce:$tenantId:$siteId:$deviceId'),
+      Variable<String>(tenantId),
+      Variable<String>(siteId),
+      Variable<String>('coordinator:$siteId'),
+      Variable<int>(_now - 2000),
+      Variable<int>(_now + 60000),
+      Variable<int>(_now - 1000),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_site_pending_enrollments '
+    '(client_fingerprint, nonce, tenant_id, site_id, coordinator_device_id, '
+    "public_key, key_algorithm, observed_at_millis) VALUES (?, ?, ?, ?, ?, ?, 'ed25519', ?)",
+    variables: [
+      Variable<String>(_deviceFingerprint(deviceId)),
+      Variable<String>('pairing-nonce:$tenantId:$siteId:$deviceId'),
+      Variable<String>(tenantId),
+      Variable<String>(siteId),
+      Variable<String>('coordinator:$siteId'),
+      Variable<Uint8List>(Uint8List.fromList(_devicePublicKey(deviceId))),
       Variable<int>(_now - 1000),
     ],
   );
@@ -2149,18 +2228,74 @@ Future<String> _seedAuthority(
   await database.retainConnectedLeasePayloadV34(
     lease,
     retainedAtMillis: _now - 500,
-    issuerEvidenceDigest: _digest('issuer:$tenantId:$siteId:$deviceId'),
+    issuerEvidenceDigest: connectedSiteSha256({
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': '$tenantId:$siteId:$deviceId',
+    }),
+    issuerEvidenceJson: canonicalConnectedSiteJson({
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': '$tenantId:$siteId:$deviceId',
+    }),
   );
+  final enrollmentPayload = _enrollmentPayloadFor(tenantId, siteId, deviceId);
+  final enrollmentDigest = connectedSiteSha256(enrollmentPayload);
+  final enrollmentEvidence = {
+    ...enrollmentPayload,
+    'signature': 's' * 64,
+    'evidenceDigest': enrollmentDigest,
+  };
+  await database.customInsert(
+    'INSERT INTO shop_site_enrollment_evidence '
+    '(evidence_digest, action, tenant_id, site_id, coordinator_device_id, '
+    'device_id, client_fingerprint, session_generation, observed_at_millis, '
+    "authority_key_id, evidence_json) VALUES (?, 'approve', ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+    variables: [
+      Variable<String>(enrollmentDigest),
+      Variable<String>(tenantId),
+      Variable<String>(siteId),
+      Variable<String>('coordinator:$siteId'),
+      Variable<String>(deviceId),
+      Variable<String>(_deviceFingerprint(deviceId)),
+      Variable<int>(_now - 1000),
+      const Variable<String>('owner-test'),
+      Variable<String>(canonicalConnectedSiteJson(enrollmentEvidence)),
+    ],
+  );
+  final approval = _approvalFor(tenantId, siteId, deviceId, enrollmentDigest);
+  await ShopConnectedSiteAttemptStore(
+    database: database,
+    approvalVerifier: const _AllowApprovalVerifier(),
+    runtimeEnabled: true,
+    now: () => DateTime.fromMillisecondsSinceEpoch(_now, isUtc: true),
+  ).importApproval(approval);
   if (bindStockScope) {
-    await database.bindConnectedStockScopeForEnrollment(
-      tenantId: tenantId,
-      siteId: siteId,
-      enrollmentEvidenceDigest: _digest('enrollment:$tenantId:$siteId'),
-      boundAtMillis: _now - 500,
-      connectedSiteEnabled: true,
-    );
+    final existingScope = await database
+        .customSelect(
+          'SELECT 1 FROM shop_connected_scope_binding WHERE tenant_id = ? AND site_id = ?',
+          variables: [Variable<String>(tenantId), Variable<String>(siteId)],
+        )
+        .getSingleOrNull();
+    if (existingScope == null) {
+      await database.bindConnectedStockScopeForEnrollment(
+        tenantId: tenantId,
+        siteId: siteId,
+        enrollmentEvidenceDigest: enrollmentDigest,
+        boundAtMillis: _now - 500,
+        connectedSiteEnabled: true,
+      );
+    }
   }
   return leaseDigest;
+}
+
+class _AllowApprovalVerifier implements ConnectedCoordinatorApprovalVerifier {
+  const _AllowApprovalVerifier();
+  @override
+  Future<bool> verify({
+    required String authorityKeyId,
+    required String canonicalEvidence,
+    required String signature,
+  }) async => true;
 }
 
 ShopConnectedSiteCommandInput _command(
@@ -2273,10 +2408,26 @@ ShopConnectedSiteCommandInput _command(
   final proof = ConnectedSiteCloudProofV1.signed(
     command: signedCommand,
     lease: lease,
-    clientFingerprint: _digest('device-key:$deviceId'),
-    enrollmentEvidenceDigest: _digest('enrollment:$tenantId:$siteId'),
-    coordinatorBindingDigest: _digest('binding:$tenantId:$siteId:$deviceId'),
-    authorityPayloadDigest: _digest('issuer:$tenantId:$siteId:$deviceId'),
+    clientFingerprint: _deviceFingerprint(deviceId),
+    enrollmentEvidenceDigest: _enrollmentDigestFor(tenantId, siteId, deviceId),
+    coordinatorBindingDigest: _approvalFor(
+      tenantId,
+      siteId,
+      deviceId,
+      _enrollmentDigestFor(tenantId, siteId, deviceId),
+    ).bindingDigest,
+    authorityPayloadDigest: connectedSiteSha256({
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': '$tenantId:$siteId:$deviceId',
+    }),
+    eventBinding: {
+      'eventId': 'event:$id',
+      'eventType': eventType,
+      'eventDigest': eventDigest ?? connectedSiteSha256(event),
+      'capability': capability.name,
+      'auditAction': 'shop.stock.reserve',
+      'commandType': signedCommand.commandType,
+    },
   );
   final effectiveLeaseDigest = leaseDigest ?? lease.payloadDigest;
   final effectiveCommandDigest = commandDigest ?? signedCommand.commandDigest;

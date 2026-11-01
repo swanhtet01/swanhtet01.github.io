@@ -141,6 +141,7 @@ class ConnectedSiteCloudProofV1 {
     required String enrollmentEvidenceDigest,
     required String coordinatorBindingDigest,
     required String authorityPayloadDigest,
+    required Map<String, Object?> eventBinding,
   }) : this._fromStrict({
          'contract': 'supermega.shop.connected-site-cloud-proof.v1',
          'proofKind': 'signedClientCommand',
@@ -152,6 +153,8 @@ class ConnectedSiteCloudProofV1 {
          'enrollmentEvidenceDigest': enrollmentEvidenceDigest,
          'coordinatorBindingDigest': coordinatorBindingDigest,
          'authorityPayloadDigest': authorityPayloadDigest,
+         'eventBinding': eventBinding,
+         'eventBindingDigest': connectedSiteSha256(eventBinding),
        });
 
   ConnectedSiteCloudProofV1.coordinatorDerived({
@@ -255,6 +258,8 @@ class ConnectedSiteCloudProofV1 {
         'enrollmentEvidenceDigest',
         'coordinatorBindingDigest',
         'authorityPayloadDigest',
+        'eventBinding',
+        'eventBindingDigest',
       })) {
         throw const FormatException('connected_site_cloud_proof_shape');
       }
@@ -275,7 +280,10 @@ class ConnectedSiteCloudProofV1 {
           source['coordinatorBindingDigest'] is! String ||
           !_isDigest(source['coordinatorBindingDigest']! as String) ||
           source['authorityPayloadDigest'] is! String ||
-          !_isDigest(source['authorityPayloadDigest']! as String)) {
+          !_isDigest(source['authorityPayloadDigest']! as String) ||
+          source['eventBinding'] is! Map ||
+          source['eventBindingDigest'] !=
+              connectedSiteSha256(source['eventBinding'])) {
         throw const FormatException('connected_site_cloud_proof_binding');
       }
     } else if (source['proofKind'] == 'coordinatorDerived') {
