@@ -174,6 +174,10 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
       if (command.payload['contract'] !=
               'supermega.shop.connected-stock-reserve.v1' ||
           command.payload.length != 2 ||
+          reservation.workspaceId != command.workspaceId ||
+          reservation.siteId != command.siteId ||
+          reservation.actorId != command.actorId ||
+          reservation.deviceId != command.deviceId ||
           reservation.workflowType != workflow ||
           reservation.capability != capability ||
           reservation.subjectId != command.aggregateId) {

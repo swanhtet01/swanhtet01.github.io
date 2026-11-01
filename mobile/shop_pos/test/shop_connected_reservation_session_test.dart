@@ -8,7 +8,6 @@ import 'package:supermega_shop/shop_connected_reservation_session.dart';
 import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
 import 'package:supermega_shop/shop_connected_site_client.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
-import 'package:supermega_shop/shop_connected_site_database_adapter.dart';
 import 'package:supermega_shop/shop_connected_stock_reservation.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
@@ -52,11 +51,14 @@ void main() {
     () async {
       final fixture = _Fixture();
       final reservation = fixture.reservation();
-      final command = await fixture.service().buildAndPrepareForTest(
+      final prepared = await fixture.service().prepareReserve(
         reservation: reservation,
         lease: fixture.lease(),
         commandId: 'reserve-restart',
+        expectedVersion: 0,
       );
+      expect(prepared.state, ConnectedReservationSessionState.unknown);
+      final command = prepared.reserveCommand;
       expect(fixture.attempts.commands, contains(command.commandId));
       expect(fixture.transport.requests, isEmpty);
 
@@ -113,6 +115,23 @@ void main() {
             lease: lease,
           )).reservationDigest,
           reservation.reservationDigest,
+        );
+        final substituted = fixture.reservation(cafe: cafe, quantity: 2);
+        await expectLater(
+          fixture.service().reservationForSale(
+            reservation: substituted,
+            lease: lease,
+          ),
+          throwsStateError,
+        );
+        await expectLater(
+          fixture.service().release(
+            reservation: substituted,
+            lease: lease,
+            commandId: 'release-substituted',
+            reason: 'operator_cancelled',
+          ),
+          throwsStateError,
         );
         final released = await fixture.service().release(
           reservation: reservation,
@@ -185,15 +204,44 @@ void main() {
   });
 
   test(
+    'replacement lease cannot authorize retry of retained old command',
+    () async {
+      final fixture = _Fixture();
+      final reservation = fixture.reservation();
+      fixture.transport.loseNextReply = true;
+      expect(
+        (await fixture.service().reserve(
+          reservation: reservation,
+          lease: fixture.lease(),
+          commandId: 'reserve-old-lease',
+          expectedVersion: 0,
+        )).state,
+        ConnectedReservationSessionState.unknown,
+      );
+      final sent = fixture.transport.requests.length;
+      await expectLater(
+        fixture.service().retry(
+          reservation: reservation,
+          lease: fixture.lease(sessionGeneration: 2),
+        ),
+        throwsStateError,
+      );
+      expect(fixture.transport.requests, hasLength(sent));
+    },
+  );
+
+  test(
     'real SQLite repository reconstructs exact durable attempt and ACK',
     () async {
       final fixture = _Fixture();
       final reservation = fixture.reservation(subject: 'durable-cart');
-      final command = await fixture.service().buildAndPrepareForTest(
+      final prepared = await fixture.service().prepareReserve(
         reservation: reservation,
         lease: fixture.lease(),
         commandId: 'reserve-durable',
+        expectedVersion: 0,
       );
+      final command = prepared.reserveCommand;
       final database = ShopDatabase(NativeDatabase.memory());
       addTearDown(database.close);
       await database.customSelect('SELECT 1').getSingle();
@@ -323,69 +371,6 @@ void main() {
   );
 }
 
-extension on ShopConnectedReservationSessionService {
-  Future<SiteCommandV1> buildAndPrepareForTest({
-    required ConnectedStockReservationV1 reservation,
-    required OfflineStaffLeaseV1 lease,
-    required String commandId,
-  }) async {
-    // Exercise the public reserve path only through its durable pre-send seam.
-    // This test helper recreates the exact signed command and calls the same
-    // attempt store so process interruption can be injected before transport.
-    final payload = <String, Object?>{
-      'contract': 'supermega.shop.connected-stock-reserve.v1',
-      'reservation': reservation.toJson(),
-    };
-    final unsigned = SiteCommandV1(
-      commandId: commandId,
-      workspaceId: reservation.workspaceId,
-      siteId: reservation.siteId,
-      actorId: reservation.actorId,
-      deviceId: reservation.deviceId,
-      aggregateType: reservation.workflowType.name,
-      aggregateId: reservation.subjectId,
-      expectedVersion: 0,
-      commandType:
-          reservation.workflowType == ConnectedStockWorkflowType.retailCart
-          ? shopRetailStockReserveCommandType
-          : shopCafeStockReserveCommandType,
-      payload: payload,
-      payloadDigest: connectedSiteSha256(payload),
-      leaseDigest: lease.payloadDigest,
-      issuedAt: _now,
-      signingKeyId: client.signer.signingKeyId,
-      signatureAlgorithm: 'ed25519',
-      signature: 'A' * 86,
-    );
-    final command = SiteCommandV1(
-      commandId: unsigned.commandId,
-      workspaceId: unsigned.workspaceId,
-      siteId: unsigned.siteId,
-      actorId: unsigned.actorId,
-      deviceId: unsigned.deviceId,
-      aggregateType: unsigned.aggregateType,
-      aggregateId: unsigned.aggregateId,
-      expectedVersion: unsigned.expectedVersion,
-      commandType: unsigned.commandType,
-      payload: unsigned.payload,
-      payloadDigest: unsigned.payloadDigest,
-      leaseDigest: unsigned.leaseDigest,
-      issuedAt: unsigned.issuedAt,
-      signingKeyId: unsigned.signingKeyId,
-      signatureAlgorithm: unsigned.signatureAlgorithm,
-      signature: await client.signer.sign(
-        utf8.encode(canonicalConnectedSiteJson(unsigned.signingPayload)),
-      ),
-    );
-    await attempts.prepare(
-      command: command,
-      bindingDigest: client.bindingDigest,
-      clientFingerprint: client.signer.clientFingerprint,
-    );
-    return command;
-  }
-}
-
 class _Fixture {
   _Fixture({this.device = 'device-1', _OneUnitCoordinator? coordinator})
     : attempts = _Attempts(),
@@ -461,7 +446,7 @@ class _Fixture {
     expiresAt: '2026-11-01T08:30:00.000Z',
   );
 
-  OfflineStaffLeaseV1 lease({bool cafe = false}) {
+  OfflineStaffLeaseV1 lease({bool cafe = false, int sessionGeneration = 1}) {
     final capabilities = [
       cafe
           ? ShopStaffCapability.cafeOrderWrite.name
@@ -478,7 +463,7 @@ class _Fixture {
           : ShopStaffRole.cashierCounter.name,
       'capabilities': capabilities,
       'deviceId': device,
-      'sessionGeneration': 1,
+      'sessionGeneration': sessionGeneration,
       'revocationGeneration': 1,
       'issuedAt': '2026-10-31T08:00:00.000Z',
       'expiresAt': '2026-11-07T08:00:00.000Z',
@@ -492,7 +477,7 @@ class _Fixture {
       role: unsigned['role']! as String,
       capabilities: capabilities,
       deviceId: device,
-      sessionGeneration: 1,
+      sessionGeneration: sessionGeneration,
       revocationGeneration: 1,
       issuedAt: unsigned['issuedAt']! as String,
       expiresAt: unsigned['expiresAt']! as String,

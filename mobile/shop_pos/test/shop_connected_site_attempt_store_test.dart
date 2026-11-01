@@ -7,10 +7,14 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
+import 'package:supermega_shop/shop_connected_reservation_session.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_database_adapter.dart';
+import 'package:supermega_shop/shop_connected_stock_reservation.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
+import 'package:supermega_shop/shop_staff_authorization.dart';
 
 void main() {
   late ShopDatabase database;
@@ -549,7 +553,7 @@ void main() {
           now: () => clock,
         );
         final binding = await persistedStore.importApproval(approval);
-        final command = _command();
+        final command = _reservationCommand();
         final prepared = await persistedStore.prepare(
           command: command,
           bindingDigest: binding,
@@ -585,6 +589,17 @@ void main() {
             )
             .getSingle();
         expect(count.read<int>('count'), 1);
+        final session =
+            await ShopConnectedReservationSessionRepository(persisted).load(
+              workspaceId: 'workspace-1',
+              siteId: 'site-1',
+              actorId: 'actor-1',
+              deviceId: 'device-1',
+              workflowType: ConnectedStockWorkflowType.retailCart,
+              subjectId: 'restore-cart',
+            );
+        expect(session?.state, ConnectedReservationSessionState.unknown);
+        expect(session?.reserveCommand.commandDigest, command.commandDigest);
         final restoredStore = ShopConnectedSiteAttemptStore(
           database: persisted,
           approvalVerifier: const _ApprovalVerifier(),
@@ -841,6 +856,46 @@ SiteCommandV1 _command({
     signingKeyId: 'key-1',
     signatureAlgorithm: 'ed25519',
     signature: signature.isEmpty ? 'A' * 86 : signature,
+  );
+}
+
+SiteCommandV1 _reservationCommand() {
+  final reservation = ConnectedStockReservationV1.held(
+    reservationId: 'reservation-restore-cart',
+    workspaceId: 'workspace-1',
+    siteId: 'site-1',
+    actorId: 'actor-1',
+    deviceId: 'device-1',
+    workflowType: ConnectedStockWorkflowType.retailCart,
+    subjectId: 'restore-cart',
+    capability: ShopStaffCapability.counterSale,
+    lines: [
+      ConnectedStockReservationLineV1(productId: 'product-1', quantity: 1),
+    ],
+    issuedAt: '2026-10-31T12:00:00.000Z',
+    expiresAt: '2026-10-31T12:30:00.000Z',
+  );
+  final payload = <String, Object?>{
+    'contract': 'supermega.shop.connected-stock-reserve.v1',
+    'reservation': reservation.toJson(),
+  };
+  return SiteCommandV1(
+    commandId: 'command-restore-cart',
+    workspaceId: 'workspace-1',
+    siteId: 'site-1',
+    actorId: 'actor-1',
+    deviceId: 'device-1',
+    aggregateType: ConnectedStockWorkflowType.retailCart.name,
+    aggregateId: reservation.subjectId,
+    expectedVersion: 0,
+    commandType: shopRetailStockReserveCommandType,
+    payload: payload,
+    payloadDigest: connectedSiteSha256(payload),
+    leaseDigest: '5' * 64,
+    issuedAt: '2026-10-31T12:00:00.000Z',
+    signingKeyId: 'key-1',
+    signatureAlgorithm: 'ed25519',
+    signature: 'A' * 86,
   );
 }
 

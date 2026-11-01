@@ -11058,6 +11058,13 @@ class ShopDatabase extends _$ShopDatabase {
               canonicalConnectedSiteJson(expected) ||
           canonicalConnectedSiteJson(reservation.toJson()) !=
               canonicalConnectedSiteJson(reservationSidecar.toJson()) ||
+          reservation.workspaceId != input.tenantId ||
+          reservation.siteId != input.siteId ||
+          reservation.actorId != input.actorId ||
+          reservation.deviceId != input.deviceId ||
+          reservation.workflowType.name != input.aggregateType ||
+          reservation.subjectId != input.aggregateId ||
+          reservation.capability.name != input.capability ||
           input.payloadDigest != connectedSiteSha256(expected)) {
         throw StateError(
           'Connected stock reserve payload bytes are not authorized.',

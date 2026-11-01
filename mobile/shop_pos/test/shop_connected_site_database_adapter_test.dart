@@ -190,6 +190,16 @@ void main() {
           ),
           throwsStateError,
         );
+        await expectLater(
+          handler.handle(
+            _fingerprint,
+            _reserveCommand(
+              'substituted-reservation-actor',
+              reservationActorId: 'other-actor',
+            ),
+          ),
+          throwsStateError,
+        );
         final accepted = _reserveCommand('last-unit');
         expect(
           (await handler.handle(_fingerprint, accepted)).state,
@@ -495,6 +505,7 @@ SiteCommandV1 _reserveCommand(
   bool forceRetailType = false,
   int quantity = 1,
   String? commandType,
+  String reservationActorId = _actor,
 }) {
   final workflow = cafe
       ? ConnectedStockWorkflowType.cafeOrder
@@ -506,7 +517,7 @@ SiteCommandV1 _reserveCommand(
     reservationId: 'reservation:$id',
     workspaceId: _workspace,
     siteId: _site,
-    actorId: _actor,
+    actorId: reservationActorId,
     deviceId: _device,
     workflowType: workflow,
     subjectId: id,

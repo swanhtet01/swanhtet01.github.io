@@ -237,6 +237,26 @@ class ShopConnectedReservationSessionService {
     required String commandId,
     required int expectedVersion,
   }) async {
+    final prepared = await prepareReserve(
+      reservation: reservation,
+      lease: lease,
+      commandId: commandId,
+      expectedVersion: expectedVersion,
+    );
+    return prepared.state == ConnectedReservationSessionState.unknown
+        ? retry(reservation: reservation, lease: lease)
+        : prepared;
+  }
+
+  /// Persists the exact signed reservation intent without starting network
+  /// I/O. Callers can deliberately separate durable intent from transmission;
+  /// after process interruption [retry] resumes these exact bytes.
+  Future<ConnectedReservationSessionV1> prepareReserve({
+    required ConnectedStockReservationV1 reservation,
+    required OfflineStaffLeaseV1 lease,
+    required String commandId,
+    required int expectedVersion,
+  }) async {
     await _authorize(reservation, lease);
     final existing = await _load(reservation);
     if (existing != null) {
@@ -244,9 +264,7 @@ class ShopConnectedReservationSessionService {
           reservation.reservationDigest) {
         throw StateError('connected_reservation_subject_already_bound');
       }
-      return existing.state == ConnectedReservationSessionState.unknown
-          ? retry(reservation: reservation, lease: lease)
-          : existing;
+      return existing;
     }
     final command = await _reserveCommand(
       reservation: reservation,
@@ -259,7 +277,6 @@ class ShopConnectedReservationSessionService {
       bindingDigest: client.bindingDigest,
       clientFingerprint: client.signer.clientFingerprint,
     );
-    await client.sendCommand(command);
     return (await _load(reservation))!;
   }
 
@@ -272,10 +289,13 @@ class ShopConnectedReservationSessionService {
     if (session == null) {
       throw StateError('connected_reservation_session_missing');
     }
+    final command = session.releaseCommand ?? session.reserveCommand;
+    if (command.leaseDigest != lease.payloadDigest) {
+      throw StateError('connected_reservation_lease_changed');
+    }
     if (session.state != ConnectedReservationSessionState.unknown) {
       return session;
     }
-    final command = session.releaseCommand ?? session.reserveCommand;
     await client.retryCommand(command.commandId);
     return (await _load(reservation))!;
   }
@@ -288,6 +308,11 @@ class ShopConnectedReservationSessionService {
   }) async {
     await _authorize(reservation, lease);
     final session = await _load(reservation);
+    if (session != null &&
+        session.reservation.reservationDigest !=
+            reservation.reservationDigest) {
+      throw StateError('connected_reservation_session_substituted');
+    }
     if (session?.state == ConnectedReservationSessionState.released) {
       return session!;
     }
@@ -302,7 +327,7 @@ class ShopConnectedReservationSessionService {
       throw StateError('connected_reservation_release_not_held');
     }
     final command = await _releaseCommand(
-      reservation: reservation,
+      reservation: session.reservation,
       lease: lease,
       commandId: commandId,
       reason: reason,
@@ -324,6 +349,8 @@ class ShopConnectedReservationSessionService {
     await _authorize(reservation, lease);
     final session = await _load(reservation);
     if (session == null ||
+        session.reservation.reservationDigest !=
+            reservation.reservationDigest ||
         session.state != ConnectedReservationSessionState.held ||
         session.reserveAcknowledgement == null ||
         session.reserveAcknowledgement!.commandId !=
