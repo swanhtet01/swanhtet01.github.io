@@ -7,6 +7,51 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private scoped LAN coordinator composition successor
+
+- **PASS / local-only:** implementation
+  `36e56ed6a5a13b57a14b65abf1c0711724456a34` (tree
+  `9a7b106bc10af9b6c87d794a00eee623e33fcb2c`, native tree
+  `ab12a778c93dee97d282aefbd30a9cb870c48123`, native-lib tree
+  `28f169c2ce37cf25b7b706511423e0c9b8dddd11`, binary patch SHA-256
+  `02dec366f6cc3aa6c51f1f526408047ae769591e2490aceabc3fb8abb80d84b2`)
+  composes the real TLS LAN server from the exact composition database,
+  enrollment store and shared-write gate. Request authentication, command
+  signatures, offline-lease authorization, command projection and replication
+  now share that one state graph.
+- Runtime workspace/site/coordinator, private address and pinned certificate
+  must match the short-lived pairing record before platform or listener side
+  effects. Pairing nonce registration is exact and idempotent. Prepared-only
+  and partial starts participate in reverse cleanup. Protected-key aliases may
+  differ from device IDs, while alias substitution between prepare and start
+  fails closed.
+- Café projection is rejected at composition and command-handler boundaries
+  unless its store owns the identical database, preserving atomic command,
+  event, stock, audit, acknowledgement and projection effects. The returned
+  composition exposes no raw server, transport, gate or database seam.
+- Focused coordinator/runtime/composition/protocol tests are **64/64 PASS**;
+  targeted analyzer, formatting and diff checks are **PASS**. Independent
+  review is **ACCEPT** after finding and verifying fixes for cross-database
+  café projection and alias/device conflation.
+- **PASS / test successor:** `a60cffba5d0dd878abc02372be21b2d21f82d737`
+  (tree `ace61371122e70ab4e7f357c652cfc95865f2a11`, native tree
+  `85243893618b118258640cfe62c7736155fe3abf`) corrects the enrollment
+  migration assertion to current schema v36; its exact reproduction is
+  **1/1 PASS**. The preceding broad run reached **181 PASS / 1 FAIL** before
+  this correction.
+- **FAIL / next source gate:** ten other historical tests still claim current
+  schema v35. Four reach only that stale assertion; six fail earlier because
+  fabricated v15/v17-v19/v32 snapshots retain later schema objects and are
+  correctly rejected. They need genuine historical construction or complete
+  post-version teardown; production verification remains fail-closed.
+- **BLOCKED / NOT RUN:** connected mode remains default-off and unmounted.
+  Real issuer keys, trusted time/health, installed TLS key custody, signed
+  Android/Windows artifacts, device LAN tests, hardware, cloud/RLS acceptance
+  and merchant evidence remain separate gates. No build, publication,
+  deployment, credential, provider or production change occurred. Current
+  capacity was 272,429,056 bytes free on `/workspace` and 5,312,831,488 bytes
+  free on `/dev/shm`.
+
 ### Private connected runtime composition successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
