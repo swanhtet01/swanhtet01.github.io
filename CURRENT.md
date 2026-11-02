@@ -1,9 +1,36 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-02 23:02 UTC
+- Last verified: 2026-11-02 23:16 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-02 23:16 UTC published successor and exact-head CI
+
+- Draft PR #752 is open and unmerged at
+  `9806fbfe16741fcf6a0dde79f0f3ff664fe3338b` (tree
+  `46f4f0ffba7f4314f6dc135bf81f482de150b677`), a guarded non-force
+  fast-forward from `2de3202161176b0a8e1ffeb4f7ced2cbae9bd8b9`.
+  The nine-commit, six-path successor had cumulative independent source review
+  **PASS** and full-range whitespace **PASS** before publication. No merge,
+  deployment, signing or connected-mode enablement followed.
+- Exact-head App CI `41542614510` **FAIL** at canonical step 638/668,
+  `hq:verify`: `database_rehearsal_evidence_stale`. Its earlier disposable
+  PostgreSQL 17 v15/v16 replay, rollback, concurrency and tenant-RLS probe
+  ran **3/3 PASS** in 1.547 seconds, followed by successful release/RLS
+  guards, lint and deployment-contract generation. The probe does **not**
+  satisfy the authoritative v14 Windows rehearsal or deployed connected-site
+  authority. Desktop/browser journeys after the failing step were **NOT RUN**.
+- Exact-head Kernel `41542621083` **PASS**. Dependency Security
+  `41542621122` **FAIL** in locked app/kernel audits; platform, runtime pip
+  and added-line credential scan passed. GitGuardian's current PR check
+  **PASS** does not by itself adjudicate historical incidents.
+- Native run `41542621302` is still **IN PROGRESS** at this timestamp:
+  isolated Android, Windows and iOS QA jobs and iPad/iOS completed **PASS**;
+  full Android remains in serial Flutter shards, and Windows PC remains in
+  its backup suite. Neither full Android nor Windows PC can be called passed
+  before terminal results. Exact-source QA archives are not production-signed
+  installed-device or physical-hardware evidence.
 
 ## 2026-11-02 23:02 UTC Windows backup UI gate
 
