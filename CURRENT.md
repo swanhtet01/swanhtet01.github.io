@@ -26,7 +26,7 @@
   substitute. Cross-device live sync is a pilot requirement and remains off
   until the authority, transport, migration and recovery evidence all pass.
 
-- **FAIL / SECURITY REVIEW HOLD:** an independent source review identified a
+- **HISTORICAL FAIL / SUPERSEDED BELOW:** an independent source review identified a
   lost-response retry gap in both v15 repositories: they compare the client's
   original `after_cursor` with the server's advanced cursor before consulting
   retained acknowledgements. A first candidate that accepted stale-cursor
@@ -37,7 +37,32 @@
   committed atomically with the ACK and cursor, with tests for identical lost
   response, reordered/substituted batch, changed digest, concurrent retries,
   tenant isolation and no duplicate money/stock effects. No sync-ready claim
-  or production enablement follows from the current 10/10 baseline unit pass.
+  or production enablement followed from that 10/10 baseline unit pass.
+
+### Private durable upload retry successor
+
+- **SOURCE PASS / PRIVATE:** implementation
+  `6d554f8c1bc1625f57a6ecaf542066db9ebe8c43` (tree
+  `6c2ee8eda18767b4cb0045fda9bfae5aa75bb770`) closes the rejected
+  stale-cursor shortcut with a new source-only v16 table retaining an immutable
+  digest of the exact ordered batch, workspace, site, device and cursor range.
+  Cursor, ACK and batch binding are written in one required non-autocommit
+  transaction. The memory test repository stages under a lock and publishes
+  only after the complete batch succeeds. Replay with reordered, substituted
+  or wrong-tenant content fails closed; the original lost-response batch
+  returns retained acknowledgements without another event effect.
+- **LOCAL PASS:** Python authority/rehearsal contracts **77/77**, Node packet
+  contracts **13/13**, `git diff --check` **PASS**. Existing cached PGlite
+  `0.5.4` ran the connected schema verifier: **14 checks PASS**, **26
+  migrations**, schema version **16**. Independent security review **ACCEPTS
+  the private source/test checkpoint** after rejecting the first unbound
+  retry design and requiring transaction and memory rollback guards.
+- **NOT RUN / BLOCKED:** genuine PostgreSQL 17 repository replay, rollback
+  and concurrent-transaction testing, authenticated issuer/deployed schema,
+  and installed two-device WAN-loss/reconnect/restore evidence. PGlite schema
+  checks do not satisfy the PostgreSQL rehearsal or pilot sync gate. Connected
+  mode remains default-off; no PR update, provider change or deployment was
+  performed.
 
 ## 2026-11-03 private Android pilot-successor preflight
 
