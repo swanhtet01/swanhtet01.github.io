@@ -601,6 +601,7 @@ class _Attempts implements ConnectedSiteCommandAttemptStore {
     clientDeviceId: clientDeviceId,
     clientFingerprint: clientFingerprint,
     clientSigningKeyId: clientSigningKeyId,
+    approvalGeneration: 1,
     address: '192.168.10.2',
     port: 9443,
     certificateSha256: 'c' * 64,

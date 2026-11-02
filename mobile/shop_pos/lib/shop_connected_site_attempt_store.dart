@@ -145,6 +145,7 @@ class ConnectedSiteApprovedBinding {
     required this.clientDeviceId,
     required this.clientFingerprint,
     required this.clientSigningKeyId,
+    required this.approvalGeneration,
     required this.address,
     required this.port,
     required this.certificateSha256,
@@ -157,6 +158,7 @@ class ConnectedSiteApprovedBinding {
   final String clientDeviceId;
   final String clientFingerprint;
   final String clientSigningKeyId;
+  final int approvalGeneration;
   final String address;
   final int port;
   final String certificateSha256;
@@ -361,6 +363,7 @@ class ShopConnectedSiteAttemptStore
       clientDeviceId: clientDeviceId,
       clientFingerprint: clientFingerprint,
       clientSigningKeyId: clientSigningKeyId,
+      approvalGeneration: row.read<int>('approval_generation'),
       address: row.read<String>('address'),
       port: row.read<int>('port'),
       certificateSha256: row.read<String>('certificate_sha256'),

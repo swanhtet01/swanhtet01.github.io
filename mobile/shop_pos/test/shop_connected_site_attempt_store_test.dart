@@ -425,17 +425,16 @@ void main() {
   test('enrollment revocation immediately blocks binding resolution', () async {
     final approval = await _seedEnrollment(database, clock);
     final binding = await store.importApproval(approval);
-    expect(
-      (await store.resolveActiveBinding(
-        bindingDigest: binding,
-        workspaceId: approval.workspaceId,
-        siteId: approval.siteId,
-        clientDeviceId: approval.clientDeviceId,
-        clientFingerprint: approval.clientFingerprint,
-        clientSigningKeyId: approval.clientSigningKeyId,
-      )).bindingDigest,
-      binding,
+    final resolved = await store.resolveActiveBinding(
+      bindingDigest: binding,
+      workspaceId: approval.workspaceId,
+      siteId: approval.siteId,
+      clientDeviceId: approval.clientDeviceId,
+      clientFingerprint: approval.clientFingerprint,
+      clientSigningKeyId: approval.clientSigningKeyId,
     );
+    expect(resolved.bindingDigest, binding);
+    expect(resolved.approvalGeneration, approval.approvalGeneration);
     await _revokeEnrollment(
       database,
       approval,
