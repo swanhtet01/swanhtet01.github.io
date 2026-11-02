@@ -652,6 +652,33 @@ void main() {
       },
     );
 
+    test('unavailable verified time denies pairing before nonce use', () async {
+      final unavailable = SiteCoordinatorServer(
+        runtimeEnabled: true,
+        sharedWriteAvailability: writes,
+        pairing: nonces,
+        requestAuthenticator: authenticator,
+        commands: commands,
+        replication: replication,
+        health: _Health(),
+        pairingResponse: _pairing(),
+        now: () async => throw StateError('trusted_time_unavailable'),
+      );
+      final result = await unavailable.dispatch(
+        _jsonRequest('POST', connectedSitePairPath, {
+          'schema': 'supermega.connected-site.pair-request.v1',
+          'protocolVersion': 1,
+          'nonce': 'nonce_abcdefghijklmnopqrstu',
+          'clientFingerprint': _fingerprint,
+          'clientPublicKey': _encodedClientPublicKey,
+          'keyAlgorithm': 'ed25519',
+        }),
+      );
+
+      expect(result.statusCode, HttpStatus.internalServerError);
+      expect(nonces.consumed, isEmpty);
+    });
+
     test('rejects bearer, cookie and API-key ambient authority', () async {
       for (final header in ['authorization', 'cookie', 'x-api-key', 'apikey']) {
         final result = await coordinator.dispatch(
@@ -1046,6 +1073,27 @@ void main() {
       expect(requestNonces.consumed, isEmpty);
     });
 
+    test(
+      'unavailable verified time denies authentication before nonce use',
+      () async {
+        _enroll(clientKeys);
+        final unavailable = Ed25519CoordinatorRequestAuthenticator(
+          clients: clientKeys,
+          nonces: requestNonces,
+          now: () async => throw StateError('trusted_time_unavailable'),
+        );
+        final proof = await _signedProof(
+          method: 'POST',
+          target: connectedSiteCommandsPath,
+          body: utf8.encode(jsonEncode((await _command()).toJson())),
+          nonce: 'request_nonce_time_unavailable_1',
+        );
+
+        expect(await unavailable.verifyAndConsume(proof), isFalse);
+        expect(requestNonces.consumed, isEmpty);
+      },
+    );
+
     test('v1 request-proof signing bytes remain byte-identical', () {
       final proof = CoordinatorRequestProof(
         workspaceId: 'workspace_1',
@@ -1140,15 +1188,19 @@ void main() {
       _LeaseSource source, {
       CoordinatorStationReadPolicy stationPolicy =
           const CoordinatorStationReadPolicyUnavailable(),
+      FutureOr<int> Function()? nowMillis,
+      ShopOfflineStaffLeaseSignatureVerifier? signatureVerifier,
     }) => OfflineLeaseCoordinatorSiteAuthorizer(
       leases: source,
       verifier: ShopOfflineStaffLeaseVerifier(
-        signatureVerifier: PinnedEd25519ShopOfflineStaffLeaseSignatureVerifier(
-          publicKeys: {'lease-key-1': issuerPublicKey},
-        ),
+        signatureVerifier:
+            signatureVerifier ??
+            PinnedEd25519ShopOfflineStaffLeaseSignatureVerifier(
+              publicKeys: {'lease-key-1': issuerPublicKey},
+            ),
       ),
       stationReadPolicy: stationPolicy,
-      nowMillis: () => _now.millisecondsSinceEpoch,
+      nowMillis: nowMillis ?? () => _now.millisecondsSinceEpoch,
     );
 
     test('valid capability authorizes read and command', () async {
@@ -1232,6 +1284,72 @@ void main() {
           isFalse,
         );
       }
+    });
+
+    test('unavailable verified time denies lease authorization', () async {
+      final lease = await _signedLease(
+        issuerKey,
+        capabilities: const ['counterSale'],
+      );
+      final source = _LeaseSource(
+        CoordinatorLeaseMaterial(
+          lease: lease,
+          sessionGeneration: 4,
+          revocationGeneration: 9,
+        ),
+      );
+      final value = authorizer(
+        source,
+        nowMillis: () async => throw StateError('trusted_time_unavailable'),
+      );
+
+      expect(
+        await value.authorize(
+          _authorizationRequest(
+            operation: CoordinatorSiteOperation.command,
+            capability: ShopStaffCapability.counterSale,
+            actorId: 'actor_1',
+            leaseDigest: lease.payloadDigest,
+          ),
+        ),
+        isFalse,
+      );
+    });
+
+    test('signature verifier defects are not masked as time denial', () async {
+      final lease = await _signedLease(
+        issuerKey,
+        capabilities: const ['counterSale'],
+      );
+      final source = _LeaseSource(
+        CoordinatorLeaseMaterial(
+          lease: lease,
+          sessionGeneration: 4,
+          revocationGeneration: 9,
+        ),
+      );
+      final value = authorizer(
+        source,
+        signatureVerifier: const _ThrowingLeaseSignatureVerifier(),
+      );
+
+      await expectLater(
+        value.authorize(
+          _authorizationRequest(
+            operation: CoordinatorSiteOperation.command,
+            capability: ShopStaffCapability.counterSale,
+            actorId: 'actor_1',
+            leaseDigest: lease.payloadDigest,
+          ),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'signature_verifier_broken',
+          ),
+        ),
+      );
     });
 
     test(
@@ -1819,6 +1937,18 @@ class _LeaseSource implements CoordinatorLeaseSource {
     }
     return value;
   }
+}
+
+class _ThrowingLeaseSignatureVerifier
+    implements ShopOfflineStaffLeaseSignatureVerifier {
+  const _ThrowingLeaseSignatureVerifier();
+
+  @override
+  Future<bool> verify({
+    required String keyId,
+    required List<int> message,
+    required String signature,
+  }) => throw StateError('signature_verifier_broken');
 }
 
 class _StationPolicy implements CoordinatorStationReadPolicy {

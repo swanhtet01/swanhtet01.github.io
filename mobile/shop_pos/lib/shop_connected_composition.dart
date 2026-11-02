@@ -34,13 +34,11 @@ class ShopConnectedCoordinatorTransportContext {
     required this.database,
     required this.enrollment,
     required this.sharedWrites,
-    required this.now,
   });
 
   final ShopDatabase database;
   final ShopConnectedSiteEnrollmentStore enrollment;
   final ShopConnectedSharedWriteGate sharedWrites;
-  final DateTime Function() now;
 }
 
 /// Explicit authorities and projections needed to construct the reviewed LAN
@@ -67,7 +65,6 @@ class ShopConnectedCoordinatorServerDependencies {
   ConnectedCoordinatorTransport build(
     ShopConnectedCoordinatorTransportContext context,
   ) {
-    pairingResponse.requireValidAt(context.now());
     if (!identical(context.enrollment.database, context.database)) {
       throw StateError('connected_transport_enrollment_database_mismatch');
     }
@@ -75,10 +72,18 @@ class ShopConnectedCoordinatorServerDependencies {
         !identical(cafeStore!.database, context.database)) {
       throw StateError('connected_transport_cafe_database_mismatch');
     }
+    Future<int> verifiedNowMillis() => timeAuthority.readValidatedNowMillis(
+      tenantId: pairingResponse.workspaceId,
+      siteId: pairingResponse.siteId,
+    );
+    Future<DateTime> verifiedNow() async => DateTime.fromMillisecondsSinceEpoch(
+      await verifiedNowMillis(),
+      isUtc: true,
+    );
     final requestAuthenticator = Ed25519CoordinatorRequestAuthenticator(
       clients: context.enrollment,
       nonces: context.enrollment,
-      now: context.now,
+      now: verifiedNow,
     );
     final commandSignatureVerifier = Ed25519SiteCommandSignatureVerifier(
       clients: context.enrollment,
@@ -88,7 +93,7 @@ class ShopConnectedCoordinatorServerDependencies {
       leases: ShopConnectedSiteLeaseSource(context.enrollment),
       verifier: leaseVerifier,
       stationReadPolicy: stationReadPolicy,
-      nowMillis: () => context.now().toUtc().millisecondsSinceEpoch,
+      nowMillis: verifiedNowMillis,
     );
     final commands = ShopConnectedSiteDatabaseCommandHandler(
       database: context.database,
@@ -122,14 +127,14 @@ class ShopConnectedCoordinatorServerDependencies {
       deviceEnrollment: context.enrollment,
       siteAuthorization: siteAuthorization,
       commandCapabilities: const ShopConnectedSiteDatabaseCapabilityResolver(),
-      now: context.now,
+      now: verifiedNow,
       runtimeEnabled: true,
     );
     return SiteCoordinatorServerTransport(
       server: server,
       enrollment: context.enrollment,
       sharedWrites: context.sharedWrites,
-      now: context.now,
+      now: verifiedNow,
     );
   }
 }
@@ -258,7 +263,6 @@ class ShopConnectedComposition {
         database: dependencies.database,
         enrollment: enrollment,
         sharedWrites: sharedWrites,
-        now: now,
       ),
     );
     final coordinator = ConnectedCoordinatorRuntimeHost(

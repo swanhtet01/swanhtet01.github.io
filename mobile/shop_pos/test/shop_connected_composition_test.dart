@@ -289,6 +289,7 @@ void main() {
         nowMillis: () => now.millisecondsSinceEpoch,
       );
       final writes = ShopConnectedSharedWriteGate();
+      final verifiedTime = _VerifiedTime(now);
       final dependencies = ShopConnectedCoordinatorServerDependencies(
         pairingResponse: CoordinatorPairingV1(
           workspaceId: 'workspace-1',
@@ -302,7 +303,7 @@ void main() {
           expiresAt: now.add(const Duration(minutes: 2)).toIso8601String(),
         ),
         leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
-        timeAuthority: const ShopConnectedSiteTimeUnavailable(),
+        timeAuthority: verifiedTime,
         healthSignals: const ShopConnectedCoordinatorHealthSignalsUnavailable(),
       );
       final transport = dependencies.build(
@@ -310,7 +311,6 @@ void main() {
           database: database,
           enrollment: enrollment,
           sharedWrites: writes,
-          now: () => now,
         ),
       );
       expect(transport, isA<SiteCoordinatorServerTransport>());
@@ -349,6 +349,7 @@ void main() {
         ),
       );
       expect(await _pairingNonceCount(database), 0);
+      expect(verifiedTime.reads, 0);
 
       final protectedIdentity = _identity(alias: 'protected-key-slot');
       await standard.prepare(
@@ -360,6 +361,7 @@ void main() {
         tlsIdentity: tls,
       );
       expect(await _pairingNonceCount(database), 1);
+      expect(verifiedTime.reads, 1);
       await expectLater(
         standard.start(
           bindAddress: '192.168.1.10',
@@ -387,8 +389,71 @@ void main() {
         tlsIdentity: tls,
       );
       expect(await _pairingNonceCount(database), 1);
+      expect(verifiedTime.reads, 2);
       await standard.stop();
       tls.dispose();
+    },
+  );
+
+  test(
+    'standard transport fails before nonce when time is unavailable',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.verifyReadyForUse();
+      final now = DateTime.utc(2026, 11, 2, 12);
+      final enrollment = ShopConnectedSiteEnrollmentStore(
+        database: database,
+        nowMillis: () => now.millisecondsSinceEpoch,
+      );
+      final writes = ShopConnectedSharedWriteGate();
+      final time = _VerifiedTime(now, unavailable: true);
+      final transport =
+          ShopConnectedCoordinatorServerDependencies(
+            pairingResponse: CoordinatorPairingV1(
+              workspaceId: 'workspace-1',
+              siteId: 'site-1',
+              coordinatorDeviceId: 'coordinator-1',
+              certificateSha256: 'b' * 64,
+              address: '192.168.1.10',
+              port: 8443,
+              nonce: 'pairing-nonce-1234567890',
+              issuedAt: now
+                  .subtract(const Duration(seconds: 10))
+                  .toIso8601String(),
+              expiresAt: now.add(const Duration(minutes: 2)).toIso8601String(),
+            ),
+            leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
+            timeAuthority: time,
+            healthSignals:
+                const ShopConnectedCoordinatorHealthSignalsUnavailable(),
+          ).build(
+            ShopConnectedCoordinatorTransportContext(
+              database: database,
+              enrollment: enrollment,
+              sharedWrites: writes,
+            ),
+          );
+      final tls = ConnectedEphemeralTlsIdentity(
+        certificatePem: Uint8List.fromList([1]),
+        privateKeyPem: Uint8List.fromList([2]),
+        certificateFingerprintSha256: 'b' * 64,
+      );
+      addTearDown(tls.dispose);
+
+      await expectLater(
+        transport.prepare(
+          bindAddress: '192.168.1.10',
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          coordinatorDeviceId: 'coordinator-1',
+          identity: _identity(alias: 'protected-key-slot'),
+          tlsIdentity: tls,
+        ),
+        throwsA(_state('connected_trusted_time_unavailable')),
+      );
+      expect(time.reads, 1);
+      expect(await _pairingNonceCount(database), 0);
     },
   );
 
@@ -430,7 +495,6 @@ void main() {
             database: database,
             enrollment: enrollment,
             sharedWrites: ShopConnectedSharedWriteGate(),
-            now: () => now,
           ),
         ),
         throwsA(
@@ -603,6 +667,29 @@ class _Authority implements ConnectedSiteSessionBoundAuthorityProvider {
   }
 }
 
+class _VerifiedTime implements ShopConnectedSiteCoordinatorTimeAuthority {
+  _VerifiedTime(this.now, {this.unavailable = false});
+
+  final DateTime now;
+  final bool unavailable;
+  int reads = 0;
+
+  @override
+  Future<int> readValidatedNowMillis({
+    required String tenantId,
+    required String siteId,
+  }) async {
+    reads += 1;
+    if (tenantId != 'workspace-1' || siteId != 'site-1') {
+      throw StateError('connected_trusted_time_scope_mismatch');
+    }
+    if (unavailable) {
+      throw StateError('connected_trusted_time_unavailable');
+    }
+    return now.millisecondsSinceEpoch;
+  }
+}
+
 Future<void> _seedDevice(ShopDatabase database) async {
   await database.verifyReadyForUse();
   await database.customInsert(
@@ -642,3 +729,6 @@ Future<int> _pairingNonceCount(ShopDatabase database) async =>
             )
             .getSingle())
         .read<int>('count');
+
+Matcher _state(String message) =>
+    isA<StateError>().having((error) => error.message, 'message', message);

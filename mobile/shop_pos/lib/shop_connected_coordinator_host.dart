@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -458,7 +459,7 @@ class SiteCoordinatorServerTransport implements ConnectedCoordinatorTransport {
     required this.server,
     this.enrollment,
     required this.sharedWrites,
-    DateTime Function()? now,
+    FutureOr<DateTime> Function()? now,
   }) : now = now ?? (() => DateTime.now().toUtc()) {
     if (!identical(server.sharedWriteAvailability, sharedWrites)) {
       throw StateError('connected_transport_shared_write_gate_mismatch');
@@ -467,7 +468,7 @@ class SiteCoordinatorServerTransport implements ConnectedCoordinatorTransport {
 
   final SiteCoordinatorServer server;
   final ShopConnectedSiteEnrollmentStore? enrollment;
-  final DateTime Function() now;
+  final FutureOr<DateTime> Function() now;
   _ConnectedPreparedTransport? _prepared;
 
   @override
@@ -494,7 +495,7 @@ class SiteCoordinatorServerTransport implements ConnectedCoordinatorTransport {
         tlsIdentity.certificateFingerprintSha256 != pairing.certificateSha256) {
       throw StateError('connected_transport_runtime_scope_mismatch');
     }
-    pairing.requireValidAt(now());
+    pairing.requireValidAt((await now()).toUtc());
     final registrar = enrollment;
     if (registrar == null) {
       throw StateError('connected_transport_enrollment_unavailable');

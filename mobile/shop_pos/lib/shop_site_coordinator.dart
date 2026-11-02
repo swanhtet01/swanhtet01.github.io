@@ -202,7 +202,7 @@ class OfflineLeaseCoordinatorSiteAuthorizer
   final CoordinatorLeaseSource leases;
   final ShopOfflineStaffLeaseVerifier verifier;
   final CoordinatorStationReadPolicy stationReadPolicy;
-  final int Function() nowMillis;
+  final FutureOr<int> Function() nowMillis;
 
   @override
   Future<bool> authorize(CoordinatorSiteAuthorizationRequest request) async {
@@ -216,6 +216,12 @@ class OfflineLeaseCoordinatorSiteAuthorizer
     if (material == null) {
       return isRead && await stationReadPolicy.allows(request);
     }
+    late final int verifiedNowMillis;
+    try {
+      verifiedNowMillis = await nowMillis();
+    } on StateError {
+      return false;
+    }
     try {
       final verified = await verifier.verify(
         lease: material.lease,
@@ -227,7 +233,7 @@ class OfflineLeaseCoordinatorSiteAuthorizer
           revocationGeneration: material.revocationGeneration,
           requiredCapability: request.requiredCapability,
         ),
-        nowMillis: nowMillis(),
+        nowMillis: verifiedNowMillis,
       );
       if (request.actorId != null && verified.actorId != request.actorId) {
         return false;
@@ -440,20 +446,20 @@ class Ed25519CoordinatorRequestAuthenticator
   Ed25519CoordinatorRequestAuthenticator({
     required this.clients,
     required this.nonces,
-    DateTime Function()? now,
+    FutureOr<DateTime> Function()? now,
     this.maxClockSkew = const Duration(minutes: 2),
   }) : now = now ?? (() => DateTime.now().toUtc());
 
   final CoordinatorClientKeyStore clients;
   final CoordinatorRequestNonceStore nonces;
-  final DateTime Function() now;
+  final FutureOr<DateTime> Function() now;
   final Duration maxClockSkew;
   final Ed25519 _algorithm = Ed25519();
 
   @override
   Future<bool> verifyAndConsume(CoordinatorRequestProof proof) async {
     try {
-      final observedAt = now().toUtc();
+      final observedAt = (await now()).toUtc();
       final issuedAt = proof.issuedAt.toUtc();
       if (maxClockSkew <= Duration.zero ||
           !_proofVersionMatchesTarget(proof) ||
@@ -598,7 +604,7 @@ class SiteCoordinatorServer {
     this.commandCapabilities = const SiteCommandCapabilityResolverUnavailable(),
     this.trustedTimeAuthority =
         const UnavailableConnectedTrustedTimeCoordinatorAuthority(),
-    DateTime Function()? now,
+    FutureOr<DateTime> Function()? now,
     this.runtimeEnabled = false,
     this.trustedTimeV2Enabled = false,
     this.maxBodyBytes = 256 * 1024,
@@ -620,7 +626,7 @@ class SiteCoordinatorServer {
   final CoordinatorHealthProvider health;
   final CoordinatorSharedWriteAvailability sharedWriteAvailability;
   final CoordinatorPairingV1 pairingResponse;
-  final DateTime Function() now;
+  final FutureOr<DateTime> Function() now;
   final bool runtimeEnabled;
   final bool trustedTimeV2Enabled;
   final int maxBodyBytes;
@@ -847,7 +853,7 @@ class SiteCoordinatorServer {
         json['protocolVersion'] != connectedSiteProtocolVersion) {
       throw const FormatException('pairing schema');
     }
-    final observedAt = now().toUtc();
+    final observedAt = (await now()).toUtc();
     pairingResponse.requireValidAt(observedAt);
     final nonce = _identifier(json['nonce'], min: 22, max: 128);
     if (nonce != pairingResponse.nonce || json['keyAlgorithm'] != 'ed25519') {
