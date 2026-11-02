@@ -850,6 +850,15 @@ class _SelectedMemberCard {
   final ShopMemberCardMatch match;
 }
 
+enum _ReceiptPrintState { sent, unconfirmed, needsPrinterTest, deviceOnly }
+
+class _SaleCompletion {
+  const _SaleCompletion({required this.receipt, required this.printState});
+
+  final ShopSaleReceipt receipt;
+  final _ReceiptPrintState printState;
+}
+
 class _ShopHomeState extends State<ShopHome> {
   static const _minSplitContentWidth = 740.0;
 
@@ -905,6 +914,7 @@ class _ShopHomeState extends State<ShopHome> {
   Future<void> _favoriteWrites = Future<void>.value();
   PendingWalletCheckout? _pendingWalletCheckout;
   _SelectedMemberCard? _selectedMemberCard;
+  _SaleCompletion? _saleCompletion;
   List<HeldSaleTicket> _heldTickets = const [];
   XFile? _recoveredMenuPhoto;
   final _thumbnailFutures = <String, Future<Uint8List?>>{};
@@ -1479,6 +1489,10 @@ class _ShopHomeState extends State<ShopHome> {
                                 Expanded(
                                   child: Column(
                                     children: [
+                                      if (_saleCompletion != null) ...[
+                                        _saleCompletionCard(),
+                                        const SizedBox(height: 12),
+                                      ],
                                       if (_recoveredMenuPhoto != null) ...[
                                         const SizedBox(height: 12),
                                         _recoveredMenuPhotoCard(),
@@ -1541,6 +1555,16 @@ class _ShopHomeState extends State<ShopHome> {
                         }
                         return Column(
                           children: [
+                            if (_saleCompletion != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  10,
+                                  12,
+                                  0,
+                                ),
+                                child: _saleCompletionCard(),
+                              ),
                             if (_recoveredMenuPhoto != null)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(
@@ -1698,6 +1722,169 @@ class _ShopHomeState extends State<ShopHome> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _saleCompletionCard() {
+    final completion = _saleCompletion!;
+    final receipt = completion.receipt;
+    final shortId = receipt.id.length <= 8
+        ? receipt.id
+        : receipt.id.substring(0, 8);
+    final paymentStatus = receipt.paymentMethod == 'cash'
+        ? shopCopy(widget.myanmar, 'Cash received', 'ငွေသား လက်ခံပြီး')
+        : shopCopy(
+            widget.myanmar,
+            'Local wallet record saved',
+            'မိုဘိုင်းငွေ ဒေသတွင်းမှတ်တမ်း သိမ်းပြီး',
+          );
+    final printStatus = switch (completion.printState) {
+      _ReceiptPrintState.sent => shopCopy(
+        widget.myanmar,
+        'receipt sent to printer; paper still needs checking',
+        'ပရင်တာသို့ ပို့ပြီး၊ စာရွက်ကို စစ်ရန်လိုသေးသည်',
+      ),
+      _ReceiptPrintState.unconfirmed => shopCopy(
+        widget.myanmar,
+        'printing unconfirmed · receipt may have printed · check paper before retry',
+        'ပုံနှိပ်မှု မသေချာပါ · ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည် · ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ',
+      ),
+      _ReceiptPrintState.needsPrinterTest => shopCopy(
+        widget.myanmar,
+        'Test printer before printing',
+        'မပုံနှိပ်မီ ပရင်တာကို စမ်းသပ်ပါ',
+      ),
+      _ReceiptPrintState.deviceOnly => shopCopy(
+        widget.myanmar,
+        'Saved on this device; not sent to a printer',
+        'ဤစက်တွင် သိမ်းပြီး၊ ပရင်တာသို့ မပို့ရသေးပါ',
+      ),
+    };
+    final reprintLabel = switch (completion.printState) {
+      _ReceiptPrintState.sent => shopCopy(
+        widget.myanmar,
+        'Send again',
+        'ထပ်ပို့ရန်',
+      ),
+      _ReceiptPrintState.unconfirmed => shopCopy(
+        widget.myanmar,
+        'Print saved receipt',
+        'ပြေစာထပ်ပုံနှိပ်',
+      ),
+      _ReceiptPrintState.needsPrinterTest => shopCopy(
+        widget.myanmar,
+        'Test printer',
+        'ပရင်တာစမ်းရန်',
+      ),
+      _ReceiptPrintState.deviceOnly => null,
+    };
+    final announcement = shopCopy(
+      widget.myanmar,
+      'Sale saved. Payment: $paymentStatus. '
+          '${receipt.cashChangeMmk == null ? '' : 'Change ${_mmk(receipt.cashChangeMmk!)}. '}'
+          'Print: $printStatus.',
+      'အရောင်းသိမ်းပြီးပါပြီ။ ငွေပေးချေမှု: $paymentStatus။ '
+          '${receipt.cashChangeMmk == null ? '' : 'ပြန်အမ်းငွေ ${_mmk(receipt.cashChangeMmk!)}။ '}'
+          'ပုံနှိပ်မှု: $printStatus။',
+    );
+    return Semantics(
+      key: ValueKey('shop-sale-completion:${receipt.id}'),
+      container: true,
+      liveRegion: true,
+      label: announcement,
+      child: Card(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'Sale complete · receipt $shortId',
+                        'အရောင်းပြီးပါပြီ · ပြေစာ $shortId',
+                      ),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: shopCopy(widget.myanmar, 'Dismiss', 'ပိတ်ရန်'),
+                    onPressed: () => setState(() => _saleCompletion = null),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Sale: Saved · ${_mmk(receipt.totalMmk)}',
+                  'အရောင်း: သိမ်းပြီး · ${_mmk(receipt.totalMmk)}',
+                ),
+                key: const ValueKey('shop-sale-completion-sale-status'),
+              ),
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Payment: $paymentStatus',
+                  'ငွေပေးချေမှု: $paymentStatus',
+                ),
+                key: const ValueKey('shop-sale-completion-payment-status'),
+              ),
+              if (receipt.cashChangeMmk case final change?)
+                Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Change: ${_mmk(change)}',
+                    'ပြန်အမ်းငွေ: ${_mmk(change)}',
+                  ),
+                  key: const ValueKey('shop-sale-completion-change'),
+                ),
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Print: $printStatus',
+                  'ပုံနှိပ်မှု: $printStatus',
+                ),
+                key: const ValueKey('shop-sale-completion-print-status'),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  TextButton.icon(
+                    key: const ValueKey('shop-sale-completion-view'),
+                    onPressed: _openRecentSales,
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    label: Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'View saved receipt',
+                        'သိမ်းထားသောပြေစာ ကြည့်ရန်',
+                      ),
+                    ),
+                  ),
+                  if (reprintLabel != null)
+                    FilledButton.tonal(
+                      key: const ValueKey('shop-sale-completion-reprint'),
+                      onPressed:
+                          completion.printState ==
+                              _ReceiptPrintState.needsPrinterTest
+                          ? () => _testPrinterThenPrint(receipt)
+                          : () => _printReceipt(receipt),
+                      child: Text(reprintLabel),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -4706,55 +4893,18 @@ class _ShopHomeState extends State<ShopHome> {
         }
       }
       if (!mounted) return;
-      _message(
-        printed
-            ? shopCopy(
-                widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · receipt sent',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ပြေစာပို့ပြီး',
-              )
-            : printFailed
-            ? shopCopy(
-                widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · printing unconfirmed · receipt may have printed · check paper before retry',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ပုံနှိပ်မှု မသေချာပါ · ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည် · ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ',
-              )
-            : printerNeedsTest
-            ? shopCopy(
-                widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · test printer to print',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ပရင်တာစမ်းသပ်ပြီးမှ ပုံနှိပ်ပါ',
-              )
-            : shopCopy(
-                widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · this device',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ဤစက်တွင်',
-              ),
-        action: (printed || printFailed || printerNeedsTest)
-            ? SnackBarAction(
-                label: shopCopy(
-                  widget.myanmar,
-                  printerNeedsTest
-                      ? 'Test printer'
-                      : printed
-                      ? 'Send again'
-                      : 'Print saved receipt',
-                  printerNeedsTest
-                      ? 'ပရင်တာစမ်းရန်'
-                      : printed
-                      ? 'ထပ်ပို့ရန်'
-                      : 'ပြေစာထပ်ပုံနှိပ်',
-                ),
-                onPressed: () {
-                  if (printerNeedsTest) {
-                    _testPrinterThenPrint(receipt);
-                  } else {
-                    _printReceipt(receipt);
-                  }
-                },
-              )
-            : null,
-      );
+      setState(() {
+        _saleCompletion = _SaleCompletion(
+          receipt: receipt,
+          printState: printed
+              ? _ReceiptPrintState.sent
+              : printFailed
+              ? _ReceiptPrintState.unconfirmed
+              : printerNeedsTest
+              ? _ReceiptPrintState.needsPrinterTest
+              : _ReceiptPrintState.deviceOnly,
+        );
+      });
     } on ShopCashShiftChangedException {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -4868,6 +5018,7 @@ class _ShopHomeState extends State<ShopHome> {
       }
       await _sendReceipt(host, receipt);
       if (mounted) {
+        _updateSaleCompletionPrintState(receipt, _ReceiptPrintState.sent);
         _message(
           shopCopy(
             widget.myanmar,
@@ -4878,20 +5029,9 @@ class _ShopHomeState extends State<ShopHome> {
       }
     } catch (_) {
       if (mounted) {
-        _message(
-          shopCopy(
-            widget.myanmar,
-            'Sale is saved. Printing could not be confirmed; the receipt may have printed. Check the paper before retrying.',
-            'အရောင်းသိမ်းပြီးပါပြီ။ ပုံနှိပ်မှုကို အတည်မပြုနိုင်ပါ။ ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည်။ ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ။',
-          ),
-          action: SnackBarAction(
-            label: shopCopy(
-              widget.myanmar,
-              'Print saved receipt',
-              'ပြေစာထပ်ပုံနှိပ်',
-            ),
-            onPressed: () => _printReceipt(receipt),
-          ),
+        _updateSaleCompletionPrintState(
+          receipt,
+          _ReceiptPrintState.unconfirmed,
         );
       }
     }
@@ -4917,6 +5057,10 @@ class _ShopHomeState extends State<ShopHome> {
       if (await _printerSettings().readHost() != null) {
         await _printReceipt(receipt);
       } else if (mounted) {
+        _updateSaleCompletionPrintState(
+          receipt,
+          _ReceiptPrintState.needsPrinterTest,
+        );
         _message(
           shopCopy(
             widget.myanmar,
@@ -4936,6 +5080,19 @@ class _ShopHomeState extends State<ShopHome> {
         );
       }
     }
+  }
+
+  void _updateSaleCompletionPrintState(
+    ShopSaleReceipt receipt,
+    _ReceiptPrintState printState,
+  ) {
+    if (!mounted || _saleCompletion?.receipt.id != receipt.id) return;
+    setState(() {
+      _saleCompletion = _SaleCompletion(
+        receipt: receipt,
+        printState: printState,
+      );
+    });
   }
 
   Future<void> _showCart(List<ShopProduct> products) async {

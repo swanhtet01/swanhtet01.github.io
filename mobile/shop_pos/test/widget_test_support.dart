@@ -4368,7 +4368,7 @@ void registerWidgetTests(WidgetTestPartition partition) {
             id: 'tea-ambiguous-print',
             name: 'Tea',
             priceMmk: 2500,
-            openingStock: 2,
+            openingStock: 3,
           );
           final stockMovementsBefore = await database.countStockMovements();
           final outboxBefore = await database.countOutboxOperations();
@@ -4422,6 +4422,37 @@ void registerWidgetTests(WidgetTestPartition partition) {
             find.textContaining('check paper before retry'),
             findsOneWidget,
           );
+          expect(
+            find.byKey(const ValueKey('shop-sale-completion-sale-status')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('shop-sale-completion-payment-status')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('shop-sale-completion-print-status')),
+            findsOneWidget,
+          );
+          final completionSemantics = tester
+              .getSemantics(
+                find.byKey(
+                  ValueKey('shop-sale-completion:${sentReceiptIds.single}'),
+                ),
+              )
+              .getSemanticsData();
+          expect(completionSemantics.flagsCollection.isLiveRegion, isTrue);
+          ScaffoldMessenger.of(tester.element(find.byType(ShopHome)))
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(content: Text('Unrelated cashier message')),
+            );
+          await tester.pump();
+          expect(find.text('Unrelated cashier message'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('shop-sale-completion-print-status')),
+            findsOneWidget,
+          );
           tester.view.physicalSize = const Size(820, 900);
           await tester.pump();
           expect(find.text('Print saved receipt'), findsOneWidget);
@@ -4433,7 +4464,7 @@ void registerWidgetTests(WidgetTestPartition partition) {
           tester.view.physicalSize = const Size(390, 800);
           await tester.pump();
           expect(await database.countSales(), 1);
-          expect((await database.readActiveProducts()).single.onHand, 1);
+          expect((await database.readActiveProducts()).single.onHand, 2);
           expect(
             await database.countStockMovements(),
             stockMovementsBefore + 1,
@@ -4451,7 +4482,7 @@ void registerWidgetTests(WidgetTestPartition partition) {
             findsOneWidget,
           );
           expect(await database.countSales(), 1);
-          expect((await database.readActiveProducts()).single.onHand, 1);
+          expect((await database.readActiveProducts()).single.onHand, 2);
           expect(
             await database.countStockMovements(),
             stockMovementsBefore + 1,
@@ -4464,12 +4495,56 @@ void registerWidgetTests(WidgetTestPartition partition) {
           expect(sentReceiptIds.toSet(), hasLength(1));
           expect(find.text('Receipt sent to printer.'), findsOneWidget);
           expect(await database.countSales(), 1);
-          expect((await database.readActiveProducts()).single.onHand, 1);
+          expect((await database.readActiveProducts()).single.onHand, 2);
           expect(
             await database.countStockMovements(),
             stockMovementsBefore + 1,
           );
           expect(await database.countOutboxOperations(), outboxBefore + 1);
+
+          final firstReceiptId = sentReceiptIds.first;
+          expect(sentReceiptIds.toSet(), {firstReceiptId});
+          final productFinder = find.byKey(
+            const ValueKey('shop-catalog-row:tea-ambiguous-print'),
+          );
+          await tester.ensureVisible(productFinder);
+          await tester.tap(productFinder);
+          await tester.pumpAndSettle();
+          await tester.tap(find.textContaining('Review sale'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Cash sale'));
+          await tester.pumpAndSettle();
+          if (find.text('Cash received?').evaluate().isEmpty) {
+            await tester.tap(find.text('Cash sale'));
+            await tester.pumpAndSettle();
+          }
+          await tester.tap(find.text('Complete sale'));
+          await tester.pumpAndSettle();
+
+          expect(sentReceiptIds, hasLength(4));
+          final secondReceiptId = sentReceiptIds.last;
+          expect(secondReceiptId, isNot(firstReceiptId));
+          expect(
+            find.byKey(ValueKey('shop-sale-completion:$firstReceiptId')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(ValueKey('shop-sale-completion:$secondReceiptId')),
+            findsOneWidget,
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('shop-sale-completion-reprint')),
+          );
+          await tester.pumpAndSettle();
+          expect(sentReceiptIds, hasLength(5));
+          expect(sentReceiptIds.sublist(3), [secondReceiptId, secondReceiptId]);
+          expect(await database.countSales(), 2);
+          expect((await database.readActiveProducts()).single.onHand, 1);
+          expect(
+            await database.countStockMovements(),
+            stockMovementsBefore + 2,
+          );
+          expect(await database.countOutboxOperations(), outboxBefore + 2);
 
           sentReceiptIds.clear();
           await tester.pumpWidget(const SizedBox.shrink());
@@ -4528,13 +4603,13 @@ void registerWidgetTests(WidgetTestPartition partition) {
             findsOneWidget,
           );
           expect(tester.takeException(), isNull);
-          expect(await database.countSales(), 2);
+          expect(await database.countSales(), 3);
           expect((await database.readActiveProducts()).single.onHand, 0);
           expect(
             await database.countStockMovements(),
-            stockMovementsBefore + 2,
+            stockMovementsBefore + 3,
           );
-          expect(await database.countOutboxOperations(), outboxBefore + 2);
+          expect(await database.countOutboxOperations(), outboxBefore + 3);
         } finally {
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 1));
