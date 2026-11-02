@@ -25,6 +25,43 @@
   at step 638/668 on stale PostgreSQL 17 rehearsal evidence; Dependency
   Security remains **FAIL/BLOCKED** on the known unsupported minimatch paths.
 
+## 2026-11-03 installed Android protocol checkpoint
+
+- **SOURCE PASS / PRIVATE:** pure-validator prerequisite
+  `f250876575f79220da8b04c6af79cf5f96cd5e4f` (tree
+  `3969b9c486a210b99ce6b3360727b26b301625da`) extracts deterministic
+  Android QA manifest plus v1/v2/v3 handoff authority into a module importing
+  only `node:crypto`. Existing CLI/writer exports remain compatible and all
+  exported authority structures are deeply frozen. Its four-file patch
+  SHA-256 is `f11373254be755aba364a7da7def6fd7427e2b67933c74dfcac27b9a44ae127a`.
+- Handoff/preflight/writer tests are **53/53 PASS**; both self-tests and the
+  997-script syntax verifier are **PASS**; QA isolation is **33/33 PASS**,
+  Native contract **22/22 PASS**, and release preflight **5/5 PASS** while
+  remaining blocked as intended. Independent review **ACCEPTS** the final
+  extraction and mutation defense.
+- **SOURCE PASS / PRIVATE:** protocol implementation
+  `a59bd7c35a9cfb90900a3b94f727585975a77ad6` (tree
+  `1c38355426f8c60422e70d4833a2b62894d1ffd2`, parent pure-validator
+  checkpoint `f250876575f79220da8b04c6af79cf5f96cd5e4f`) defines a pure,
+  injected-observation exact-APK installed-QA state machine. The two-file
+  patch SHA-256 is `4dfe9c7f86eef2a2fec0a3fd4d40c4e72418dda5f31cfa3758927f78e65fcf36`.
+- Canonical v3 authority derives source, merge, native-tree, archive, APK,
+  signer and manifest identities. The protocol binds pre/post sale deltas,
+  selectors, isolation, private-to-external staged evidence across `pm clear`,
+  restored receipt count reset, session nonce/order/ack chain, same-target
+  lock, abandoned recovery, separate operation/abort/cleanup deadlines and
+  mandatory cleanup receipts. Timed-out operations remain `UNKNOWN` until a
+  request-bound abort/join acknowledgement proves `ABORTED`.
+- Focused protocol plus pure-validator tests are **99/99 PASS** and the
+  extended handoff/preflight/manifest matrix is **126/126 PASS**; syntax and
+  diff checks are **PASS**. Independent security review **ACCEPTS** the final
+  source.
+- **NOT RUN / BLOCKED:** this is a protocol validator, not an ADB, filesystem,
+  emulator or device adapter. UI actions, `pm clear`, staging, OS termination,
+  isolation and cleanup remain injected attestations until executed against
+  an authorized pinned Android target. No production signing, physical
+  hardware or promotion eligibility is established.
+
 ## 2026-11-03 installed Android selector checkpoint
 
 - **SOURCE PASS / PRIVATE:** implementation
