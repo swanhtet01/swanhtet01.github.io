@@ -7,6 +7,31 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private trusted-time v2 in-process integration evidence
+
+- **SOURCE TEST PASS / NO LIVE NETWORK:** test-only commit
+  `46489ccb70d9afaca3796f525fe44e4c585f4dab` (repository tree
+  `04df22da3186f82b7296a9c83546c2628db507fa`, native tree
+  `deebd9cf49dede619d9cc293c67444d9ef3fc1d1`, binary patch SHA-256
+  `e2b295cc944ca27edb6b64cf070ea9a68c38213a365bfdc13a5eac3353b74953`)
+  adds an in-process client-to-server v2 trusted-time integration regression.
+- The test uses the real `SiteCoordinatorClient`, exchange adapter,
+  `SiteCoordinatorServer.dispatch`, Ed25519 request signer/authenticator,
+  approved client enrollment, atomic request-nonce consumption and injected
+  deterministic authority. It proves exact canonical request/response and
+  challenge binding, rejects an outer-nonce replay with 403 without re-entering
+  authority, and accepts a fresh outer nonce with a fresh trusted-time
+  challenge.
+- Targeted analyzer is **PASS**; focused loopback is **1/1 PASS**; combined
+  authority, client, facade and coordinator matrix is **59/59 PASS**; diff
+  checks are **PASS**; independent review is **ACCEPT**. The final test file
+  SHA-256 is
+  `696556a71e13c71fe57e1696847e7f1d9a7aba7f99a1b306a39db1b264d5590f`.
+- **NOT RUN / BLOCKED:** the bridge opens no socket and is not installed-device
+  evidence. No listener, live network, production key/credential, runtime
+  mount, Windows clock or protected authority ran. Connected mode and v2 stay
+  default-off.
+
 ### Private default-off trusted-time v2 client successor
 
 - **SOURCE PASS / DEFAULT-OFF / UNMOUNTED:** implementation
