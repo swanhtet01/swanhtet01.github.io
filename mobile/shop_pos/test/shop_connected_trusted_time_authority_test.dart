@@ -99,6 +99,137 @@ void main() {
       ),
     );
   });
+
+  test('v2 wire request and response round-trip exact canonical bytes', () {
+    final wireRequest = _wireRequest();
+    final decodedRequest = ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+      wireRequest.canonicalBytes,
+    );
+    expect(decodedRequest.wireRequestDigest, wireRequest.wireRequestDigest);
+    expect(
+      decodedRequest.request.observationRequestDigest,
+      wireRequest.request.observationRequestDigest,
+    );
+
+    final response = ConnectedTrustedTimeWireResponseV2(
+      request: wireRequest,
+      observation: _observation(wireRequest.request.challenge),
+    );
+    final decodedResponse =
+        ConnectedTrustedTimeWireResponseV2.fromCanonicalBytes(
+          response.canonicalBytes,
+          request: wireRequest,
+        );
+    expect(decodedResponse.wireRequestDigest, wireRequest.wireRequestDigest);
+    expect(
+      decodedResponse.observation.observationDigest,
+      response.observation.observationDigest,
+    );
+    expect(utf8.decode(decodedResponse.canonicalBytes), response.canonicalJson);
+  });
+
+  test('v2 request rejects substitution, shape, encoding, and oversize', () {
+    final wireRequest = _wireRequest();
+    final missingRequest = Map<String, Object>.from(wireRequest.toJson())
+      ..remove('request');
+    expect(
+      () => ConnectedTrustedTimeWireRequestV2.fromJson(missingRequest),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireRequestV2.fromJson({
+        ...wireRequest.toJson(),
+        'protocolVersion': 1,
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireRequestV2.fromJson({
+        ...wireRequest.toJson(),
+        'request': ConnectedTrustedTimeObservationRequestV1(
+          approvalDigest: '9' * 64,
+          challenge: _challenge(),
+        ).toJson(),
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireRequestV2.fromJson({
+        ...wireRequest.toJson(),
+        'extra': true,
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+        utf8.encode('${wireRequest.canonicalJson}\n'),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(const [0xff]),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+        List<int>.filled(connectedTrustedTimeWireMaximumBytes + 1, 0x20),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('v2 response rejects request echo and observation substitution', () {
+    final wireRequest = _wireRequest();
+    final response = ConnectedTrustedTimeWireResponseV2(
+      request: wireRequest,
+      observation: _observation(wireRequest.request.challenge),
+    );
+    expect(
+      () => ConnectedTrustedTimeWireResponseV2.fromJson({
+        ...response.toJson(),
+        'wireRequestDigest': '0' * 64,
+      }, request: wireRequest),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireResponseV2.fromJson({
+        ...response.toJson(),
+        'extra': true,
+      }, request: wireRequest),
+      throwsFormatException,
+    );
+    final substitutedObservation = _observation(
+      _challenge(sessionGeneration: 4),
+    );
+    expect(
+      () => ConnectedTrustedTimeWireResponseV2(
+        request: wireRequest,
+        observation: substitutedObservation,
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireResponseV2.fromJson({
+        ...response.toJson(),
+        'observation': substitutedObservation.toJson(),
+      }, request: wireRequest),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireResponseV2.fromCanonicalBytes(
+        utf8.encode('${response.canonicalJson} '),
+        request: wireRequest,
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => ConnectedTrustedTimeWireResponseV2.fromCanonicalBytes(
+        List<int>.filled(connectedTrustedTimeWireMaximumBytes + 1, 0x20),
+        request: wireRequest,
+      ),
+      throwsFormatException,
+    );
+  });
 }
 
 ConnectedTrustedTimeObservationRequestV1 _request() =>
@@ -106,6 +237,9 @@ ConnectedTrustedTimeObservationRequestV1 _request() =>
       approvalDigest: '5' * 64,
       challenge: _challenge(),
     );
+
+ConnectedTrustedTimeWireRequestV2 _wireRequest() =>
+    ConnectedTrustedTimeWireRequestV2(request: _request());
 
 ConnectedTrustedTimeChallengeV1 _challenge({int sessionGeneration = 3}) =>
     ConnectedTrustedTimeChallengeV1(
@@ -121,3 +255,18 @@ ConnectedTrustedTimeChallengeV1 _challenge({int sessionGeneration = 3}) =>
       bootSessionId: '3' * 64,
       startedMonotonicMillis: 5000,
     );
+
+ConnectedTrustedTimeObservationV1 _observation(
+  ConnectedTrustedTimeChallengeV1 challenge,
+) => ConnectedTrustedTimeObservationV1(
+  challenge: challenge,
+  authorityKeyId: 'time_key_1',
+  authorityKeyFingerprint: '4' * 64,
+  authorityKeyGeneration: 2,
+  authorityEpoch: 5,
+  authoritySequence: 9,
+  observedAtMillis: 1800000000000,
+  validUntilMillis: 1800000060000,
+  authoritySignature: base64UrlEncode(List<int>.filled(64, 7))
+      .replaceAll('=', ''),
+);
