@@ -43,13 +43,18 @@
   records another sale. A later completion replaces the complete prior receipt
   binding; a late print result can update only the same full receipt ID.
 - The EN/MY completion boundary is a semantic live region. The focused
-  ambiguous-printer/two-sale and slow-printer/change tests are **2/2 PASS**;
+  ambiguous-printer/two-sale, slow-printer/change and device-only durable
+  receipt tests are **3/3 PASS**;
   targeted analyzer is **PASS**. The two-sale regression proves sale B removes
   sale A's completion key, reprint sends sale B's receipt again, and sale,
   stock and outbox totals remain exactly two effects. QA-isolation contracts
   are **24/24 PASS** with strict verifier **PASS**; Native CI contracts are
   **22/22 PASS** with verifier **PASS**. Independent review initially **HELD**
   for live-region and replacement-proof gaps, then **ACCEPTED** the final diff.
+  A separate independent review **ACCEPTED** the test-only device completion
+  hardening at `db8e9bd9fafe24d9ea9b30d119982d10fec5d353` (tree
+  `c7e66d23899a63e0c6d9176508ae62df06818bf5`, patch SHA-256
+  `6808c11a469a3b4fb08734ecabbc4b983955d927600d6f7946d2be350bbd8f5e`).
 - **NOT RUN / BLOCKED:** this is source/widget evidence, not physical printer,
   installed Android/Windows, large-text or merchant acceptance. The completion
   card is intentionally session-persistent; after restart, durable receipt,
