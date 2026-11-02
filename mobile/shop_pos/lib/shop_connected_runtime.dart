@@ -68,6 +68,55 @@ abstract interface class ConnectedSharedWriteGate {
   Future<void> resume();
 }
 
+class ConnectedRuntimeSessionBinding {
+  const ConnectedRuntimeSessionBinding({
+    required this.workspaceId,
+    required this.siteId,
+    required this.coordinatorDeviceId,
+    required this.identityFingerprint,
+  });
+
+  final String workspaceId;
+  final String siteId;
+  final String coordinatorDeviceId;
+  final String identityFingerprint;
+}
+
+abstract interface class ConnectedRuntimeSessionRegistry {
+  ConnectedRuntimeSessionBinding? get current;
+
+  void activate(
+    ConnectedRuntimeStartRequest request,
+    ConnectedPlatformIdentity identity,
+  );
+
+  void clear();
+}
+
+class ShopConnectedRuntimeSessionRegistry
+    implements ConnectedRuntimeSessionRegistry {
+  ConnectedRuntimeSessionBinding? _current;
+
+  @override
+  ConnectedRuntimeSessionBinding? get current => _current;
+
+  @override
+  void activate(
+    ConnectedRuntimeStartRequest request,
+    ConnectedPlatformIdentity identity,
+  ) {
+    _current = ConnectedRuntimeSessionBinding(
+      workspaceId: request.workspaceId,
+      siteId: request.siteId,
+      coordinatorDeviceId: request.coordinatorDeviceId,
+      identityFingerprint: identity.publicKeyFingerprintSha256,
+    );
+  }
+
+  @override
+  void clear() => _current = null;
+}
+
 /// One in-process gate shared by the application runtime and coordinator
 /// dispatcher. It starts paused, so binding a listener can never make commands
 /// writable before runtime authority and enrollment checks have completed.
@@ -155,6 +204,7 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
     required this.readiness,
     required this.sharedWrites,
     required this.coordinator,
+    this.sessionRegistry,
   }) {
     if (!identical(sharedWrites, coordinator.sharedWrites)) {
       throw StateError('connected_runtime_shared_write_gate_mismatch');
@@ -165,6 +215,7 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
   final ConnectedRuntimeReadiness readiness;
   final ConnectedSharedWriteGate sharedWrites;
   final ConnectedCoordinatorHost coordinator;
+  final ConnectedRuntimeSessionRegistry? sessionRegistry;
 
   ConnectedRuntimeState _state = ConnectedRuntimeState.stopped;
   ConnectedRuntimeStartRequest? _request;
@@ -226,6 +277,7 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
         identity: identity,
         tlsIdentity: tlsIdentity,
       );
+      sessionRegistry?.activate(request, identity);
       _request = request;
       _pauseReason = null;
       _state = ConnectedRuntimeState.running;
@@ -243,6 +295,7 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
       }
       _tlsIdentity?.dispose();
       _tlsIdentity = null;
+      sessionRegistry?.clear();
       _request = null;
       _state = ConnectedRuntimeState.failed;
       _pauseReason = failureCode;
@@ -268,6 +321,10 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
     if (_state != ConnectedRuntimeState.running || request == null) {
       throw const ConnectedRuntimeException('connected_runtime_not_running');
     }
+    _state = ConnectedRuntimeState.paused;
+    _pauseReason = 'connected_runtime_revalidating';
+    await sharedWrites.pause(_pauseReason!);
+    sessionRegistry?.clear();
     try {
       await _verifyPreIdentity(request);
       final identity = await platformSecurity.loadIdentity(
@@ -289,10 +346,15 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
         );
       }
       await _verifyAuthority(request, identity);
+      sessionRegistry?.activate(request, identity);
+      _state = ConnectedRuntimeState.running;
+      _pauseReason = null;
+      await sharedWrites.resume();
     } catch (error) {
       _state = ConnectedRuntimeState.paused;
       _pauseReason = _errorCode(error);
       await sharedWrites.pause(_pauseReason!);
+      sessionRegistry?.clear();
       try {
         await coordinator.stop();
       } catch (_) {
@@ -323,6 +385,7 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
     if (_state == ConnectedRuntimeState.stopped) return;
     _state = ConnectedRuntimeState.stopping;
     await sharedWrites.pause('connected_runtime_stopped');
+    sessionRegistry?.clear();
     try {
       await coordinator.stop();
     } catch (_) {

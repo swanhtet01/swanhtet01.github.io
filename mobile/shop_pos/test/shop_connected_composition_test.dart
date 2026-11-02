@@ -89,11 +89,27 @@ void main() {
     expect(composition.runtime!.sharedWrites, same(composition.sharedWrites));
     expect(composition.runtime!.coordinator, same(composition.coordinator));
     expect(composition.runtime!.readiness, same(composition.readiness));
-    expect(composition.reconciliation!.authority, same(composition.cloud));
-    expect(composition.reconciliation!.transport, same(composition.cloud));
     expect(composition.readiness!.database, same(database));
     await composition.boundary.initialize();
     expect(composition.boundary.state, ConnectedApplicationState.ready);
+    await expectLater(
+      composition.reconciliation!.reconcile(
+        scope: ConnectedSiteScope(
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          deviceId: 'coordinator-1',
+        ),
+        now: DateTime.utc(2026, 11, 2),
+      ),
+      throwsA(
+        isA<ConnectedSiteReconciliationException>().having(
+          (error) => error.code,
+          'code',
+          'connected_site_reconciliation_runtime_unavailable',
+        ),
+      ),
+    );
+    expect(executor.calls, 0);
     await expectLater(
       composition.boundary.start(
         ConnectedRuntimeStartRequest(
@@ -119,6 +135,59 @@ void main() {
     expect(await _authorityRowCount(database), 0);
     expect(transport.starts, 0);
     expect(transport.stops, 0);
+  });
+
+  test('pending enrollment prevents cloud and authority retention', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final executor = _Executor();
+    final transport = _Transport();
+    final composition = ShopConnectedComposition.resolve(
+      capabilities: _enabledCapabilities,
+      enabledDependencies: () => ShopConnectedEnabledDependencies(
+        database: database,
+        cloudBaseUri: Uri.parse('https://cloud.invalid'),
+        cloudExecutor: executor,
+        cloudAuthorityVerifier:
+            const UnavailableConnectedSiteCloudAuthorityVerifier(),
+        payloadVerifier:
+            const ConnectedSiteAuthorityPayloadVerificationUnavailable(),
+        platformSecurity: _Security(_identity()),
+        platformLifecycle:
+            const UnavailableConnectedCoordinatorPlatformLifecycle(),
+        transportFactory: (gate) {
+          transport.gate = gate;
+          return transport;
+        },
+        now: () => DateTime.utc(2026, 11, 2),
+      ),
+    );
+    await composition.boundary.initialize();
+
+    await expectLater(
+      composition.boundary.start(
+        ConnectedRuntimeStartRequest(
+          capabilities: _enabledCapabilities,
+          bindAddress: '192.168.1.10',
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          coordinatorDeviceId: 'coordinator-1',
+          identityAlias: 'coordinator-1',
+          expectedIdentity: _identity(),
+        ),
+      ),
+      throwsA(
+        isA<ConnectedRuntimeException>().having(
+          (error) => error.code,
+          'code',
+          'connected_runtime_enrollment_unapproved',
+        ),
+      ),
+    );
+
+    expect(executor.calls, 0);
+    expect(await _authorityRowCount(database), 0);
+    expect(transport.starts, 0);
   });
 
   test('readiness binds coordinator enrollment identity exactly', () async {

@@ -68,7 +68,7 @@ class ShopConnectedComposition {
   final ShopConnectedRuntimeReadiness? readiness;
   final ShopConnectedSharedWriteGate? sharedWrites;
   final ConnectedSiteCloudWireClient? cloud;
-  final ConnectedSiteReconciliationEngine? reconciliation;
+  final ShopConnectedReconciliationRuntime? reconciliation;
   final ConnectedCoordinatorRuntimeHost? coordinator;
 
   bool get enabled => runtime != null;
@@ -119,6 +119,7 @@ class ShopConnectedComposition {
       authority: cloud,
       now: now,
     );
+    final sessionRegistry = ShopConnectedRuntimeSessionRegistry();
     final repository = ShopConnectedSiteReconciliationStore(
       database: dependencies.database,
       nowMillis: nowMillis,
@@ -128,12 +129,22 @@ class ShopConnectedComposition {
       nowMillis: nowMillis,
       runtimeEnabled: true,
     );
-    final reconciliation = ConnectedSiteReconciliationEngine(
-      authority: cloud,
+    final boundAuthority = _ShopConnectedSessionBoundAuthority(
+      database: dependencies.database,
+      cloud: cloud,
+      sessions: sessionRegistry,
+    );
+    final reconciliationEngine = ConnectedSiteReconciliationEngine(
+      authority: boundAuthority,
       repository: repository,
       transport: cloud,
       authorityDeltaApplier: authorityDeltaStore,
       runtimeEnabled: true,
+    );
+    final reconciliation = ShopConnectedReconciliationRuntime._(
+      engine: reconciliationEngine,
+      sharedWrites: sharedWrites,
+      sessions: sessionRegistry,
     );
     final transport = dependencies.transportFactory(sharedWrites);
     final coordinator = ConnectedCoordinatorRuntimeHost(
@@ -146,6 +157,7 @@ class ShopConnectedComposition {
       readiness: readiness,
       sharedWrites: sharedWrites,
       coordinator: coordinator,
+      sessionRegistry: sessionRegistry,
     );
     return ShopConnectedComposition._(
       boundary: ShopConnectedApplicationBoundary(
@@ -159,6 +171,104 @@ class ShopConnectedComposition {
       reconciliation: reconciliation,
       coordinator: coordinator,
     );
+  }
+}
+
+/// The only exposed reconciliation entry point from the composition root.
+/// It requires an active runtime session and holds the shared-write gate for
+/// the complete authority refresh, upload, outcome persistence, and delta
+/// application transaction.
+class ShopConnectedReconciliationRuntime {
+  const ShopConnectedReconciliationRuntime._({
+    required this._engine,
+    required this._sharedWrites,
+    required this._sessions,
+  });
+
+  final ConnectedSiteReconciliationEngine _engine;
+  final ShopConnectedSharedWriteGate _sharedWrites;
+  final ConnectedRuntimeSessionRegistry _sessions;
+
+  Future<ConnectedSiteReconciliationResult> reconcile({
+    required ConnectedSiteScope scope,
+    required DateTime now,
+  }) async {
+    final session = _sessions.current;
+    if (session == null ||
+        session.workspaceId != scope.workspaceId ||
+        session.siteId != scope.siteId ||
+        session.coordinatorDeviceId != scope.deviceId ||
+        !_sharedWrites.tryBeginSharedWrite()) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_reconciliation_runtime_unavailable',
+      );
+    }
+    try {
+      return await _engine.reconcile(scope: scope, now: now);
+    } finally {
+      _sharedWrites.endSharedWrite();
+    }
+  }
+}
+
+class _ShopConnectedSessionBoundAuthority
+    implements ConnectedSiteAuthorityProvider {
+  const _ShopConnectedSessionBoundAuthority({
+    required this.database,
+    required this.cloud,
+    required this.sessions,
+  });
+
+  final ShopDatabase database;
+  final ConnectedSiteSessionBoundAuthorityProvider cloud;
+  final ConnectedRuntimeSessionRegistry sessions;
+
+  @override
+  Future<ConnectedSiteAuthorityState> refresh(ConnectedSiteScope scope) async {
+    final session = sessions.current;
+    if (session == null ||
+        session.workspaceId != scope.workspaceId ||
+        session.siteId != scope.siteId ||
+        session.coordinatorDeviceId != scope.deviceId) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_reconciliation_session_unavailable',
+      );
+    }
+
+    Future<int?> activeSessionGeneration() async {
+      final row = await database
+          .customSelect(
+            'SELECT session_generation FROM shop_site_devices '
+            "WHERE device_id = ? AND tenant_id = ? AND site_id = ? "
+            "AND public_key_fingerprint = ? AND state = 'active'",
+            variables: [
+              Variable<String>(scope.deviceId),
+              Variable<String>(scope.workspaceId),
+              Variable<String>(scope.siteId),
+              Variable<String>(session.identityFingerprint),
+            ],
+          )
+          .getSingleOrNull();
+      return row?.read<int>('session_generation');
+    }
+
+    final expectedSessionGeneration = await activeSessionGeneration();
+    if (expectedSessionGeneration == null || expectedSessionGeneration < 1) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_reconciliation_session_unavailable',
+      );
+    }
+    final state = await cloud.refreshForSession(
+      scope,
+      expectedSessionGeneration: expectedSessionGeneration,
+    );
+    if (state.sessionGeneration != expectedSessionGeneration ||
+        await activeSessionGeneration() != expectedSessionGeneration) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_reconciliation_session_changed',
+      );
+    }
+    return state;
   }
 }
 

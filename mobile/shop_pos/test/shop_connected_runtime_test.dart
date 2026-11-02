@@ -177,6 +177,48 @@ void main() {
     },
   );
 
+  test('revalidation drains writes until authority completes', () async {
+    final gate = ShopConnectedSharedWriteGate();
+    final gatedCoordinator = _Coordinator(gate);
+    final registry = ShopConnectedRuntimeSessionRegistry();
+    final gatedRuntime = ShopConnectedRuntime(
+      platformSecurity: security,
+      readiness: readiness,
+      sharedWrites: gate,
+      coordinator: gatedCoordinator,
+      sessionRegistry: registry,
+    );
+    await gatedRuntime.start(_request());
+    expect(gate.sharedWritesAvailable, isTrue);
+    expect(registry.current, isNotNull);
+
+    readiness.authorityObserved = Completer<void>();
+    readiness.authorityBarrier = Completer<void>();
+    final revalidating = gatedRuntime.revalidate();
+    await readiness.authorityObserved!.future;
+
+    expect(gatedRuntime.state, ConnectedRuntimeState.paused);
+    expect(gate.sharedWritesAvailable, isFalse);
+    expect(gate.tryBeginSharedWrite(), isFalse);
+    expect(registry.current, isNull);
+
+    readiness.authorityBarrier!.complete();
+    await revalidating;
+    expect(gatedRuntime.state, ConnectedRuntimeState.running);
+    expect(gate.sharedWritesAvailable, isTrue);
+    expect(registry.current, isNotNull);
+
+    readiness.authorityBarrier = null;
+    readiness.authorityObserved = null;
+    readiness.authority = ConnectedRuntimeAuthorityState.revoked;
+    await expectLater(
+      gatedRuntime.revalidate(),
+      throwsA(_runtimeCode('connected_runtime_authority_revoked')),
+    );
+    expect(gate.sharedWritesAvailable, isFalse);
+    expect(registry.current, isNull);
+  });
+
   test(
     'database, enrollment and unavailable authority all fail closed',
     () async {
@@ -372,6 +414,8 @@ class _Readiness implements ConnectedRuntimeReadiness {
   ConnectedRuntimeAuthorityState authority =
       ConnectedRuntimeAuthorityState.active;
   int authorityCalls = 0;
+  Completer<void>? authorityObserved;
+  Completer<void>? authorityBarrier;
 
   @override
   Future<ConnectedRuntimeAuthorityState> authorityState({
@@ -381,6 +425,9 @@ class _Readiness implements ConnectedRuntimeReadiness {
     required ConnectedPlatformIdentity identity,
   }) async {
     authorityCalls += 1;
+    final observed = authorityObserved;
+    if (observed != null && !observed.isCompleted) observed.complete();
+    await authorityBarrier?.future;
     return authority;
   }
 
