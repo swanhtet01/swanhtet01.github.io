@@ -7,6 +7,38 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private trusted-time client-head prerequisite
+
+- **SOURCE PASS / EVIDENCE-ONLY / UNMOUNTED:** implementation
+  `d11a0fea380d622ca5db4ba6e5f1dea2c0c0b1ec` (repository tree
+  `d0d3edd74e51348057df62d96d36daf76ce50c41`, native tree
+  `fe6e3167327ab8564088cb74acadc1f5ea1360c0`, native `lib/` tree
+  `0d603630ce789df0d2a519ff36cc65772c2c6630`, binary patch SHA-256
+  `bfd45e8e7dc41f4ebcace441a6515b4776bcee2e898e6d1232876a380f8a1f6b`)
+  defines canonical identity for the last trusted-time observation accepted by
+  one exact client stream.
+- The head binds workspace/site/coordinator, client device/fingerprint,
+  session and coordinator-binding generations, authority key identity and
+  generation, epoch/sequence, request/observation/acceptance digests,
+  observed/effective/valid times, current boot and monotonic acceptance. Its
+  domain-separated digest is self-consistency evidence only, not a signature
+  or authority grant. Absence is represented by no object; no self-authored
+  genesis head exists.
+- Exact-schema canonical UTF-8/JSON parsing enforces an 8 KiB limit and rejects
+  missing/extra/wrongly typed, substituted, malformed, noncanonical and
+  oversized input. Targeted analyzer is **PASS**; focused tests are **4/4
+  PASS**; diff checks are **PASS**; independent review is **ACCEPT**. Reviewed
+  file SHA-256 identities are
+  `27168505f8dd693d509972b84b4f8e9495bd8e08e3068994c94d0b1c5d0ce7a8`
+  for the contract and
+  `91131055d40d0332fa47ee872d53222047e42bc48bc62cfd721a190ee3e147b2`
+  for its tests.
+- **BLOCKED / NOT RUN:** no durable per-client issuer stream, acknowledgement
+  transport, sequence allocator, approval registry, trusted issuance clock or
+  protected authority signer exists. The current issuer cannot safely allocate
+  the next tuple across lost replies/restart/concurrency, so authority issuance
+  remains unavailable and connected mode stays off.
+
 ### Private trusted-time v2 in-process integration evidence
 
 - **SOURCE TEST PASS / NO LIVE NETWORK:** test-only commit
