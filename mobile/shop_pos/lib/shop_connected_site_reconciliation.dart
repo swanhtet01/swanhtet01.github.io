@@ -314,7 +314,8 @@ class ConnectedSiteCloudProofV1 {
       final sourceProof = ConnectedSiteCloudProofV1.fromJson(
         json['sourceProof'],
       );
-      final sourceReservation = sourceProof.signedCommand?.payload['reservation'];
+      final sourceReservation =
+          sourceProof.signedCommand?.payload['reservation'];
       final transition = payload is Map ? payload['transition'] : null;
       final before = transition is Map ? transition['before'] : null;
       if (derivation is! Map ||
