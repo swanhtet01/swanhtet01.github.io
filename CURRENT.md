@@ -40,9 +40,20 @@
   tracking and line-height contracts. Phone/tablet EN/MY at 1.3x text are
   **4/4 PASS**, targeted analyzer is **PASS**, and independent design,
   accessibility and transaction-boundary review **ACCEPTS** the final diff.
-  This is a reversible visual foundation, not a complete or installed redesign;
-  richer product media, restrained motion and consolidated offline/LAN/sync/
-  lease/backup/printer state remain later bounded slices.
+  Second-slice successor `9d2c4be0118d80f30a5bb6d447b73f225274f3f3`
+  (tree `b18126e5b8542b92fc26469ada9aa99df75b5764`, native tree
+  `8717de271cc830211f4967dbaa552428778bd290`) strengthens Sell/current-sale/
+  checkout hierarchy with responsive 56/64/72dp product media, a stronger
+  total and 56dp cash/wallet actions. Its two-file binary-diff SHA-256 is
+  `6494b99156dd0713ef917e3342b5538d3126b9cad6566cf19c35adc31a044780`.
+  New 390/820 EN/MY 1.3x tests are **4/4 PASS**, existing 768/1024 EN/MY
+  normal/1.3x tests are **8/8 PASS**, the reviewer-requested 320px/1.5x
+  Myanmar regression is **1/1 PASS**, analyzer and diff checks are **PASS**,
+  and independent review **ACCEPTS** the exact final diff. Existing callbacks,
+  identifiers, money logic, persistence, receipts, scanner/printer interfaces
+  and connected defaults are unchanged. This remains a reversible visual
+  foundation, not a complete or installed redesign; restrained motion and
+  consolidated offline/LAN/sync/lease/backup/printer state remain later slices.
 - **NOT RUN / BLOCKED:** no APK was rebuilt or installed for this private
   successor, no TalkBack or physical-device pass occurred, and no scanner,
   printer, signing, merchant or production evidence is created. Connected mode
