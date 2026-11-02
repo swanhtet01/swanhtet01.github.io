@@ -7,6 +7,44 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private Android current-boot trusted-time clock successor
+
+- **SOURCE PASS / ANDROID-ONLY / DEFAULT-OFF:** implementation
+  `28d93ef3b3410f202e43333677722d0d906ed6ac` (repository tree
+  `4446560656c2cf54a9ce6078e20e26747e1864d6`, native tree
+  `804e55c0839142d2a12695a9f31777ae0dca32b1`, native `lib/` tree
+  `3f1e193a5b5b06dc4058739edac68b2ce18d27c5`, binary patch SHA-256
+  `19bbc3bf79291fdedbe120116f66e5d163ed3a58717012fa5c54c73ffcc4124a`)
+  adds a strict Dart platform-clock adapter and an Android API-33+ native
+  response on the existing connected-security channel.
+- Android derives a domain-separated 64-hex current-boot identity from
+  `Settings.Global.BOOT_COUNT` and reports `SystemClock.elapsedRealtime()`,
+  which includes deep sleep. Channel registration remains behind the existing
+  `CONNECTED_SITE_PLATFORM_SECURITY_ENABLED` build flag and API-33 gate.
+  Ordinary builds therefore remain unavailable and connected mode stays off.
+- The Dart adapter requires exact request/response schemas and the reviewed
+  Android source label. It rejects missing/extra/non-string fields, malformed
+  boot IDs, negative or non-integer monotonic values, boot substitution and
+  monotonic regression within one adapter. Missing plugins and platform errors
+  fail closed. Windows recognizes the method name but deliberately continues
+  to return `NotImplemented`; no synthetic Windows boot identity was added.
+- Targeted analyzer is **PASS**, focused adversarial tests are **4/4 PASS**,
+  and diff checks are **PASS**. Independent review is **ACCEPT**. Reviewed
+  file SHA-256 identities are
+  `1bc2cc0e5e18c9ab09d1e42a4a43ec104f65016488c4378b0149fc94cff42fba`
+  for the adapter and
+  `869c702f4f5ce22b7d5719a3230a4a8a1b1859ab70781df23b4255d1810b24a4`
+  for its tests.
+- **NOT RUN / BLOCKED:** Android Kotlin/Gradle compilation and installed-device
+  behavior were not run because this source archive has no Android Gradle
+  wrapper. `BOOT_COUNT` plus elapsed realtime provides current-boot evidence,
+  not protected anti-rollback authority across reboot, restore, factory reset
+  or a compromised OS. Windows remains unavailable until a stable supported
+  boot-identity primitive is selected, compiled and installed-tested.
+- Capacity at `2026-11-02T03:25:44Z`: durable `/workspace` had `338,710,528`
+  bytes free and `/dev/shm` had `5,313,273,856` bytes free. No build, cleanup,
+  network, credential, provider, publication or production action occurred.
+
 ### Private schema-v37 one-shot trusted-time persistence successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
