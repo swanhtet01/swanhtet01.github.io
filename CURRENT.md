@@ -1,9 +1,48 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 UTC
+- Last verified: 2026-11-02 22:48 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-02 22:48 UTC exact-head CI and private successor
+
+- Draft PR #752 was updated by one guarded non-force fast-forward from
+  `fe02f283d51bb546db7fab0feabfcff0a43673ee` to
+  `2de3202161176b0a8e1ffeb4f7ced2cbae9bd8b9` (tree
+  `7f27b3fa51dcc4347bfa6d2759c12d895c21454b`); remote readback matched.
+  No merge, deployment, release signing or connected-mode enablement occurred.
+- Exact-head App CI `41538956811` **FAIL** at `Build and verify canonical app`:
+  `tools:syntax:verify` found the missing QA metrics test in the native test
+  inventory and shard assignment. Native run `41538964926` has the same first
+  Android failure at `Verify pinned native toolchain contract`; full Android
+  tests, gallery and APK packaging are **NOT RUN** on that job. At this ledger
+  timestamp the Windows PC job is still in progress; isolated Android,
+  Windows and both Apple QA jobs passed separately. Kernel `41538964891`
+  **PASS**. Dependency Security `41538964925` **FAIL** in locked app/kernel
+  dependency audits; platform, pip and added-line credential jobs passed.
+- Private, unpublished workflow repair `841097bd3f8fd7f118df42f0ed78ebb4d709426d`
+  (tree `66b1716a9387476c799ad5290c6b853ea619dbff`) adds the metrics test
+  exactly once to inventory and the persistence shard, plus a fail-closed
+  formatter check. Deterministic inventory diff, native CI contract **22/22**,
+  QA isolation **33/33** and independent review **PASS**. Hosted verification
+  of this successor is **NOT RUN**.
+- Private, unpublished PG17 test successor
+  `2fe9c269bec916c463d1cd3c3583496b88bd9eda` (tree
+  `0b01a5d1d08eb43f43108d887b0c9dabbdce06ae`) adds an opt-in disposable
+  PostgreSQL 17 v15/v16 replay/concurrency/tenant-RLS test and an explicit App
+  CI invocation. The production `connected_enabled=false` source check stays
+  required; only the synthetic disposable fixture relaxes it. Python syntax,
+  non-PG authority/runtime suite **28/28 PASS**, three PG tests **SKIPPED**
+  locally because PostgreSQL 17 is absent, claims guard **179 PASS**, and
+  independent static review **PASS**. Actual PG SQL behavior, full v14→v16
+  migration, authoritative Windows rehearsal and CI runtime are **NOT RUN**.
+  Local `verify_app_deploy_workflow.mjs` is **BLOCKED** by the installed Python
+  dependency pin mismatch `fastapi`, not by a reported workflow assertion.
+- Current private head is `2fe9c269bec916c463d1cd3c3583496b88bd9eda`;
+  it must not be described as hosted-tested or published. Next: preserve the
+  current hosted job to terminal state, then separately review a guarded
+  successor and run exact-head CI before using any new QA artifact.
 
 ## 2026-11-03 cumulative private candidate review
 
