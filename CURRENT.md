@@ -1,9 +1,52 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-01 UTC
+- Last verified: 2026-11-02 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-02 exact-head release checkpoint
+
+### Private joining-device authority checkpoint successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `bd6830952684fb6c054499211c6c5754aa5fc15f`, repository tree
+  `32696841b2253470580e87c3528428ad615c9ffd`, native tree
+  `d51bf21988c21b05b1d0cc65ac55e28aed705761`, and native `lib/` tree
+  `ef0593835fbaf65198b88fdca5a366e2576a534d`. Its exact predecessor is
+  ledger `56fbfe5187c6b40c670f740eba604705d74251af`; binary patch SHA-256 is
+  `76297ff5deeb832f28457468e299240db6f93aa949c60e13f31143d338926097`.
+  This successor is private and unpublished.
+- A later-joining device can now establish authority only from a freshly
+  signed, device-bound `ConnectedSiteAuthorityCheckpointV1` containing the
+  complete sequence-one authority chain. Schema v36 atomically retains the
+  checkpoint, every payload/projection/revocation effect and immutable
+  `checkpoint_joined` provenance. Checkpoint and payload signatures are
+  independently reverified after restart/restore. Missing evidence, replay,
+  changed digest, gaps, scope/device substitution, partial writes and former
+  unsigned `incremental`/`legacy_incremental` fallback modes fail closed.
+  Pre-v36 retained chains are deliberately quarantined until separately
+  reauthenticated; migration does not invent a trusted bootstrap.
+- Authority/checkpoint/migration/backup tests are **20/20 PASS** in 1:18;
+  broader backup and connected persistence tests are **119/119 PASS** in 5:20;
+  targeted four-file analyzer and `git diff --check` are **PASS**. A first
+  broader run used the pre-fix test image, exposed stale schema-35 expectations
+  and incomplete legacy-fixture teardown, and was interrupted after preserving
+  those failures; the corrected focused checks and exact-source 119-test run
+  passed. Independent security review is **ACCEPT** after rejecting two earlier
+  drafts for optional checkpoint evidence and substitutable unsigned bootstrap
+  modes.
+- **BLOCKED / NOT RUN:** connected authority remains feature-off and is not
+  mounted into a production runtime. Real issuer/key custody, Android
+  Keystore/Windows DPAPI, installed-device enrollment, LAN TLS composition,
+  PostgreSQL rehearsal, cloud/RLS acceptance and merchant evidence are not
+  proven. Checkpoint issuance currently requires an OS-synchronized clock and
+  rejects any future skew; this is a documented availability risk, not a
+  relaxed security boundary. No APK, publication, deployment or live service
+  was used.
+- Capacity at `2026-11-02T00:29:28Z`: durable `/workspace` had 277,671,936
+  bytes free and `/dev/shm` had 5,309,321,216 bytes free. The durable artifact
+  build gate remains blocked; no cleanup or speculative build was attempted.
 
 ## 2026-11-01 exact-head release checkpoint
 
