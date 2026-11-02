@@ -7,6 +7,36 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private coordinator-binding session-generation successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `38e8bf5ea49dd7544461432cc78cba0dd5379853` (repository tree
+  `9ec99824f82a6f41517313f8236b2f67b4692fc3`, native tree
+  `30e93f769d3d1a8280a88928bbbb29e8de0e4fc5`, native `lib/` tree
+  `8116b994d01e61412951a7d3411649d62571194f`, binary patch SHA-256
+  `896df7ebd6f5ccff37390c38a7e1401c2701ce566a42696d24e697239668589f`)
+  exposes the exact retained enrollment session generation through an approved
+  coordinator binding and closes stale-session binding resolution.
+- The binding query selects the session only from the exact enrollment
+  evidence digest retained by the signed coordinator approval. It now also
+  requires the device's current session generation to equal that evidence
+  generation and the device to remain active. Advancing the device session
+  without matching retained enrollment evidence therefore fails closed.
+- Existing exact binding, latest approval/revocation, active enrollment,
+  workspace/site/device/fingerprint/signing-key, expiry, authority-signature
+  and approval-generation checks remain intact. No schema or migration changed.
+- Targeted analyzer is **PASS**; attempt-store, reservation-session, client and
+  platform-signer tests are **36/36 PASS**; diff checks are **PASS**;
+  independent review is **ACCEPT**. Reviewed primary file SHA-256 identities
+  are `83dadffd0496d96b06e7288181741fe2c0d199435b861d0f98060d929eb47e2d`
+  for the store and
+  `ac6d3be63e77b0bd97aa34afc826dd9595fe5401f44e3e3e1ebf406ac7cd8536`
+  for its real-store tests.
+- **BLOCKED / NOT RUN:** session generation is now available to future
+  trusted-time authorization, but no trusted-time endpoint, issuer, protected
+  signing custody, observation transport, runtime mount or installed-device
+  evidence exists. Connected mode remains default-off.
+
 ### Private coordinator-binding approval-generation successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
