@@ -392,6 +392,7 @@ class _Attempts extends UnavailableConnectedSiteCommandAttemptStore {
       clientFingerprint: clientFingerprint,
       clientSigningKeyId: clientSigningKeyId,
       approvalGeneration: 1,
+      sessionGeneration: 1,
       address: '192.168.10.4',
       port: 9443,
       certificateSha256: 'c' * 64,

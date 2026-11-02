@@ -435,6 +435,22 @@ void main() {
     );
     expect(resolved.bindingDigest, binding);
     expect(resolved.approvalGeneration, approval.approvalGeneration);
+    expect(resolved.sessionGeneration, 1);
+    await database.customStatement(
+      'UPDATE shop_site_devices SET session_generation = 2 WHERE device_id = ?',
+      [approval.clientDeviceId],
+    );
+    await expectLater(
+      store.resolveActiveBinding(
+        bindingDigest: binding,
+        workspaceId: approval.workspaceId,
+        siteId: approval.siteId,
+        clientDeviceId: approval.clientDeviceId,
+        clientFingerprint: approval.clientFingerprint,
+        clientSigningKeyId: approval.clientSigningKeyId,
+      ),
+      throwsStateError,
+    );
     await _revokeEnrollment(
       database,
       approval,

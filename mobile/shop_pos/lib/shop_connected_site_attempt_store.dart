@@ -146,6 +146,7 @@ class ConnectedSiteApprovedBinding {
     required this.clientFingerprint,
     required this.clientSigningKeyId,
     required this.approvalGeneration,
+    required this.sessionGeneration,
     required this.address,
     required this.port,
     required this.certificateSha256,
@@ -159,6 +160,7 @@ class ConnectedSiteApprovedBinding {
   final String clientFingerprint;
   final String clientSigningKeyId;
   final int approvalGeneration;
+  final int sessionGeneration;
   final String address;
   final int port;
   final String certificateSha256;
@@ -319,11 +321,13 @@ class ShopConnectedSiteAttemptStore
         ? null
         : await database
               .customSelect(
-                'SELECT 1 FROM shop_site_enrollment_evidence evidence '
+                'SELECT evidence.session_generation AS session_generation '
+                'FROM shop_site_enrollment_evidence evidence '
                 'JOIN shop_site_devices device ON device.device_id = evidence.device_id '
                 'WHERE evidence.evidence_digest = ? AND evidence.action = ? '
                 'AND evidence.tenant_id = ? AND evidence.site_id = ? '
                 'AND evidence.device_id = ? AND evidence.client_fingerprint = ? '
+                'AND device.session_generation = evidence.session_generation '
                 "AND device.state = 'active' LIMIT 1",
                 variables: [
                   Variable.withString(
@@ -364,6 +368,7 @@ class ShopConnectedSiteAttemptStore
       clientFingerprint: clientFingerprint,
       clientSigningKeyId: clientSigningKeyId,
       approvalGeneration: row.read<int>('approval_generation'),
+      sessionGeneration: activeEnrollment.read<int>('session_generation'),
       address: row.read<String>('address'),
       port: row.read<int>('port'),
       certificateSha256: row.read<String>('certificate_sha256'),
