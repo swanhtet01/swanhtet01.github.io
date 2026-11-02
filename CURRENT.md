@@ -7,6 +7,63 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private schema-v37 one-shot trusted-time persistence successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `fac04dd7bbb53b557e818f483a35ddd576e6c9e2` (repository tree
+  `f3dba3b250a5c7b5c64349cabe5164c5487ca3cf`, native tree
+  `d59dc14219bea7ab89b497aa958926e5b0430566`, native `lib/` tree
+  `cca7c18e16e52c18f4d6f16f423643da8b991432`, binary patch SHA-256
+  `45f2381204e18223b6f2204c57b171455af6fa06fccff60adb004a014456bd5d`)
+  advances the Shop database, verified snapshot and encrypted backup contract
+  to schema v37 with real atomic trusted-time evidence persistence.
+- V37 retains immutable owner approvals, request challenges, signed
+  observations and local acceptances. Only the hash of a random capability is
+  persisted; completion also requires the exact opaque same-process capability
+  retained in memory. Completion revalidates the complete retained evidence
+  inside one database transaction, consumes a request once, and atomically
+  advances reconstructable authority and device heads.
+- Authority progress rejects repeated or regressed key-generation,
+  epoch/sequence and observed-time tuples. Device progress binds workspace,
+  site, coordinator, device/fingerprint, session, coordinator-binding digest
+  and generation, boot session, effective time and monotonic acceptance.
+  Missing, substituted or digest-invalid heads fail closed. Capability and
+  temporary secret bytes are zeroized after use.
+- Restart and encrypted fresh-target restore retain auditable evidence but do
+  not recreate a live capability or effective time. A fresh verified challenge
+  on the current process and boot is required. V36 migrates to an empty v37
+  evidence set after verifying the complete v36 boundary; historical fixture
+  teardown and snapshot validation were updated rather than weakening the
+  production verifier.
+- Changed-file analyzer is **PASS** with no issues. The final exact-source
+  protocol, verifier, store and connected persistence matrix is **32/32 PASS**
+  serially, including **5/5** focused replay/restart, concurrent consumption,
+  rollback/head tamper, v36 migration and encrypted restore tests. The exact
+  synthetic-v32 fixture that failed in the earlier broad run was repaired and
+  its focused rerun is **PASS**. The earlier pre-fix authority+replica run was
+  **30 PASS / 1 stale-fixture FAIL** and was not repeated in full after that
+  fixture-only correction. Formatting and diff checks are **PASS**.
+- Independent adversarial review is **ACCEPT** after two HOLD rounds. Verified
+  fixes cover full approval/request/observation/acceptance reconstruction,
+  strict tuple ordering, approval-to-observation authority binding, current
+  head presence/digests, unchanged-generation binding consistency,
+  transaction-local full evidence validation, full live-scope keys and secret
+  zeroization. Reviewed primary file SHA-256 identities are
+  `4c341b3c21905e14b9f4ae9b6896e7c18406e3c99113ba84e7323a1f597b5d49`
+  for the store and
+  `fde50d8fa5b74ff7767028e1eb3407d21480821f5b12ba33873dee5e35a9a0b6`
+  for its focused tests.
+- **BLOCKED / NOT RUN:** the store is intentionally not mounted in a shipping
+  profile. Production owner/time-authority key enrollment and custody,
+  installed Android/Windows protected boot/monotonic evidence, runtime lease
+  integration and device acceptance remain required. Restoring an older but
+  internally valid database cannot be detected by SQLite alone; restored
+  trusted-time heads are audit-only. Offline authority across reboot requires
+  a separately reviewed platform anti-rollback clock or counter.
+- Capacity at `2026-11-02T03:21:41Z`: durable `/workspace` had `339,050,496`
+  bytes free and `/dev/shm` had `5,312,966,656` bytes free. No build, cleanup,
+  network, credential, provider, publication or production action occurred.
+
 ### Private pinned trusted-time verifier successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
