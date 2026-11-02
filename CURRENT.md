@@ -19,7 +19,10 @@
 - Combined handoff/preflight tests are **42/42 PASS**; Node syntax and diff
   checks are **PASS**. Independent review **ACCEPTS** the exact final diff and
   confirms canonical v3 still requires artifact/signing/provenance identity
-  and cannot promote itself to observed installed evidence.
+  and cannot promote itself to observed installed evidence. The complete QA
+  isolation contract is **33/33 PASS** with audit `ok:true`,
+  `installedIsolationVerified:false` and `launchAuthorized:false`; the Native
+  CI artifact-identity contract is **22/22 PASS** with verifier `ok:true`.
 - **BLOCKED / NOT RUN:** the result remains `BLOCKED_OFFLINE_PLAN` on
   `external_remote_observation_required`; emulator/cloud execution flags stay
   false. The current GitHub Ubuntu runner advertises Android command-line,
