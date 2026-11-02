@@ -5,6 +5,30 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 trusted-time active-binding recheck checkpoint
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `6a8699001edfa0cc7346aba70c7cba73267088ef` (tree
+  `95b50480cb1ab13d75a2071340c85b202319a0bc`, parent receipt/CI ledger
+  `eae326ddbaf350fbafb2e360a182b1824758c6be`) closes the trusted-time
+  revoke-during-request race. The client now resolves the complete active
+  coordinator binding again after canonical signed-response parsing and before
+  returning the observation. The two-file patch SHA-256 is
+  `528fc1da380179d1a260ca678f2da5f1bf0a1d1e8690a79aa81cfb72a305eab2`.
+- The comparison binds digest, workspace, site, coordinator/client identity,
+  client fingerprint and key, approval/session generation, endpoint and TLS
+  certificate. Revocation fails as binding unavailable; rotation or
+  substitution fails as binding rejected. The POST remains one-shot with no
+  automatic retry, and a rejected binding cannot return an observation to the
+  runtime for persistence.
+- Focused client tests are **17/17 PASS**. The broader client, trusted-time
+  composition and durable restart/restore matrix is **29/29 PASS**; targeted
+  analyzer, formatting and diff checks are **PASS**. Independent security
+  review **ACCEPTS** the complete final diff.
+- **NOT RUN / BLOCKED:** no listener, real key custody, enabled profile,
+  installed-device revocation race or production issuer evidence is claimed.
+  Connected operation remains unmounted and disabled in shipping profiles.
+
 ## 2026-11-02 exact-head `3c02a2bf` hosted CI receipt
 
 - Draft PR #752 was updated by the exact authorized non-force fast-forward to
@@ -20,12 +44,14 @@
   Kernel moderate records). Runtime/Python, platform and added-line credential
   scans are **PASS**. GitGuardian's external status is terminal **NEUTRAL**;
   this does not resolve or dismiss its historical findings.
-- Native run `41485851468` completed with overall **FAIL/INCOMPLETE** because
-  both `macos-latest` jobs were cancelled before a runner was assigned and ran
-  no steps. Android full analyze/test/gallery/debug package, isolated Android,
-  Windows PC and isolated Windows jobs are **PASS**. iPad/iOS and isolated iOS
-  are **NOT RUN**, not product failures. These are unsigned CI artifacts, not
-  signed or installed-device acceptance.
+- Native run `41485851468` is **PASS** after the specifically scoped
+  failed-jobs-only retry. The original two `macos-latest` jobs were cancelled
+  before runner assignment because GitHub reported hosted macOS arm64 capacity;
+  no steps ran. Retry iPad/iOS job `125453513572` and isolated iOS QA job
+  `125453512230` both acquired runners and are **PASS**. Android full
+  analyze/test/gallery/debug package, isolated Android, Windows PC and isolated
+  Windows retain their original **PASS** results and were not rerun. These are
+  unsigned CI artifacts, not signed or installed-device acceptance.
 
 ## 2026-11-02 receipt-bound sale completion checkpoint
 
