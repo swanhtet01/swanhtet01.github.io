@@ -7,6 +7,38 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private trusted-time per-client stream prerequisite
+
+- **SOURCE PASS / CONTRACT-ONLY / UNMOUNTED:** implementation
+  `17774b345850aa5037a83698c0862839b71be3c1` (repository tree
+  `7f0e0bdceb9622c716539b75ad83b9a816c1b67d`, native tree
+  `317ce6c0afd695adb1cdcd99246cbf224c2b973c`, native `lib/` tree
+  `4dadc4d7298b271691fb75fd441c652a5111ed81`, binary patch SHA-256
+  `1a5f97b3374517cc4a50d14e8fa7420f49dcb731b1f1ba73fd5b46080d055342`)
+  defines challenge-independent authority-signed entries and device-signed
+  acknowledgements for exact per-client trusted-time streams.
+- Entries bind full client/session/coordinator-binding scope, authority key
+  identity/generation, epoch, per-client sequence, predecessor digest and
+  bounded time. Continuity entries can preserve an immutable no-gap chain but
+  cannot grant live time. Acknowledgements bind the exact resulting entry
+  head, client signing identity, boot session and monotonic receipt.
+- Exact canonical schemas enforce 8 KiB limits, deterministic domain-separated
+  digests and canonical 64-byte Ed25519 encodings. Sequence/predecessor,
+  independent-stream, substitution, malformed/noncanonical and altered-ack
+  cases fail closed. Targeted analyzer is **PASS**; focused tests are **5/5
+  PASS**; diff checks are **PASS**. Independent review first returned **HOLD**
+  for regex-valid but noncanonical base64url signatures, then **ACCEPT** after
+  decode/length/re-encode validation and negative tests. Reviewed file SHA-256
+  identities are `f5ec7a0f43ca0b8a44e66d9afa46d24ab8d49997c1fcbf8a644635da15bfe80c`
+  for the contract and
+  `923b3c9cada8dd9c9e5f83fec3cbe2fa07426688439abf3a66a32c22d5059c51`
+  for its tests.
+- **BLOCKED / NOT RUN:** no issuer persistence, sequence allocator, client
+  stream-head acceptance, acknowledgement transport, protected clock/signer,
+  restore recovery or runtime mount exists. The contracts are not
+  self-authenticating without injected verification, and authority issuance
+  remains unavailable/default-off.
+
 ### Private trusted-time client-head prerequisite
 
 - **SOURCE PASS / EVIDENCE-ONLY / UNMOUNTED:** implementation
