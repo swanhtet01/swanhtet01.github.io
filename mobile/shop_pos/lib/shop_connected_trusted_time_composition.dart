@@ -114,7 +114,8 @@ final class ShopConnectedTrustedTimeComposition {
   }
 }
 
-final class ShopConnectedTrustedTimeRuntime {
+final class ShopConnectedTrustedTimeRuntime
+    implements ShopConnectedSiteCoordinatorTimeAuthority {
   const ShopConnectedTrustedTimeRuntime._({
     required this._scope,
     required this._approval,
@@ -175,6 +176,21 @@ final class ShopConnectedTrustedTimeRuntime {
     coordinatorBindingDigest: _scope.coordinatorBindingDigest,
     coordinatorBindingGeneration: _scope.coordinatorBindingGeneration,
   );
+
+  @override
+  Future<int> readValidatedNowMillis({
+    required String tenantId,
+    required String siteId,
+  }) async {
+    if (tenantId != _scope.workspaceId || siteId != _scope.siteId) {
+      throw StateError('connected_trusted_time_scope_mismatch');
+    }
+    final effective = await effectiveTimeMillis();
+    if (effective == null) {
+      throw StateError('connected_trusted_time_unavailable');
+    }
+    return effective;
+  }
 }
 
 ConnectedTrustedTimeAuthorityApprovalV1 _snapshotApproval(

@@ -52,6 +52,27 @@ void main() {
       expect(challenge.coordinatorBindingDigest, '2' * 64);
       expect(challenge.coordinatorBindingGeneration, 7);
       expect(await runtime.effectiveTimeMillis(), 1800000000000);
+      expect(
+        await runtime.readValidatedNowMillis(
+          tenantId: 'workspace_1',
+          siteId: 'site_1',
+        ),
+        1800000000000,
+      );
+      await expectLater(
+        runtime.readValidatedNowMillis(
+          tenantId: 'workspace_2',
+          siteId: 'site_1',
+        ),
+        throwsA(_state('connected_trusted_time_scope_mismatch')),
+      );
+      await expectLater(
+        runtime.readValidatedNowMillis(
+          tenantId: 'workspace_1',
+          siteId: 'site_2',
+        ),
+        throwsA(_state('connected_trusted_time_scope_mismatch')),
+      );
     },
   );
 
@@ -80,6 +101,10 @@ void main() {
       throwsA(_state('exchange_unavailable')),
     );
     expect(await runtime.effectiveTimeMillis(), isNull);
+    await expectLater(
+      runtime.readValidatedNowMillis(tenantId: 'workspace_1', siteId: 'site_1'),
+      throwsA(_state('connected_trusted_time_unavailable')),
+    );
   });
 
   test(
