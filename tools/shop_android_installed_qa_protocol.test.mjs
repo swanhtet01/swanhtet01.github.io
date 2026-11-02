@@ -657,4 +657,3 @@ test('protocol source imports no process filesystem network or provider executio
   assert.doesNotMatch(source, /\b(?:fetch|spawn|execFile|execSync|Bun|Deno)\s*\(/)
   assert.doesNotMatch(source, /(?:googleapis|@google-cloud|firebase-admin|aws-sdk)/)
 })
-
