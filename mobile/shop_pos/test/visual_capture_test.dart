@@ -816,6 +816,83 @@ void main() {
     );
   }
 
+  for (final (width, language) in [
+    (390.0, 'en'),
+    (390.0, 'my'),
+    (820.0, 'en'),
+    (820.0, 'my'),
+  ]) {
+    testWidgets(
+      'Android design tokens and controls remain safe at ${width.toInt()}px $language 1.3x',
+      (tester) async {
+        tester.view.physicalSize = Size(width, width == 390 ? 844 : 1000);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = await _sampleShop(myanmar: language == 'my');
+        try {
+          await tester.pumpWidget(
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
+              child: ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
+                initialCounter: true,
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                initialMyanmar: language == 'my',
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+          final theme = app.theme!;
+          expect(theme.scaffoldBackgroundColor, const Color(0xfff7f3ec));
+          expect(theme.colorScheme.surface, Colors.white);
+          expect(theme.colorScheme.onSurface, const Color(0xff111318));
+          expect(theme.colorScheme.primary, const Color(0xff2563eb));
+          expect(theme.materialTapTargetSize, MaterialTapTargetSize.padded);
+          expect(
+            theme.textTheme.bodyMedium?.fontFamily,
+            language == 'my' ? 'NotoSansMyanmarUI' : 'Inter',
+          );
+          expect(
+            theme.textTheme.bodyMedium?.height,
+            language == 'my' ? 1.6 : 1.45,
+          );
+
+          final camera = find.byKey(const ValueKey('shop-camera-scan'));
+          expect(camera, findsOneWidget);
+          expect(tester.getSize(camera).width, greaterThanOrEqualTo(48));
+          expect(tester.getSize(camera).height, greaterThanOrEqualTo(48));
+          final add = find
+              .byTooltip(language == 'my' ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale')
+              .first;
+          expect(tester.getSize(add).width, greaterThanOrEqualTo(48));
+          expect(tester.getSize(add).height, greaterThanOrEqualTo(48));
+          expect(tester.takeException(), isNull);
+
+          if (_capture) {
+            await _resolveVisibleProductPhotos(tester);
+            await expectLater(
+              find.byKey(_captureKey),
+              matchesGoldenFile(
+                'goldens/shop_design_system_${width.toInt()}_${language}_large.png',
+              ),
+            );
+          }
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
   for (final (width, height, language) in [
     (320.0, 800.0, 'en'),
     (390.0, 844.0, 'en'),

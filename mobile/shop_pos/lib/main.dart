@@ -376,8 +376,9 @@ class _ShopAppState extends State<ShopApp> {
         ? const ['NotoSansMyanmar', 'Inter']
         : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'];
     final tracking = _myanmar ? 0.0 : -0.4;
-    const ink = Color(0xff171b2c);
-    const border = Color(0xffdce2ed);
+    const canvas = Color(0xfff7f3ec);
+    const ink = Color(0xff111318);
+    const border = Color(0xffded8cf);
     const accent = Color(0xff2563eb);
     return MaterialApp(
       navigatorKey: _navigatorKey,
@@ -440,7 +441,9 @@ class _ShopAppState extends State<ShopApp> {
               onSurface: ink,
               outline: border,
             ),
-        scaffoldBackgroundColor: const Color(0xfff5f7fb),
+        scaffoldBackgroundColor: canvas,
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+        visualDensity: VisualDensity.standard,
         textTheme:
             TextTheme(
               headlineMedium: TextStyle(
@@ -569,6 +572,18 @@ class _ShopAppState extends State<ShopApp> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(11),
             ),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+        ),
+        iconButtonTheme: const IconButtonThemeData(
+          style: ButtonStyle(
+            minimumSize: WidgetStatePropertyAll(Size.square(48)),
+            tapTargetSize: MaterialTapTargetSize.padded,
           ),
         ),
         inputDecorationTheme: const InputDecorationTheme(
