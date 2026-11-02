@@ -7,6 +7,25 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private historical-schema fixture successor
+
+- **PASS / test-only:** `eee4671683d87b76c1a88245704b890302341379`
+  (tree `53e87c223c36f2e8d90487b40519183a2b9f8805`, native tree
+  `838fa22920d61bda9e9962dcbf6fb4198f25c929`, binary patch SHA-256
+  `ae7f2a2e28dbe59a2d1a2015b02aeca067dffa003b331daffbca86e598f8e9df`)
+  advances the shared historical-fixture inventory to schema v36 and removes
+  v36 authority-checkpoint objects before constructing claimed v5, v15,
+  v17-v19, v21, v30-v32 histories. Production migration and fail-closed
+  verification code are unchanged.
+- The ten previously stale/failing historical cases are **10/10 PASS**. The
+  independently identified v5 shift and v17 cash-movement migration/restore
+  cases are **2/2 PASS**; shared inventory guard tests are **2/2 PASS**; the
+  enrollment regression remains **1/1 PASS**. Targeted nine-file analyzer,
+  formatting and diff checks are **PASS**.
+- Independent review is **ACCEPT** after verifying v36 trigger/table teardown
+  order, complete affected fixture coverage, and test-only scope. The prior
+  historical-fixture FAIL recorded below is superseded by this evidence.
+
 ### Private scoped LAN coordinator composition successor
 
 - **PASS / local-only:** implementation
