@@ -161,6 +161,45 @@ class ShopSaleLineInput {
   final int quantity;
 }
 
+/// Redacted, count-only SQLite snapshot for synthetic installed-QA evidence.
+///
+/// [storeIdentitySha256] binds a restored database to its immutable local
+/// store identity without exposing that identity. [snapshotSha256] binds the
+/// complete canonical state of every table underlying the six metrics. The
+/// private rows are hashed inside the transaction and never leave this API.
+class ShopQaMetricsSnapshot {
+  const ShopQaMetricsSnapshot({
+    required this.schemaVersion,
+    required this.storeIdentitySha256,
+    required this.sales,
+    required this.stockMovements,
+    required this.receipts,
+    required this.outbox,
+    required this.onHand,
+    required this.shifts,
+    required this.snapshotSha256,
+  });
+
+  final int schemaVersion;
+  final String storeIdentitySha256;
+  final int sales;
+  final int stockMovements;
+  final int receipts;
+  final int outbox;
+  final int onHand;
+  final int shifts;
+  final String snapshotSha256;
+
+  Map<String, int> get counts => <String, int>{
+    'sales': sales,
+    'stockMovements': stockMovements,
+    'receipts': receipts,
+    'outbox': outbox,
+    'onHand': onHand,
+    'shifts': shifts,
+  };
+}
+
 class ShopCashShiftChangedException implements Exception {
   const ShopCashShiftChangedException();
 }
@@ -19957,6 +19996,83 @@ class ShopDatabase extends _$ShopDatabase {
     final query = selectOnly(shopSyncOutbox)..addColumns([count]);
     return await query.map((row) => row.read(count) ?? 0).getSingle();
   }
+
+  /// Reads the synthetic installed-QA counters from one SQLite snapshot.
+  ///
+  /// The single statement is deliberately count-only. It never selects row
+  /// payloads, and the immutable store reference is hashed before leaving this
+  /// method. The surrounding read transaction prevents a writer from mixing
+  /// counts from different database states.
+  Future<ShopQaMetricsSnapshot> readQaMetricsSnapshot() =>
+      transaction(() async {
+        final row = await customSelect('''
+      SELECT
+        (SELECT COUNT(*) FROM shop_sales) AS sales,
+        (SELECT COUNT(*) FROM shop_stock_movements) AS stock_movements,
+        (SELECT COUNT(*) FROM shop_sales AS sale
+          WHERE EXISTS (SELECT 1 FROM shop_sale_lines AS line
+            WHERE line.sale_id = sale.id)) AS receipts,
+        (SELECT COUNT(*) FROM shop_sync_outbox) AS outbox,
+        (SELECT COALESCE(SUM(on_hand), 0) FROM shop_products) AS on_hand,
+        (SELECT COUNT(*) FROM shop_cash_shifts) AS shifts,
+        (SELECT store_ref FROM shop_store_identity
+          WHERE singleton = 1) AS store_ref
+    ''').getSingle();
+        final counts = <String, int>{
+          'sales': row.read<int>('sales'),
+          'stockMovements': row.read<int>('stock_movements'),
+          'receipts': row.read<int>('receipts'),
+          'outbox': row.read<int>('outbox'),
+          'onHand': row.read<int>('on_hand'),
+          'shifts': row.read<int>('shifts'),
+        };
+        final storeIdentitySha256 = crypto.sha256
+            .convert(utf8.encode(row.read<String>('store_ref')))
+            .toString();
+        final state = <String, Object>{};
+        for (final entry in const <String, String>{
+          'shop_products': 'id',
+          'shop_sales': 'id',
+          'shop_sale_lines': 'id',
+          'shop_stock_movements': 'id',
+          'shop_sync_outbox': 'operation_id',
+          'shop_cash_shifts': 'id',
+        }.entries) {
+          final rows = await customSelect(
+            'SELECT * FROM ${entry.key} ORDER BY ${entry.value}',
+          ).get();
+          state[entry.key] = <Map<String, Object?>>[
+            for (final row in rows)
+              Map<String, Object?>.fromEntries(
+                row.data.entries.toList()
+                  ..sort((left, right) => left.key.compareTo(right.key)),
+              ),
+          ];
+        }
+        final snapshotSha256 = crypto.sha256
+            .convert(
+              utf8.encode(
+                jsonEncode(<String, Object>{
+                  'contract': 'supermega.shop.synthetic-qa-db-snapshot.v1',
+                  'schemaVersion': schemaVersion,
+                  'storeIdentitySha256': storeIdentitySha256,
+                  'state': state,
+                }),
+              ),
+            )
+            .toString();
+        return ShopQaMetricsSnapshot(
+          schemaVersion: schemaVersion,
+          storeIdentitySha256: storeIdentitySha256,
+          sales: counts['sales']!,
+          stockMovements: counts['stockMovements']!,
+          receipts: counts['receipts']!,
+          outbox: counts['outbox']!,
+          onHand: counts['onHand']!,
+          shifts: counts['shifts']!,
+          snapshotSha256: snapshotSha256,
+        );
+      });
 
   Future<int> stageMenuCandidates({
     required String batchId,

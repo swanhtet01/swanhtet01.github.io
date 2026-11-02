@@ -116,7 +116,10 @@ final class ShopQaEvidenceStore {
         throw StateError('shop_qa_evidence_entry_invalid');
       }
       final name = _basename(entity.path);
-      if (name == shopQaLoopbackReceiptEvidenceFileName) continue;
+      if (name == shopQaLoopbackReceiptEvidenceFileName ||
+          name == shopQaMetricsEvidenceFileName) {
+        continue;
+      }
       if (!_fileNamePattern.hasMatch(name)) {
         throw StateError('shop_qa_evidence_filename_invalid');
       }

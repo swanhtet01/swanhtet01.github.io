@@ -79,6 +79,10 @@ void main() {
         '${scope.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
         '$shopQaLoopbackReceiptEvidenceFileName',
       ).writeAsString('{}', flush: true);
+      await File(
+        '${scope.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
+        '$shopQaMetricsEvidenceFileName',
+      ).writeAsString('{}', flush: true);
 
       final staged = await store.stageLatestEncryptedBackup();
       expect(staged, isNotNull);
