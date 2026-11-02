@@ -7124,6 +7124,8 @@ END
         );
         await tester.tap(find.byKey(const ValueKey('shop-member-card-apply')));
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Mobile money'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Mobile money'));
         await tester.pumpAndSettle();
         expect(
