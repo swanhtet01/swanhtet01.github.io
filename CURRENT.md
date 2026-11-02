@@ -25,6 +25,33 @@
   at step 638/668 on stale PostgreSQL 17 rehearsal evidence; Dependency
   Security remains **FAIL/BLOCKED** on the known unsupported minimatch paths.
 
+## 2026-11-03 installed Android selector checkpoint
+
+- **SOURCE PASS / PRIVATE:** implementation
+  `19c452772997b6805b40bf34fe5074413c0a6280` (tree
+  `9db0646521e3c7b007b79d8f4096893d42486469`, parent Native-CI receipt
+  `953b646c0b36d2b4f4e71754939d99e1876e0a35`) adds stable,
+  locale-independent semantic identifiers to existing installed-journey
+  controls without adding an API, bypass or alternate transaction path. The
+  six-file patch SHA-256 is
+  `a482900f7e855a758e62feabb05e264623b740009a07d9715a8b3eece4f66b9c`.
+- Identifiers cover empty-catalog add, product fields/barcode reveal/save,
+  dynamic catalog row, cart review, cash/given/confirm, startup start/confirm,
+  restore choose/password/confirm and backup password/confirm/export. Existing
+  receipt and restored-state selectors remain intact. Production changed-line
+  scope is 93 lines across four files, including a 12-line metadata-only
+  selector extension.
+- The initial broad test run retained one pre-fix responsive-layout test-design
+  failure with 105 other tests passing. Final-source EN/MY responsive,
+  startup, backup and restore selector tests are **6/6 PASS**; the post-review
+  journey rerun is **2/2 PASS**; targeted analyzer and diff checks are
+  **PASS**. Independent review **ACCEPTS** the corrected final diff.
+- **NOT RUN / BLOCKED:** no ADB, UIAutomator, APK installation, emulator,
+  device, force-stop or restore execution is claimed. The earlier uncommitted
+  runner draft was independently **HELD** for evidence-staging, restored-count,
+  delta, isolation and crash-recovery gaps and was removed completely before
+  this bounded selector implementation began.
+
 ## 2026-11-03 Android synthetic receipt evidence checkpoint
 
 - **SOURCE PASS / PRIVATE:** implementation
