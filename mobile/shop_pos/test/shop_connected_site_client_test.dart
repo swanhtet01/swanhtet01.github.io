@@ -7,6 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_site_client.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_authority.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_contract.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_exchange.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
 
 const _now = '2026-10-31T12:00:00.000Z';
@@ -56,6 +59,173 @@ void main() {
       );
     },
   );
+
+  test('v2 trusted time sends only exact bound canonical request', () async {
+    final wire = _trustedTimeWire(signer);
+    transport.handler = (request) async {
+      expect(request.uri.path, connectedTrustedTimeV2Path);
+      expect(request.method, 'POST');
+      expect(request.certificateSha256, _certificate);
+      expect(request.headers, isNot(contains('authorization')));
+      final decoded = ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+        request.body,
+      );
+      expect(decoded.wireRequestDigest, wire.wireRequestDigest);
+      expect(decoded.request.approvalDigest, _approval().approvalDigest);
+      expect(
+        utf8.decode(request.body),
+        isNot(contains(_approval().ownerAuthoritySignature)),
+      );
+      final response = ConnectedTrustedTimeWireResponseV2(
+        request: decoded,
+        observation: _trustedTimeObservation(decoded.request.challenge),
+      );
+      return ConnectedSiteHttpResponse(
+        statusCode: 200,
+        contentType: 'application/json; charset=utf-8',
+        body: Uint8List.fromList(response.canonicalBytes),
+      );
+    };
+    final exchange = SiteCoordinatorTrustedTimeObservationExchange(
+      client: _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      ),
+    );
+
+    final observation = await exchange.observe(
+      approval: _approval(),
+      challenge: wire.request.challenge,
+    );
+
+    expect(
+      observation.challenge.requestDigest,
+      wire.request.challenge.requestDigest,
+    );
+    expect(transport.requests, hasLength(1));
+  });
+
+  test(
+    'v2 trusted time is default-off and rejects stale binding scope',
+    () async {
+      final disabled = SiteCoordinatorClient(
+        pairing: pairing,
+        bindingDigest: _binding,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+      await expectLater(
+        disabled.requestTrustedTime(_trustedTimeWire(signer)),
+        throwsStateError,
+      );
+      expect(transport.requests, isEmpty);
+
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+      for (final wire in [
+        _trustedTimeWire(signer, sessionGeneration: 2),
+        _trustedTimeWire(signer, bindingGeneration: 2),
+        _trustedTimeWire(signer, bindingDigest: 'e' * 64),
+      ]) {
+        await expectLater(
+          client.requestTrustedTime(wire),
+          throwsA(
+            isA<ConnectedSiteTransportException>().having(
+              (error) => error.code,
+              'code',
+              'trusted_time_binding_rejected',
+            ),
+          ),
+        );
+      }
+      expect(transport.requests, isEmpty);
+    },
+  );
+
+  test(
+    'v2 trusted time rejects malformed substituted and oversized replies',
+    () async {
+      final wire = _trustedTimeWire(signer);
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+      final valid = ConnectedTrustedTimeWireResponseV2(
+        request: wire,
+        observation: _trustedTimeObservation(wire.request.challenge),
+      );
+      final responses = <ConnectedSiteHttpResponse>[
+        ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'text/plain',
+          body: Uint8List.fromList(valid.canonicalBytes),
+        ),
+        ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'application/json',
+          body: Uint8List.fromList(
+            utf8.encode(
+              canonicalConnectedSiteJson({
+                ...valid.toJson(),
+                'wireRequestDigest': '0' * 64,
+              }),
+            ),
+          ),
+        ),
+        ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'application/json',
+          body: Uint8List(connectedTrustedTimeWireMaximumBytes + 1),
+        ),
+      ];
+      for (final response in responses) {
+        transport.handler = (_) async => response;
+        await expectLater(
+          client.requestTrustedTime(wire),
+          throwsA(
+            isA<ConnectedSiteTransportException>().having(
+              (error) => error.code,
+              'code',
+              'trusted_time_response_invalid',
+            ),
+          ),
+        );
+      }
+    },
+  );
+
+  test('v2 trusted time propagates ambiguous POST without retry', () async {
+    transport.handler = (_) async =>
+        throw const ConnectedSiteTransportException(
+          'redirect_rejected',
+          ambiguous: true,
+        );
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+    );
+
+    await expectLater(
+      client.requestTrustedTime(_trustedTimeWire(signer)),
+      throwsA(
+        isA<ConnectedSiteTransportException>()
+            .having((error) => error.code, 'code', 'redirect_rejected')
+            .having((error) => error.ambiguous, 'ambiguous', isTrue),
+      ),
+    );
+    expect(transport.requests, hasLength(1));
+  });
 
   test(
     'pairing binds exact pending acknowledgement and certificate pin',
@@ -471,6 +641,62 @@ Future<SiteCommandV1> _command(_Signer signer, {int quantity = 1}) async {
     signature: signature,
   );
 }
+
+ConnectedTrustedTimeWireRequestV2 _trustedTimeWire(
+  _Signer signer, {
+  int sessionGeneration = 1,
+  int bindingGeneration = 1,
+  String bindingDigest = _binding,
+}) => ConnectedTrustedTimeWireRequestV2(
+  request: ConnectedTrustedTimeObservationRequestV1(
+    approvalDigest: _approval().approvalDigest,
+    challenge: ConnectedTrustedTimeChallengeV1(
+      workspaceId: 'workspace-1',
+      siteId: 'site-1',
+      coordinatorDeviceId: 'counter-1',
+      clientDeviceId: signer.deviceId,
+      clientFingerprint: signer.clientFingerprint,
+      sessionGeneration: sessionGeneration,
+      coordinatorBindingDigest: bindingDigest,
+      coordinatorBindingGeneration: bindingGeneration,
+      nonce: 'trusted_time_client_nonce_1',
+      bootSessionId: '3' * 64,
+      startedMonotonicMillis: 5000,
+    ),
+  ),
+);
+
+ConnectedTrustedTimeAuthorityApprovalV1 _approval() =>
+    ConnectedTrustedTimeAuthorityApprovalV1(
+      workspaceId: 'workspace-1',
+      siteId: 'site-1',
+      coordinatorDeviceId: 'counter-1',
+      coordinatorBindingDigest: _binding,
+      coordinatorBindingGeneration: 1,
+      authorityKeyId: 'time-key-1',
+      authorityKeyFingerprint: '4' * 64,
+      authorityKeyGeneration: 2,
+      issuedAtMillis: 1799999999000,
+      expiresAtMillis: 1800003600000,
+      ownerAuthorityKeyId: 'owner-key-1',
+      ownerAuthoritySignature: _signature,
+    );
+
+ConnectedTrustedTimeObservationV1 _trustedTimeObservation(
+  ConnectedTrustedTimeChallengeV1 challenge,
+) => ConnectedTrustedTimeObservationV1(
+  challenge: challenge,
+  authorityKeyId: 'time-key-1',
+  authorityKeyFingerprint: '4' * 64,
+  authorityKeyGeneration: 2,
+  authorityEpoch: 5,
+  authoritySequence: 1,
+  observedAtMillis: 1800000000000,
+  validUntilMillis: 1800000060000,
+  authoritySignature: _signature,
+);
+
+final _signature = base64UrlEncode(List<int>.filled(64, 7)).replaceAll('=', '');
 
 Future<void> _expectValidProof(
   _Request request,

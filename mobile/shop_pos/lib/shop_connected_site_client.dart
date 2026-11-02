@@ -7,6 +7,8 @@ import 'package:crypto/crypto.dart' as crypto;
 
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_site_attempt_store.dart';
+import 'shop_connected_trusted_time_authority.dart';
+import 'shop_connected_trusted_time_contract.dart';
 import 'shop_site_coordinator.dart';
 
 abstract interface class ConnectedSiteDeviceSigner {
@@ -413,14 +415,71 @@ class SiteCoordinatorClient {
     return health;
   }
 
+  /// Requests one signed observation for an already retained challenge.
+  ///
+  /// This method never retries an ambiguous POST. The caller must abandon the
+  /// retained capability and create a fresh challenge after any failure.
+  Future<ConnectedTrustedTimeObservationV1> requestTrustedTime(
+    ConnectedTrustedTimeWireRequestV2 wire,
+  ) async {
+    _requireEnabled();
+    _requireSignerIdentity();
+    final binding = await _approvedBinding();
+    final challenge = wire.request.challenge;
+    if (challenge.workspaceId != binding.workspaceId ||
+        challenge.siteId != binding.siteId ||
+        challenge.coordinatorDeviceId != binding.coordinatorDeviceId ||
+        challenge.clientDeviceId != binding.clientDeviceId ||
+        challenge.clientFingerprint != binding.clientFingerprint ||
+        challenge.sessionGeneration != binding.sessionGeneration ||
+        challenge.coordinatorBindingDigest != binding.bindingDigest ||
+        challenge.coordinatorBindingGeneration != binding.approvalGeneration) {
+      throw const ConnectedSiteTransportException(
+        'trusted_time_binding_rejected',
+      );
+    }
+    final response = await _send(
+      path: connectedTrustedTimeV2Path,
+      method: 'POST',
+      body: Uint8List.fromList(wire.canonicalBytes),
+      protocolVersion: connectedTrustedTimeWireProtocolVersion,
+      approvedBinding: binding,
+    );
+    if (response.contentType?.split(';').first.trim().toLowerCase() !=
+            ContentType.json.mimeType ||
+        response.body.isEmpty ||
+        response.body.length > connectedTrustedTimeWireMaximumBytes) {
+      throw const ConnectedSiteTransportException(
+        'trusted_time_response_invalid',
+      );
+    }
+    try {
+      return ConnectedTrustedTimeWireResponseV2.fromCanonicalBytes(
+        response.body,
+        request: wire,
+      ).observation;
+    } on FormatException {
+      throw const ConnectedSiteTransportException(
+        'trusted_time_response_invalid',
+      );
+    }
+  }
+
   Future<ConnectedSiteHttpResponse> _send({
     required String path,
     required String method,
     required Uint8List body,
     bool authenticate = true,
+    int protocolVersion = connectedSiteProtocolVersion,
+    ConnectedSiteApprovedBinding? approvedBinding,
   }) async {
     _requireEnabled();
-    final binding = authenticate ? await _approvedBinding() : null;
+    if (!authenticate && approvedBinding != null) {
+      throw const ConnectedSiteTransportException('request_binding_rejected');
+    }
+    final binding = authenticate
+        ? approvedBinding ?? await _approvedBinding()
+        : null;
     final headers = <String, String>{
       HttpHeaders.acceptHeader: ContentType.json.mimeType,
       if (body.isNotEmpty)
@@ -446,6 +505,7 @@ class SiteCoordinatorClient {
         canonicalTarget: path,
         bodySha256: crypto.sha256.convert(body).toString(),
         signature: '',
+        protocolVersion: protocolVersion,
       );
       final signature = await signer.sign(proof.signingBytes);
       headers.addAll({
