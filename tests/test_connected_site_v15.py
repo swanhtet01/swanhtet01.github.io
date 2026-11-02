@@ -494,6 +494,16 @@ class ConnectedSiteV15Tests(unittest.TestCase):
         self.assertEqual(len(self.repository.events), 1)
         self.assertEqual(len(self.repository.upload_batches), 1)
 
+    def test_old_ack_can_replay_after_a_later_batch_advances_cursor(self) -> None:
+        first = _upload(self.a, key=DEVICE_A, cursor=1, command_id="command-1", aggregate_id="basket-1")
+        later = _upload(self.a, key=DEVICE_A, cursor=2, command_id="command-2", aggregate_id="basket-2")
+        self.assertEqual(self._reconcile(self.a, first, after=0)[0].state, "accepted")
+        self.assertEqual(self._reconcile(self.a, later, after=1)[0].state, "accepted")
+        self.assertEqual(self._reconcile(self.a, first, after=0)[0].state, "replayed")
+        self.assertEqual(len(self.repository.events), 2)
+        self.assertEqual(self.repository.upload_cursors[("workspace-a", "site-a", "device-a")], 2)
+        self.assertEqual(len(self.repository.upload_batches), 2)
+
     def test_postgres_rejects_autocommit_before_first_query(self) -> None:
         class Connection:
             autocommit = True
