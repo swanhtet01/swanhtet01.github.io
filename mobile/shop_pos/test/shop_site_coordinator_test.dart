@@ -8,6 +8,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_coordinator_host.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_authority.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_contract.dart';
 import 'package:supermega_shop/shop_connected_runtime.dart';
 import 'package:supermega_shop/shop_offline_staff_lease.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
@@ -283,6 +285,201 @@ void main() {
       expect(result.statusCode, HttpStatus.serviceUnavailable);
       expect(result.body['error'], 'connected_site_disabled');
     });
+
+    test(
+      'trusted-time v2 is separately default-off and dependency silent',
+      () async {
+        final authority = _TimeAuthority();
+        final server = SiteCoordinatorServer(
+          runtimeEnabled: true,
+          trustedTimeAuthority: authority,
+          pairing: nonces,
+          requestAuthenticator: authenticator,
+          commands: commands,
+          replication: replication,
+          health: _Health(),
+          pairingResponse: _pairing(),
+          now: () => _now,
+        );
+
+        final response = await server.dispatch(
+          _request('POST', connectedTrustedTimeV2Path),
+        );
+
+        expect(response.statusCode, HttpStatus.notFound);
+        expect(authority.calls, 0);
+        expect(requestNonces.consumed, isEmpty);
+      },
+    );
+
+    test(
+      'trusted-time v2 authenticates exact scope and returns canonical wire',
+      () async {
+        _enroll(clientKeys);
+        final authority = _TimeAuthority();
+        final server = SiteCoordinatorServer(
+          runtimeEnabled: true,
+          trustedTimeV2Enabled: true,
+          trustedTimeAuthority: authority,
+          pairing: nonces,
+          requestAuthenticator: authenticator,
+          commands: commands,
+          deviceEnrollment: enrollment,
+          replication: replication,
+          health: _Health(),
+          pairingResponse: _pairing(),
+          now: () => _now,
+        );
+        final wire = _trustedTimeWire();
+
+        final signed = await _signedRequest(
+          'POST',
+          connectedTrustedTimeV2Path,
+          body: wire.canonicalBytes,
+          contentType: true,
+          nonce: 'request_nonce_trusted_time_v2_01',
+          protocolVersion: connectedTrustedTimeWireProtocolVersion,
+        );
+        final response = await server.dispatch(signed);
+        final replay = await server.dispatch(signed);
+
+        expect(response.statusCode, HttpStatus.ok);
+        expect(response.canonicalJson, isTrue);
+        final decoded = ConnectedTrustedTimeWireResponseV2.fromJson(
+          response.body,
+          request: wire,
+        );
+        expect(
+          decoded.observation.challenge.requestDigest,
+          wire.request.challenge.requestDigest,
+        );
+        expect(authority.calls, 1);
+        expect(replay.statusCode, HttpStatus.forbidden);
+        expect(siteAuthorization.calls, 0);
+        expect(commands.handled, 0);
+      },
+    );
+
+    test(
+      'trusted-time proof version and route cannot be substituted',
+      () async {
+        _enroll(clientKeys);
+        final authority = _TimeAuthority();
+        final server = SiteCoordinatorServer(
+          runtimeEnabled: true,
+          trustedTimeV2Enabled: true,
+          trustedTimeAuthority: authority,
+          pairing: nonces,
+          requestAuthenticator: authenticator,
+          commands: commands,
+          deviceEnrollment: enrollment,
+          replication: replication,
+          health: _Health(),
+          pairingResponse: _pairing(),
+          now: () => _now,
+        );
+        final wire = _trustedTimeWire();
+
+        final v1Proof = await server.dispatch(
+          await _signedRequest(
+            'POST',
+            connectedTrustedTimeV2Path,
+            body: wire.canonicalBytes,
+            contentType: true,
+            nonce: 'request_nonce_trusted_time_v1_01',
+          ),
+        );
+        final v2OnV1 = await _signedProof(
+          method: 'GET',
+          target: connectedSiteSnapshotPath,
+          body: const [],
+          nonce: 'request_nonce_trusted_time_route_01',
+          protocolVersion: connectedTrustedTimeWireProtocolVersion,
+        );
+
+        expect(v1Proof.statusCode, HttpStatus.forbidden);
+        expect(await authenticator.verifyAndConsume(v2OnV1), isFalse);
+        expect(authority.calls, 0);
+        expect(requestNonces.consumed, isEmpty);
+      },
+    );
+
+    test(
+      'trusted-time malformed, substituted and unavailable paths fail closed',
+      () async {
+        _enroll(clientKeys);
+        SiteCoordinatorServer serverFor(
+          ConnectedTrustedTimeCoordinatorAuthority authority,
+        ) => SiteCoordinatorServer(
+          runtimeEnabled: true,
+          trustedTimeV2Enabled: true,
+          trustedTimeAuthority: authority,
+          pairing: nonces,
+          requestAuthenticator: authenticator,
+          commands: commands,
+          deviceEnrollment: enrollment,
+          replication: replication,
+          health: _Health(),
+          pairingResponse: _pairing(),
+          now: () => _now,
+        );
+        final malformed = await serverFor(_TimeAuthority()).dispatch(
+          await _signedRequest(
+            'POST',
+            connectedTrustedTimeV2Path,
+            body: utf8.encode('{}'),
+            contentType: true,
+            nonce: 'request_nonce_trusted_time_bad_01',
+            protocolVersion: connectedTrustedTimeWireProtocolVersion,
+          ),
+        );
+        final wrongScope = _trustedTimeWire(siteId: 'site_2');
+        final scopeResponse = await serverFor(_TimeAuthority()).dispatch(
+          await _signedRequest(
+            'POST',
+            connectedTrustedTimeV2Path,
+            body: wrongScope.canonicalBytes,
+            contentType: true,
+            nonce: 'request_nonce_trusted_time_scope_01',
+            protocolVersion: connectedTrustedTimeWireProtocolVersion,
+          ),
+        );
+        final wire = _trustedTimeWire();
+        final unavailable =
+            await serverFor(
+              const UnavailableConnectedTrustedTimeCoordinatorAuthority(),
+            ).dispatch(
+              await _signedRequest(
+                'POST',
+                connectedTrustedTimeV2Path,
+                body: wire.canonicalBytes,
+                contentType: true,
+                nonce: 'request_nonce_trusted_time_unavailable_01',
+                protocolVersion: connectedTrustedTimeWireProtocolVersion,
+              ),
+            );
+        final substituted =
+            await serverFor(_TimeAuthority(substituteChallenge: true)).dispatch(
+              await _signedRequest(
+                'POST',
+                connectedTrustedTimeV2Path,
+                body: wire.canonicalBytes,
+                contentType: true,
+                nonce: 'request_nonce_trusted_time_substitute_01',
+                protocolVersion: connectedTrustedTimeWireProtocolVersion,
+              ),
+            );
+
+        expect(malformed.statusCode, HttpStatus.badRequest);
+        expect(scopeResponse.statusCode, HttpStatus.forbidden);
+        expect(unavailable.statusCode, HttpStatus.serviceUnavailable);
+        expect(substituted.statusCode, HttpStatus.internalServerError);
+        expect(
+          substituted.body['error'],
+          'trusted_time_observation_binding_failed',
+        );
+      },
+    );
 
     test(
       'command dispatch stays paused until runtime resumes writes',
@@ -849,6 +1046,37 @@ void main() {
       expect(requestNonces.consumed, isEmpty);
     });
 
+    test('v1 request-proof signing bytes remain byte-identical', () {
+      final proof = CoordinatorRequestProof(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        coordinatorDeviceId: 'device_counter',
+        clientFingerprint: 'a' * 64,
+        claimedDeviceId: 'device_1',
+        issuedAt: DateTime.utc(2026, 10, 31, 12),
+        nonce: 'request_nonce_v1_golden_0001',
+        method: 'POST',
+        canonicalTarget: connectedSiteCommandsPath,
+        bodySha256: 'b' * 64,
+        signature: '',
+      );
+
+      expect(
+        utf8.decode(proof.signingBytes),
+        '{"bodySha256":"${'b' * 64}",'
+        '"canonicalTarget":"/v1/commands",'
+        '"claimedDeviceId":"device_1",'
+        '"clientFingerprint":"${'a' * 64}",'
+        '"coordinatorDeviceId":"device_counter",'
+        '"issuedAt":"2026-10-31T12:00:00.000Z",'
+        '"method":"POST",'
+        '"nonce":"request_nonce_v1_golden_0001",'
+        '"protocolVersion":1,'
+        '"siteId":"site_1",'
+        '"workspaceId":"workspace_1"}',
+      );
+    });
+
     test(
       'rejects unknown routes, methods, query fields and oversized bodies',
       () async {
@@ -1067,6 +1295,7 @@ Future<SiteCoordinatorRequest> _signedJsonRequest(
   required String nonce,
   DateTime? issuedAt,
   String deviceId = 'device_1',
+  int protocolVersion = connectedSiteProtocolVersion,
 }) async {
   final bytes = utf8.encode(jsonEncode(body));
   return _signedRequest(
@@ -1076,6 +1305,7 @@ Future<SiteCoordinatorRequest> _signedJsonRequest(
     nonce: nonce,
     issuedAt: issuedAt,
     deviceId: deviceId,
+    protocolVersion: protocolVersion,
     contentType: true,
   );
 }
@@ -1088,6 +1318,7 @@ Future<SiteCoordinatorRequest> _signedRequest(
   DateTime? issuedAt,
   String deviceId = 'device_1',
   bool contentType = false,
+  int protocolVersion = connectedSiteProtocolVersion,
 }) async {
   final proof = await _signedProof(
     method: method,
@@ -1096,6 +1327,7 @@ Future<SiteCoordinatorRequest> _signedRequest(
     nonce: nonce,
     issuedAt: issuedAt,
     deviceId: deviceId,
+    protocolVersion: protocolVersion,
   );
   return _request(
     method,
@@ -1120,6 +1352,7 @@ Future<CoordinatorRequestProof> _signedProof({
   required String nonce,
   DateTime? issuedAt,
   String deviceId = 'device_1',
+  int protocolVersion = connectedSiteProtocolVersion,
 }) async {
   final unsigned = CoordinatorRequestProof(
     workspaceId: 'workspace_1',
@@ -1133,6 +1366,7 @@ Future<CoordinatorRequestProof> _signedProof({
     canonicalTarget: target,
     bodySha256: crypto.sha256.convert(body).toString(),
     signature: '',
+    protocolVersion: protocolVersion,
   );
   final signature = await Ed25519().sign(
     unsigned.signingBytes,
@@ -1151,6 +1385,7 @@ CoordinatorRequestProof _copyProof(
   String? canonicalTarget,
   String? bodySha256,
   String? signature,
+  int? protocolVersion,
 }) => CoordinatorRequestProof(
   workspaceId: source.workspaceId,
   siteId: source.siteId,
@@ -1163,6 +1398,7 @@ CoordinatorRequestProof _copyProof(
   canonicalTarget: canonicalTarget ?? source.canonicalTarget,
   bodySha256: bodySha256 ?? source.bodySha256,
   signature: signature ?? source.signature,
+  protocolVersion: protocolVersion ?? source.protocolVersion,
 );
 
 Map<String, String> _proofHeaders({
@@ -1177,6 +1413,27 @@ Map<String, String> _proofHeaders({
   'x-supermega-request-nonce': nonce,
   'x-supermega-request-signature': signature,
 };
+
+ConnectedTrustedTimeWireRequestV2 _trustedTimeWire({
+  String siteId = 'site_1',
+}) => ConnectedTrustedTimeWireRequestV2(
+  request: ConnectedTrustedTimeObservationRequestV1(
+    approvalDigest: '5' * 64,
+    challenge: ConnectedTrustedTimeChallengeV1(
+      workspaceId: 'workspace_1',
+      siteId: siteId,
+      coordinatorDeviceId: 'device_counter',
+      clientDeviceId: 'device_1',
+      clientFingerprint: _fingerprint,
+      sessionGeneration: 1,
+      coordinatorBindingDigest: '6' * 64,
+      coordinatorBindingGeneration: 1,
+      nonce: 'trusted_time_endpoint_nonce_1',
+      bootSessionId: '7' * 64,
+      startedMonotonicMillis: 5000,
+    ),
+  ),
+);
 
 CoordinatorPairingV1 _pairing({
   String workspaceId = 'workspace_1',
@@ -1323,6 +1580,47 @@ class _Enrollment implements CoordinatorDeviceEnrollmentAuthorizer {
     required String deviceId,
     required String clientFingerprint,
   }) async => state;
+}
+
+class _TimeAuthority implements ConnectedTrustedTimeCoordinatorAuthority {
+  _TimeAuthority({this.substituteChallenge = false});
+
+  final bool substituteChallenge;
+  int calls = 0;
+
+  @override
+  Future<ConnectedTrustedTimeObservationV1> observe(
+    ConnectedTrustedTimeObservationRequestV1 request,
+  ) async {
+    calls += 1;
+    final source = request.challenge;
+    final challenge = substituteChallenge
+        ? ConnectedTrustedTimeChallengeV1(
+            workspaceId: source.workspaceId,
+            siteId: 'site_2',
+            coordinatorDeviceId: source.coordinatorDeviceId,
+            clientDeviceId: source.clientDeviceId,
+            clientFingerprint: source.clientFingerprint,
+            sessionGeneration: source.sessionGeneration,
+            coordinatorBindingDigest: source.coordinatorBindingDigest,
+            coordinatorBindingGeneration: source.coordinatorBindingGeneration,
+            nonce: source.nonce,
+            bootSessionId: source.bootSessionId,
+            startedMonotonicMillis: source.startedMonotonicMillis,
+          )
+        : source;
+    return ConnectedTrustedTimeObservationV1(
+      challenge: challenge,
+      authorityKeyId: 'trusted_time_key_1',
+      authorityKeyFingerprint: '8' * 64,
+      authorityKeyGeneration: 1,
+      authorityEpoch: 1,
+      authoritySequence: 1,
+      observedAtMillis: 1800000000000,
+      validUntilMillis: 1800000060000,
+      authoritySignature: 'A' * 86,
+    );
+  }
 }
 
 class _SiteAuthorization implements CoordinatorSiteAuthorizer {

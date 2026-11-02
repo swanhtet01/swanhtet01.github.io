@@ -7,6 +7,8 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_trusted_time_authority.dart';
+import 'shop_connected_trusted_time_contract.dart';
 import 'shop_offline_staff_lease.dart';
 import 'shop_staff_authorization.dart';
 
@@ -15,6 +17,7 @@ const connectedSiteCommandsPath = '/v1/commands';
 const connectedSiteDeltaPath = '/v1/delta';
 const connectedSiteSnapshotPath = '/v1/snapshot';
 const connectedSiteHealthPath = '/v1/health';
+const connectedTrustedTimeV2Path = '/v2/trusted-time';
 
 const _pairRequestSchema = 'supermega.connected-site.pair-request.v1';
 const _pairAckSchema = 'supermega.connected-site.pair-ack.v1';
@@ -43,10 +46,15 @@ class SiteCoordinatorRequest {
 }
 
 class SiteCoordinatorResponse {
-  const SiteCoordinatorResponse({required this.statusCode, required this.body});
+  const SiteCoordinatorResponse({
+    required this.statusCode,
+    required this.body,
+    this.canonicalJson = false,
+  });
 
   final int statusCode;
   final Map<String, Object?> body;
+  final bool canonicalJson;
 }
 
 class PairingNonceClaim {
@@ -258,6 +266,7 @@ class CoordinatorRequestProof {
     required this.canonicalTarget,
     required this.bodySha256,
     required this.signature,
+    this.protocolVersion = connectedSiteProtocolVersion,
   });
 
   final String workspaceId;
@@ -271,9 +280,10 @@ class CoordinatorRequestProof {
   final String canonicalTarget;
   final String bodySha256;
   final String signature;
+  final int protocolVersion;
 
   Map<String, Object> get signingPayload => {
-    'protocolVersion': connectedSiteProtocolVersion,
+    'protocolVersion': protocolVersion,
     'workspaceId': workspaceId,
     'siteId': siteId,
     'coordinatorDeviceId': coordinatorDeviceId,
@@ -446,6 +456,7 @@ class Ed25519CoordinatorRequestAuthenticator
       final observedAt = now().toUtc();
       final issuedAt = proof.issuedAt.toUtc();
       if (maxClockSkew <= Duration.zero ||
+          !_proofVersionMatchesTarget(proof) ||
           issuedAt.isBefore(observedAt.subtract(maxClockSkew)) ||
           issuedAt.isAfter(observedAt.add(maxClockSkew)) ||
           !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:@/-]{21,127}$')
@@ -487,6 +498,16 @@ class Ed25519CoordinatorRequestAuthenticator
       return false;
     }
   }
+
+  bool _proofVersionMatchesTarget(CoordinatorRequestProof proof) =>
+      switch (proof.protocolVersion) {
+        connectedSiteProtocolVersion =>
+          proof.canonicalTarget != connectedTrustedTimeV2Path,
+        connectedTrustedTimeWireProtocolVersion =>
+          proof.canonicalTarget == connectedTrustedTimeV2Path &&
+              proof.method == 'POST',
+        _ => false,
+      };
 }
 
 abstract interface class SiteCommandHandler {
@@ -575,8 +596,11 @@ class SiteCoordinatorServer {
     this.deviceEnrollment = const CoordinatorDeviceEnrollmentUnavailable(),
     this.siteAuthorization = const CoordinatorSiteAuthorizationUnavailable(),
     this.commandCapabilities = const SiteCommandCapabilityResolverUnavailable(),
+    this.trustedTimeAuthority =
+        const UnavailableConnectedTrustedTimeCoordinatorAuthority(),
     DateTime Function()? now,
     this.runtimeEnabled = false,
+    this.trustedTimeV2Enabled = false,
     this.maxBodyBytes = 256 * 1024,
     this.requestTimeout = const Duration(seconds: 5),
     this.maxConcurrentRequests = 32,
@@ -591,12 +615,14 @@ class SiteCoordinatorServer {
   final CoordinatorDeviceEnrollmentAuthorizer deviceEnrollment;
   final CoordinatorSiteAuthorizer siteAuthorization;
   final SiteCommandCapabilityResolver commandCapabilities;
+  final ConnectedTrustedTimeCoordinatorAuthority trustedTimeAuthority;
   final SiteReplicationReader replication;
   final CoordinatorHealthProvider health;
   final CoordinatorSharedWriteAvailability sharedWriteAvailability;
   final CoordinatorPairingV1 pairingResponse;
   final DateTime Function() now;
   final bool runtimeEnabled;
+  final bool trustedTimeV2Enabled;
   final int maxBodyBytes;
   final Duration requestTimeout;
   final int maxConcurrentRequests;
@@ -744,7 +770,11 @@ class SiteCoordinatorServer {
     target.headers.contentType = ContentType.json;
     target.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     target.headers.set('x-content-type-options', 'nosniff');
-    target.write(jsonEncode(source.body));
+    target.write(
+      source.canonicalJson
+          ? canonicalConnectedSiteJson(source.body)
+          : jsonEncode(source.body),
+    );
     await target.close();
   }
 
@@ -788,6 +818,9 @@ class SiteCoordinatorServer {
         case ('GET', connectedSiteHealthPath):
           if (uri.hasQuery) return _notFound();
           return await _readHealth(request);
+        case ('POST', connectedTrustedTimeV2Path):
+          if (!trustedTimeV2Enabled || uri.hasQuery) return _notFound();
+          return await _trustedTimeV2(request, uri);
         default:
           return _notFound();
       }
@@ -1020,6 +1053,67 @@ class SiteCoordinatorServer {
     );
   }
 
+  Future<SiteCoordinatorResponse> _trustedTimeV2(
+    SiteCoordinatorRequest request,
+    Uri uri,
+  ) async {
+    if (request.body.length > connectedTrustedTimeWireMaximumBytes) {
+      return _error(HttpStatus.requestEntityTooLarge, 'request_too_large');
+    }
+    final wire = ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+      request.body,
+    );
+    final challenge = wire.request.challenge;
+    if (challenge.workspaceId != pairingResponse.workspaceId ||
+        challenge.siteId != pairingResponse.siteId ||
+        challenge.coordinatorDeviceId != pairingResponse.coordinatorDeviceId) {
+      return _error(HttpStatus.forbidden, 'trusted_time_scope_mismatch');
+    }
+    final authenticated = await _authenticatedClient(
+      request,
+      uri,
+      claimedDeviceId: challenge.clientDeviceId,
+      protocolVersion: connectedTrustedTimeWireProtocolVersion,
+    );
+    if (authenticated == null ||
+        authenticated.deviceId != challenge.clientDeviceId ||
+        authenticated.fingerprint != challenge.clientFingerprint) {
+      return _error(HttpStatus.forbidden, 'client_not_authorized');
+    }
+    late final ConnectedTrustedTimeObservationV1 observation;
+    try {
+      observation = await trustedTimeAuthority
+          .observe(wire.request)
+          .timeout(requestTimeout);
+    } on StateError catch (error) {
+      return _error(
+        error.message ==
+                'connected_trusted_time_coordinator_authority_unavailable'
+            ? HttpStatus.serviceUnavailable
+            : HttpStatus.forbidden,
+        error.message ==
+                'connected_trusted_time_coordinator_authority_unavailable'
+            ? 'trusted_time_authority_unavailable'
+            : 'trusted_time_authority_denied',
+      );
+    }
+    if (canonicalConnectedSiteJson(observation.challenge.toJson()) !=
+        canonicalConnectedSiteJson(challenge.toJson())) {
+      return _error(
+        HttpStatus.internalServerError,
+        'trusted_time_observation_binding_failed',
+      );
+    }
+    return SiteCoordinatorResponse(
+      statusCode: HttpStatus.ok,
+      body: ConnectedTrustedTimeWireResponseV2(
+        request: wire,
+        observation: observation,
+      ).toJson(),
+      canonicalJson: true,
+    );
+  }
+
   /// Detailed status is local UI state only and is never serialized by the
   /// unauthenticated HTTP health endpoint.
   Future<CoordinatorHealthV1> readLocalHealth() =>
@@ -1044,6 +1138,7 @@ class SiteCoordinatorServer {
     SiteCoordinatorRequest request,
     Uri uri, {
     String? claimedDeviceId,
+    int protocolVersion = connectedSiteProtocolVersion,
   }) async {
     try {
       final fingerprint = _fingerprint(
@@ -1076,6 +1171,7 @@ class SiteCoordinatorServer {
         canonicalTarget: uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path,
         bodySha256: crypto.sha256.convert(request.body).toString(),
         signature: signature,
+        protocolVersion: protocolVersion,
       );
       final proofValid = await requestAuthenticator
           .verifyAndConsume(proof)
