@@ -5,6 +5,34 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-03 private Android pilot-successor preflight
+
+- **SOURCE PASS / PRIVATE:** implementation
+  `9edfa8fc73fa5a3b73c44a6448a596abe50d909b` (tree
+  `5fe9b32c7d332d9887d8779072225b39d73e7d8e`, native tree
+  `8717de271cc830211f4967dbaa552428778bd290`) is a strict descendant of
+  draft PR #752's public head `fe02f283d51bb546db7fab0feabfcff0a43673ee`.
+  The exact 25-path standard binary diff is SHA-256
+  `b28401ee2e2cdcb525abaf00defa8d14631b7aa15a6f61d6496650b096eb3f86`.
+  It composes synthetic receipt evidence, stable installed-journey selectors,
+  pure handoff/protocol authority, the source-only fail-closed ADB adapter,
+  operator-clarity fixes and the first two Android visual-system slices.
+- Final-source release contracts plus adapter/protocol/handoff tests are
+  **163/163 PASS**. Final native-tree focused evidence is: hidden filtered
+  matches **2/2 PASS**, explicit shift difference/close **2/2 PASS**, backup
+  guidance **1/1 PASS**, design tokens **4/4 PASS**, Sell/checkout responsive
+  hierarchy **13/13 PASS**, and targeted analyzers **PASS**. The complete
+  range `git diff --check` is **PASS** after the recorded one-line EOF
+  correction. Independent reviews accept each final source slice; combined
+  candidate review is required before publication.
+- **NOT RUN / BLOCKED:** this implementation has no exact-head hosted CI,
+  rebuilt artifact, authorized remote installation or device observation.
+  PostgreSQL rehearsal evidence remains stale and dependency security remains
+  red on unsupported minimatch paths. Signing, installed restart/restore,
+  TalkBack, physical hardware, merchant acceptance and production are not
+  established. Connected mode remains default-off; no publication, merge or
+  deployment is authorized by this ledger.
+
 ## 2026-11-03 Android operator-clarity checkpoint
 
 - **SOURCE PASS / PRIVATE:** implementation
