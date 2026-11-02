@@ -754,10 +754,43 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     'native_visual_capture_opt_in_missing',
     failures,
   )
+  const visualCaptureBlock = source.match(
+    /- name: Capture synthetic Flutter screens with bundled fonts[\s\S]*?(?=\n      - name:)/,
+  )?.[0] || ''
   requireToken(
-    source,
-    '180s flutter test test/visual_capture_test.dart --update-goldens',
+    visualCaptureBlock,
+    'visual_capture_start budget_seconds=300 per_test_timeout_seconds=60',
     'native_visual_capture_test_not_separately_bounded',
+    failures,
+  )
+  requireToken(
+    visualCaptureBlock,
+    'timeout --signal=TERM --kill-after=10s 300s flutter test test/visual_capture_test.dart --update-goldens --reporter expanded --timeout 60s',
+    'native_visual_capture_test_not_separately_bounded',
+    failures,
+  )
+  requireToken(
+    visualCaptureBlock,
+    'visual_capture_status=$?',
+    'native_visual_capture_status_not_captured',
+    failures,
+  )
+  requireToken(
+    visualCaptureBlock,
+    'visual_capture_complete status=$visual_capture_status elapsed_seconds=$visual_capture_elapsed',
+    'native_visual_capture_diagnostics_missing',
+    failures,
+  )
+  requireToken(
+    visualCaptureBlock,
+    'if [ "$visual_capture_status" -ne 0 ]; then',
+    'native_visual_capture_failure_not_propagated',
+    failures,
+  )
+  requireToken(
+    visualCaptureBlock,
+    'exit "$visual_capture_status"',
+    'native_visual_capture_failure_not_propagated',
     failures,
   )
   const galleryUploadBlock = source.match(

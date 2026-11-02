@@ -77,6 +77,42 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
 })
 
+test('visual capture remains bounded and reports its terminal status', () => {
+  for (const [token, failure] of [
+    [
+      'visual_capture_start budget_seconds=300 per_test_timeout_seconds=60',
+      'native_visual_capture_test_not_separately_bounded',
+    ],
+    [
+      'timeout --signal=TERM --kill-after=10s 300s flutter test test/visual_capture_test.dart --update-goldens --reporter expanded --timeout 60s',
+      'native_visual_capture_test_not_separately_bounded',
+    ],
+    [
+      'visual_capture_status=$?',
+      'native_visual_capture_status_not_captured',
+    ],
+    [
+      'visual_capture_complete status=$visual_capture_status elapsed_seconds=$visual_capture_elapsed',
+      'native_visual_capture_diagnostics_missing',
+    ],
+    [
+      'if [ "$visual_capture_status" -ne 0 ]; then',
+      'native_visual_capture_failure_not_propagated',
+    ],
+    [
+      'exit "$visual_capture_status"',
+      'native_visual_capture_failure_not_propagated',
+    ],
+  ]) {
+    const result = verifyShopNativeCiContract(
+      workflow.replace(token, 'visual-capture-control-omitted'),
+      gradleWrapper,
+      actualTestPaths,
+    )
+    assert.ok(result.failures.includes(failure), failure)
+  }
+})
+
 test('Android, iOS and Windows QA artifacts inspect signing and use canonical source binding', () => {
   for (const [command, failure] of [
     ['apksigner" verify --verbose --print-certs app-qa-debug.apk', 'android_qa_signature_not_verified'],

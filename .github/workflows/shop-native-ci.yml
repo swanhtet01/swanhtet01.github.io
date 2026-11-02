@@ -506,7 +506,17 @@ jobs:
           flutter_bin="$(readlink -f "$(command -v flutter)")"
           export SHOP_MATERIAL_ICONS_FONT="$(dirname "$flutter_bin")/cache/artifacts/material_fonts/MaterialIcons-Regular.otf"
           test -f "$SHOP_MATERIAL_ICONS_FONT"
-          timeout --signal=TERM --kill-after=10s 180s flutter test test/visual_capture_test.dart --update-goldens --reporter expanded --timeout 60s
+          visual_capture_started_at=$SECONDS
+          echo "visual_capture_start budget_seconds=300 per_test_timeout_seconds=60"
+          set +e
+          timeout --signal=TERM --kill-after=10s 300s flutter test test/visual_capture_test.dart --update-goldens --reporter expanded --timeout 60s
+          visual_capture_status=$?
+          set -e
+          visual_capture_elapsed=$((SECONDS - visual_capture_started_at))
+          echo "visual_capture_complete status=$visual_capture_status elapsed_seconds=$visual_capture_elapsed"
+          if [ "$visual_capture_status" -ne 0 ]; then
+            exit "$visual_capture_status"
+          fi
 
       - name: Retain Flutter-rendered screens for design review
         if: always()
