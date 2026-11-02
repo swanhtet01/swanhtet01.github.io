@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-02 22:48 UTC
+- Last verified: 2026-11-02 22:50 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
@@ -39,10 +39,13 @@
   migration, authoritative Windows rehearsal and CI runtime are **NOT RUN**.
   Local `verify_app_deploy_workflow.mjs` is **BLOCKED** by the installed Python
   dependency pin mismatch `fastapi`, not by a reported workflow assertion.
-- Current private head is `2fe9c269bec916c463d1cd3c3583496b88bd9eda`;
-  it must not be described as hosted-tested or published. Next: preserve the
-  current hosted job to terminal state, then separately review a guarded
-  successor and run exact-head CI before using any new QA artifact.
+- The unpublished test implementation is
+  `2fe9c269bec916c463d1cd3c3583496b88bd9eda`; private follow-up
+  `e68e8274774c976e92c3a0f3f8b8edd854ee299e` removes a final blank line
+  exposed by the full-range whitespace check, which now **PASS**. None of
+  these successors is hosted-tested or published. Next: preserve the current
+  hosted job to terminal state, then separately review a guarded successor
+  and run exact-head CI before using any new QA artifact.
 
 ## 2026-11-03 cumulative private candidate review
 
