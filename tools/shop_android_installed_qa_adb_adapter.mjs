@@ -10,8 +10,11 @@ const PACKAGE_ID = 'dev.supermega.supermega_shop.qa'
 const SHA64 = /^[0-9a-f]{64}$/
 const NONCE = /^[0-9a-f]{32,64}$/
 const SAFE_SERIAL = /^[A-Za-z0-9._:-]{1,128}$/
-const SAFE_ARG = /^[A-Za-z0-9_./:=+@,%*!-]{1,512}$/
+const SAFE_ARG = /^[A-Za-z0-9_./:=+@,-]{1,512}$/
 const ALLOWED_COMMANDS = new Set(['adb', 'apkanalyzer', 'apksigner', 'sha256sum', 'ss'])
+const SENSITIVE_IO_CONTRACT = 'supermega.shop.android-installed-qa-sensitive-executor.v1'
+const LOCK_RELEASE_CONTRACT = 'supermega.shop.android-installed-qa-lock-release.v1'
+const RECEIPT_CONTRACT = 'supermega.shop.qa-loopback-receipt.v1'
 
 const UI_SELECTORS = Object.freeze({
   ui_start_new: ['startNew', 'startNewConfirm'],
@@ -31,7 +34,10 @@ function fail(code) {
 }
 
 function sha256(value) {
-  return createHash('sha256').update(value).digest('hex')
+  return createHash('sha256').update(
+    value && typeof value === 'object' && !Buffer.isBuffer(value)
+      ? JSON.stringify(value) : value,
+  ).digest('hex')
 }
 
 function exactKeys(value, keys, code) {
@@ -73,7 +79,11 @@ export class ShopAndroidInstalledQaAdbAdapter {
     }
     if (handoff.artifact.applicationId !== PACKAGE_ID
         || typeof authorizationVerifier !== 'function'
-        || typeof executor?.run !== 'function' || typeof executor?.abortAndJoin !== 'function'
+        || typeof executor?.run !== 'function' || typeof executor?.runSensitive !== 'function'
+        || executor?.sensitiveIoContract !== SENSITIVE_IO_CONTRACT
+        || typeof executor?.releaseOwnedLock !== 'function'
+        || executor?.lockReleaseContract !== LOCK_RELEASE_CONTRACT
+        || typeof executor?.abortAndJoin !== 'function'
         || typeof uiDriver?.act !== 'function' || typeof metricsObserver?.observe !== 'function'
         || typeof recoveryObserver?.observe !== 'function' || typeof clock?.now !== 'function') {
       fail('shop_android_adb_adapter_dependency_missing')
@@ -88,11 +98,13 @@ export class ShopAndroidInstalledQaAdbAdapter {
     this.recoveryObserver = recoveryObserver
     this.clock = clock
     this.lockToken = null
+    this.lockOwned = false
     this.operationOutcome = 'NOT_APPLICABLE'
     this.activeRequest = null
     this.envelope = null
     this.stageRoot = `/data/local/tmp/${this.plan.paths.stagingRoot.replace(/\/$/, '')}`
     this.stagedEnvelope = `/data/local/tmp/${this.plan.paths.stagedEnvelope}`
+    this.lockPath = `/data/local/tmp/supermega-shop-installed-qa/${this.plan.targetId}.lock`
     if (!safePath(this.stageRoot, `/data/local/tmp/supermega-shop-installed-qa/${this.plan.sessionNonce}`)
         || !safePath(this.stagedEnvelope, `${this.stageRoot}/`, '.smqa')) {
       fail('shop_android_adb_adapter_stage_path_invalid')
@@ -112,12 +124,13 @@ export class ShopAndroidInstalledQaAdbAdapter {
         || authorization.providerAccessFromApp !== false || authorization.noEgress !== true
         || authorization.loopbackOnly !== true
         || Date.parse(authorization.expiresAt) <= this.clock.now()) fail('shop_android_adb_authorization_invalid')
+    const authorityDigest = sha256(authorization)
     const startedAt = new Date(this.clock.now()).toISOString()
     const special = ['abort_and_join_timed_out_operation', 'cleanup_and_release'].includes(request.step)
     if (!special) this.activeRequest = request
     let data
     try {
-      data = await this.#step(request, signal)
+      data = await this.#step(request, signal, authorityDigest)
     } catch (error) {
       if (!special && !signal.aborted && this.activeRequest === request) this.activeRequest = null
       throw error
@@ -144,9 +157,23 @@ export class ShopAndroidInstalledQaAdbAdapter {
   }
 
   async #run(command, args, signal, { stdin } = {}) {
+    if (stdin !== undefined) fail('shop_android_adb_sensitive_io_required')
     if (!ALLOWED_COMMANDS.has(command) || !Array.isArray(args) || args.some((arg) =>
       typeof arg !== 'string' || !SAFE_ARG.test(arg))) fail('shop_android_adb_command_forbidden')
     const result = await this.executor.run(command, [...args], { signal, stdin })
+    exactKeys(result, ['abortedAndJoined', 'exitCode', 'stderr', 'stdout'], 'shop_android_adb_command_result_invalid')
+    if (!Number.isInteger(result.exitCode) || result.abortedAndJoined !== true) {
+      fail('shop_android_adb_command_unsettled')
+    }
+    return result
+  }
+
+  async #runSensitive(command, args, signal, { input = null } = {}) {
+    if (!ALLOWED_COMMANDS.has(command) || !Array.isArray(args) || args.some((arg) =>
+      typeof arg !== 'string' || !SAFE_ARG.test(arg))) fail('shop_android_adb_command_forbidden')
+    const result = await this.executor.runSensitive(command, [...args], {
+      signal, input, contract: SENSITIVE_IO_CONTRACT,
+    })
     exactKeys(result, ['abortedAndJoined', 'exitCode', 'stderr', 'stdout'], 'shop_android_adb_command_result_invalid')
     if (!Number.isInteger(result.exitCode) || result.abortedAndJoined !== true) {
       fail('shop_android_adb_command_unsettled')
@@ -158,19 +185,28 @@ export class ShopAndroidInstalledQaAdbAdapter {
     return this.#run('adb', ['-s', this.serial, ...args], signal, options)
   }
 
-  async #step(request, signal) {
+  #adbSensitive(args, signal, options) {
+    return this.#runSensitive('adb', ['-s', this.serial, ...args], signal, options)
+  }
+
+  async #step(request, signal, authorityDigest) {
     const step = request.step
     if (step === 'observe_target' || step === 'reobserve_runtime_isolation') return this.#target(signal)
-    if (step === 'recover_prior_session') return this.recoveryObserver.observe({ request, signal })
+    if (step === 'recover_prior_session') return this.#recovery(request, signal, authorityDigest)
     if (step === 'acquire_target_lock') return this.#lock(signal)
     if (step === 'verify_installed_artifact') return this.#artifact(signal)
     if (['observe_pre_sale', 'observe_post_sale', 'observe_restored_state'].includes(step)) {
-      const value = await this.metricsObserver.observe({ step, signal })
+      const observation = await this.metricsObserver.observe({ step, requestDigest: request.requestDigest,
+        authorityDigest, signal })
+      exactKeys(observation, ['authorityDigest', 'counts', 'requestDigest'], 'shop_android_adb_metrics_invalid')
+      if (observation.authorityDigest !== authorityDigest
+          || observation.requestDigest !== request.requestDigest) fail('shop_android_adb_metrics_invalid')
+      const value = observation.counts
       exactKeys(value, ['onHand', 'outbox', 'receipts', 'sales', 'shifts', 'stockMovements'], 'shop_android_adb_metrics_invalid')
       if (Object.values(value).some((item) => !Number.isInteger(item) || item < 0)) fail('shop_android_adb_metrics_invalid')
       return value
     }
-    if (UI_SELECTORS[step]) return this.#ui(step, signal)
+    if (UI_SELECTORS[step]) return this.#ui(step, request, signal, authorityDigest)
     if (step.startsWith('observe_receipt_') || step === 'observe_restored_receipt') {
       return this.#receipt(signal)
     }
@@ -206,11 +242,31 @@ export class ShopAndroidInstalledQaAdbAdapter {
     return { ...this.plan.isolation }
   }
 
+  async #recovery(request, signal, authorityDigest) {
+    const observation = await this.recoveryObserver.observe({ request,
+      requestDigest: request.requestDigest, authorityDigest, signal })
+    exactKeys(observation, ['authorityDigest', 'recovery', 'requestDigest'], 'shop_android_adb_recovery_invalid')
+    if (observation.authorityDigest !== authorityDigest
+        || observation.requestDigest !== request.requestDigest) fail('shop_android_adb_recovery_invalid')
+    return observation.recovery
+  }
+
   async #lock(signal) {
-    const lockPath = `${this.stageRoot}.lock`
-    const result = await this.#adb(['shell', 'mkdir', lockPath], signal)
-    this.lockToken = sha256(`${this.plan.targetId}:${this.plan.sessionNonce}:${lockPath}`)
-    return { acquired: result.exitCode === 0, concurrentOwner: result.exitCode !== 0, lockToken: this.lockToken }
+    const result = await this.#adb(['shell', 'mkdir', this.lockPath], signal)
+    const candidateToken = sha256(`${this.plan.targetId}:${this.plan.sessionNonce}:${this.lockPath}`)
+    if (result.exitCode !== 0) {
+      this.lockToken = null
+      return { acquired: false, concurrentOwner: true, lockToken: candidateToken }
+    }
+    this.lockToken = candidateToken
+    const ownerPath = `${this.lockPath}/owner`
+    const written = await this.#adbSensitive(['exec-in', 'shell', 'tee', ownerPath], signal,
+      { input: Buffer.from(this.lockToken, 'utf8') })
+    const owner = await this.#adbSensitive(['exec-out', 'cat', ownerPath], signal)
+    if (written.exitCode !== 0 || owner.exitCode !== 0
+        || text(owner.stdout).trim() !== this.lockToken) fail('shop_android_adb_lock_unproven')
+    this.lockOwned = true
+    return { acquired: true, concurrentOwner: false, lockToken: this.lockToken }
   }
 
   async #artifact(signal) {
@@ -222,12 +278,21 @@ export class ShopAndroidInstalledQaAdbAdapter {
       this.#run('apksigner', ['verify', '--verbose', '--print-certs', this.apkPath], signal),
       this.#adb(['shell', 'pm', 'path', PACKAGE_ID], signal),
     ])
-    const signer = text(signing.stdout).match(/certificate SHA-256 digest:\s*([0-9a-f]{64})/i)?.[1]?.toLowerCase()
+    const signers = [...text(signing.stdout).matchAll(/certificate SHA-256 digest:\s*([0-9a-f]{64})/ig)]
+      .map((match) => match[1].toLowerCase())
+    const installedPaths = text(installed.stdout).trim().split('\n')
+      .filter(Boolean).map((line) => line.startsWith('package:') ? line.slice(8) : '')
+    if (installedPaths.length !== 1 || !safePath(installedPaths[0], '/data/app/', '/base.apk')) {
+      fail('shop_android_adb_artifact_unproven')
+    }
+    const installedBytes = await this.#adbSensitive(['exec-out', 'cat', installedPaths[0]], signal)
     if ([hash, appId, manifest, signing, installed].some((item) => item.exitCode !== 0)
         || text(hash.stdout).trim().split(/\s+/)[0] !== artifact.apkSha256
-        || text(appId.stdout).trim() !== PACKAGE_ID || signer !== artifact.signerCertificateSha256
+        || text(appId.stdout).trim() !== PACKAGE_ID || signers.length !== 1
+        || signers[0] !== artifact.signerCertificateSha256
         || !text(manifest.stdout).includes('android:debuggable="true"')
-        || !text(installed.stdout).trim().startsWith('package:')) fail('shop_android_adb_artifact_unproven')
+        || installedBytes.exitCode !== 0 || !Buffer.isBuffer(installedBytes.stdout)
+        || sha256(installedBytes.stdout) !== artifact.apkSha256) fail('shop_android_adb_artifact_unproven')
     return {
       packageId: PACKAGE_ID, profileId: 'synthetic_qa_v1', apkSha256: artifact.apkSha256,
       signerSha256: artifact.signerCertificateSha256,
@@ -236,30 +301,48 @@ export class ShopAndroidInstalledQaAdbAdapter {
     }
   }
 
-  async #ui(step, signal) {
-    const dump = await this.#adb(['exec-out', 'uiautomator', 'dump', '/dev/tty'], signal)
-    if (dump.exitCode !== 0) fail('shop_android_adb_ui_identifiers_unavailable')
+  async #ui(step, request, signal, authorityDigest) {
     const selectors = UI_SELECTORS[step].map((key) => SHOP_ANDROID_INSTALLED_QA_SELECTORS[key])
-    for (const selector of selectors) {
-      const matches = text(dump.stdout).split(`resource-id="${selector}"`).length - 1
+    for (const [transitionIndex, selector] of selectors.entries()) {
+      const before = await this.#adb(['exec-out', 'uiautomator', 'dump', '/dev/tty'], signal)
+      if (before.exitCode !== 0) fail('shop_android_adb_ui_identifiers_unavailable')
+      const matches = text(before.stdout).split(`resource-id="${selector}"`).length - 1
       if (matches !== 1) fail('shop_android_adb_ui_identifiers_unavailable')
+      const beforeUiDigest = sha256(text(before.stdout))
+      const result = await this.uiDriver.act({ step, selector, transitionIndex,
+        requestDigest: request.requestDigest, authorityDigest, beforeUiDigest, signal })
+      exactKeys(result, ['acted', 'afterUiDigest', 'authorityDigest', 'beforeUiDigest',
+        'requestDigest', 'selector'], 'shop_android_adb_ui_result_invalid')
+      const after = await this.#adb(['exec-out', 'uiautomator', 'dump', '/dev/tty'], signal)
+      if (result.acted !== true || result.selector !== selector
+          || result.requestDigest !== request.requestDigest
+          || result.authorityDigest !== authorityDigest
+          || result.beforeUiDigest !== beforeUiDigest || after.exitCode !== 0
+          || result.afterUiDigest === beforeUiDigest
+          || result.afterUiDigest !== sha256(text(after.stdout))) fail('shop_android_adb_ui_result_invalid')
     }
-    const result = await this.uiDriver.act({ step, selectors: [...selectors], signal })
-    exactKeys(result, step === 'ui_commit_sale'
-      ? ['acted', 'productSelector', 'selectorsUsed'] : ['acted', 'selectorsUsed'], 'shop_android_adb_ui_result_invalid')
-    if (result.acted !== true || result.selectorsUsed.join('\n') !== selectors.join('\n')) fail('shop_android_adb_ui_result_invalid')
-    return result
+    return step === 'ui_commit_sale'
+      ? { acted: true, productSelector: this.plan.expected.productSelector, selectorsUsed: selectors }
+      : { acted: true, selectorsUsed: selectors }
   }
 
   async #receipt(signal) {
     const path = this.plan.paths.privateReceiptSidecar
-    const result = await this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'cat', path], signal)
+    const result = await this.#adbSensitive(['exec-out', 'run-as', PACKAGE_ID, 'cat', path], signal)
     if (result.exitCode !== 0) fail('shop_android_adb_receipt_unavailable')
     let source
     try { source = JSON.parse(text(result.stdout)) } catch { fail('shop_android_adb_receipt_invalid') }
-    if (!Array.isArray(source?.captures) || source.captures.length !== 1) fail('shop_android_adb_receipt_invalid')
+    exactKeys(source, ['captures', 'contract', 'inventorySha256', 'platformIdentity', 'profileId'], 'shop_android_adb_receipt_invalid')
+    if (source.contract !== RECEIPT_CONTRACT || source.profileId !== 'synthetic_qa_v1'
+        || source.platformIdentity !== PACKAGE_ID || !Array.isArray(source.captures)
+        || source.captures.length !== 1 || !SHA64.test(source.inventorySha256)) fail('shop_android_adb_receipt_invalid')
     const capture = source.captures[0]
     exactKeys(capture, ['captureCount', 'language', 'receiptBindingSha256', 'renderedReceiptSha256'], 'shop_android_adb_receipt_invalid')
+    if (!Number.isInteger(capture.captureCount) || capture.captureCount < 1
+        || !['en', 'my'].includes(capture.language)
+        || !SHA64.test(capture.receiptBindingSha256)
+        || !SHA64.test(capture.renderedReceiptSha256)
+        || source.inventorySha256 !== sha256(source.captures)) fail('shop_android_adb_receipt_invalid')
     return { captureCount: capture.captureCount, receiptBindingSha256: capture.receiptBindingSha256,
       receiptRenderSha256: capture.renderedReceiptSha256, sidecarPath: path }
   }
@@ -280,12 +363,12 @@ export class ShopAndroidInstalledQaAdbAdapter {
     const parent = this.plan.paths.privateEnvelope.split('/').slice(0, -1).join('/')
     const [regular, noLink, inventory, result] = await Promise.all([
       this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'test', '-f', this.plan.paths.privateEnvelope], signal),
-      this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'test', '!', '-L', this.plan.paths.privateEnvelope], signal),
+      this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'test', '-L', this.plan.paths.privateEnvelope], signal),
       this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'toybox', 'find', parent, '-mindepth', '1', '-maxdepth', '1', '-type', 'f'], signal),
-      this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'cat', this.plan.paths.privateEnvelope], signal),
+      this.#adbSensitive(['exec-out', 'run-as', PACKAGE_ID, 'cat', this.plan.paths.privateEnvelope], signal),
     ])
     const envelopes = text(inventory.stdout).trim().split('\n').filter((path) => path.endsWith('.smqa'))
-    if (regular.exitCode !== 0 || noLink.exitCode !== 0 || inventory.exitCode !== 0
+    if (regular.exitCode !== 0 || noLink.exitCode === 0 || inventory.exitCode !== 0
         || envelopes.length !== 1 || envelopes[0] !== this.plan.paths.privateEnvelope
         || result.exitCode !== 0 || !Buffer.isBuffer(result.stdout) || result.stdout.length === 0) fail('shop_android_adb_private_export_failed')
     this.envelope = Buffer.from(result.stdout)
@@ -298,7 +381,8 @@ export class ShopAndroidInstalledQaAdbAdapter {
   async #stage(signal) {
     if (!this.envelope) fail('shop_android_adb_stage_source_missing')
     const made = await this.#adb(['shell', 'mkdir', '-p', this.stageRoot], signal)
-    const written = await this.#adb(['exec-in', 'shell', 'tee', this.stagedEnvelope], signal, { stdin: this.envelope })
+    const written = await this.#adbSensitive(['exec-in', 'shell', 'tee', this.stagedEnvelope], signal,
+      { input: this.envelope })
     if (made.exitCode !== 0 || written.exitCode !== 0) fail('shop_android_adb_stage_failed')
     return this.#stageProof(signal)
   }
@@ -307,14 +391,14 @@ export class ShopAndroidInstalledQaAdbAdapter {
 
   async #stageProof(signal) {
     const [kind, noLink, digest, inventory] = await Promise.all([
-      this.#adb(['shell', 'toybox', 'stat', '-c', '%F', this.stagedEnvelope], signal),
-      this.#adb(['shell', 'toybox', 'test', '!', '-L', this.stagedEnvelope], signal),
+      this.#adb(['shell', 'toybox', 'test', '-f', this.stagedEnvelope], signal),
+      this.#adb(['shell', 'toybox', 'test', '-L', this.stagedEnvelope], signal),
       this.#adb(['shell', 'toybox', 'sha256sum', this.stagedEnvelope], signal),
       this.#adb(['shell', 'toybox', 'find', this.stageRoot, '-mindepth', '1', '-maxdepth', '1', '-type', 'f'], signal),
     ])
     const actual = text(digest.stdout).trim().split(/\s+/)[0]
     const files = text(inventory.stdout).trim().split('\n').filter(Boolean)
-    if (kind.exitCode !== 0 || noLink.exitCode !== 0 || !text(kind.stdout).includes('regular file')
+    if (kind.exitCode !== 0 || noLink.exitCode === 0
         || digest.exitCode !== 0 || actual !== this.plan.expected.envelopeSha256
         || inventory.exitCode !== 0 || files.length !== 1 || files[0] !== this.stagedEnvelope) fail('shop_android_adb_stage_proof_invalid')
     return { sourcePath: this.plan.paths.privateEnvelope, destinationPath: this.plan.paths.stagedEnvelope,
@@ -333,19 +417,31 @@ export class ShopAndroidInstalledQaAdbAdapter {
       this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'test', '-e', this.plan.paths.privateReceiptSidecar], signal),
       this.#stageProof(signal),
     ])
-    return { privateSourceExists: privateSource.exitCode === 0, receiptSidecarExists: sidecar.exitCode === 0,
+    if (privateSource.exitCode !== 1 || sidecar.exitCode !== 1) {
+      fail('shop_android_adb_clear_absence_unproven')
+    }
+    return { privateSourceExists: false, receiptSidecarExists: false,
       stagedExists: true, stagedSha256: stage.destinationSha256, stagedInventoryCount: stage.inventoryCount,
       stagedRegularFile: stage.regularFile, stagedSymlink: stage.symlink }
   }
 
   async #restore(signal) {
-    const source = await this.#adb(['exec-out', 'cat', this.stagedEnvelope], signal)
+    const source = await this.#adbSensitive(['exec-out', 'cat', this.stagedEnvelope], signal)
     const parent = this.plan.paths.privateEnvelope.split('/').slice(0, -1).join('/')
     const made = await this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'mkdir', '-p', parent], signal)
-    const written = await this.#adb(['exec-in', 'run-as', PACKAGE_ID, 'tee', this.plan.paths.privateEnvelope], signal, { stdin: source.stdout })
+    const written = await this.#adbSensitive(['exec-in', 'run-as', PACKAGE_ID, 'tee', this.plan.paths.privateEnvelope], signal,
+      { input: source.stdout })
+    const [destination, regular, link] = await Promise.all([
+      this.#adbSensitive(['exec-out', 'run-as', PACKAGE_ID, 'cat', this.plan.paths.privateEnvelope], signal),
+      this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'test', '-f', this.plan.paths.privateEnvelope], signal),
+      this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'test', '-L', this.plan.paths.privateEnvelope], signal),
+    ])
     const digest = sha256(source.stdout)
     if (source.exitCode !== 0 || made.exitCode !== 0 || written.exitCode !== 0
-        || digest !== this.plan.expected.envelopeSha256) fail('shop_android_adb_restore_copy_failed')
+        || destination.exitCode !== 0 || !Buffer.isBuffer(destination.stdout)
+        || regular.exitCode !== 0 || link.exitCode !== 1
+        || digest !== this.plan.expected.envelopeSha256
+        || sha256(destination.stdout) !== digest) fail('shop_android_adb_restore_copy_failed')
     return { sourcePath: this.plan.paths.stagedEnvelope, destinationPath: this.plan.paths.privateEnvelope,
       sourceSha256: digest, destinationSha256: digest, regularFile: true, symlink: false }
   }
@@ -366,14 +462,30 @@ export class ShopAndroidInstalledQaAdbAdapter {
 
   async #cleanup(request, signal) {
     if (this.activeRequest) fail('shop_android_adb_cleanup_unproven')
-    const results = await Promise.all([
-      this.#adb(['shell', 'rm', '-f', this.stagedEnvelope], signal),
-      this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'rm', '-f', this.plan.paths.privateEnvelope, this.plan.paths.privateReceiptSidecar], signal),
-      this.#adb(['shell', 'rmdir', this.stageRoot], signal),
-      this.#adb(['shell', 'rmdir', `${this.stageRoot}.lock`], signal),
-    ])
+    const results = [
+      await this.#adb(['shell', 'rm', '-f', this.stagedEnvelope], signal),
+      await this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'rm', '-f', this.plan.paths.privateEnvelope,
+        this.plan.paths.privateReceiptSidecar], signal),
+      await this.#adb(['shell', 'rmdir', this.stageRoot], signal),
+    ]
+    if (this.lockOwned) {
+      const released = await this.executor.releaseOwnedLock({ path: this.lockPath,
+        ownerToken: this.lockToken, signal, contract: LOCK_RELEASE_CONTRACT })
+      exactKeys(released, ['lockAbsent', 'ownerMatched', 'released'], 'shop_android_adb_cleanup_foreign_lock')
+      if (released.ownerMatched !== true || released.released !== true
+          || released.lockAbsent !== true) fail('shop_android_adb_cleanup_foreign_lock')
+    }
     if (results.some((result) => result.exitCode !== 0)) fail('shop_android_adb_cleanup_unproven')
+    const [stageAbsent, privateAbsent, sidecarAbsent, lockAbsent] = await Promise.all([
+      this.#adb(['shell', 'test', '-e', this.stageRoot], signal),
+      this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'test', '-e', this.plan.paths.privateEnvelope], signal),
+      this.#adb(['exec-out', 'run-as', PACKAGE_ID, 'test', '-e', this.plan.paths.privateReceiptSidecar], signal),
+      this.#adb(['shell', 'test', '-e', this.lockPath], signal),
+    ])
+    if ([stageAbsent, privateAbsent, sidecarAbsent, lockAbsent]
+      .some((result) => result.exitCode !== 1)) fail('shop_android_adb_cleanup_unproven')
     this.envelope = null
+    this.lockOwned = false
     return { cleanupReceiptSha256: sha256(`${request.requestDigest}:${request.reasonCode}`),
       externalStageDeleted: true, privateEvidenceDeleted: true, lockReleased: true,
       operationOutcome: this.operationOutcome, reasonCode: request.reasonCode }

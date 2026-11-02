@@ -22,6 +22,7 @@ const LOCK = /^[0-9a-f]{64}$/
 const RECEIPT = '1'.repeat(64)
 const RENDER = '2'.repeat(64)
 const ENVELOPE = Buffer.from('SMQA synthetic encrypted evidence')
+const APK_BYTES = Buffer.from('synthetic android qa apk fixture')
 const ENVELOPE_SHA = createHash('sha256').update(ENVELOPE).digest('hex')
 const PRE = { sales: 0, stockMovements: 0, receipts: 0, outbox: 0, onHand: 3, shifts: 1 }
 const POST = { sales: 1, stockMovements: 1, receipts: 1, outbox: 1, onHand: 2, shifts: 1 }
@@ -65,13 +66,23 @@ function ok(stdout = '') {
   return { abortedAndJoined: true, exitCode: 0, stderr: '', stdout }
 }
 
+function uiDocument(state) {
+  return Object.values(SHOP_ANDROID_INSTALLED_QA_SELECTORS)
+    .map((id) => `<node resource-id="${id}" state="${state}"/>`).join('')
+}
+
 class FakeExecutor {
-  constructor(source, { mutate, hang } = {}) {
+  constructor(source, { mutate, hang, device = {} } = {}) {
     this.plan = source
     this.mutate = mutate
     this.hang = hang
     this.calls = []
+    this.sensitiveCalls = []
     this.receipts = 0
+    this.uiDumps = 0
+    this.device = device
+    this.sensitiveIoContract = 'supermega.shop.android-installed-qa-sensitive-executor.v1'
+    this.lockReleaseContract = 'supermega.shop.android-installed-qa-lock-release.v1'
   }
 
   async run(command, args, options) {
@@ -82,8 +93,28 @@ class FakeExecutor {
     return result
   }
 
+  async runSensitive(command, args, options) {
+    this.sensitiveCalls.push({ command, args: [...args], inputBytes: options.input?.length ?? 0,
+      contract: options.contract })
+    if (this.hang?.(command, args)) return new Promise(() => {})
+    let result = this.#result(command, args, options)
+    if (this.mutate) result = this.mutate(result, command, args) || result
+    return result
+  }
+
   async abortAndJoin({ timedOutRequestDigest, timedOutSequence }) {
     return { aborted: true, joined: true, outcome: 'ABORTED', timedOutRequestDigest, timedOutSequence }
+  }
+
+  async releaseOwnedLock({ path, ownerToken, contract }) {
+    assert.equal(path, `/data/local/tmp/supermega-shop-installed-qa/${TARGET}.lock`)
+    assert.equal(contract, this.lockReleaseContract)
+    if (this.device.swapOnRelease) this.device.lockOwner = 'foreign-owner-after-read'
+    if (this.device.lockOwner !== ownerToken) {
+      return { released: false, ownerMatched: false, lockAbsent: false }
+    }
+    this.device.lockOwner = null
+    return { released: true, ownerMatched: true, lockAbsent: true }
   }
 
   #result(command, args, options) {
@@ -95,18 +126,42 @@ class FakeExecutor {
     if (command === 'apksigner') return ok(`Signer #1 certificate SHA-256 digest: ${artifact.signerCertificateSha256}`)
     assert.equal(command, 'adb')
     const tail = args.slice(2)
+    const lockPath = `/data/local/tmp/supermega-shop-installed-qa/${TARGET}.lock`
+    if (tail[0] === 'shell' && tail[1] === 'mkdir' && tail[2] === lockPath) {
+      if (this.device.lockOwner) return { ...ok(), exitCode: 1 }
+      this.device.lockOwner = 'pending'
+      return ok()
+    }
+    if (tail[0] === 'exec-in' && tail.includes('tee') && tail.at(-1) === `${lockPath}/owner`) {
+      this.device.lockOwner = options.input.toString('utf8')
+      return ok(Buffer.from(options.input))
+    }
+    if (tail[0] === 'exec-out' && tail[1] === 'cat' && tail[2] === `${lockPath}/owner`) {
+      return this.device.lockOwner ? ok(this.device.lockOwner) : { ...ok(), exitCode: 1 }
+    }
+    if (tail[0] === 'shell' && tail[1] === 'rm' && tail.at(-1) === `${lockPath}/owner`) return ok()
+    if (tail[0] === 'shell' && tail[1] === 'rmdir' && tail[2] === lockPath) {
+      this.device.lockOwner = null
+      return ok()
+    }
     if (tail[0] === 'get-state') return ok('device\n')
     if (tail.includes('service.adb.tcp.port')) return ok('-1\n')
     if (tail[0] === 'exec-out' && tail[1] === 'uiautomator') {
-      return ok(Object.values(SHOP_ANDROID_INSTALLED_QA_SELECTORS)
-        .map((id) => `<node resource-id="${id}"/>`).join(''))
+      this.uiDumps += 1
+      return ok(uiDocument(this.uiDumps))
     }
-    if (tail.includes('pm') && tail.includes('path')) return ok('package:/data/app/base.apk\n')
+    if (tail.includes('pm') && tail.includes('path')) return ok('package:/data/app/qa/base.apk\n')
+    if (tail[0] === 'exec-out' && tail[1] === 'cat' && tail[2] === '/data/app/qa/base.apk') {
+      return ok(Buffer.from(APK_BYTES))
+    }
     if (tail[0] === 'exec-out' && tail.includes('cat') && tail.at(-1).endsWith('.json')) {
       this.receipts += 1
       const count = this.receipts === 1 ? 1 : (this.receipts === 2 ? 2 : 1)
-      return ok(JSON.stringify({ captures: [{ captureCount: count, language: 'en',
-        receiptBindingSha256: RECEIPT, renderedReceiptSha256: RENDER }] }))
+      const captures = [{ captureCount: count, language: 'en',
+        receiptBindingSha256: RECEIPT, renderedReceiptSha256: RENDER }]
+      return ok(JSON.stringify({ contract: 'supermega.shop.qa-loopback-receipt.v1',
+        profileId: 'synthetic_qa_v1', platformIdentity: 'dev.supermega.supermega_shop.qa',
+        captures, inventorySha256: createHash('sha256').update(JSON.stringify(captures)).digest('hex') }))
     }
     if (tail[0] === 'exec-out' && tail.includes('cat') && tail.at(-1).endsWith('.smqa')) return ok(Buffer.from(ENVELOPE))
     if (tail[0] === 'exec-out' && tail[1] === 'cat') return ok(Buffer.from(ENVELOPE))
@@ -116,12 +171,15 @@ class FakeExecutor {
         ? ok(`${this.plan.paths.stagedEnvelope.replace(/^/, '/data/local/tmp/')}\n`)
         : ok(`${this.plan.paths.privateEnvelope}\n${this.plan.paths.privateReceiptSidecar}\n`)
     }
-    if (tail.includes('stat')) return ok('regular file\n')
     if (tail.includes('sha256sum')) return ok(`${ENVELOPE_SHA}  staged\n`)
+    if (tail.includes('test') && tail.includes('-L')) return { ...ok(), exitCode: 1 }
+    if (tail.includes('test') && tail.includes('-e') && tail.at(-1) === lockPath) {
+      return { ...ok(), exitCode: this.device.lockOwner ? 0 : 1 }
+    }
     if (tail.includes('test') && tail.includes('-e')) return { ...ok(), exitCode: 1 }
     if (tail.includes('pm') && tail.includes('clear')) return ok('Success\n')
     if (tail[0] === 'exec-in' && tail.includes('tee')) {
-      assert.deepEqual(options.stdin, ENVELOPE)
+      assert.deepEqual(options.input, ENVELOPE)
       return ok(Buffer.from(ENVELOPE))
     }
     return ok()
@@ -140,17 +198,20 @@ function dependencies(source, overrides = {}) {
       adbTcpipEnabled: false, adbListenAll: false, providerAccessFromApp: false,
       noEgress: true, loopbackOnly: true,
     })),
-    recoveryObserver: { observe: async () => ({ priorSessionState: 'none', priorSessionNonce: null,
-      targetId: TARGET, containmentId: CONTAINMENT, recoveryReceiptSha256: null,
-      staleLockReleased: false, externalStageDeleted: false,
-      privateEvidenceDeleted: false, recoveredAt: null }) },
-    metricsObserver: overrides.metricsObserver ?? { observe: async () => {
+    recoveryObserver: overrides.recoveryObserver ?? { observe: async ({ requestDigest, authorityDigest }) => ({
+      requestDigest, authorityDigest, recovery: { priorSessionState: 'none', priorSessionNonce: null,
+        targetId: TARGET, containmentId: CONTAINMENT, recoveryReceiptSha256: null,
+        staleLockReleased: false, externalStageDeleted: false,
+        privateEvidenceDeleted: false, recoveredAt: null } }) },
+    metricsObserver: overrides.metricsObserver ?? { observe: async ({ requestDigest, authorityDigest }) => {
       metricCount += 1
-      return metricCount === 1 ? { ...PRE } : { ...POST }
+      return { requestDigest, authorityDigest,
+        counts: metricCount === 1 ? { ...PRE } : { ...POST } }
     } },
-    uiDriver: overrides.uiDriver ?? { act: async ({ step, selectors }) => step === 'ui_commit_sale'
-      ? { acted: true, productSelector: source.expected.productSelector, selectorsUsed: selectors }
-      : { acted: true, selectorsUsed: selectors } },
+    uiDriver: overrides.uiDriver ?? { act: async ({ selector, requestDigest, authorityDigest,
+      beforeUiDigest }) => ({ acted: true, selector, requestDigest, authorityDigest,
+      beforeUiDigest, afterUiDigest: createHash('sha256')
+        .update(uiDocument(executor.uiDumps + 1)).digest('hex') }) },
   }
 }
 
@@ -165,6 +226,7 @@ test('fake authorized target completes protocol without executing a real tool', 
   assert.ok(deps.executor.calls.every((call) =>
     ['adb', 'apkanalyzer', 'apksigner', 'sha256sum', 'ss'].includes(call.command)))
   assert.ok(deps.executor.calls.every((call) => call.args.every((arg) => typeof arg === 'string')))
+  assert.ok(deps.executor.sensitiveCalls.every((call) => !('input' in call) && !('stdout' in call)))
 })
 
 test('missing dependencies and unsafe target paths fail before execution', () => {
@@ -213,14 +275,142 @@ test('artifact and UI identifier substitutions never reach a claimed pass', asyn
     new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: missingSelector }))))
 })
 
+test('installed bytes, split inventory, and exact single signer are all bound', async () => {
+  const source = plan()
+  for (const executor of [
+    new FakeExecutor(source, { mutate(result, command, args) {
+      if (command === 'adb' && args.includes('/data/app/qa/base.apk')) return ok(Buffer.from('substituted'))
+    } }),
+    new FakeExecutor(source, { mutate(result, command, args) {
+      if (command === 'adb' && args.includes('path')) {
+        return ok('package:/data/app/qa/base.apk\npackage:/data/app/qa/split_config.apk\n')
+      }
+    } }),
+    new FakeExecutor(source, { mutate(result, command) {
+      if (command === 'apksigner') return ok(`${result.stdout}\nSigner #2 certificate SHA-256 digest: ${'a'.repeat(64)}`)
+    } }),
+  ]) {
+    await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+      new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor }))))
+  }
+})
+
+test('target lock is nonce-independent and foreign ownership is never removed', async () => {
+  const first = plan()
+  const second = plan()
+  second.sessionNonce = 'abcdef0123456789abcdef0123456789'
+  second.paths.stagingRoot = `supermega-shop-installed-qa/${second.sessionNonce}/`
+  second.paths.stagedEnvelope = `${second.paths.stagingRoot}evidence.smqa`
+  const device = { lockOwner: 'foreign-owner-token' }
+  const executor = new FakeExecutor(second, { device })
+  await assert.rejects(runShopAndroidInstalledQaProtocol(second,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(second, { executor }))),
+  (error) => error.code === 'shop_android_installed_qa_cleanup_failed')
+  assert.equal(device.lockOwner, 'foreign-owner-token')
+  assert.equal(executor.calls.some((call) => call.args.includes('foreign-owner-token')), false)
+  assert.equal(executor.calls.some((call) => call.args.includes('rm')
+    && call.args.some((arg) => arg.endsWith(`${TARGET}.lock/owner`))), false)
+  assert.equal(first.targetId, second.targetId)
+})
+
+test('UI, metrics, and recovery reject request or authority substitution', async () => {
+  const source = plan()
+  const wrongUi = { act: async ({ selector, authorityDigest, beforeUiDigest }) => ({
+    acted: true, selector, requestDigest: 'a'.repeat(64), authorityDigest,
+    beforeUiDigest, afterUiDigest: beforeUiDigest,
+  }) }
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { uiDriver: wrongUi }))))
+
+  const wrongMetrics = { observe: async ({ requestDigest }) => ({
+    requestDigest, authorityDigest: 'b'.repeat(64), counts: { ...PRE },
+  }) }
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { metricsObserver: wrongMetrics }))))
+
+  const wrongRecovery = { observe: async ({ requestDigest }) => ({
+    requestDigest, authorityDigest: 'c'.repeat(64), recovery: {},
+  }) }
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { recoveryObserver: wrongRecovery }))))
+})
+
+test('no-op UI transitions and substituted restore destinations are rejected', async () => {
+  const source = plan()
+  let noOpActions = 0
+  const noOpExecutor = new FakeExecutor(source, { mutate(result, command, args) {
+    if (command === 'adb' && args.includes('uiautomator')) return ok(uiDocument(0))
+  } })
+  const noOpDriver = { act: async ({ selector, requestDigest, authorityDigest, beforeUiDigest }) => {
+    noOpActions += 1
+    return { acted: true, selector, requestDigest, authorityDigest, beforeUiDigest,
+      afterUiDigest: beforeUiDigest }
+  } }
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source,
+      { executor: noOpExecutor, uiDriver: noOpDriver }))))
+  assert.equal(noOpActions, 1)
+
+  let privateEnvelopeReads = 0
+  const substitutedRestore = new FakeExecutor(source, { mutate(result, command, args) {
+    if (command === 'adb' && args.at(-1)?.endsWith('.smqa') && args.includes('run-as')
+        && args.includes('cat')) {
+      privateEnvelopeReads += 1
+      if (privateEnvelopeReads === 2) return ok(Buffer.from('substituted restored bytes'))
+    }
+  } })
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: substitutedRestore }))))
+})
+
+test('atomic lock release refuses an owner swap and preserves the foreign lock', async () => {
+  const source = plan()
+  const device = { lockOwner: null, swapOnRelease: true }
+  const executor = new FakeExecutor(source, { device })
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor }))),
+  (error) => error.code === 'shop_android_installed_qa_cleanup_failed')
+  assert.equal(device.lockOwner, 'foreign-owner-after-read')
+})
+
+test('receipt root privacy and post-clean absence are fail-closed', async () => {
+  const source = plan()
+  const leakedReceipt = new FakeExecutor(source, { mutate(result, command, args) {
+    if (command === 'adb' && args.at(-1)?.endsWith('.json')) {
+      const decoded = JSON.parse(result.stdout)
+      decoded.customerName = 'forbidden'
+      return ok(JSON.stringify(decoded))
+    }
+  } })
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: leakedReceipt }))))
+
+  const remains = new FakeExecutor(source, { mutate(result, command, args) {
+    if (command === 'adb' && args.includes('test') && args.includes('-e')
+        && args.some((arg) => arg.endsWith('.smqa'))) return ok()
+  } })
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: remains }))),
+  (error) => error.code === 'shop_android_installed_qa_cleanup_failed')
+})
+
 test('stage symlink or extra-file proof and cleanup failure are rejected', async () => {
   const source = plan()
   const symlink = new FakeExecutor(source, { mutate(result, command, args) {
-    if (command === 'adb' && args.includes('!') && args.includes('-L')
-        && args.some((arg) => arg.startsWith('/data/local/tmp/'))) return { ...ok(), exitCode: 1 }
+    if (command === 'adb' && args.includes('-L')
+        && args.some((arg) => arg.startsWith('/data/local/tmp/'))) return ok()
   } })
   await assert.rejects(runShopAndroidInstalledQaProtocol(source,
     new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: symlink }))))
+
+  const extraFile = new FakeExecutor(source, { mutate(result, command, args) {
+    if (command === 'adb' && args.includes('find')
+        && args.some((arg) => arg.startsWith('/data/local/tmp/'))) {
+      return ok(`${source.paths.stagedEnvelope.replace(/^/, '/data/local/tmp/')}\n/data/local/tmp/unreviewed.smqa\n`)
+    }
+  } })
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: extraFile }))))
 
   const cleanup = new FakeExecutor(source, { mutate(result, command, args) {
     if (command === 'adb' && args.includes('rmdir')) return { ...ok(), exitCode: 1 }
