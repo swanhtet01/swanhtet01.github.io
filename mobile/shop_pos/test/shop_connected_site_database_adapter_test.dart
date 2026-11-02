@@ -642,7 +642,7 @@ void main() {
       }
       expect(
         () =>
-            ShopBackup.verifySnapshot(scopeTampered, expectedSchemaVersion: 38),
+            ShopBackup.verifySnapshot(scopeTampered, expectedSchemaVersion: 39),
         throwsFormatException,
       );
       raw = sqlite.sqlite3.open(gapTampered.path);
@@ -655,7 +655,7 @@ void main() {
         raw.close();
       }
       expect(
-        () => ShopBackup.verifySnapshot(gapTampered, expectedSchemaVersion: 38),
+        () => ShopBackup.verifySnapshot(gapTampered, expectedSchemaVersion: 39),
         throwsFormatException,
       );
     } finally {

@@ -1,9 +1,10 @@
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_database.dart';
 
-const historicalShopFixtureSupportedSchemaVersion = 38;
+const historicalShopFixtureSupportedSchemaVersion = 39;
 
 Set<String> historicalShopPostV15SchemaObjectNames() => <String>{
+  ...shopConnectedTrustedTimeClientSchemaDefinitionsV39().keys,
   ...shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
   ...shopMemberSchemaDefinitionsV16().keys,
   ...shopCorrectionConsumptionSchemaDefinitionsV17().keys,
@@ -26,6 +27,16 @@ void dropHistoricalShopSchemaDefinitionGroup(
   sqlite.Database connection,
   Map<String, String> definitions,
 ) {
+  if (definitions.keys.toSet().containsAll(
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
+      ) &&
+      definitions.length ==
+          shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().length) {
+    dropHistoricalShopSchemaDefinitionGroup(
+      connection,
+      shopConnectedTrustedTimeClientSchemaDefinitionsV39(),
+    );
+  }
   for (final definition in definitions.entries.toList().reversed) {
     final type = shopSchemaObjectTypeForDefinition(definition.value);
     connection.execute(
@@ -42,6 +53,16 @@ Future<void> dropHistoricalShopSchemaDefinitionGroupInDatabase(
   ShopDatabase database,
   Map<String, String> definitions,
 ) async {
+  if (definitions.keys.toSet().containsAll(
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
+      ) &&
+      definitions.length ==
+          shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().length) {
+    await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+      database,
+      shopConnectedTrustedTimeClientSchemaDefinitionsV39(),
+    );
+  }
   for (final definition in definitions.entries.toList().reversed) {
     final type = shopSchemaObjectTypeForDefinition(definition.value);
     await database.customStatement(

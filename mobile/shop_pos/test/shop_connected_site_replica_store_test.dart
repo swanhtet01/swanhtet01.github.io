@@ -451,7 +451,7 @@ void main() {
       raw.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 38),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 39),
       throwsFormatException,
     );
   });
@@ -659,7 +659,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 38);
+    expect(migrated.schemaVersion, 39);
     await migrated.verifyConnectedReplicaEvidence();
   });
 
@@ -793,7 +793,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 38);
+    expect(migrated.schemaVersion, 39);
     expect(
       await migrated
           .customSelect(

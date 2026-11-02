@@ -15,6 +15,7 @@ import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
+import 'shop_connected_trusted_time_client_schema.dart';
 import 'shop_connected_trusted_time_contract.dart';
 import 'shop_connected_trusted_time_stream.dart';
 import 'shop_site_coordinator.dart';
@@ -25,6 +26,7 @@ import 'shop_staff_authorization.dart';
 
 export 'shop_correction_consumption.dart';
 export 'shop_correction_receipt.dart';
+export 'shop_connected_trusted_time_client_schema.dart';
 
 part 'shop_database.g.dart';
 
@@ -5500,7 +5502,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 38) return const {};
+  if (schemaVersion < 5 || schemaVersion > 39) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -6519,6 +6521,7 @@ class ShopDatabase extends _$ShopDatabase {
       await database.verifyReadyForUse();
       await database.markCorrectionRestorePending();
       await database._suspendTrustedTimeIssuerAfterRestoreV38();
+      await database._markTrustedTimeClientStreamsRestoredV39();
       await database.verifyReadyForUse();
       final row = await database
           .customSelect('PRAGMA user_version')
@@ -6591,7 +6594,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 38;
+  int get schemaVersion => 39;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6647,15 +6650,25 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV37Schema();
       await _createConnectedTrustedTimeIssuerSchemaV38();
       await _requireUnifiedV38Schema();
+      await _createConnectedTrustedTimeClientSchemaV39();
+      await _requireUnifiedV39Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 38) {
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        return;
+      }
       if (from == 37) {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from == 36) {
@@ -6664,6 +6677,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from == 35) {
@@ -6674,6 +6689,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from == 34) {
@@ -6688,6 +6705,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from == 33) {
@@ -6702,6 +6721,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from == 32) {
@@ -6719,6 +6740,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from == 31) {
@@ -6737,6 +6760,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from == 30) {
@@ -6758,6 +6783,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       final origin = await _classifyUpgradeOrigin(from);
@@ -6782,6 +6809,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from == 28) {
@@ -6820,6 +6849,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV37Schema();
         await _createConnectedTrustedTimeIssuerSchemaV38();
         await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
         return;
       }
       if (from < 2) {
@@ -7054,14 +7085,16 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV37Schema();
       await _createConnectedTrustedTimeIssuerSchemaV38();
       await _requireUnifiedV38Schema();
+      await _createConnectedTrustedTimeClientSchemaV39();
+      await _requireUnifiedV39Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV38Schema();
+      await _requireUnifiedV39Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV38Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV39Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
@@ -7597,11 +7630,55 @@ class ShopDatabase extends _$ShopDatabase {
     );
   }
 
+  Future<void> _createConnectedTrustedTimeClientSchemaV39() async {
+    for (final definition
+        in shopConnectedTrustedTimeClientSchemaDefinitionsV39().values) {
+      await customStatement(definition);
+    }
+  }
+
   Future<void> _suspendTrustedTimeIssuerAfterRestoreV38() async {
     await customUpdate(
       'UPDATE shop_connected_time_issuer_state SET issuance_suspended = 1 '
       'WHERE singleton_id = 1 AND issuance_suspended = 0',
     );
+  }
+
+  Future<void> _markTrustedTimeClientStreamsRestoredV39() async {
+    final heads = await customSelect(
+      'SELECT head.* FROM shop_connected_time_client_heads head '
+      'WHERE head.authority_sequence = (SELECT MAX(candidate.authority_sequence) '
+      'FROM shop_connected_time_client_heads candidate '
+      'WHERE candidate.stream_digest = head.stream_digest)',
+    ).get();
+    for (final head in heads) {
+      final streamDigest = head.read<String>('stream_digest');
+      final sequenceRow = await customSelect(
+        'SELECT COALESCE(MAX(restore_sequence), 0) AS value FROM '
+        'shop_connected_time_client_restore_barriers WHERE stream_digest = ?',
+        variables: [Variable<String>(streamDigest)],
+      ).getSingle();
+      final restoreSequence = sequenceRow.read<int>('value') + 1;
+      final barrier = <String, Object>{
+        'schema': 'supermega.connected-trusted-time-client-restore-barrier.v1',
+        'streamDigest': streamDigest,
+        'restoreSequence': restoreSequence,
+        'headDigest': head.read<String>('head_digest'),
+        'reason': 'fresh_target_restore',
+      };
+      await customInsert(
+        'INSERT INTO shop_connected_time_client_restore_barriers '
+        '(barrier_digest, stream_digest, restore_sequence, head_digest, barrier_json) '
+        'VALUES (?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(connectedSiteSha256(barrier)),
+          Variable<String>(streamDigest),
+          Variable<int>(restoreSequence),
+          Variable<String>(head.read<String>('head_digest')),
+          Variable<String>(canonicalConnectedSiteJson(barrier)),
+        ],
+      );
+    }
   }
 
   /// V32 retained deltas as individually valid events, but did not retain the
@@ -10466,6 +10543,57 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
+  Future<void> _requireUnifiedV39Schema() async {
+    await _requireUnifiedV38Schema();
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {#shopAllowV38NestedSchemaVerification: false},
+    );
+    final definitions = shopConnectedTrustedTimeClientSchemaDefinitionsV39();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    final rowsValid = await _v39ConnectedTrustedTimeClientRowsValid();
+    if (!definitionsValid || !rowsValid) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map(
+            (entry) => '${entry.key}:${objects[entry.key]?.type ?? 'missing'}',
+          )
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v39 trusted-time client schema failed verification '
+        '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<bool> _v39ConnectedTrustedTimeClientRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedTrustedTimeClientRowsValidV39(
+        entries: await rows('shop_connected_time_client_entries'),
+        acks: await rows('shop_connected_time_client_acks'),
+        heads: await rows('shop_connected_time_client_heads'),
+        barriers: await rows('shop_connected_time_client_restore_barriers'),
+        clearances: await rows('shop_connected_time_client_restore_clearances'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
   Future<bool> _v37ConnectedTrustedTimeRowsValid() async {
     try {
       Future<List<Map<String, Object?>>> rows(String table) async =>
@@ -12241,9 +12369,12 @@ class ShopDatabase extends _$ShopDatabase {
     for (final row in rows) {
       final name = row.read<String>('name').toLowerCase();
       if (Zone.current[#shopAllowV38NestedSchemaVerification] == true &&
-          shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().containsKey(
-            name,
-          )) {
+          (shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().containsKey(
+                name,
+              ) ||
+              shopConnectedTrustedTimeClientSchemaDefinitionsV39().containsKey(
+                name,
+              ))) {
         continue;
       }
       if (objects.containsKey(name)) {

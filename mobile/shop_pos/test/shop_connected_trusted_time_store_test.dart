@@ -298,7 +298,7 @@ void main() {
       database = ShopDatabase(NativeDatabase(file));
       addTearDown(database.close);
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 38);
+      expect(database.schemaVersion, 39);
       final count = await database
           .customSelect(
             'SELECT COUNT(*) AS total FROM shop_connected_time_requests',
