@@ -1385,6 +1385,7 @@ class _ShopHomeState extends State<ShopHome> {
                   ),
                 ] else if (!inWorkspace)
                   PopupMenuButton<String>(
+                    key: const ValueKey('shop-open-more'),
                     tooltip: shopCopy(widget.myanmar, 'More', 'နောက်ထပ်'),
                     icon: const Icon(Icons.menu_rounded),
                     onSelected: (value) {
@@ -1403,11 +1404,14 @@ class _ShopHomeState extends State<ShopHome> {
                     itemBuilder: (context) => [
                       PopupMenuItem(
                         value: 'sales',
-                        child: Text(
-                          shopCopy(
-                            widget.myanmar,
-                            'Recent sales',
-                            'မကြာသေးမီက အရောင်းများ',
+                        child: Semantics(
+                          identifier: 'shop.open-recent-sales',
+                          child: Text(
+                            shopCopy(
+                              widget.myanmar,
+                              'Recent sales',
+                              'မကြာသေးမီက အရောင်းများ',
+                            ),
                           ),
                         ),
                       ),
@@ -1791,6 +1795,7 @@ class _ShopHomeState extends State<ShopHome> {
     );
     return Semantics(
       key: ValueKey('shop-sale-completion:${receipt.id}'),
+      identifier: 'shop.sale-completion',
       container: true,
       liveRegion: true,
       label: announcement,
@@ -1859,27 +1864,33 @@ class _ShopHomeState extends State<ShopHome> {
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  TextButton.icon(
-                    key: const ValueKey('shop-sale-completion-view'),
-                    onPressed: _openRecentSales,
-                    icon: const Icon(Icons.receipt_long_outlined),
-                    label: Text(
-                      shopCopy(
-                        widget.myanmar,
-                        'View saved receipt',
-                        'သိမ်းထားသောပြေစာ ကြည့်ရန်',
+                  Semantics(
+                    identifier: 'shop.sale-completion.view-receipt',
+                    child: TextButton.icon(
+                      key: const ValueKey('shop-sale-completion-view'),
+                      onPressed: _openRecentSales,
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      label: Text(
+                        shopCopy(
+                          widget.myanmar,
+                          'View saved receipt',
+                          'သိမ်းထားသောပြေစာ ကြည့်ရန်',
+                        ),
                       ),
                     ),
                   ),
                   if (reprintLabel != null)
-                    FilledButton.tonal(
-                      key: const ValueKey('shop-sale-completion-reprint'),
-                      onPressed:
-                          completion.printState ==
-                              _ReceiptPrintState.needsPrinterTest
-                          ? () => _testPrinterThenPrint(receipt)
-                          : () => _printReceipt(receipt),
-                      child: Text(reprintLabel),
+                    Semantics(
+                      identifier: 'shop.sale-completion.reprint',
+                      child: FilledButton.tonal(
+                        key: const ValueKey('shop-sale-completion-reprint'),
+                        onPressed:
+                            completion.printState ==
+                                _ReceiptPrintState.needsPrinterTest
+                            ? () => _testPrinterThenPrint(receipt)
+                            : () => _printReceipt(receipt),
+                        child: Text(reprintLabel),
+                      ),
                     ),
                 ],
               ),

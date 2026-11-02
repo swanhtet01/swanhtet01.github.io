@@ -1715,12 +1715,14 @@ void registerWidgetTests(WidgetTestPartition partition) {
                     ? find.byType(NavigationRail)
                     : find.byType(NavigationBar);
                 expect(navigation, findsOneWidget);
-                await tester.tap(
-                  find.descendant(
-                    of: navigation,
-                    matching: find.text(labels[index]),
-                  ),
-                );
+                final destination = index == 2
+                    ? find.bySemanticsIdentifier('shop.open-recent-sales')
+                    : find.descendant(
+                        of: navigation,
+                        matching: find.text(labels[index]),
+                      );
+                expect(destination, findsOneWidget);
+                await tester.tap(destination);
                 await tester.pumpAndSettle();
                 if (width >= 1100) {
                   expect(
@@ -4278,7 +4280,9 @@ void registerWidgetTests(WidgetTestPartition partition) {
       await tester.tap(find.text('2,500 MMK'));
       await tester.pumpAndSettle();
       expect(find.text('Reprint receipt'), findsOneWidget);
-      await tester.tap(find.text('Reprint receipt'));
+      await tester.tap(
+        find.bySemanticsIdentifier('shop.saved-receipt.reprint'),
+      );
       await tester.pumpAndSettle();
 
       expect(sent, hasLength(1));
@@ -5440,16 +5444,32 @@ void registerWidgetTests(WidgetTestPartition partition) {
       expect((await database.readActiveProducts()).single.onHand, 1);
       expect(find.textContaining('not sent to a printer'), findsOneWidget);
       expect(
+        find.bySemanticsIdentifier('shop.sale-completion'),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier('shop.sale-completion.view-receipt'),
+        findsOneWidget,
+      );
+      expect(
         find.byKey(const ValueKey('shop-sale-completion-view')),
         findsOneWidget,
       );
-      await tester.tap(find.byKey(const ValueKey('shop-sale-completion-view')));
+      await tester.tap(
+        find.bySemanticsIdentifier('shop.sale-completion.view-receipt'),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Recent sales'), findsOneWidget);
       expect(find.text('2,500 MMK'), findsOneWidget);
-      await tester.tap(find.text('2,500 MMK'));
+      expect(find.bySemanticsIdentifier('shop.recent-sale.0'), findsOneWidget);
+      await tester.tap(find.bySemanticsIdentifier('shop.recent-sale.0'));
       await tester.pumpAndSettle();
       expect(find.text('Sale details'), findsOneWidget);
+      expect(find.bySemanticsIdentifier('shop.saved-receipt'), findsOneWidget);
+      expect(
+        find.bySemanticsIdentifier('shop.saved-receipt.reprint'),
+        findsOneWidget,
+      );
       expect(find.text('Tea × 1'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));

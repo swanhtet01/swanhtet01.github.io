@@ -18,6 +18,8 @@ import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_runtime_profile.dart';
+import 'package:supermega_shop/shop_runtime_scope.dart';
 
 import 'historical_shop_fixture_support.dart';
 import 'managed_staff_test_support.dart';
@@ -4242,6 +4244,198 @@ void main() {
       expect(PrinterDiscoveryService.new, throwsStateError);
       expect(ShopReceiptPrinter.new, throwsStateError);
       expect(ReceiptReprintService.new, throwsStateError);
+    });
+
+    test(
+      'synthetic receipt capture is redacted, idempotent and side-effect free',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final root = await Directory.systemTemp.createTemp(
+          'shop-qa-loopback-receipt-',
+        );
+        final support = await Directory('${root.path}/support').create();
+        final temporary = await Directory('${root.path}/temporary').create();
+        final configuration = ShopRuntimeConfiguration.resolve(
+          runtimeProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+          qaProfile: ShopRuntimeConfiguration.qaProfileId,
+          buildIdentityProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+          buildIdentityQaProfile: ShopRuntimeConfiguration.qaProfileId,
+          platformIdentity: 'dev.supermega.supermega_shop.qa',
+        );
+        final scope = await ShopRuntimeScope.resolve(
+          ShopRuntimeProfile.syntheticQa,
+          configuration: configuration,
+          supportProvider: () async => support,
+          temporaryProvider: () async => temporary,
+        );
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'private-tea-product',
+            name: 'Private Tea Name',
+            priceMmk: 2500,
+            openingStock: 2,
+          );
+          final receipt = await database.recordManagedTestCashSale(
+            operationId: 'private-receipt-operation',
+            lines: const [
+              ShopSaleLineInput(productId: 'private-tea-product', quantity: 1),
+            ],
+          );
+          final before = (
+            sales: await database.countSales(),
+            stock: await database.countStockMovements(),
+            outbox: await database.countOutboxOperations(),
+            onHand: (await database.readActiveProducts()).single.onHand,
+          );
+          final service = ReceiptReprintService(runtimeScope: scope);
+
+          expect(await service.printIfTrusted(receipt, myanmar: false), isTrue);
+          expect(await service.printIfTrusted(receipt, myanmar: false), isTrue);
+          final store = ShopQaLoopbackReceiptCaptureStore.forRuntime(scope);
+          final english = (await store.read()).single;
+          expect(english.captureCount, 2);
+          expect(english.language, 'en');
+          expect(
+            english.receiptBindingSha256,
+            matches(RegExp(r'^[a-f0-9]{64}$')),
+          );
+          expect(
+            english.renderedReceiptSha256,
+            matches(RegExp(r'^[a-f0-9]{64}$')),
+          );
+
+          expect(await service.printIfTrusted(receipt, myanmar: true), isTrue);
+          final captures = await store.read();
+          expect(captures, hasLength(2));
+          expect(
+            captures.map((capture) => capture.language),
+            containsAll(<String>['en', 'my']),
+          );
+          expect(
+            captures.map((capture) => capture.receiptBindingSha256).toSet(),
+            hasLength(1),
+          );
+
+          final fixedReceipt = ShopSaleReceipt(
+            id: 'fixture-receipt',
+            operationId: 'fixture-operation',
+            totalMmk: 2500,
+            createdAtMillis: 42,
+            paymentMethod: 'cash',
+            cashTenderedMmk: 3000,
+            lines: const [
+              ShopSaleReceiptLine(
+                id: 'fixture-line',
+                productId: 'fixture-product',
+                productName: 'Tea',
+                unitPriceMmk: 2500,
+                quantity: 1,
+                lineTotalMmk: 2500,
+              ),
+            ],
+          );
+          final fixed = await store.capture(fixedReceipt, myanmar: false);
+          expect(
+            fixed.receiptBindingSha256,
+            'cee016243a485917a7663496a8c25f909ed2f9d799c3a67ed3609dea05edf0fe',
+          );
+          final altered = await store.capture(
+            ShopSaleReceipt(
+              id: fixedReceipt.id,
+              operationId: 'substituted-operation',
+              totalMmk: fixedReceipt.totalMmk,
+              createdAtMillis: fixedReceipt.createdAtMillis,
+              paymentMethod: fixedReceipt.paymentMethod,
+              cashTenderedMmk: fixedReceipt.cashTenderedMmk,
+              lines: fixedReceipt.lines,
+            ),
+            myanmar: false,
+          );
+          expect(
+            altered.receiptBindingSha256,
+            isNot(fixed.receiptBindingSha256),
+          );
+          await Future.wait([
+            for (var index = 0; index < 4; index++)
+              store.capture(fixedReceipt, myanmar: false),
+          ]);
+          expect(
+            (await store.read())
+                .singleWhere(
+                  (capture) =>
+                      capture.receiptBindingSha256 ==
+                      fixed.receiptBindingSha256,
+                )
+                .captureCount,
+            5,
+          );
+
+          expect(
+            store.evidenceFile.path,
+            endsWith(
+              '${Platform.pathSeparator}synthetic-evidence'
+              '${Platform.pathSeparator}'
+              'SuperMega-Shop-SYNTHETIC-QA-RECEIPTS-v1.json',
+            ),
+          );
+          final encoded = await store.evidenceFile.readAsString();
+          for (final privateValue in const [
+            'private-receipt-operation',
+            'private-tea-product',
+            'Private Tea Name',
+            '2500',
+          ]) {
+            expect(encoded, isNot(contains(privateValue)));
+          }
+          expect(await database.countSales(), before.sales);
+          expect(await database.countStockMovements(), before.stock);
+          expect(await database.countOutboxOperations(), before.outbox);
+          expect(
+            (await database.readActiveProducts()).single.onHand,
+            before.onHand,
+          );
+        } finally {
+          await database.close();
+          await root.delete(recursive: true);
+        }
+      },
+    );
+
+    test('production runtime cannot open synthetic receipt capture', () async {
+      SharedPreferences.setMockInitialValues({});
+      final root = await Directory.systemTemp.createTemp(
+        'shop-production-loopback-receipt-',
+      );
+      final documents = await Directory('${root.path}/documents').create();
+      final temporary = await Directory('${root.path}/temporary').create();
+      try {
+        final configuration = ShopRuntimeConfiguration.resolve(
+          runtimeProfile: 'production',
+          qaProfile: '',
+          buildIdentityProfile: 'production',
+          buildIdentityQaProfile: '',
+          platformIdentity: 'production-current',
+        );
+        final scope = await ShopRuntimeScope.resolve(
+          ShopRuntimeProfile.production,
+          configuration: configuration,
+          documentsProvider: () async => documents,
+          temporaryProvider: () async => temporary,
+        );
+        expect(
+          () => ShopQaLoopbackReceiptCaptureStore.forRuntime(scope),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'shop_qa_loopback_receipt_scope_required',
+            ),
+          ),
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
     });
 
     test('injected printer callbacks still require an explicit test seam', () {
