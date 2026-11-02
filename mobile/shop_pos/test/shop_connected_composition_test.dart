@@ -8,6 +8,7 @@ import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_connected_application_boundary.dart';
 import 'package:supermega_shop/shop_connected_composition.dart';
 import 'package:supermega_shop/shop_connected_coordinator_host.dart';
+import 'package:supermega_shop/shop_connected_coordinator_health.dart';
 import 'package:supermega_shop/shop_connected_platform_security.dart';
 import 'package:supermega_shop/shop_connected_runtime.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
@@ -302,7 +303,7 @@ void main() {
         ),
         leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
         timeAuthority: const ShopConnectedSiteTimeUnavailable(),
-        health: const _Health(),
+        healthSignals: const ShopConnectedCoordinatorHealthSignalsUnavailable(),
       );
       final transport = dependencies.build(
         ShopConnectedCoordinatorTransportContext(
@@ -317,6 +318,13 @@ void main() {
       expect(standard.sharedWrites, same(writes));
       expect(standard.enrollment, same(enrollment));
       expect(standard.server.sharedWriteAvailability, same(writes));
+      final health =
+          standard.server.health as ShopConnectedCoordinatorHealthProvider;
+      expect(health.database, same(database));
+      expect(health.sharedWrites, same(writes));
+      expect((await health.readHealth()).sharedWritesAvailable, isFalse);
+      await writes.resume();
+      expect((await health.readHealth()).sharedWritesAvailable, isTrue);
 
       final tls = ConnectedEphemeralTlsIdentity(
         certificatePem: Uint8List.fromList([1]),
@@ -413,7 +421,7 @@ void main() {
         ),
         leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
         timeAuthority: const ShopConnectedSiteTimeUnavailable(),
-        health: const _Health(),
+        healthSignals: const ShopConnectedCoordinatorHealthSignalsUnavailable(),
         cafeStore: foreignCafeStore,
       );
       expect(
@@ -634,16 +642,3 @@ Future<int> _pairingNonceCount(ShopDatabase database) async =>
             )
             .getSingle())
         .read<int>('count');
-
-class _Health implements CoordinatorHealthProvider {
-  const _Health();
-
-  @override
-  Future<CoordinatorHealthV1> readHealth() async => const CoordinatorHealthV1(
-    sharedWritesAvailable: false,
-    internetAvailable: false,
-    cloudSyncHealthy: false,
-    backupCurrent: false,
-    pendingConflictCount: 0,
-  );
-}

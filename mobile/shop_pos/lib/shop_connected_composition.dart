@@ -4,6 +4,7 @@ import 'shop_cafe_order_contract.dart';
 import 'shop_cafe_order_store.dart';
 import 'shop_connected_application_boundary.dart';
 import 'shop_connected_coordinator_host.dart';
+import 'shop_connected_coordinator_health.dart';
 import 'shop_connected_platform_security.dart';
 import 'shop_connected_runtime.dart';
 import 'shop_connected_site_authority_store.dart';
@@ -49,7 +50,7 @@ class ShopConnectedCoordinatorServerDependencies {
     required this.pairingResponse,
     required this.leaseVerifier,
     required this.timeAuthority,
-    required this.health,
+    required this.healthSignals,
     this.stationReadPolicy = const CoordinatorStationReadPolicyUnavailable(),
     this.cafeStore,
     this.cafeModifierCatalog = const {},
@@ -58,7 +59,7 @@ class ShopConnectedCoordinatorServerDependencies {
   final CoordinatorPairingV1 pairingResponse;
   final ShopOfflineStaffLeaseVerifier leaseVerifier;
   final ShopConnectedSiteCoordinatorTimeAuthority timeAuthority;
-  final CoordinatorHealthProvider health;
+  final ShopConnectedCoordinatorHealthSignalSource healthSignals;
   final CoordinatorStationReadPolicy stationReadPolicy;
   final ShopCafeOrderStore? cafeStore;
   final Map<String, CafeModifierSnapshot> cafeModifierCatalog;
@@ -100,6 +101,14 @@ class ShopConnectedCoordinatorServerDependencies {
       database: context.database,
       workspaceId: pairingResponse.workspaceId,
       siteId: pairingResponse.siteId,
+    );
+    final health = ShopConnectedCoordinatorHealthProvider(
+      database: context.database,
+      sharedWrites: context.sharedWrites,
+      workspaceId: pairingResponse.workspaceId,
+      siteId: pairingResponse.siteId,
+      coordinatorDeviceId: pairingResponse.coordinatorDeviceId,
+      signals: healthSignals,
     );
     final server = SiteCoordinatorServer(
       pairing: context.enrollment,
