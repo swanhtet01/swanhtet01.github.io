@@ -5,6 +5,46 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 exact-head hosted CI and private formatter successor
+
+- **PUBLIC EXACT HEAD / DRAFT ONLY:** the specifically authorized non-force
+  update advanced draft PR #752 to ledger
+  `ae456914c43eb1b33dfd25f98dabbf532625a103` (tree
+  `be3f741aa42f4d25495251e96e9f33e435948a15`). No force push, merge,
+  deployment, signing, production enablement or manual workflow dispatch
+  occurred.
+- **NATIVE CI PARTIAL PASS / ANDROID FAIL:** automatic run `41400100819`
+  completed **FAIL**. Windows PC, iPad/iOS, and isolated Android, iOS and
+  Windows synthetic-QA jobs all **PASS**. The production-profile Android job
+  stopped before analysis, tests and APK packaging at changed-Dart formatting:
+  Dart 3.47.8 changed exactly one line wrap in
+  `shop_connected_site_reconciliation.dart`; the missing rendered-artifact
+  upload was downstream noise. Private successor
+  `7681baf2d6085c0bebeba05c648ba1ab3dde684f` (tree
+  `65d7192bf078d142babf2a3fc986e4259bda72a0`) contains only that formatter
+  output. Its Native CI contract is **21/21 PASS**, verifier **PASS**, QA
+  isolation contracts are **33/33 PASS**, audit is **PASS/strict-ready**, and
+  `git diff --check` is **PASS**. Independent review **ACCEPTS** the change as
+  byte-identical to the hosted formatter hunk and semantically inert. Exact
+  hosted Android analysis/tests/APK for this successor are **NOT RUN**; the
+  successor is not published without a new exact guarded authorization.
+- **APP CI FAIL / EXPECTED EVIDENCE GATE:** run `41400097120` passed steps
+  1--637 and failed at step 638, the first `hq:verify` check,
+  `node tools/record_postgres17_rehearsal.mjs --verify`, with
+  `database_rehearsal_evidence_stale` and `secretValuesExposed:false`.
+  Downstream App checks are **NOT RUN**. This is not an implementation PASS;
+  a genuine exact-source PostgreSQL 17 rehearsal remains required.
+- **DEPENDENCY SECURITY FAIL / UPSTREAM-BLOCKED:** run `41400100785` failed
+  app and kernel audits on `GHSA-g3hv-75wg-m249`, minimatch `<11.0.1`, in the
+  ESLint/tooling chains. Platform audit, Python audit and added-line credential
+  scan **PASS**. Forced downgrades, blanket minimatch overrides and suppression
+  remain prohibited because current consumers do not share a compatible API
+  and supported semver range.
+- **OTHER EXACT-HEAD CHECKS:** Kernel run `41400100790` **PASS**. GitGuardian
+  remains **FAIL** with two historical findings; neither is disposed or
+  reproduced here. Production signing, installed recovery, physical hardware,
+  merchant acceptance and the joint go/no-go remain **NOT RUN/BLOCKED**.
+
 ## 2026-11-02 private release-candidate preflight
 
 - **SOURCE/WORKFLOW PASS; PUBLICATION NOT AUTHORIZED:** the frozen implementation
