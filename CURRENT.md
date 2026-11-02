@@ -7,6 +7,40 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private schema-v38 trusted-time issuer persistence
+
+- **SOURCE PASS / DEFAULT-OFF / PERSISTENCE-ONLY:** implementation
+  `8be2636c8de1b36c3c6ce37771894a1a747982de` (repository tree
+  `324b00d944fcdc03fb2f803c0005f56022ac310a`, native tree
+  `a640f279b2744dbb72bdd64e60c72bcfab5081ca`, native `lib/` tree
+  `ac0e376974f2b6bc9cd0390e888963016fce28b3`, binary patch SHA-256
+  `5f5b0bffbd574cef313fb346e3330f954d905cec14fca5793e235dadfd32fa60`)
+  adds schema-v38 durable per-client issuer streams, allocation, signature,
+  replay, acknowledgement, exact head advancement, immutable evidence and
+  fresh-target restore suspension.
+- Issuance is explicitly disabled unless injected by a reviewed caller. Exact
+  canonical unsigned entries are parsed before allocation; same-stream
+  allocation is transactional and retains at most one pending entry; restart
+  and lost-response replay return the same signed bytes; acknowledgement must
+  match the complete signed entry scope and advances only the exact next head.
+  Backup verification reconstructs the allocation/signature/ack chain and
+  fails closed on gaps, substitution, malformed canonical bytes or partial
+  closure. A v37 upgrade creates no synthetic streams.
+- Targeted analyzer is **PASS**. Focused issuer tests are **8/8 PASS** and
+  existing stream tests are **5/5 PASS**. The combined issuer, stream and full
+  backup/restore regression is **114/114 PASS** in 6m14s; diff checks are
+  **PASS**. Independent adversarial review returned two **HOLD** rounds for
+  global restore suspension, chain closure, unsigned parsing, transition
+  guards and missing concurrency/restart cases, then **ACCEPT** after the
+  corrections and negative tests. The issuer store and its tests have SHA-256
+  `9bc20db71fed2c9a383a6c6e9613750c17a5268addccde42a875e8068f685ccd`
+  and `fcc93fe3a7a2bdb5926583ac1ee9e40d3cf265241e1012ce6089b82a5604f8f7`.
+- **BLOCKED / NOT RUN:** this is not a protected issuer runtime. No approved
+  wall-clock bootstrap, production signer/key custody, client stream-head
+  acceptance transport, restore-recovery authority, platform compilation or
+  installed-device evidence exists. Restored issuer state stays suspended and
+  there is intentionally no recovery-approval API. Connected mode remains off.
+
 ### Private trusted-time per-client stream prerequisite
 
 - **SOURCE PASS / CONTRACT-ONLY / UNMOUNTED:** implementation
