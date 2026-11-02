@@ -109,9 +109,14 @@
   mandatory cleanup receipts. Timed-out operations remain `UNKNOWN` until a
   request-bound abort/join acknowledgement proves `ABORTED`.
 - Focused protocol plus pure-validator tests are **99/99 PASS** and the
-  extended handoff/preflight/manifest matrix is **126/126 PASS**; syntax and
-  diff checks are **PASS**. Independent security review **ACCEPTS** the final
-  source.
+  extended handoff/preflight/manifest matrix is **126/126 PASS**; syntax is
+  **PASS**. The original exact implementation's full-range diff check was
+  **FAIL** on one trailing blank line at EOF, contrary to the earlier ledger
+  wording. Whitespace-only successor
+  `fdd5b7dab1f32990cc178f4e73eb92ffc927707b` removes that line; its exact
+  protocol suite is **73/73 PASS** and the full candidate range diff check is
+  **PASS**. Independent security review **ACCEPTS** the protocol source; the
+  whitespace correction changes no runtime or assertion semantics.
 - **NOT RUN / BLOCKED:** this is a protocol validator, not an ADB, filesystem,
   emulator or device adapter. UI actions, `pm clear`, staging, OS termination,
   isolation and cleanup remain injected attestations until executed against
