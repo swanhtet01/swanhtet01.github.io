@@ -8,14 +8,16 @@
 ## 2026-11-02 private release-candidate preflight
 
 - **SOURCE/WORKFLOW PASS; PUBLICATION NOT AUTHORIZED:** the frozen implementation
-  candidate is `598e21fb2bbc33d67f1d4875731ae83d08ec44a4` (tree
-  `d5120e0485c6e987288b9ed8b7e856efdb4e563b`, parent
-  `3001d31f7d78b6262c0d9de17e85e135e274f677`, patch SHA-256
-  `ecb29e6e61e681f6516921a22d05b65b1fa2e9468208c8f2f5f064f87eda8a1e`).
+  candidate is `56be3de0da96c46fb51b030757ec4e4d5b11f11b` (tree
+  `131b062d4549a90b6ed8f0ac02ee82216e8f4177`, native tree
+  `715110af0040010b05f308b4b82213f2d83f7f3a`, native `lib/` tree
+  `1d01e5fbd4733f3df6dbb91b5cf7b2d13a01f676`, parent
+  `0004c02bbc507e195f2adc0da06ebb046cd96d47`, patch SHA-256
+  `6969a58b8537ea4b3720303eccbe56fe86ca22b2ca6e965dec3b0cc57dc61470`).
   PR #752 remains open/draft at public head
   `584b713554120ae4833ddd0d6517b759854f469d`; the private candidate is a
   strict descendant and no remote update was made.
-- The candidate delta from that public head is deliberately large: 73 linear
+- The candidate delta from that public head is deliberately large: 75 linear
   commits implementing the reviewed default-off connected/LAN/trusted-time
   chain, schema through v39, historical-fixture repairs, and its source
   evidence. It must be reviewed as a complete integration successor, not as a
@@ -29,6 +31,17 @@
   **PASS**, QA-isolation contracts are **24/24 PASS**, strict isolation is
   **PASS**, YAML and Android shell syntax are **PASS**, and `git diff --check`
   is **PASS**. Independent adversarial review is **ACCEPT**.
+- Complete-diff security review found and closed one release-blocking cloud
+  authorization gap: a retained signed command could previously be paired with
+  unrelated coordinator-derived stock bytes. The v2 derivation now binds the
+  exact signed reserve command and canonical reservation (identity, subject,
+  lines, basket, workflow, actor, device, scope and capability) to the terminal
+  transition; the security-insufficient v1 derivation fails closed. Python
+  runtime and cloud tests are **24/24 PASS**, Native CI contracts remain **21/21
+  PASS**, and independent adversarial re-review is **ACCEPT**. `operationId` is
+  explicitly coordinator-authored audit metadata and cannot select different
+  stock; retained native database/backup checks bind it to transition or sale
+  evidence.
 - **NOT RUN / BLOCKED:** the two new hosted shard runtimes, exact-source Android
   and Windows builds, signing, installation, device recovery and merchant
   acceptance are not proved until an exact guarded PR update and its automatic
