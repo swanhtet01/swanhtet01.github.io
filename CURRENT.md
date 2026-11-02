@@ -5,6 +5,26 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-03 exact-head `fe02f283` Native CI receipt
+
+- Draft PR #752 exact head `fe02f283d51bb546db7fab0feabfcff0a43673ee`
+  (tree `662d6b932a4a01a51b231e1ab9c58bc544fb6c28`) completed Native run
+  `41509167112` with **all six jobs PASS**. Full Android passed serial Flutter
+  shards, real process-interruption recovery, analyzer, deterministic gallery
+  capture, unsigned-release rejection and debug APK packaging. Windows PC,
+  isolated Android/iOS/Windows QA and iPad/iOS also passed.
+- Retained Android production-debug artifact `13176655623` is 104,995,993
+  bytes and gallery artifact `13174854644` is 1,660,609 bytes; both are named
+  for GitHub's tested synthetic merge `fb0c6b291f6e85d013d5df43fbeace75a798afbf`
+  and expire 16 November 2026. Isolated Android synthetic-QA artifact
+  `13171938890` is 104,999,415 bytes, promotion-ineligible, and expires 9
+  November 2026. No artifact was downloaded in this checkpoint.
+- **EVIDENCE BOUNDARY:** this is exact-head hosted CI and retained debug/QA
+  artifact evidence, not production signing, installation, device recovery,
+  physical hardware or merchant acceptance. App CI remains **FAIL/BLOCKED**
+  at step 638/668 on stale PostgreSQL 17 rehearsal evidence; Dependency
+  Security remains **FAIL/BLOCKED** on the known unsupported minimatch paths.
+
 ## 2026-11-03 Android synthetic receipt evidence checkpoint
 
 - **SOURCE PASS / PRIVATE:** implementation
