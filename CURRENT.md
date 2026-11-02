@@ -12,8 +12,8 @@
   backup tests but failed `export screen validates the password before opening
   Save As` at `test/shop_backup_test.dart:1732`: the validation text was not
   found. Android failed earlier at the known native inventory contract; full
-  Android tests, gallery and APK packaging were **NOT RUN**. Four isolated QA
-  platform jobs and the iPad/iOS job passed separately; they do not override
+  Android tests, gallery and APK packaging were **NOT RUN**. Three isolated QA
+  jobs and the iPad/iOS job passed separately; they do not override
   either failed job.
 - Private implementation `01b41856de4b4846a463c0de4cd2240a6a401edd`
   (tree `0a0ccaab5b686e92c232a0e66362d09f84150614`) scrolls the existing
