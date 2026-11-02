@@ -1755,11 +1755,47 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      final headings = myanmar
+          ? const [
+              'သိမ်းဆည်းမည့်အရာ',
+              'လုံခြုံစွာ သိမ်းပါ',
+              'ပြန်လည်ရယူနိုင်သည့် အခြေအနေ',
+            ]
+          : const ['What is saved', 'Keep it safe', 'Restore boundary'];
+      for (final heading in headings) {
+        expect(find.text(heading), findsOneWidget);
+        expect(
+          find.ancestor(
+            of: find.text(heading),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.header == true,
+            ),
+          ),
+          findsOneWidget,
+        );
+      }
       expect(
         find.text(
           myanmar
-              ? 'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။ ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။ ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။'
-              : 'Includes sales, photos and payment settings. Keep the file and password safe. Online backup is not available. Restore this encrypted file from the start screen when this device has no local Shop yet.',
+              ? 'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။'
+              : 'Includes sales, photos and payment settings.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          myanmar
+              ? 'ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။'
+              : 'Keep the file and password safe. Online backup is not available.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          myanmar
+              ? 'ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။'
+              : 'Restore this encrypted file from the start screen when this device has no local Shop yet.',
         ),
         findsOneWidget,
       );
@@ -1791,10 +1827,59 @@ void main() {
     );
     await tester.enterText(find.byType(TextField).at(0), _password);
     await tester.enterText(find.byType(TextField).at(1), _password);
+    await tester.ensureVisible(find.text('Choose where to save'));
+    await tester.pump();
     await tester.tap(find.text('Choose where to save'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Save cancelled.'), findsOneWidget);
     expect(find.textContaining('Backup file saved.'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.liveRegion == true,
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('saved and failed export outcomes remain live regions', (
+    tester,
+  ) async {
+    for (final outcome in ['saved', 'failed']) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopBackupExportScreen(
+            database: database,
+            myanmar: false,
+            allowTestFileAccessWithoutScope: true,
+            exportAction: (_) async {
+              if (outcome == 'failed') throw StateError('test failure');
+              return ShopBackupExportResult.saved;
+            },
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField).at(0), _password);
+      await tester.enterText(find.byType(TextField).at(1), _password);
+      await tester.ensureVisible(find.text('Choose where to save'));
+      await tester.pump();
+      await tester.tap(find.text('Choose where to save'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(
+          outcome == 'saved'
+              ? 'Backup file saved.'
+              : 'Could not finish the export.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics && widget.properties.liveRegion == true,
+        ),
+        findsOneWidget,
+      );
+    }
   });
 
   test('wrong password never creates a target', () async {

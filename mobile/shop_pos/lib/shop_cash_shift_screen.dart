@@ -294,7 +294,8 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
             '${shopCopy(widget.myanmar, 'Counted', 'ရေတွက်ငွေ')}: '
             '${shopMmk(counted, myanmar: widget.myanmar)}\n'
             '${shopCopy(widget.myanmar, 'Difference', 'ကွာခြားချက်')}: '
-            '${shopMmk(difference, myanmar: widget.myanmar)}',
+            '${shopMmk(difference, myanmar: widget.myanmar)}\n\n'
+            '${shopCopy(widget.myanmar, 'Recording this difference will close the shift.', 'ဤကွာခြားချက်ကို မှတ်တမ်းတင်လျှင် တာဝန်ချိန်ကို ပိတ်ပါမည်။')}',
           ),
           actions: [
             TextButton(
@@ -306,8 +307,8 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
               child: Text(
                 shopCopy(
                   widget.myanmar,
-                  'Record difference',
-                  'ကွာခြားချက် မှတ်တမ်းတင်မည်',
+                  'Record difference & close shift',
+                  'ကွာခြားချက်မှတ်တမ်းတင်ပြီး တာဝန်ချိန်ပိတ်မည်',
                 ),
               ),
             ),

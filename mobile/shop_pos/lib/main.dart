@@ -2541,6 +2541,11 @@ class _ShopHomeState extends State<ShopHome> {
     );
     final text = _search.text.trim().toLowerCase();
     final visible = _visibleProducts(products).toList();
+    final hiddenMatches = text.isEmpty
+        ? const <ShopProduct>[]
+        : _catalogSearch.search(products, _search.text).toList();
+    final hasMatchesHiddenByFilter =
+        visible.isEmpty && hiddenMatches.isNotEmpty;
     if (visible.isEmpty) {
       return ListView(
         padding: const EdgeInsets.all(24),
@@ -2560,6 +2565,12 @@ class _ShopHomeState extends State<ShopHome> {
                         'Your catalog is empty',
                         'ကုန်ပစ္စည်းစာရင်း မရှိသေးပါ',
                       )
+                    : hasMatchesHiddenByFilter
+                    ? shopCopy(
+                        widget.myanmar,
+                        'Matches hidden by filter',
+                        'စစ်ထုတ်မှုကြောင့် ကိုက်ညီမှုများ ဖျောက်ထားပါသည်',
+                      )
                     : shopCopy(
                         widget.myanmar,
                         'No matching products',
@@ -2568,25 +2579,57 @@ class _ShopHomeState extends State<ShopHome> {
               ),
               if (text.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                FilledButton.icon(
-                  key: const ValueKey('shop-add-search-result'),
-                  onPressed: () {
-                    final query = _search.text.trim();
-                    final isBarcode = RegExp(r'^[0-9]{6,64}$').hasMatch(query);
-                    _showAddProduct(
-                      initialBarcode: isBarcode ? query : '',
-                      initialName: isBarcode ? '' : query,
-                    );
-                  },
-                  icon: const Icon(Icons.add),
-                  label: Text(
+                if (hasMatchesHiddenByFilter) ...[
+                  Text(
                     shopCopy(
                       widget.myanmar,
-                      'Add product',
-                      'ကုန်ပစ္စည်းထည့်ရန်',
+                      'A matching product is hidden by the current filter.',
+                      'ကိုက်ညီသောပစ္စည်းကို လက်ရှိစစ်ထုတ်မှုက ဖျောက်ထားပါသည်။',
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    key: const ValueKey('shop-show-all-search-matches'),
+                    onPressed: () {
+                      setState(() {
+                        _favoritesOnly = false;
+                        _selectedCategory = null;
+                      });
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _focusScannerIfReady();
+                      });
+                    },
+                    icon: const Icon(Icons.filter_alt_off_outlined),
+                    label: Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'Show all matches',
+                        'ကိုက်ညီမှုအားလုံး ပြရန်',
+                      ),
                     ),
                   ),
-                ),
+                ] else
+                  FilledButton.icon(
+                    key: const ValueKey('shop-add-search-result'),
+                    onPressed: () {
+                      final query = _search.text.trim();
+                      final isBarcode = RegExp(r'^[0-9]{6,64}$')
+                          .hasMatch(query);
+                      _showAddProduct(
+                        initialBarcode: isBarcode ? query : '',
+                        initialName: isBarcode ? '' : query,
+                      );
+                    },
+                    icon: const Icon(Icons.add),
+                    label: Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'Add product',
+                        'ကုန်ပစ္စည်းထည့်ရန်',
+                      ),
+                    ),
+                  ),
               ] else ...[
                 const SizedBox(height: 6),
                 Text(

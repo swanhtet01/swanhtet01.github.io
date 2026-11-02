@@ -516,6 +516,7 @@ void registerWidgetTests(WidgetTestPartition partition) {
               id: 'rice',
               name: 'Rice',
               category: 'Food',
+              barcode: '0098765432105',
               priceMmk: 12000,
               openingStock: 5,
             );
@@ -642,6 +643,67 @@ void registerWidgetTests(WidgetTestPartition partition) {
             expect(
               find.byKey(const ValueKey('shop-catalog-row:tea')),
               findsNothing,
+            );
+            expect(
+              find.text(
+                myanmar
+                    ? 'ကိုက်ညီသောပစ္စည်းကို လက်ရှိစစ်ထုတ်မှုက ဖျောက်ထားပါသည်။'
+                    : 'A matching product is hidden by the current filter.',
+              ),
+              findsOneWidget,
+            );
+            expect(
+              find.text(
+                myanmar ? 'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ' : 'No matching products',
+              ),
+              findsNothing,
+            );
+            expect(
+              find.byKey(const ValueKey('shop-add-search-result')),
+              findsNothing,
+            );
+            final showAll = find.byKey(
+              const ValueKey('shop-show-all-search-matches'),
+            );
+            expect(showAll, findsOneWidget);
+            expect(tester.getSize(showAll).height, greaterThanOrEqualTo(48));
+            await tester.tap(showAll);
+            await tester.pump();
+            expect(
+              find.byKey(const ValueKey('shop-catalog-row:rice')),
+              findsOneWidget,
+            );
+
+            await tester.tap(
+              find.byKey(const ValueKey('shop-category-filter:value:drink')),
+            );
+            await tester.enterText(search, '0098765432105');
+            await tester.pump();
+            expect(
+              find.byKey(const ValueKey('shop-add-search-result')),
+              findsNothing,
+            );
+            expect(
+              find.byKey(const ValueKey('shop-show-all-search-matches')),
+              findsOneWidget,
+            );
+            expect(
+              find.text(
+                myanmar ? 'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ' : 'No matching products',
+              ),
+              findsNothing,
+            );
+            await tester.tap(
+              find.byKey(const ValueKey('shop-show-all-search-matches')),
+            );
+            await tester.pump();
+            expect(
+              find.byKey(const ValueKey('shop-catalog-row:rice')),
+              findsOneWidget,
+            );
+
+            await tester.tap(
+              find.byKey(const ValueKey('shop-category-filter:value:drink')),
             );
 
             await tester.enterText(search, '');
@@ -770,6 +832,25 @@ void registerWidgetTests(WidgetTestPartition partition) {
             expect(
               find.byKey(const ValueKey('shop-catalog-row:rice')),
               findsNothing,
+            );
+            final search = find.byKey(const ValueKey('shop-sale-search-field'));
+            await tester.enterText(search, 'rice');
+            await tester.pump();
+            expect(
+              find.byKey(const ValueKey('shop-add-search-result')),
+              findsNothing,
+            );
+            expect(
+              find.byKey(const ValueKey('shop-show-all-search-matches')),
+              findsOneWidget,
+            );
+            await tester.tap(
+              find.byKey(const ValueKey('shop-show-all-search-matches')),
+            );
+            await tester.pump();
+            expect(
+              find.byKey(const ValueKey('shop-catalog-row:rice')),
+              findsOneWidget,
             );
 
             await tester.pumpWidget(const SizedBox.shrink());

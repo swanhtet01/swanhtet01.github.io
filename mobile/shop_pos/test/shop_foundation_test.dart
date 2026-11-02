@@ -3725,6 +3725,90 @@ void main() {
       }
     });
 
+    for (final myanmar in [false, true]) {
+      testWidgets(
+        'cash difference clearly closes the ${myanmar ? 'MY' : 'EN'} shift exactly once',
+        (tester) async {
+          tester.view.physicalSize = myanmar
+              ? const ui.Size(768, 1024)
+              : const ui.Size(390, 800);
+          tester.view.devicePixelRatio = 1;
+          final database = ShopDatabase(NativeDatabase.memory());
+          try {
+            await tester.pumpWidget(
+              MaterialApp(
+                home: ShopCashShiftScreen(database: database, myanmar: myanmar),
+              ),
+            );
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextField).first, 'May');
+            await tester.enterText(find.byType(TextField).last, '10000');
+            await tester.tap(
+              find.text(myanmar ? 'တာဝန်ချိန် စတင်မည်' : 'Start shift'),
+            );
+            await tester.pumpAndSettle();
+            final outboxBeforeClose = await database.countOutboxOperations();
+
+            Future<void> requestClose() async {
+              await tester.enterText(find.byType(TextField).last, '9000');
+              final close = find.text(
+                myanmar ? 'တာဝန်ချိန် ပိတ်မည်' : 'Close shift',
+              );
+              await tester.scrollUntilVisible(
+                close,
+                240,
+                scrollable: find.byType(Scrollable).first,
+              );
+              await tester.tap(close);
+              await tester.pumpAndSettle();
+            }
+
+            await requestClose();
+            expect(
+              find.textContaining(
+                myanmar
+                    ? 'ဤကွာခြားချက်ကို မှတ်တမ်းတင်လျှင် တာဝန်ချိန်ကို ပိတ်ပါမည်။'
+                    : 'Recording this difference will close the shift.',
+              ),
+              findsOneWidget,
+            );
+            expect(
+              find.text(
+                myanmar
+                    ? 'ကွာခြားချက်မှတ်တမ်းတင်ပြီး တာဝန်ချိန်ပိတ်မည်'
+                    : 'Record difference & close shift',
+              ),
+              findsOneWidget,
+            );
+            await tester.tap(find.text(myanmar ? 'ဖွင့်ထားမည်' : 'Keep open'));
+            await tester.pumpAndSettle();
+            expect((await database.readLatestCashShift())?.state, 'open');
+            expect(await database.countOutboxOperations(), outboxBeforeClose);
+
+            await requestClose();
+            await tester.tap(
+              find.text(
+                myanmar
+                    ? 'ကွာခြားချက်မှတ်တမ်းတင်ပြီး တာဝန်ချိန်ပိတ်မည်'
+                    : 'Record difference & close shift',
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect((await database.readLatestCashShift())?.state, 'closed');
+            expect(
+              await database.countOutboxOperations(),
+              outboxBeforeClose + 1,
+            );
+          } finally {
+            await tester.pumpWidget(const SizedBox());
+            await database.close();
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          }
+        },
+      );
+    }
+
     testWidgets('shift review separates KBZPay and WavePay records', (
       tester,
     ) async {

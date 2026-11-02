@@ -292,11 +292,59 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
+              Semantics(
+                header: true,
+                child: Text(
+                  shopCopy(widget.myanmar, 'What is saved', 'သိမ်းဆည်းမည့်အရာ'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 4),
               Text(
                 shopCopy(
                   widget.myanmar,
-                  'Includes sales, photos and payment settings. Keep the file and password safe. Online backup is not available. Restore this encrypted file from the start screen when this device has no local Shop yet.',
-                  'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။ ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။ ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။',
+                  'Includes sales, photos and payment settings.',
+                  'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။',
+                ),
+              ),
+              const SizedBox(height: 16),
+              Semantics(
+                header: true,
+                child: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Keep it safe',
+                    'လုံခြုံစွာ သိမ်းပါ',
+                  ),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Keep the file and password safe. Online backup is not available.',
+                  'ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။',
+                ),
+              ),
+              const SizedBox(height: 16),
+              Semantics(
+                header: true,
+                child: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Restore boundary',
+                    'ပြန်လည်ရယူနိုင်သည့် အခြေအနေ',
+                  ),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Restore this encrypted file from the start screen when this device has no local Shop yet.',
+                  'ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။',
                 ),
               ),
               const SizedBox(height: 24),
