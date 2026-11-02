@@ -7,6 +7,42 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private protected-platform LAN client signer successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `a5b2a01267ce412b7694add6c41163c416cbb5f8` (repository tree
+  `8267442a2de175643612ee8712c9314d42abd368`, native tree
+  `9a79ccd9cad0c15505b62a8239589c83a6aac9ca`, native `lib/` tree
+  `d431c706ebe86f87ee773b07741b8894da24101f`, binary patch SHA-256
+  `5aa2a392b0412e473c51108d9efb7f9a7901072feec09ca2fb56faf0d48911e6`)
+  supplies the previously missing production-shaped
+  `ConnectedSiteDeviceSigner` bridge from one explicit retained public identity
+  to non-exportable `ConnectedPlatformSecurity` signing custody.
+- The adapter discovers or creates no key. It maps the enrolled public-key
+  fingerprint to the protocol client fingerprint/signing-key ID, canonicalizes
+  the public key as unpadded base64url, requires the strict platform device-ID
+  grammar, snapshots caller bytes before any await and reloads the exact
+  platform identity before and after every signature.
+- Every returned signature must be exactly 64 bytes and independently verify
+  under the retained Ed25519 public key. This rejects alias/key substitution,
+  wrong-key output and swap-sign-restore behavior. Caller, verification and
+  platform payload copies plus signature bytes are separated and temporary
+  copies are zeroed on every success and failure path.
+- Targeted analyzer is **PASS** with no issues. Signer, real LAN-client request
+  proof and platform-security tests are **40/40 PASS** serially; the final
+  adapter-only regression is **7/7 PASS**. Formatting and diff checks are
+  **PASS**. Independent review is **ACCEPT** after finding and verifying fixes
+  for wrong-key output, pre-await caller mutation, incomplete failure cleanup
+  and permissive device identifiers.
+- **BLOCKED / NOT RUN:** the explicit device ID is ultimately authorized by the
+  durable approved coordinator binding; it is not embedded in the retained
+  platform identity. Real Android/Windows keys, installed-device signing,
+  platform custody, runtime client composition and LAN acceptance remain
+  required. The adapter is not mounted and connected mode remains default-off.
+- Capacity at `2026-11-02T02:23:42Z`: durable `/workspace` had `269,660,160`
+  bytes free and `/dev/shm` had `5,313,880,064` bytes free. No build, cleanup,
+  network, credential, provider, publication or production action occurred.
+
 ### Private scope-bound coordinator health successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
