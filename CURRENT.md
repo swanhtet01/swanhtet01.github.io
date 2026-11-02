@@ -1,9 +1,44 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-02 UTC
+- Last verified: 2026-11-03 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 Android operator-clarity checkpoint
+
+- **SOURCE PASS / PRIVATE:** implementation
+  `50cd0a7fa6e69f981c1249fad58be2ce6171bf11` (tree
+  `fa74092dab7660c1a44acfa554a35d9933587b15`, parent installed-protocol
+  ledger `cb1664ceab1810258e5cfb4b713ed9de78d133ab`) changes exactly six
+  native Shop files. It prevents a category or favorites filter from offering
+  duplicate product creation when an exact name or barcode match is merely
+  hidden, makes the cash-difference confirmation explicitly state that it
+  closes the shift, and separates backup contents, custody and restore-boundary
+  guidance into accessible English and Burmese sections. The reviewed source
+  commit's binary patch SHA-256 is
+  `9f4bd6d85058d778ba960bdfe27edf05edb7600a3a446f0e5464c0ae9d17b5b3`.
+- Hidden-name/barcode/category/favorites tests are **4/4 PASS**; existing and
+  explicit shift-close tests are **3/3 PASS**; backup guidance plus live
+  save/cancel/error status tests are **3/3 PASS**; targeted analyzer and diff
+  checks are **PASS**. Independent UX, accessibility and accounting review
+  **ACCEPTS** the final diff after replacing a contradictory hidden-match
+  heading. No database, accounting, transaction or close-shift implementation
+  changed; Keep open creates no state/outbox effect and the confirmed path
+  creates exactly one existing close transition.
+- A source-bound synthetic visual audit at predecessor
+  `f250876575f79220da8b04c6af79cf5f96cd5e4f` captured and reviewed 138
+  Flutter PNGs for EN/MY phone and tablet layouts; its 43/43 visual-capture
+  tests **PASS**. The bounded Android-first direction is a warm-neutral canvas,
+  white transactional surfaces, near-black type, blue decisive actions,
+  minimum 48dp targets, larger product media, restrained functional motion and
+  explicit offline/LAN/sync/lease/backup/printer states. This is design
+  evidence and a phased implementation boundary, not an installed redesign.
+- **NOT RUN / BLOCKED:** no APK was rebuilt or installed for this private
+  successor, no TalkBack or physical-device pass occurred, and no scanner,
+  printer, signing, merchant or production evidence is created. Connected mode
+  remains default-off. Draft PR #752 remains on public head `fe02f283`; this
+  checkpoint has not been published.
 
 ## 2026-11-03 exact-head `fe02f283` Native CI receipt
 
