@@ -6,26 +6,35 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inflateRawSync } from 'node:zlib'
 
-import { validateShopQaArtifactManifest } from './write_shop_qa_artifact_manifest.mjs'
+import {
+  SHOP_ANDROID_QA_CAPABILITIES,
+  SHOP_ANDROID_QA_CAPABILITY_AWARE_BLOCKED_CAPABILITIES as CAPABILITY_AWARE_BLOCKED_CAPABILITIES,
+  SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
+  SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT,
+  SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT,
+  SHOP_ANDROID_QA_DECLARED_CAPABILITIES as DECLARED_QA_CAPABILITIES,
+  SHOP_ANDROID_QA_EVIDENCE_CONTRACT,
+  SHOP_ANDROID_QA_EXPECTED_APPLICATION_ID as EXPECTED_APPLICATION_ID,
+  SHOP_ANDROID_QA_EXPECTED_APPLICATION_LABEL as EXPECTED_APPLICATION_LABEL,
+  SHOP_ANDROID_QA_EXPECTED_CLAIM_BOUNDARY as EXPECTED_CLAIM_BOUNDARY,
+  SHOP_ANDROID_QA_HANDOFF_CONTRACT,
+  SHOP_ANDROID_QA_REQUIRED_BLOCKED_CAPABILITIES as REQUIRED_BLOCKED_CAPABILITIES,
+  SHOP_ANDROID_QA_REQUIRED_EVIDENCE_FIELDS as REQUIRED_EVIDENCE_FIELDS,
+  SHOP_ANDROID_QA_RUN_STEPS as RUN_STEPS,
+  validateShopAndroidQaHandoff,
+  validateShopQaArtifactManifest,
+} from './shop_android_qa_handoff_validator.mjs'
 
-export const SHOP_ANDROID_QA_HANDOFF_CONTRACT =
-  'supermega.shop.android-qa-internal-handoff.v1'
-export const SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT =
-  'supermega.shop.android-qa-internal-handoff.v2'
-export const SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT =
-  'supermega.shop.android-qa-internal-handoff.v3'
+export {
+  SHOP_ANDROID_QA_CAPABILITIES,
+  SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
+  SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT,
+  SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT,
+  SHOP_ANDROID_QA_EVIDENCE_CONTRACT,
+  SHOP_ANDROID_QA_HANDOFF_CONTRACT,
+  validateShopAndroidQaHandoff,
+} from './shop_android_qa_handoff_validator.mjs'
 
-export const SHOP_ANDROID_QA_CAPABILITY_CONTRACT =
-  'supermega.shop.android-qa-capabilities.v1'
-export const SHOP_ANDROID_QA_EVIDENCE_CONTRACT =
-  'supermega.shop.synthetic-qa-evidence.v1'
-export const SHOP_ANDROID_QA_CAPABILITIES = [
-  'scoped_encrypted_backup_restore',
-  'scoped_synthetic_evidence_export',
-]
-
-const EXPECTED_APPLICATION_ID = 'dev.supermega.supermega_shop.qa'
-const EXPECTED_APPLICATION_LABEL = 'Shop QA'
 const EXPECTED_APK_NAME = 'app-qa-debug.apk'
 const EXPECTED_ARCHIVE_FILES = [
   EXPECTED_APK_NAME,
@@ -53,91 +62,6 @@ const CRC32_TABLE = Uint32Array.from({ length: 256 }, (_, index) => {
   return value >>> 0
 })
 
-const REQUIRED_BLOCKED_CAPABILITIES = [
-  'cross_build_update',
-  'encrypted_backup_restore',
-  'external_file_export',
-  'camera_or_gallery',
-  'physical_scanner_or_printer',
-  'managed_auth_or_provider_access',
-  'correction_authorization',
-  'production_or_merchant_use',
-]
-
-const CAPABILITY_AWARE_BLOCKED_CAPABILITIES = [
-  'cross_build_update',
-  'installed_backup_restore_acceptance',
-  'general_external_file_export',
-  'camera_or_gallery',
-  'physical_scanner_or_printer',
-  'managed_auth_or_provider_access',
-  'correction_authorization',
-  'production_or_merchant_use',
-]
-
-const DECLARED_QA_CAPABILITIES = SHOP_ANDROID_QA_CAPABILITIES.map((id) => ({
-  id,
-  contract: SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
-  status: 'SOURCE_BOUND_NOT_INSTALLED_ACCEPTED',
-}))
-
-const RUN_STEPS = [
-  ['clean_target', 'Use a separately approved disposable Android device or emulator containing no SuperMega Shop data.'],
-  ['production_sentinel_before', 'Record installed package IDs and a production-data sentinel before installing; do not open or modify production Shop.'],
-  ['install_qa', 'Install the verified debug-signed Shop QA APK and confirm the visible Shop QA label and QA application ID.'],
-  ['fictional_setup', 'Create only a fictional shop and synthetic products.'],
-  ['cash_sale', 'Complete one fictional cash sale, record tender and change, and verify the saved sale and stock movement.'],
-  ['receipt_reprint', 'Open the saved receipt and reprint through the simulated/available QA path without creating another sale, payment, or stock movement.'],
-  ['shift_close', 'Close the synthetic shift and record the expected totals.'],
-  ['restart_reopen', 'Terminate and reopen the app, then verify the same sale, stock, receipt, and shift-close state.'],
-  ['uninstall_qa', 'Uninstall the QA application and record removal of the QA package only.'],
-  ['production_sentinel_after', 'Verify the production package inventory and production-data sentinel remain unchanged.'],
-]
-
-const REQUIRED_EVIDENCE_FIELDS = [
-  'device_or_emulator_id',
-  'android_version',
-  'disposable_target_basis',
-  'package_inventory_before',
-  'package_inventory_after',
-  'production_sentinel_before',
-  'production_sentinel_after',
-  'artifact_archive_sha256',
-  'apk_sha256',
-  'source_sha',
-  'merge_sha',
-  'native_tree',
-  'run_id',
-  'artifact_id',
-  'application_id_observed',
-  'application_label_observed',
-  'install_result',
-  'sale_id_and_total',
-  'stock_before_and_after',
-  'receipt_id_and_reprint_result',
-  'shift_close_totals',
-  'restart_result',
-  'uninstall_result',
-  'unexpected_errors',
-  'recorded_at',
-]
-
-const EXPECTED_CLAIM_BOUNDARY = {
-  internalSyntheticQaOnly: true,
-  disposableTargetRequired: true,
-  installedAcceptanceProven: false,
-  updateAcceptanceProven: false,
-  backupRestoreAcceptanceProven: false,
-  hardwareAcceptanceProven: false,
-  merchantAcceptanceProven: false,
-  productionReady: false,
-  productionSigned: false,
-  externalWritesPerformed: false,
-  providerAccessPerformed: false,
-  databaseExecutionPerformed: false,
-  deploymentPerformed: false,
-  credentialValuesInspected: false,
-}
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
@@ -580,156 +504,6 @@ export function assessShopAndroidQaHandoff(input = {}) {
     claimBoundary: { ...EXPECTED_CLAIM_BOUNDARY },
   }
   return { ...body, digest: packetDigest(body) }
-}
-
-export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } = {}) {
-  const body = { ...packet }
-  const digest = body.digest
-  delete body.digest
-  if (digest !== packetDigest(body)) throw new Error('shop_android_qa_handoff_digest_invalid')
-  const canonicalAware = packet.contract === SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT
-  const capabilityAware = canonicalAware || packet.contract === SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
-  if (packet.contract !== SHOP_ANDROID_QA_HANDOFF_CONTRACT && !capabilityAware) {
-    throw new Error('shop_android_qa_handoff_contract_invalid')
-  }
-  if (packet.ok !== true || packet.status !== 'ready_for_internal_install_run') {
-    throw new Error('shop_android_qa_handoff_not_ready')
-  }
-  const artifact = packet.artifact || {}
-  const expectation = packet.releaseExpectation || {}
-  const generatedAtMillis = parseIsoMillis(packet.generatedAt)
-  const expiresAtMillis = parseIsoMillis(artifact.expiresAt)
-  if (packet.digestScope !== 'utf8_compact_json_without_digest'
-    || !Array.isArray(packet.failures) || packet.failures.length !== 0
-    || artifact.repository !== 'swanhtet01/swanhtet01.github.io'
-    || !SHA40.test(String(artifact.headSha || ''))
-    || !SHA40.test(String(artifact.sourceSha || ''))
-    || !SHA40.test(String(artifact.mergeSha || ''))
-    || artifact.sourceSha !== artifact.mergeSha
-    || !SHA40.test(String(artifact.nativeTree || ''))
-    || !DECIMAL_ID.test(String(artifact.runId || ''))
-    || !DECIMAL_ID.test(String(artifact.artifactId || ''))
-    || artifact.artifactUrl !== expectedArtifactUrl(artifact.runId, artifact.artifactId)
-    || !SHA64.test(String(artifact.archiveSha256 || ''))
-    || !SHA64.test(String(artifact.apkSha256 || ''))
-    || artifact.archiveContentsBound !== true
-    || expectation.headSha !== artifact.headSha
-    || expectation.sourceSha !== artifact.sourceSha
-    || expectation.mergeSha !== artifact.mergeSha
-    || expectation.nativeTree !== artifact.nativeTree
-    || expectation.runId !== artifact.runId
-    || expectation.artifactId !== artifact.artifactId
-    || expectation.archiveSha256 !== artifact.archiveSha256
-    || generatedAtMillis == null || expiresAtMillis == null
-    || expiresAtMillis <= generatedAtMillis || expiresAtMillis <= nowMillis) {
-    throw new Error('shop_android_qa_handoff_provenance_invalid')
-  }
-  if (artifact.applicationId !== EXPECTED_APPLICATION_ID
-    || packet.artifact?.applicationLabel !== EXPECTED_APPLICATION_LABEL
-    || artifact.identityInspection !== (canonicalAware
-      ? 'canonical_manifest_and_receipts_verified'
-      : 'reported_producer_ci_passed_not_reinspected')
-    || artifact.signingClass !== 'android_debug'
-    || packet.artifact?.productionSigned !== false
-    || packet.artifact?.promotionEligible !== false) {
-    throw new Error('shop_android_qa_handoff_artifact_identity_invalid')
-  }
-  if (canonicalAware && (!SHA64.test(String(artifact.signerCertificateSha256 || ''))
-    || !/^\d+\.\d+\.\d+$/.test(String(artifact.apksignerBuildToolsVersion || ''))
-    || !SHA64.test(String(artifact.apksignerSha256 || ''))
-    || !SHA64.test(String(artifact.apksignerJarSha256 || ''))
-    || !SHA64.test(String(artifact.buildToolsSourcePropertiesSha256 || ''))
-    || !/^[1-9][0-9]*$/.test(String(artifact.versionCode || ''))
-    || typeof artifact.versionName !== 'string' || !artifact.versionName.trim()
-    || !Number.isSafeInteger(artifact.compileSdk)
-    || !Number.isSafeInteger(artifact.minSdk)
-    || !Number.isSafeInteger(artifact.targetSdk)
-    || artifact.compileSdk < artifact.targetSdk
-    || artifact.targetSdk < artifact.minSdk
-    || !Array.isArray(artifact.abis) || artifact.abis.length === 0
-    || !SHA64.test(String(artifact.buildIdentitySha256 || '')))) {
-    throw new Error('shop_android_qa_handoff_canonical_observation_invalid')
-  }
-  if (canonicalAware) {
-    let canonicalManifest
-    try {
-      canonicalManifest = validateShopQaArtifactManifest(packet.canonicalArtifactManifest)
-    } catch {
-      throw new Error('shop_android_qa_handoff_canonical_manifest_invalid')
-    }
-    if (canonicalManifest.platform !== 'android'
-      || canonicalManifest.source.sourceSha !== artifact.sourceSha
-      || canonicalManifest.source.nativeTree !== artifact.nativeTree
-      || canonicalManifest.artifact.sha256 !== artifact.apkSha256
-      || JSON.stringify(canonicalManifest.artifact.identity.abis) !== JSON.stringify(artifact.abis)
-      || canonicalManifest.artifact.identity.versionCode !== artifact.versionCode
-      || canonicalManifest.artifact.identity.versionName !== artifact.versionName
-      || canonicalManifest.artifact.identity.compileSdk !== artifact.compileSdk
-      || canonicalManifest.artifact.identity.minSdk !== artifact.minSdk
-      || canonicalManifest.artifact.identity.targetSdk !== artifact.targetSdk
-      || canonicalManifest.artifact.identity.buildIdentitySha256 !== artifact.buildIdentitySha256
-      || canonicalManifest.signing.certificateSha256 !== artifact.signerCertificateSha256
-      || canonicalManifest.signing.apksignerBuildToolsVersion !== artifact.apksignerBuildToolsVersion
-      || canonicalManifest.signing.apksignerSha256 !== artifact.apksignerSha256
-      || canonicalManifest.signing.apksignerJarSha256 !== artifact.apksignerJarSha256
-      || canonicalManifest.signing.buildToolsSourcePropertiesSha256 !== artifact.buildToolsSourcePropertiesSha256) {
-      throw new Error('shop_android_qa_handoff_canonical_manifest_mismatch')
-    }
-  } else if (packet.canonicalArtifactManifest != null) {
-    throw new Error('shop_android_qa_handoff_legacy_canonical_manifest_forbidden')
-  }
-  if (capabilityAware) {
-    if (artifact.capabilityInspection !== (canonicalAware
-      ? 'canonical_manifest_and_receipts_verified'
-      : 'reported_producer_ci_passed_not_reinspected')
-      || artifact.capabilityContract !== SHOP_ANDROID_QA_CAPABILITY_CONTRACT
-      || artifact.evidenceContract !== SHOP_ANDROID_QA_EVIDENCE_CONTRACT
-      || JSON.stringify(artifact.capabilities) !== JSON.stringify(SHOP_ANDROID_QA_CAPABILITIES)
-      || artifact.scopedEncryptedRestore !== true
-      || artifact.scopedSyntheticExport !== true
-      || artifact.generalExternalFileAccess !== false
-      || !Array.isArray(packet.artifactCapabilities)
-      || JSON.stringify(packet.artifactCapabilities) !== JSON.stringify(DECLARED_QA_CAPABILITIES)) {
-      throw new Error('shop_android_qa_handoff_capability_identity_invalid')
-    }
-  } else if ((artifact.capabilityInspection != null
-      && artifact.capabilityInspection !== 'unavailable')
-    || (artifact.capabilityContract ?? null) !== null
-    || (artifact.evidenceContract ?? null) !== null
-    || (artifact.capabilities != null
-      && (!Array.isArray(artifact.capabilities) || artifact.capabilities.length !== 0))
-    || (artifact.scopedEncryptedRestore ?? false) !== false
-    || (artifact.scopedSyntheticExport ?? false) !== false
-    || (artifact.generalExternalFileAccess ?? false) !== false
-    || (packet.artifactCapabilities != null
-      && (!Array.isArray(packet.artifactCapabilities)
-        || packet.artifactCapabilities.length !== 0))) {
-    throw new Error('shop_android_qa_handoff_legacy_capability_claim_invalid')
-  }
-  if (!Array.isArray(packet.runPlan)
-    || packet.runPlan.length !== RUN_STEPS.length
-    || packet.runPlan.some((step, index) => step?.id !== RUN_STEPS[index][0]
-      || step.instruction !== RUN_STEPS[index][1] || step.required !== true)) {
-    throw new Error('shop_android_qa_handoff_run_plan_invalid')
-  }
-  if (!Array.isArray(packet.requiredEvidenceFields)
-    || packet.requiredEvidenceFields.length !== REQUIRED_EVIDENCE_FIELDS.length
-    || REQUIRED_EVIDENCE_FIELDS.some((field, index) => packet.requiredEvidenceFields[index] !== field)) {
-    throw new Error('shop_android_qa_handoff_evidence_fields_invalid')
-  }
-  const expectedBlockedCapabilities = capabilityAware
-    ? CAPABILITY_AWARE_BLOCKED_CAPABILITIES
-    : REQUIRED_BLOCKED_CAPABILITIES
-  if (!Array.isArray(packet.blockedCapabilities)
-    || packet.blockedCapabilities.length !== expectedBlockedCapabilities.length
-    || packet.blockedCapabilities.some((entry, index) =>
-      entry?.id !== expectedBlockedCapabilities[index] || entry.status !== 'BLOCKED')) {
-    throw new Error('shop_android_qa_handoff_blocked_capabilities_invalid')
-  }
-  if (JSON.stringify(packet.claimBoundary) !== JSON.stringify(EXPECTED_CLAIM_BOUNDARY)) {
-    throw new Error('shop_android_qa_handoff_claim_boundary_invalid')
-  }
-  return packet
 }
 
 export function sampleShopAndroidQaHandoffInput(overrides = {}) {

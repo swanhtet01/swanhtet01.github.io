@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -13,6 +14,54 @@ import {
   sampleShopAndroidQaHandoffInput,
   validateShopAndroidQaHandoff,
 } from './prepare_shop_android_qa_handoff.mjs'
+import * as pureValidator from './shop_android_qa_handoff_validator.mjs'
+
+test('canonical handoff validator has a pure static import graph', async () => {
+  const source = await readFile(
+    new URL('./shop_android_qa_handoff_validator.mjs', import.meta.url),
+    'utf8',
+  )
+  const imports = [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)]
+    .map((match) => match[1])
+  assert.deepEqual(imports, ['node:crypto'])
+  for (const forbidden of [
+    'node:child_process', 'node:fs', 'node:path', 'node:url', 'node:zlib',
+    'fetch(', 'XMLHttpRequest',
+  ]) {
+    assert.equal(source.includes(forbidden), false, forbidden)
+  }
+})
+
+test('canonical handoff authority constants are deeply immutable', () => {
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_CAPABILITIES.push('substituted') },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_RUN_STEPS[0][1] = 'substituted' },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_DECLARED_CAPABILITIES[0].status = 'substituted' },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_REQUIRED_EVIDENCE_FIELDS[0] = 'substituted' },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_REQUIRED_BLOCKED_CAPABILITIES.pop() },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_CAPABILITY_AWARE_BLOCKED_CAPABILITIES.pop() },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_EXPECTED_CLAIM_BOUNDARY.productionReady = true },
+    TypeError,
+  )
+})
 
 function resign(packet) {
   const body = { ...packet }

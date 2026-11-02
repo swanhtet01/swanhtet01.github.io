@@ -6,6 +6,10 @@ import { link, lstat, readFile, realpath, rm, writeFile } from 'node:fs/promises
 import { basename, dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { validateShopQaArtifactManifest } from './shop_android_qa_handoff_validator.mjs'
+
+export { validateShopQaArtifactManifest } from './shop_android_qa_handoff_validator.mjs'
+
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SHA40 = /^[0-9a-f]{40}$/
 const SHA256 = /^[0-9a-f]{64}$/
@@ -73,96 +77,6 @@ function sha256(bytes) {
 
 function defaultExec(command, args, cwd) {
   return execFileSync(command, args, { cwd, encoding: 'utf8' }).trim()
-}
-
-function canonicalBody(manifest) {
-  const { digest: _digest, ...body } = manifest
-  return JSON.stringify(body)
-}
-
-export function validateShopQaArtifactManifest(manifest) {
-  if (!exactKeys(manifest, [
-    'contract', 'digestScope', 'platform', 'buildProfile', 'source', 'artifact',
-    'toolchain', 'signing', 'claimBoundary', 'digest',
-  ])) fail('shop_qa_manifest_keys_invalid')
-  if (manifest.contract !== 'supermega.shop.synthetic-qa-artifact.v1'
-    || manifest.digestScope !== 'utf8_compact_json_without_digest'
-    || manifest.buildProfile !== 'synthetic_qa_v1'
-    || !Object.hasOwn(contracts, manifest.platform)) fail('shop_qa_manifest_contract_invalid')
-  const contract = contracts[manifest.platform]
-  if (!exactKeys(manifest.source, ['sourceSha', 'sourceTree', 'nativeTree'])
-    || !Object.values(manifest.source).every(value => SHA40.test(value))) fail('shop_qa_manifest_source_invalid')
-  const android = manifest.platform === 'android'
-  const artifactKeys = android
-    ? ['fileName', 'sha256', 'bytes', 'identity', 'identityReceiptSha256']
-    : ['fileName', 'sha256', 'bytes', 'identity']
-  if (!exactKeys(manifest.artifact, artifactKeys)
-    || manifest.artifact.fileName !== contract.artifact
-    || !SHA256.test(manifest.artifact.sha256)
-    || !Number.isSafeInteger(manifest.artifact.bytes)
-    || manifest.artifact.bytes <= 0
-    || (android && !SHA256.test(manifest.artifact.identityReceiptSha256))) fail('shop_qa_manifest_artifact_invalid')
-  if (android) {
-    if (!exactKeys(manifest.artifact.identity, [
-      ...Object.keys(contract.identity), 'versionCode', 'versionName', 'compileSdk', 'minSdk', 'targetSdk', 'abis', 'buildIdentitySha256',
-    ])
-      || Object.entries(contract.identity).some(([key, value]) => manifest.artifact.identity[key] !== value)
-      || !/^[1-9][0-9]*$/.test(manifest.artifact.identity.versionCode)
-      || typeof manifest.artifact.identity.versionName !== 'string'
-      || !manifest.artifact.identity.versionName.trim()
-      || !Number.isSafeInteger(manifest.artifact.identity.compileSdk)
-      || !Number.isSafeInteger(manifest.artifact.identity.minSdk)
-      || !Number.isSafeInteger(manifest.artifact.identity.targetSdk)
-      || manifest.artifact.identity.compileSdk < manifest.artifact.identity.targetSdk
-      || manifest.artifact.identity.minSdk <= 0
-      || manifest.artifact.identity.targetSdk < manifest.artifact.identity.minSdk
-      || !Array.isArray(manifest.artifact.identity.abis)
-      || manifest.artifact.identity.abis.length === 0
-      || manifest.artifact.identity.abis.some((abi, index, values) => (
-        !['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'].includes(abi)
-        || (index > 0 && values[index - 1] >= abi)
-      ))
-      || !SHA256.test(manifest.artifact.identity.buildIdentitySha256)) fail('shop_qa_manifest_android_identity_invalid')
-  } else if (JSON.stringify(manifest.artifact.identity) !== JSON.stringify(contract.identity)) {
-    fail('shop_qa_manifest_artifact_invalid')
-  }
-  if (!exactKeys(manifest.toolchain, [
-    'flutterVersion', 'flutterRevision', 'dartVersion', 'runnerOs', 'runnerArch',
-    'runnerImageOs', 'runnerImageVersion', 'receiptSha256',
-  ])
-    || !/^\d+\.\d+\.\d+/.test(manifest.toolchain.flutterVersion)
-    || !SHA40.test(manifest.toolchain.flutterRevision)
-    || typeof manifest.toolchain.dartVersion !== 'string'
-    || !manifest.toolchain.dartVersion.trim()
-    || manifest.toolchain.runnerOs !== contract.runnerOs
-    || !SHA256.test(manifest.toolchain.receiptSha256)
-    || !['runnerArch', 'runnerImageOs', 'runnerImageVersion'].every(key => (
-      typeof manifest.toolchain[key] === 'string' && manifest.toolchain[key].trim()
-    ))) fail('shop_qa_manifest_toolchain_invalid')
-  const signingKeys = android
-    ? ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'certificateSha256', 'signatureVerified', 'apksignerBuildToolsVersion', 'apksignerSha256', 'apksignerJarSha256', 'buildToolsSourcePropertiesSha256', 'receiptSha256']
-    : ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'receiptSha256']
-  if (!exactKeys(manifest.signing, signingKeys)
-    || manifest.signing.classification !== contract.signing
-    || manifest.signing.productionSigned !== false
-    || manifest.signing.stableUpdateIdentityProven !== false
-    || (android && (!SHA256.test(manifest.signing.certificateSha256)
-      || manifest.signing.signatureVerified !== true
-      || !/^\d+\.\d+\.\d+$/.test(manifest.signing.apksignerBuildToolsVersion)
-      || !SHA256.test(manifest.signing.apksignerSha256)
-      || !SHA256.test(manifest.signing.apksignerJarSha256)
-      || !SHA256.test(manifest.signing.buildToolsSourcePropertiesSha256)))
-    || !SHA256.test(manifest.signing.receiptSha256)) fail('shop_qa_manifest_signing_invalid')
-  if (!exactKeys(manifest.claimBoundary, [
-    'internalSyntheticQaOnly', 'installedAcceptanceProven', 'hardwareAcceptanceProven',
-    'merchantAcceptanceProven', 'productionReady', 'promotionEligible',
-  ])
-    || manifest.claimBoundary.internalSyntheticQaOnly !== true
-    || ['installedAcceptanceProven', 'hardwareAcceptanceProven', 'merchantAcceptanceProven', 'productionReady', 'promotionEligible']
-      .some(key => manifest.claimBoundary[key] !== false)) fail('shop_qa_manifest_claim_boundary_invalid')
-  const expectedDigest = `sha256:${sha256(canonicalBody(manifest))}`
-  if (manifest.digest !== expectedDigest) fail('shop_qa_manifest_digest_invalid')
-  return manifest
 }
 
 export async function writeShopQaArtifactManifest({
