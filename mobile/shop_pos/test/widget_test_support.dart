@@ -5438,9 +5438,12 @@ void registerWidgetTests(WidgetTestPartition partition) {
 
       expect(await database.countSales(), 1);
       expect((await database.readActiveProducts()).single.onHand, 1);
-      await tester.tap(find.byTooltip('More'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Recent sales'));
+      expect(find.textContaining('not sent to a printer'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('shop-sale-completion-view')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('shop-sale-completion-view')));
       await tester.pumpAndSettle();
       expect(find.text('Recent sales'), findsOneWidget);
       expect(find.text('2,500 MMK'), findsOneWidget);
