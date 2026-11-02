@@ -7,6 +7,40 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private default-off trusted-time v2 route successor
+
+- **SOURCE PASS / DEFAULT-OFF / UNMOUNTED:** implementation
+  `477136d40ee79f93b74b8681b749213af961ff56` (repository tree
+  `00686a2320cb725cf49c5673ca6e24d9f62fe07e`, native tree
+  `7b2230c9ed92624499617dec57e47d9321af797f`, native `lib/` tree
+  `64b5365fd0ff5424ef9e1af6fb3276d8e480690e`, binary patch SHA-256
+  `0f0fbff3843885391b60dea2448723a07871c5a5eae7fd2cbf5c71f1658fe8ac`)
+  adds an independently gated `POST /v2/trusted-time` dispatcher and explicit
+  proof-version routing while preserving all v1 routes and signing bytes.
+- V2 is disabled by default and returns 404 before accessing authority or
+  authentication dependencies. When explicitly constructed for tests, it
+  reuses signature verification, atomic request-nonce consumption and approved
+  enrollment; requires protocol v2 only on the exact v2 POST target; parses
+  canonical requests within 16 KiB; binds coordinator, workspace/site,
+  device/fingerprint and exact returned challenge; and emits canonical JSON
+  with `no-store` and `nosniff`. It does not invoke staff command capability
+  authorization.
+- Targeted analyzer is **PASS**; trusted-time authority and complete
+  coordinator suites are **39/39 PASS**; diff checks are **PASS**; independent
+  security review is **ACCEPT**. Tests include an explicit byte-level v1 proof
+  golden, disabled dependency silence, wrong proof/target, replay, malformed
+  and scope-substituted requests, unavailable authority and substituted
+  observation. Reviewed file SHA-256 identities are
+  `e672073e628df2d750d5498011a5d09763f3d3bf8197db804f99c0d721b2fb58`
+  for the coordinator and
+  `a1ce0f1e367d09f0c72c860cc3a0fa629574edd839ac1990c5e198ce138802e1`
+  for its tests.
+- **BLOCKED / NOT RUN:** no listener/runtime composition or client exchange is
+  mounted; the injected authority remains unavailable without separately
+  reviewed approval resolution and protected signing custody. Wall-clock
+  bootstrap, Windows trusted clock, compilation and installed-device evidence
+  remain absent. Connected mode and v2 remain default-off.
+
 ### Private trusted-time v2 wire-contract successor
 
 - **SOURCE PASS / DEFAULT-OFF / UNMOUNTED:** implementation
