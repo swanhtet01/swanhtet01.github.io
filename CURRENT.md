@@ -7,6 +7,50 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private joining-device replica synchronization successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `abe2025be365939b8eb00823dd7373a9d03acba1` (repository tree
+  `149e531e51ea8caf1a45484f6032084c62b59478`, native tree
+  `444d7998e810b8b24fcca2562e229ddb105759c6`, native `lib/` tree
+  `b44567941bb35fee3c819cc88ccb7f10792a17cd`, binary patch SHA-256
+  `09fbc9e79e789074790680180bf82cba56ac4082d2428340d785931b12dd29db`)
+  supplies the previously missing production-shaped composition for one
+  secondary/joining device. It binds the real platform signer, durable command
+  attempt store, pinned-TLS LAN client and read-only replica to one exact
+  database, device identity, workspace/site and approved coordinator binding.
+- The composition remains lazy and network/key silent when the connected-site
+  capability is off. Its enabled facade exposes only pairing, one bounded
+  snapshot/delta synchronization step and read-only replica status/projections;
+  raw signing, arbitrary command transmission and direct replica mutation are
+  not exposed.
+- Every fetch requires the retained active approval to match the QR pairing's
+  workspace, site, coordinator, endpoint and certificate plus the retained
+  device fingerprint/signing-key identity. The replica re-resolves approval
+  inside its apply transaction. Substitution, expiry, revocation before fetch,
+  revocation between fetch and apply, transport failure and invalid apply all
+  leave an established replica durably paused. The pause-only path is bound to
+  the local scope/fingerprint and cannot unpause or apply data.
+- The default request nonce now always starts with a protocol-valid token byte;
+  secure random base64url output can no longer intermittently begin with `-` or
+  `_` and fail its own request grammar.
+- Targeted analyzer is **PASS** with no issues. Client composition, transport
+  and protected-signing tests are **24/24 PASS**; the complete replica,
+  migration and encrypted backup/restore file is **11/11 PASS**. Formatting
+  and diff checks are **PASS**. Independent review is **ACCEPT** after finding
+  and verifying fixes for privileged internal exposure and three durable-pause
+  gaps (preflight failure, revocation during fetch/apply and substituted
+  pairing after an earlier successful sync).
+- **BLOCKED / NOT RUN:** this is not mounted in a shipping profile. A fresh,
+  signed request-bound trusted-time observation remains absent; the rejected
+  static authority-payload clock design must not be revived because it allowed
+  replay/reset across adapters and restarts. Real issuer/key enrollment,
+  installed Android/Windows LAN/TLS operation, cloud/RLS reconciliation,
+  signed artifacts and merchant acceptance remain separate gates.
+- Capacity after verification: durable `/workspace` had `268,193,792` bytes
+  free and `/dev/shm` had `5,313,249,280` bytes free. No build, cleanup,
+  network, credential, provider, publication or production action occurred.
+
 ### Private protected-platform LAN client signer successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
