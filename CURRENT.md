@@ -5,6 +5,42 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 private release-candidate preflight
+
+- **SOURCE/WORKFLOW PASS; PUBLICATION NOT AUTHORIZED:** the frozen implementation
+  candidate is `598e21fb2bbc33d67f1d4875731ae83d08ec44a4` (tree
+  `d5120e0485c6e987288b9ed8b7e856efdb4e563b`, parent
+  `3001d31f7d78b6262c0d9de17e85e135e274f677`, patch SHA-256
+  `ecb29e6e61e681f6516921a22d05b65b1fa2e9468208c8f2f5f064f87eda8a1e`).
+  PR #752 remains open/draft at public head
+  `584b713554120ae4833ddd0d6517b759854f469d`; the private candidate is a
+  strict descendant and no remote update was made.
+- The candidate delta from that public head is deliberately large: 73 linear
+  commits implementing the reviewed default-off connected/LAN/trusted-time
+  chain, schema through v39, historical-fixture repairs, and its source
+  evidence. It must be reviewed as a complete integration successor, not as a
+  small CI-only patch. Older `584b7135` QA artifacts are **STALE** for this
+  source and must not be relabelled.
+- The preflight first found 15 new Flutter tests missing from Native CI. The
+  accepted correction now binds the deterministic **68/68** inventory, assigns
+  67 tests exactly once to bounded serial shards, retains the process
+  interruption test in its separate bounded harness, and format-gates all 66
+  changed Dart files. Native contract tests are **21/21 PASS**, its verifier is
+  **PASS**, QA-isolation contracts are **24/24 PASS**, strict isolation is
+  **PASS**, YAML and Android shell syntax are **PASS**, and `git diff --check`
+  is **PASS**. Independent adversarial review is **ACCEPT**.
+- **NOT RUN / BLOCKED:** the two new hosted shard runtimes, exact-source Android
+  and Windows builds, signing, installation, device recovery and merchant
+  acceptance are not proved until an exact guarded PR update and its automatic
+  CI are separately authorized and complete. Durable `/workspace` free space
+  was only `309104640` bytes at the latest read-only measurement, below the
+  retained 384 MiB reserve; no local build or cleanup was attempted.
+- Existing independent release gates remain red: App CI stops at the stale
+  PostgreSQL 17 rehearsal receipt; dependency audits retain the unresolved
+  minimatch advisory; GitGuardian retains two historical findings requiring
+  owner disposition; protected key custody, production signing, installed
+  recovery, physical hardware and merchant evidence are not complete.
+
 ## 2026-11-02 exact-head release checkpoint
 
 ### Private schema-v39 trusted-time client-head persistence
