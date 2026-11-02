@@ -2457,6 +2457,18 @@ ShopConnectedSiteCommandInput _command(
       : stockReservationLifecycle != null
       ? shopConnectedStockReleasedEventType
       : 'shop.stock.reserved.v1';
+  final commandType = selectedReservation != null
+      ? switch (selectedReservation.workflowType) {
+          ConnectedStockWorkflowType.retailCart => 'retail.stock.reserve.v1',
+          ConnectedStockWorkflowType.cafeOrder => 'cafe.stock.reserve.v1',
+        }
+      : stockReservationLifecycle != null
+      ? switch (aggregateType) {
+          'retailCart' => 'retail.stock.release.v1',
+          'cafeOrder' => 'cafe.stock.release.v1',
+          _ => eventType,
+        }
+      : eventType;
   final payload = selectedReservation != null
       ? <String, Object?>{
           'contract': 'supermega.shop.connected-stock-reserve.v1',
@@ -2501,7 +2513,7 @@ ShopConnectedSiteCommandInput _command(
     aggregateType: aggregateType,
     aggregateId: aggregateId,
     expectedVersion: expectedVersion,
-    commandType: eventType,
+    commandType: commandType,
     payload: payload,
     payloadDigest: connectedSiteSha256(payload),
     leaseDigest: lease.payloadDigest,
