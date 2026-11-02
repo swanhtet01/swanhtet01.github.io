@@ -16,7 +16,7 @@ void main() {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 35);
+        expect(database.schemaVersion, 36);
         final storeRef = await database.readStoreRef();
         expect(storeRef, matches(RegExp(r'^[0-9a-f]{64}$')));
         await expectLater(
@@ -544,7 +544,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 35);
+            expect(upgraded.schemaVersion, 36);
             expect(await upgraded.countSales(), 1);
             expect(await upgraded.countStockMovements(), 2);
             expect(await upgraded.countOutboxOperations(), 2);
@@ -620,7 +620,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 35);
+            expect(upgraded.schemaVersion, 36);
             final product = (await upgraded.readActiveProducts()).single;
             expect(product.sku, 'smc1.legacy-merchant-code');
             expect(product.onHand, 1);
@@ -717,7 +717,7 @@ void main() {
         final upgraded = ShopDatabase(NativeDatabase(snapshot));
         try {
           await upgraded.verifyReadyForUse();
-          expect(upgraded.schemaVersion, 35);
+          expect(upgraded.schemaVersion, 36);
           expect(await upgraded.memberCardIdentificationAvailable(), isFalse);
           await _seedMember(
             upgraded,
@@ -1483,6 +1483,19 @@ String _syntheticStaticMmqr() {
 }
 
 void _removePostV15SchemaObjects(Database connection) {
+  for (final definition
+      in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   for (final definition
       in shopConnectedCloudProofSchemaDefinitionsV35().entries
           .toList()

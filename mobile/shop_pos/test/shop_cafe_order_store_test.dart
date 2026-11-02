@@ -1967,7 +1967,7 @@ void main() {
           } on Object catch (error, stack) {
             fail('v$origin migration failed: $error\n$stack');
           }
-          expect(database.schemaVersion, 35);
+          expect(database.schemaVersion, 36);
           expect(await database.countSales(), origin == 18 ? 1 : 0);
           final products = await database.readActiveProducts();
           expect(products, origin == 18 ? hasLength(1) : isEmpty);
@@ -2404,6 +2404,12 @@ CafeOrderCommand _command(
 void _downgradeV19(File file, int target) {
   final connection = sqlite.sqlite3.open(file.path);
   try {
+    for (final definition
+        in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
     for (final definition
         in shopConnectedCloudProofSchemaDefinitionsV35().entries
             .toList()

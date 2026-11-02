@@ -1,7 +1,7 @@
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_database.dart';
 
-const historicalShopFixtureSupportedSchemaVersion = 35;
+const historicalShopFixtureSupportedSchemaVersion = 36;
 
 Set<String> historicalShopPostV15SchemaObjectNames() => <String>{
   ...shopMemberSchemaDefinitionsV16().keys,
@@ -10,6 +10,7 @@ Set<String> historicalShopPostV15SchemaObjectNames() => <String>{
   ...shopCafeOrderSchemaDefinitionsV19().keys,
   ...shopCafeCancellationSchemaDefinitionsV20().keys,
   ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
+  ...shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys,
   ...shopConnectedSiteSchemaDefinitionsV28().keys,
   ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
   ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,

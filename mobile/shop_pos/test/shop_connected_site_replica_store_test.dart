@@ -582,6 +582,19 @@ void main() {
     final raw = sqlite.sqlite3.open(file.path);
     try {
       for (final definition
+          in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(definition.value);
+        raw.execute(
+          'DROP ${type == 'table'
+              ? 'TABLE'
+              : type == 'index'
+              ? 'INDEX'
+              : 'TRIGGER'} IF EXISTS ${definition.key}',
+        );
+      }
+      for (final definition
           in shopConnectedCloudProofSchemaDefinitionsV35().entries
               .toList()
               .reversed) {
@@ -627,7 +640,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 35);
+    expect(migrated.schemaVersion, 36);
     await migrated.verifyConnectedReplicaEvidence();
   });
 
@@ -669,6 +682,19 @@ void main() {
     await source.close();
     final raw = sqlite.sqlite3.open(file.path);
     try {
+      for (final definition
+          in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries
+              .toList()
+              .reversed) {
+        final type = shopSchemaObjectTypeForDefinition(definition.value);
+        raw.execute(
+          'DROP ${type == 'table'
+              ? 'TABLE'
+              : type == 'index'
+              ? 'INDEX'
+              : 'TRIGGER'} IF EXISTS ${definition.key}',
+        );
+      }
       for (final definition
           in shopConnectedCloudProofSchemaDefinitionsV35().entries
               .toList()
@@ -731,7 +757,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 35);
+    expect(migrated.schemaVersion, 36);
     expect(
       await migrated
           .customSelect(
