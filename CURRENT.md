@@ -5,6 +5,35 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 verified-time coordinator adapter checkpoint
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `272c1284544871a7402e081b232dbc121de2e881` (tree
+  `d87a5bbe898feac677c89c09779fb66ccd9ffbda`, parent Windows-clock ledger
+  `09f1a7bbd6b0a33d418d9c0aa882a5c26bde89e1`) closes the missing source
+  adapter between `ShopConnectedTrustedTimeRuntime` and the existing
+  `ShopConnectedSiteCoordinatorTimeAuthority` required by stock and cafe sale
+  paths. Its two-file patch SHA-256 is
+  `c1d8ee5c9c2742c6ead509f8e7fef3e086bb0d3a427f15098d7989048e75ecbb`
+  with stable patch ID `b55164e64e5596c88af0f9afcb997146404006dc`.
+- The adapter rejects workspace or site substitution before reading retained
+  state and exposes only the existing live effective time. Missing, expired,
+  replayed, restarted, restored-audit-only or otherwise unavailable evidence
+  cannot synthesize time and fails closed. It does not modify the verifier,
+  persistence, protocol, composition mount, runtime profiles or network I/O.
+- The focused trusted-time composition plus platform-clock suite is **10/10
+  PASS** and targeted analyzer is **PASS**. The complete 11-file trusted-time
+  regression is **65/65 PASS** in 1m20s, covering canonical wire contracts,
+  replay, concurrent consumption, rollback, restart, migration, encrypted
+  restore, expiry and regression. Formatting and diff checks are **PASS**.
+  Independent security review **ACCEPTS** the final two-file diff.
+- **BLOCKED / NOT RUN:** the enabled coordinator composition still requires an
+  explicit reviewed mount of this authority and still uses a separate injected
+  wall-clock callback for pairing, nonce and lease windows. No claim is made
+  that all connected time decisions are protected. Production issuer/key
+  custody, MSVC/runtime proof, signed artifacts, installed recovery and pilot
+  acceptance remain **NOT RUN/BLOCKED**; connected operation remains off.
+
 ## 2026-11-02 current-base Windows trusted-time checkpoint
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
