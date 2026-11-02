@@ -7,6 +7,39 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private schema-v39 trusted-time client-head persistence
+
+- **SOURCE PASS / DEFAULT-OFF / RESTORE-QUARANTINED:** implementation
+  `c7edd0a0e0f0e238a98625c04bdc76f7d795a6f2` (repository tree
+  `e4eb42d3ad76a520e4e85dfc191e0bdce0bd90b1`, native tree
+  `722ed7af093491a6030d0a46095516479c6f7422`, native `lib/` tree
+  `bd55b56bef2cab8a6175718a5a7aa8bb2bcb32c1`, binary patch SHA-256
+  `ad05c6e64e69d972fe0d4a733302049ef3387bc0bb08a3ab91a288626423ab1f`)
+  adds immutable accepted-entry, acknowledgement and client-head evidence,
+  plus append-only restore barriers and clearances.
+- Entry, ACK and resulting head persist atomically with exact scope,
+  sequence/predecessor and digest closure. Replay is idempotent only for
+  identical bytes; gaps, substitution, concurrency races and outer
+  transaction rollback fail closed. Fresh-target restore preserves audit
+  evidence but makes every stream unusable until injected authority and
+  device-ACK verifiers, current binding resolution, platform clock and a
+  separately approved restoration policy all revalidate the exact head.
+  Clearance is audit-only and always records `timeGranted=false`; restored or
+  expired evidence can never recreate live time.
+- Focused client-store tests are **7/7 PASS**; the migration/issuer/store/export
+  matrix is **26/26 PASS**; pending-cash regression is **14/14 PASS**; a final
+  combined client-store/pending-cash rerun is **21/21 PASS** in 1m58s.
+  Analyzer and diff checks are **PASS**. Independent security review is
+  **ACCEPT** after closing ACK-entry permutation, restored-time grant and v39
+  fixture/assertion findings. Schema/store/test SHA-256 identities are
+  `a1148cd4785d6b96726423f6a29c7a20371cb7e065d83f5172937d0359347b3c`,
+  `5b456aba8c34138c77a1bd67dcdacae2075ccc4dd97802dbc8e324b198f22a12`
+  and `7eb998d861cc7c0784f5b3275209454abb4d5f4d901e8d95cc890060c1bb59ba`.
+- **BLOCKED / NOT RUN:** there is no production restoration-policy authority,
+  protected issuer/device key custody, platform clock bootstrap, endpoint
+  composition, platform compilation or installed-device evidence. Connected
+  mode remains off and no restored evidence grants time automatically.
+
 ### Private default-off trusted-time client stream acceptance
 
 - **SOURCE PASS / DEFAULT-OFF / VOLATILE:** implementation
