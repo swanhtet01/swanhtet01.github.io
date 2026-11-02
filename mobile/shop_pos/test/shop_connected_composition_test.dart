@@ -15,6 +15,8 @@ import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_enrollment_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_authority.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_contract.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_offline_staff_lease.dart';
 import 'package:supermega_shop/shop_runtime_profile.dart';
@@ -290,6 +292,7 @@ void main() {
       );
       final writes = ShopConnectedSharedWriteGate();
       final verifiedTime = _VerifiedTime(now);
+      final trustedTimeAuthority = _TrustedTimeAuthority();
       final dependencies = ShopConnectedCoordinatorServerDependencies(
         pairingResponse: CoordinatorPairingV1(
           workspaceId: 'workspace-1',
@@ -304,6 +307,7 @@ void main() {
         ),
         leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
         timeAuthority: verifiedTime,
+        trustedTimeAuthority: trustedTimeAuthority,
         healthSignals: const ShopConnectedCoordinatorHealthSignalsUnavailable(),
       );
       final transport = dependencies.build(
@@ -318,6 +322,8 @@ void main() {
       expect(standard.sharedWrites, same(writes));
       expect(standard.enrollment, same(enrollment));
       expect(standard.server.sharedWriteAvailability, same(writes));
+      expect(standard.server.trustedTimeV2Enabled, isTrue);
+      expect(standard.server.trustedTimeAuthority, same(trustedTimeAuthority));
       final health =
           standard.server.health as ShopConnectedCoordinatorHealthProvider;
       expect(health.database, same(database));
@@ -425,6 +431,8 @@ void main() {
             ),
             leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
             timeAuthority: time,
+            trustedTimeAuthority:
+                const UnavailableConnectedTrustedTimeCoordinatorAuthority(),
             healthSignals:
                 const ShopConnectedCoordinatorHealthSignalsUnavailable(),
           ).build(
@@ -486,6 +494,8 @@ void main() {
         ),
         leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
         timeAuthority: const ShopConnectedSiteTimeUnavailable(),
+        trustedTimeAuthority:
+            const UnavailableConnectedTrustedTimeCoordinatorAuthority(),
         healthSignals: const ShopConnectedCoordinatorHealthSignalsUnavailable(),
         cafeStore: foreignCafeStore,
       );
@@ -688,6 +698,24 @@ class _VerifiedTime implements ShopConnectedSiteCoordinatorTimeAuthority {
     }
     return now.millisecondsSinceEpoch;
   }
+}
+
+class _TrustedTimeAuthority
+    implements ConnectedTrustedTimeCoordinatorAuthority {
+  @override
+  Future<ConnectedTrustedTimeObservationV1> observe(
+    ConnectedTrustedTimeObservationRequestV1 request,
+  ) async => ConnectedTrustedTimeObservationV1(
+    challenge: request.challenge,
+    authorityKeyId: 'trusted-time-key-1',
+    authorityKeyFingerprint: '8' * 64,
+    authorityKeyGeneration: 1,
+    authorityEpoch: 1,
+    authoritySequence: 1,
+    observedAtMillis: 1800000000000,
+    validUntilMillis: 1800000060000,
+    authoritySignature: 'A' * 86,
+  );
 }
 
 Future<void> _seedDevice(ShopDatabase database) async {

@@ -13,6 +13,7 @@ import 'shop_connected_site_database_adapter.dart';
 import 'shop_connected_site_enrollment_store.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_site_reconciliation_store.dart';
+import 'shop_connected_trusted_time_authority.dart';
 import 'shop_database.dart';
 import 'shop_offline_staff_lease.dart';
 import 'shop_runtime_profile.dart';
@@ -48,6 +49,7 @@ class ShopConnectedCoordinatorServerDependencies {
     required this.pairingResponse,
     required this.leaseVerifier,
     required this.timeAuthority,
+    required this.trustedTimeAuthority,
     required this.healthSignals,
     this.stationReadPolicy = const CoordinatorStationReadPolicyUnavailable(),
     this.cafeStore,
@@ -57,6 +59,7 @@ class ShopConnectedCoordinatorServerDependencies {
   final CoordinatorPairingV1 pairingResponse;
   final ShopOfflineStaffLeaseVerifier leaseVerifier;
   final ShopConnectedSiteCoordinatorTimeAuthority timeAuthority;
+  final ConnectedTrustedTimeCoordinatorAuthority trustedTimeAuthority;
   final ShopConnectedCoordinatorHealthSignalSource healthSignals;
   final CoordinatorStationReadPolicy stationReadPolicy;
   final ShopCafeOrderStore? cafeStore;
@@ -127,8 +130,10 @@ class ShopConnectedCoordinatorServerDependencies {
       deviceEnrollment: context.enrollment,
       siteAuthorization: siteAuthorization,
       commandCapabilities: const ShopConnectedSiteDatabaseCapabilityResolver(),
+      trustedTimeAuthority: trustedTimeAuthority,
       now: verifiedNow,
       runtimeEnabled: true,
+      trustedTimeV2Enabled: true,
     );
     return SiteCoordinatorServerTransport(
       server: server,
