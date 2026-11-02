@@ -7,6 +7,40 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private default-off trusted-time v2 client successor
+
+- **SOURCE PASS / DEFAULT-OFF / UNMOUNTED:** implementation
+  `20b8d1c861d3f384640b38393ccbf242ebe1746c` (repository tree
+  `ae96686e934acde929d099d76ecf63dc2ba69058`, native tree
+  `c9dbf2c01fd25c472cc941a541ca386f3ddd6f9a`, native `lib/` tree
+  `ee8f9cfd0619d29ced49d9ee32a292b2cbeeebf1`, binary patch SHA-256
+  `ab2ff842766e2999e903e70d4493ecbe73c1cabb0db8718b5dd58788ddbfa0f3`)
+  adds the default-off client exchange for one retained trusted-time challenge.
+- Before transmission, the client resolves one retained approved binding and
+  binds workspace/site/coordinator, client device/fingerprint, current session
+  generation, exact binding digest and approval generation. That same binding
+  supplies the exact v2 endpoint and pinned TLS certificate, avoiding a second
+  resolution race.
+- The client sends canonical v2 bytes only to `POST /v2/trusted-time` with a
+  v2 proof. Only approval digest and challenge cross the LAN. Responses require
+  successful JSON within 16 KiB, exact canonical response, echoed request
+  digest and original challenge. Ambiguous/lost POST errors propagate after
+  exactly one send; the facade abandons that capability and a future refresh
+  must create a new challenge.
+- Targeted analyzer is **PASS**; client, authority and facade suites are
+  **26/26 PASS**; diff checks are **PASS**; independent review is **ACCEPT**.
+  Reviewed file SHA-256 identities are
+  `7acd520703393c988d68492353c2967cc22b0e258b54b2226e9442337a9508d5`
+  for the client,
+  `79e4890f5db2fc0ec9360f8d3db8388060862c4c9fdf11bbdd9e11c973e57306`
+  for the exchange adapter and
+  `62d3805c7e6ac4fa8185dc75262c825e855c04992f55b28b225f9bceb30494db`
+  for client tests.
+- **BLOCKED / NOT RUN:** the client and server are not mounted into shipping
+  composition and no live network ran. Protected coordinator authority,
+  signing-key custody, clock bootstrap, Windows trusted clock, compilation and
+  installed-device evidence remain absent. V2 and connected mode stay off.
+
 ### Private default-off trusted-time v2 route successor
 
 - **SOURCE PASS / DEFAULT-OFF / UNMOUNTED:** implementation
