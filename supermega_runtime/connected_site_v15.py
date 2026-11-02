@@ -10,11 +10,13 @@ trusted as authority.
 from __future__ import annotations
 
 import base64
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 import re
+from threading import Lock
 from typing import Any, Mapping, Sequence
 
 from cryptography.exceptions import InvalidSignature
@@ -61,6 +63,19 @@ def canonical_json(value: Any) -> str:
 
 def digest(value: Any) -> str:
     return sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _upload_batch_digest(authority: "SiteAuthority", device_id: str, after_cursor: int,
+                         validated: Sequence[tuple["UploadEvent", Mapping[str, Any]]]) -> str:
+    return digest({
+        "contract": "supermega.connected-site-upload-batch.v1",
+        "workspaceId": authority.workspace_id, "siteId": authority.site_id,
+        "deviceId": device_id, "afterCursor": after_cursor,
+        "events": [{"cursor": upload.cursor, "commandId": upload.command_id,
+                    "commandDigest": upload.command_digest, "eventDigest": upload.event_digest,
+                    "event": upload.event, "cloudProof": upload.cloud_proof}
+                   for upload, _ in validated],
+    })
 
 
 def _exact(value: Any, keys: set[str], reason: str) -> dict[str, Any]:
@@ -338,7 +353,9 @@ class MemoryConnectedSiteRepository:
     event_heads: dict[tuple[str, str], tuple[int, str]] = field(default_factory=dict)
     conflicts: list[dict[str, Any]] = field(default_factory=list)
     upload_cursors: dict[tuple[str, str, str], int] = field(default_factory=dict)
+    upload_batches: dict[tuple[str, str, str, int, int], str] = field(default_factory=dict)
     financial_records: dict[str, Any] = field(default_factory=dict)
+    _apply_lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
     def apply(
         self,
@@ -349,13 +366,49 @@ class MemoryConnectedSiteRepository:
         validated: Sequence[tuple[UploadEvent, Mapping[str, Any]]],
         observed_at: datetime,
     ) -> list[UploadDecision]:
+        # Match the database transaction: failed batches have no partial effects.
+        with self._apply_lock:
+            staged = MemoryConnectedSiteRepository(
+                commands=deepcopy(self.commands),
+                aggregate_versions=deepcopy(self.aggregate_versions),
+                events=deepcopy(self.events),
+                event_heads=deepcopy(self.event_heads),
+                conflicts=deepcopy(self.conflicts),
+                upload_cursors=deepcopy(self.upload_cursors),
+                upload_batches=deepcopy(self.upload_batches),
+                financial_records=deepcopy(self.financial_records),
+            )
+            decisions = staged._apply_transaction(
+                authority=authority, device_id=device_id, after_cursor=after_cursor,
+                validated=validated, observed_at=observed_at,
+            )
+            self.commands = staged.commands
+            self.aggregate_versions = staged.aggregate_versions
+            self.events = staged.events
+            self.event_heads = staged.event_heads
+            self.conflicts = staged.conflicts
+            self.upload_cursors = staged.upload_cursors
+            self.upload_batches = staged.upload_batches
+            self.financial_records = staged.financial_records
+            return decisions
+
+    def _apply_transaction(
+        self, *, authority: SiteAuthority, device_id: str, after_cursor: int,
+        validated: Sequence[tuple[UploadEvent, Mapping[str, Any]]], observed_at: datetime,
+    ) -> list[UploadDecision]:
         cursor_key = (authority.workspace_id, authority.site_id, device_id)
-        if self.upload_cursors.get(cursor_key, 0) != after_cursor:
+        current_cursor = self.upload_cursors.get(cursor_key, 0)
+        replay_only = current_cursor != after_cursor
+        batch_key = (*cursor_key, after_cursor, validated[-1][0].cursor) if validated else None
+        batch_digest = _upload_batch_digest(authority, device_id, after_cursor, validated) if validated else None
+        if replay_only and (batch_key is None or self.upload_batches.get(batch_key) != batch_digest):
             _fail("upload_cursor_conflict")
         decisions: list[UploadDecision] = []
         for upload, command in validated:
             command_key = (authority.workspace_id, authority.site_id, upload.command_id)
             previous = self.commands.get(command_key)
+            if replay_only and previous is None:
+                _fail("replay_evidence_incomplete")
             if previous is not None:
                 if previous[0] != upload.command_digest:
                     _fail("command_id_digest_conflict")
@@ -434,8 +487,9 @@ class MemoryConnectedSiteRepository:
             self.aggregate_versions[aggregate_key] = next_version
             self.commands[command_key] = (upload.command_digest, decision)
             decisions.append(decision)
-        if validated:
+        if validated and not replay_only:
             self.upload_cursors[cursor_key] = validated[-1][0].cursor
+            self.upload_batches[batch_key] = batch_digest
         return decisions
 
 
@@ -461,6 +515,8 @@ class PostgresConnectedSiteRepository:
     ) -> list[UploadDecision]:
         decisions: list[UploadDecision] = []
         with self._connection_factory() as connection:
+            if getattr(connection, "autocommit", None) is not False:
+                _fail("postgres_transaction_required")
             with connection.cursor() as cursor:
                 cursor.execute("select set_config('app.workspace_id', %s, true)", (authority.workspace_id,))
                 cursor.execute("select set_config('app.site_id', %s, true)", (authority.site_id,))
@@ -481,8 +537,23 @@ class PostgresConnectedSiteRepository:
                     (authority.workspace_id, authority.site_id, device_id),
                 )
                 row = cursor.fetchone()
-                if row is None or row[0] != after_cursor:
+                if row is None:
                     _fail("upload_cursor_conflict")
+                replay_only = row[0] != after_cursor
+                batch_digest = _upload_batch_digest(authority, device_id, after_cursor, validated) if validated else None
+                if replay_only:
+                    if not validated:
+                        _fail("upload_cursor_conflict")
+                    cursor.execute(
+                        "select batch_digest from app_private.connected_site_upload_batches "
+                        "where workspace_id=%s and site_id=%s and device_id=%s "
+                        "and after_cursor=%s and next_cursor=%s",
+                        (authority.workspace_id, authority.site_id, device_id,
+                         after_cursor, validated[-1][0].cursor),
+                    )
+                    retained_batch = cursor.fetchone()
+                    if retained_batch is None or retained_batch[0] != batch_digest:
+                        _fail("upload_cursor_conflict")
                 for upload, command in validated:
                     cursor.execute(
                         "select command_digest,state from app_private.connected_site_commands "
@@ -490,6 +561,8 @@ class PostgresConnectedSiteRepository:
                         (authority.workspace_id, authority.site_id, upload.command_id),
                     )
                     prior = cursor.fetchone()
+                    if replay_only and prior is None:
+                        _fail("replay_evidence_incomplete")
                     if prior is not None:
                         if prior[0] != upload.command_digest:
                             _fail("command_id_digest_conflict")
@@ -593,10 +666,17 @@ class PostgresConnectedSiteRepository:
                          decision.state, decision.canonical_version, decision.event_digest, decision.reason, canonical_json(ack)),
                     )
                     decisions.append(decision)
-                if validated:
+                if validated and not replay_only:
                     cursor.execute(
                         "update app_private.connected_site_cursors set upload_cursor=%s where workspace_id=%s and site_id=%s and device_id=%s",
                         (validated[-1][0].cursor, authority.workspace_id, authority.site_id, device_id),
+                    )
+                    cursor.execute(
+                        "insert into app_private.connected_site_upload_batches "
+                        "(workspace_id,site_id,device_id,after_cursor,next_cursor,batch_digest) "
+                        "values (%s,%s,%s,%s,%s,%s)",
+                        (authority.workspace_id, authority.site_id, device_id, after_cursor,
+                         validated[-1][0].cursor, batch_digest),
                     )
         return decisions
 

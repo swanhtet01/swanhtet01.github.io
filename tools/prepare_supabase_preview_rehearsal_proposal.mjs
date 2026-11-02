@@ -12,7 +12,7 @@ const output = resolve(root, 'hq', 'readiness', 'supabase-preview-rehearsal-prop
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const EXPECTED_MIGRATION_COUNT = 25
 const EXPECTED_PRIVATE_MIGRATION_COUNT = 24
-const EXPECTED_SOURCE_ONLY_MIGRATION_COUNT = 1
+const EXPECTED_SOURCE_ONLY_MIGRATION_COUNT = 2
 const EXPECTED_PUBLIC_BASELINE = '20260711081300_public_legacy_baseline.sql'
 const EXPECTED_FINAL_MIGRATION = '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql'
 const EXPECTED_SCHEMA_PROFILE = 'v14-shop-correction'
@@ -46,6 +46,7 @@ const EXPECTED_MIGRATIONS = Object.freeze([
 ])
 const EXPECTED_SOURCE_ONLY_MIGRATIONS = Object.freeze([
   '20261101090000_private_trial_backend_v15_connected_site.sql',
+  '20261103090000_private_trial_backend_v16_connected_upload_batches.sql',
 ])
 const EXPECTED_SOURCE_INVENTORY = Object.freeze([
   ...EXPECTED_MIGRATIONS,

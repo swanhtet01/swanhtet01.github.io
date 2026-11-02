@@ -50,6 +50,7 @@ const expectedExecutableMigrationNames = [
 ]
 const expectedSourceOnlyMigrationNames = [
   '20261101090000_private_trial_backend_v15_connected_site.sql',
+  '20261103090000_private_trial_backend_v16_connected_upload_batches.sql',
 ]
 const expectedMigrationNames = [
   ...expectedExecutableMigrationNames,

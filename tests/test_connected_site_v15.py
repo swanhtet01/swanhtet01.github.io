@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import unittest
@@ -14,6 +15,7 @@ from supermega_runtime.connected_site_v15 import (
     CurrentMember,
     DeviceAuthority,
     MemoryConnectedSiteRepository,
+    PostgresConnectedSiteRepository,
     SiteAuthority,
     UploadEvent,
     canonical_json,
@@ -442,6 +444,72 @@ class ConnectedSiteV15Tests(unittest.TestCase):
         changed = _upload(self.a, key=DEVICE_A, cursor=3, command_id="command-1", aggregate_id="other")
         with self.assertRaisesRegex(ConnectedSiteV15Error, "command_id_digest_conflict"):
             self._reconcile(self.a, changed, after=2)
+
+    def test_lost_reply_requires_the_retained_ordered_batch(self) -> None:
+        first = _upload(self.a, key=DEVICE_A, cursor=1, command_id="command-1", aggregate_id="basket-1")
+        second = _upload(self.a, key=DEVICE_A, cursor=2, command_id="command-2", aggregate_id="basket-2")
+
+        def send(events):
+            return self.adapter.reconcile(
+                workspace_id="workspace-a", site_id="site-a", device_id="device-a",
+                session_generation=2, revocation_generation=3, after_cursor=0,
+                events=events, now=NOW,
+            )
+
+        self.assertEqual([item.state for item in send([first, second])], ["accepted", "accepted"])
+        self.assertEqual([item.state for item in send([first, second])], ["replayed", "replayed"])
+        self.assertEqual(len(self.repository.events), 2)
+        self.assertEqual(len(self.repository.upload_batches), 1)
+        reordered = [
+            _upload(self.a, key=DEVICE_A, cursor=1, command_id="command-2", aggregate_id="basket-2"),
+            _upload(self.a, key=DEVICE_A, cursor=2, command_id="command-1", aggregate_id="basket-1"),
+        ]
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "upload_cursor_conflict"):
+            send(reordered)
+        changed = _upload(self.a, key=DEVICE_A, cursor=2, command_id="command-3", aggregate_id="basket-3")
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "upload_cursor_conflict"):
+            send([first, changed])
+        with self.assertRaises(ConnectedSiteV15Error):
+            self._reconcile(self.b, first, after=0)
+        self.assertEqual(len(self.repository.events), 2)
+
+    def test_failed_batch_rolls_back_and_concurrent_retry_has_one_effect(self) -> None:
+        first = _upload(self.a, key=DEVICE_A, cursor=1, command_id="command-1", aggregate_id="basket-1")
+        altered = _upload(self.a, key=DEVICE_A, cursor=2, command_id="command-1", aggregate_id="basket-2")
+        def send(events):
+            return self.adapter.reconcile(
+                workspace_id="workspace-a", site_id="site-a", device_id="device-a",
+                session_generation=2, revocation_generation=3, after_cursor=0,
+                events=events, now=NOW,
+            )
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "command_id_digest_conflict"):
+            send([first, altered])
+        self.assertEqual(self.repository.events, [])
+        self.assertEqual(self.repository.upload_cursors, {})
+        self.assertEqual(self.repository.upload_batches, {})
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            states = [future.result()[0].state for future in
+                      [pool.submit(send, [first]), pool.submit(send, [first])]]
+        self.assertCountEqual(states, ["accepted", "replayed"])
+        self.assertEqual(len(self.repository.events), 1)
+        self.assertEqual(len(self.repository.upload_batches), 1)
+
+    def test_postgres_rejects_autocommit_before_first_query(self) -> None:
+        class Connection:
+            autocommit = True
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def cursor(self):
+                raise AssertionError("must not query or write")
+
+        repository = PostgresConnectedSiteRepository(Connection)
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "postgres_transaction_required"):
+            repository.apply(
+                authority=self.a, device_id="device-a", after_cursor=0,
+                validated=[], observed_at=NOW,
+            )
 
     def test_revoked_and_expired_leases_are_denied(self) -> None:
         expired = _upload(self.a, key=DEVICE_A, expires_at=NOW)

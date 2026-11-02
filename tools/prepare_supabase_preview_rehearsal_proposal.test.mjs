@@ -68,7 +68,7 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
   assert.equal(built.migrationPlan.migrationCount, 25)
   assert.equal(built.migrationPlan.privateMigrationCount, 24)
-  assert.equal(built.migrationPlan.sourceOnlyMigrationCount, 1)
+  assert.equal(built.migrationPlan.sourceOnlyMigrationCount, 2)
   assert.equal(built.migrationPlan.schemaVersion, 14)
   assert.equal(built.migrationPlan.schemaProfile, 'v14-shop-correction')
   assert.equal(built.migrationPlan.databaseContract, 'supermega_private_trial_database_v14_shop_correction_v1')

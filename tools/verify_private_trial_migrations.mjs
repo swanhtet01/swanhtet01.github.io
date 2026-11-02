@@ -25,11 +25,12 @@ const migrationDirectory = resolve(root, 'supabase', 'migrations')
 // pgvector, which PGlite does not provide — applying it here would fail for reasons
 // unrelated to what is being verified.
 const outOfScopeMigrations = ['20260711081300_public_legacy_baseline.sql']
-// Source-only connected-site v15 is verified independently. The canonical
+// Source-only connected-site v15/v16 is verified independently. The canonical
 // PostgreSQL 17 rehearsal remains pinned to v14 until a genuine fresh receipt
 // is produced; including it in expectedMigrations would misrepresent that gate.
 const sourceOnlyMigrations = [
   '20261101090000_private_trial_backend_v15_connected_site.sql',
+  '20261103090000_private_trial_backend_v16_connected_upload_batches.sql',
 ]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',

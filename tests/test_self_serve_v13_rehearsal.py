@@ -88,6 +88,10 @@ class FullChainProofContractTests(unittest.TestCase):
             "supabase/migrations/20261101090000_private_trial_backend_v15_connected_site.sql",
             {item["path"] for item in identity["files"]},
         )
+        self.assertIn(
+            "supabase/migrations/20261103090000_private_trial_backend_v16_connected_upload_batches.sql",
+            {item["path"] for item in identity["files"]},
+        )
 
     def test_existing_output_causes_no_database_work(self):
         with tempfile.TemporaryDirectory(prefix="supermega-proof-contract-") as temp:

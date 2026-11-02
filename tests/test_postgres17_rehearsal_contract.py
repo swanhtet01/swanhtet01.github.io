@@ -182,6 +182,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertEqual((*module.CURRENT_MIGRATIONS, *module.SOURCE_ONLY_MIGRATIONS), observed)
         self.assertEqual(module.SOURCE_ONLY_MIGRATIONS, (
             "20261101090000_private_trial_backend_v15_connected_site.sql",
+            "20261103090000_private_trial_backend_v16_connected_upload_batches.sql",
         ))
 
     def test_account_restore_inventory_includes_website_review_history(self) -> None:

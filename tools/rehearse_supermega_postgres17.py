@@ -81,12 +81,13 @@ CURRENT_MIGRATIONS = (
     *V13_MIGRATIONS,
     "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql",
 )
-# Connected-site v15 is source-verified and deliberately excluded from the
+# Connected-site v15/v16 is source-verified and deliberately excluded from the
 # authoritative v14 rehearsal until its separate PostgreSQL 17 catalog review
 # is complete. It is still part of the exact source inventory and digest, so a
 # v14 receipt can never silently attest a tree that contains untracked schema.
 SOURCE_ONLY_MIGRATIONS = (
     "20261101090000_private_trial_backend_v15_connected_site.sql",
+    "20261103090000_private_trial_backend_v16_connected_upload_batches.sql",
 )
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"

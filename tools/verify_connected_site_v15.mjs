@@ -42,18 +42,19 @@ for (const name of names) {
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('connected site source schema is v15', version.rows[0]?.schema_version === 15)
+requireCheck('connected site source schema is v16', version.rows[0]?.schema_version === 16)
 const relations = await database.query(`
   select relation.relname as name, relation.relrowsecurity as rls, relation.relforcerowsecurity as forced
   from pg_class relation join pg_namespace namespace on namespace.oid = relation.relnamespace
   where namespace.nspname = 'app_private' and relation.relkind = 'r'
     and relation.relname in ('connected_sites','connected_site_devices','connected_site_leases',
       'connected_site_commands','connected_site_events','connected_site_acknowledgements',
-      'connected_site_conflicts','connected_site_cursors') order by relation.relname
+      'connected_site_conflicts','connected_site_cursors',
+      'connected_site_upload_batches') order by relation.relname
 `)
 requireCheck(
-  'all eight connected site relations force RLS',
-  relations.rows.length === 8 && relations.rows.every((row) => row.rls && row.forced),
+  'all nine connected site relations force RLS',
+  relations.rows.length === 9 && relations.rows.every((row) => row.rls && row.forced),
 )
 const policies = await database.query(`
   select policyname, roles from pg_policies
@@ -61,7 +62,7 @@ const policies = await database.query(`
 `)
 requireCheck(
   'connected site policies are backend-only and dimension scoped',
-  policies.rows.length === 20 && policies.rows.every((row) =>
+  policies.rows.length === 22 && policies.rows.every((row) =>
     JSON.stringify(row.roles) === JSON.stringify(['supermega_trial_backend'])
   ),
 )
@@ -70,7 +71,8 @@ const apiAcl = await database.query(`
     select 1 from unnest(array['anon','authenticated','service_role']) role_name,
       unnest(array['connected_sites','connected_site_devices','connected_site_leases',
         'connected_site_commands','connected_site_events','connected_site_acknowledgements',
-        'connected_site_conflicts','connected_site_cursors']) relation_name,
+        'connected_site_conflicts','connected_site_cursors',
+        'connected_site_upload_batches']) relation_name,
       unnest(array['SELECT','INSERT','UPDATE','DELETE']) privilege_name
     where has_table_privilege(role_name, format('app_private.%I', relation_name), privilege_name)
   ) as exposed
@@ -116,6 +118,15 @@ requireCheck(
 )
 await database.exec(`update app_private.connected_site_cursors set upload_cursor=1
   where workspace_id='workspace-a' and site_id='site-a' and device_id='device-a'`)
+await database.exec(`insert into app_private.connected_site_upload_batches
+  (workspace_id,site_id,device_id,after_cursor,next_cursor,batch_digest)
+  values ('workspace-a','site-a','device-a',0,1,repeat('a',64))`)
+requireCheck(
+  'upload batch identity is immutable',
+  await rejected(() => database.exec(`update app_private.connected_site_upload_batches
+    set batch_digest=repeat('b',64) where workspace_id='workspace-a'
+    and site_id='site-a' and device_id='device-a' and after_cursor=0`)),
+)
 requireCheck(
   'connected cursors cannot move backwards',
   await rejected(() => database.exec(`update app_private.connected_site_cursors set upload_cursor=0
@@ -167,5 +178,5 @@ await database.exec("select set_config('app.site_id','site-b',false)")
 const otherSite = await database.query('select workspace_id,site_id from app_private.connected_sites')
 requireCheck('backend cannot cross site boundary', otherSite.rows.length === 0)
 await database.exec('reset role')
-console.log(JSON.stringify({ ok: true, checks: checks.length, migrations: names.length, schema_version: 15 }))
+console.log(JSON.stringify({ ok: true, checks: checks.length, migrations: names.length, schema_version: 16 }))
 await database.close()
