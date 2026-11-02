@@ -5,6 +5,22 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-03 cumulative private candidate review
+
+- Independent review of the cumulative draft-PR successor first **HELD** the
+  Android installed-QA adapter because malformed authorization expiry and
+  request deadline text could parse to `NaN` and evade an expiry comparison.
+  Implementation `7eae84659a3947a2c934fbd7bb530d1c6e034eb1` (tree
+  `c1f7d944871b385659c15297f081f074dc93e014`) requires canonical, finite,
+  strictly future UTC timestamps at both boundaries and corrects the SQLite
+  metrics comment to disclose in-memory row hashing. The affected installed
+  protocol/handoff tests are **113/113 PASS**; independent re-review **ACCEPTS
+  the cumulative source candidate** with this correction included.
+- Public PR #752 remains draft at `fe02f283d51bb546db7fab0feabfcff0a43673ee`.
+  Its prior App and dependency failures are terminal; no current-source hosted
+  run, signed artifact, installed device, live PostgreSQL 17 replay, or
+  two-merchant acceptance follows from the private source review.
+
 ## 2026-11-03 cross-device pilot gate recheck
 
 - **SOURCE PASS / DEFAULT-OFF:** the v15 migration defines eight private
