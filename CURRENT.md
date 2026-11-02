@@ -5,6 +5,35 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 trusted-time V2 composition checkpoint
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `4570f155b80209677dd8abb61995a27cd9110148` (tree
+  `ff4a7ef80c68b367f433ec08c56c1146f1cb20b5`, parent published ledger
+  `3c02a2bfca9c6012b1a667d0191291099bb6005b`) supplies a required,
+  separately typed `ConnectedTrustedTimeCoordinatorAuthority` to the standard
+  coordinator composition and enables only the already-reviewed
+  `/v2/trusted-time` route inside that still-unmounted composition. The
+  two-file patch SHA-256 is
+  `8960a67506891b9f96a3917d8dddacfc044f4d1bb58b8d40dfd51cd23526b00d`.
+- The signing/observation authority remains distinct from the accepted-time
+  reader used for pairing, nonce, lease and command decisions. It must be
+  injected explicitly and has no ambient or permissive default. Existing
+  endpoint authentication still binds exact coordinator scope, enrolled
+  client identity and fingerprint, protocol-specific request proof and a
+  one-shot nonce before authority invocation; unavailable authority returns a
+  fail-closed service response and challenge substitution remains rejected.
+- Composition tests are **9/9 PASS**; combined composition and endpoint tests
+  are **45/45 PASS**; targeted analyzer is **PASS**. Native CI contracts are
+  **22/22 PASS** with verifier **PASS**; QA-isolation contracts are **24/24
+  PASS** with strict verifier **PASS**; formatting and diff checks are
+  **PASS**. Independent security review **ACCEPTS** the exact final diff.
+- **NOT RUN / BLOCKED:** no listener, real signing key, production authority,
+  credential, installed Windows/Android exchange or connected-mode acceptance
+  is established. Connected operation remains unmounted and disabled in every
+  shipping profile. This successor is private and has not been published,
+  merged, deployed or enabled.
+
 ## 2026-11-02 verified-time coordinator propagation checkpoint
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
