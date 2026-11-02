@@ -60,7 +60,11 @@ class ShopConnectedSiteDatabaseCommandHandler implements SiteCommandHandler {
     this.cafeStore,
     Map<String, CafeModifierSnapshot> cafeModifierCatalog = const {},
     this.connectedSiteEnabled = false,
-  }) : cafeModifierCatalog = Map.unmodifiable(cafeModifierCatalog);
+  }) : cafeModifierCatalog = Map.unmodifiable(cafeModifierCatalog) {
+    if (cafeStore != null && !identical(cafeStore!.database, database)) {
+      throw StateError('connected_cafe_store_database_mismatch');
+    }
+  }
 
   final ShopDatabase database;
   final ShopConnectedSiteCoordinatorTimeAuthority timeAuthority;

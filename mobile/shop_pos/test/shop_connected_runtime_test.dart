@@ -476,6 +476,9 @@ class _Coordinator implements ConnectedCoordinatorHost {
   @override
   Future<void> start({
     required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
     required ConnectedPlatformIdentity identity,
     required ConnectedEphemeralTlsIdentity tlsIdentity,
   }) async {

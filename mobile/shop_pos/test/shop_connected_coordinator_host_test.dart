@@ -46,6 +46,9 @@ void main() {
     () async {
       await host.start(
         bindAddress: '192.168.10.4',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'site-primary',
         identity: _identity(),
         tlsIdentity: _tls(),
       );
@@ -53,8 +56,12 @@ void main() {
         'platform.start:site-primary',
         'platform.listening:site-primary',
       ]);
-      expect(transport.events, ['transport.start:192.168.10.4']);
+      expect(transport.events, [
+        'transport.prepare:192.168.10.4',
+        'transport.start:192.168.10.4',
+      ]);
       expect(platform.timeline, [
+        'transport.prepare:192.168.10.4',
         'platform.start:site-primary',
         'transport.start:192.168.10.4',
         'platform.listening:site-primary',
@@ -73,13 +80,36 @@ void main() {
     await expectLater(
       host.start(
         bindAddress: '192.168.10.4',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'site-primary',
         identity: _identity(),
         tlsIdentity: _tls(),
       ),
       throwsA(isA<StateError>()),
     );
-    expect(transport.events, isEmpty);
+    expect(transport.events, [
+      'transport.prepare:192.168.10.4',
+      'transport.stop',
+    ]);
     expect(platform.events, ['platform.start:site-primary']);
+  });
+
+  test('transport preparation failure has no platform side effect', () async {
+    transport.failPrepare = true;
+    await expectLater(
+      host.start(
+        bindAddress: '192.168.10.4',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'site-primary',
+        identity: _identity(),
+        tlsIdentity: _tls(),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(platform.events, isEmpty);
+    expect(transport.events, ['transport.prepare:192.168.10.4']);
   });
 
   test('transport failure stops the visible platform lifecycle', () async {
@@ -87,14 +117,19 @@ void main() {
     await expectLater(
       host.start(
         bindAddress: '192.168.10.4',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'site-primary',
         identity: _identity(),
         tlsIdentity: _tls(),
       ),
       throwsA(isA<StateError>()),
     );
     expect(platform.timeline, [
+      'transport.prepare:192.168.10.4',
       'platform.start:site-primary',
       'transport.start:192.168.10.4',
+      'transport.stop',
       'platform.stop',
     ]);
   });
@@ -104,12 +139,16 @@ void main() {
     await expectLater(
       host.start(
         bindAddress: '192.168.10.4',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'site-primary',
         identity: _identity(),
         tlsIdentity: _tls(),
       ),
       throwsA(isA<StateError>()),
     );
     expect(platform.timeline, [
+      'transport.prepare:192.168.10.4',
       'platform.start:site-primary',
       'transport.start:192.168.10.4',
       'platform.listening:site-primary',
@@ -124,6 +163,9 @@ void main() {
     await expectLater(
       host.start(
         bindAddress: '192.168.10.4',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'site-primary',
         identity: _identity(),
         tlsIdentity: _tls(),
       ),
@@ -140,6 +182,9 @@ void main() {
     await expectLater(
       host.start(
         bindAddress: '192.168.10.4',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'site-primary',
         identity: _identity(),
         tlsIdentity: _tls(),
       ),
@@ -158,6 +203,9 @@ void main() {
       await expectLater(
         host.start(
           bindAddress: '192.168.10.4',
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          coordinatorDeviceId: 'site-primary',
           identity: _identity(),
           tlsIdentity: _tls(),
         ),
@@ -177,6 +225,9 @@ void main() {
       await expectLater(
         host.start(
           bindAddress: '192.168.10.4',
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          coordinatorDeviceId: 'site-primary',
           identity: _identity(),
           tlsIdentity: _tls(),
         ),
@@ -190,12 +241,18 @@ void main() {
   test('duplicate start is rejected without a second side effect', () async {
     await host.start(
       bindAddress: '192.168.10.4',
+      workspaceId: 'workspace-1',
+      siteId: 'site-1',
+      coordinatorDeviceId: 'site-primary',
       identity: _identity(),
       tlsIdentity: _tls(),
     );
     await expectLater(
       host.start(
         bindAddress: '192.168.10.4',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'site-primary',
         identity: _identity(),
         tlsIdentity: _tls(),
       ),
@@ -458,11 +515,30 @@ class _Transport implements ConnectedCoordinatorTransport {
   final events = <String>[];
   final timeline = _timeline;
   bool failStart = false;
+  bool failPrepare = false;
   bool failStop = false;
+
+  @override
+  Future<void> prepare({
+    required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
+    required ConnectedEphemeralTlsIdentity tlsIdentity,
+  }) async {
+    events.add('transport.prepare:$bindAddress');
+    timeline.add('transport.prepare:$bindAddress');
+    if (failPrepare) throw StateError('synthetic_transport_prepare');
+  }
 
   @override
   Future<void> start({
     required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
     required ConnectedEphemeralTlsIdentity tlsIdentity,
   }) async {
     final event = 'transport.start:$bindAddress';

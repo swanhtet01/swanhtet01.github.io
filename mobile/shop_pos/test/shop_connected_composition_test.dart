@@ -4,14 +4,18 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_connected_application_boundary.dart';
 import 'package:supermega_shop/shop_connected_composition.dart';
 import 'package:supermega_shop/shop_connected_coordinator_host.dart';
 import 'package:supermega_shop/shop_connected_platform_security.dart';
 import 'package:supermega_shop/shop_connected_runtime.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
+import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_enrollment_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_offline_staff_lease.dart';
 import 'package:supermega_shop/shop_runtime_profile.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
 
@@ -69,9 +73,9 @@ void main() {
           platformSecurity: _Security(_identity(keyId: 'wrong-key')),
           platformLifecycle:
               const UnavailableConnectedCoordinatorPlatformLifecycle(),
-          transportFactory: (gate) {
-            observedGate = gate;
-            transport.gate = gate;
+          transportFactory: (context) {
+            observedGate = context.sharedWrites;
+            transport.gate = context.sharedWrites;
             return transport;
           },
           now: () => DateTime.utc(2026, 11, 2),
@@ -160,8 +164,8 @@ void main() {
         platformSecurity: _Security(_identity()),
         platformLifecycle:
             const UnavailableConnectedCoordinatorPlatformLifecycle(),
-        transportFactory: (gate) {
-          transport.gate = gate;
+        transportFactory: (context) {
+          transport.gate = context.sharedWrites;
           return transport;
         },
         now: () => DateTime.utc(2026, 11, 2),
@@ -271,6 +275,167 @@ void main() {
       ConnectedRuntimeAuthorityState.unavailable,
     );
   });
+
+  test(
+    'standard coordinator transport binds scope and one state graph',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.verifyReadyForUse();
+      final now = DateTime.utc(2026, 11, 2, 12);
+      final enrollment = ShopConnectedSiteEnrollmentStore(
+        database: database,
+        nowMillis: () => now.millisecondsSinceEpoch,
+      );
+      final writes = ShopConnectedSharedWriteGate();
+      final dependencies = ShopConnectedCoordinatorServerDependencies(
+        pairingResponse: CoordinatorPairingV1(
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          coordinatorDeviceId: 'coordinator-1',
+          certificateSha256: 'b' * 64,
+          address: '192.168.1.10',
+          port: 8443,
+          nonce: 'pairing-nonce-1234567890',
+          issuedAt: now.subtract(const Duration(seconds: 10)).toIso8601String(),
+          expiresAt: now.add(const Duration(minutes: 2)).toIso8601String(),
+        ),
+        leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
+        timeAuthority: const ShopConnectedSiteTimeUnavailable(),
+        health: const _Health(),
+      );
+      final transport = dependencies.build(
+        ShopConnectedCoordinatorTransportContext(
+          database: database,
+          enrollment: enrollment,
+          sharedWrites: writes,
+          now: () => now,
+        ),
+      );
+      expect(transport, isA<SiteCoordinatorServerTransport>());
+      final standard = transport as SiteCoordinatorServerTransport;
+      expect(standard.sharedWrites, same(writes));
+      expect(standard.enrollment, same(enrollment));
+      expect(standard.server.sharedWriteAvailability, same(writes));
+
+      final tls = ConnectedEphemeralTlsIdentity(
+        certificatePem: Uint8List.fromList([1]),
+        privateKeyPem: Uint8List.fromList([2]),
+        certificateFingerprintSha256: 'b' * 64,
+      );
+      await expectLater(
+        standard.prepare(
+          bindAddress: '192.168.1.10',
+          workspaceId: 'other-workspace',
+          siteId: 'site-1',
+          coordinatorDeviceId: 'coordinator-1',
+          identity: _identity(),
+          tlsIdentity: tls,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'connected_transport_runtime_scope_mismatch',
+          ),
+        ),
+      );
+      expect(await _pairingNonceCount(database), 0);
+
+      final protectedIdentity = _identity(alias: 'protected-key-slot');
+      await standard.prepare(
+        bindAddress: '192.168.1.10',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'coordinator-1',
+        identity: protectedIdentity,
+        tlsIdentity: tls,
+      );
+      expect(await _pairingNonceCount(database), 1);
+      await expectLater(
+        standard.start(
+          bindAddress: '192.168.1.10',
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          coordinatorDeviceId: 'coordinator-1',
+          identity: _identity(alias: 'substituted-key-slot'),
+          tlsIdentity: tls,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'connected_transport_not_prepared',
+          ),
+        ),
+      );
+      await standard.stop();
+      await standard.prepare(
+        bindAddress: '192.168.1.10',
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        coordinatorDeviceId: 'coordinator-1',
+        identity: protectedIdentity,
+        tlsIdentity: tls,
+      );
+      expect(await _pairingNonceCount(database), 1);
+      await standard.stop();
+      tls.dispose();
+    },
+  );
+
+  test(
+    'standard coordinator rejects a cafe store on another database',
+    () async {
+      final foreignDatabase = ShopDatabase(NativeDatabase.memory());
+      final foreignCafeStore = ShopCafeOrderStore(foreignDatabase);
+      await foreignDatabase.close();
+
+      final database = ShopDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.verifyReadyForUse();
+      final now = DateTime.utc(2026, 11, 2, 12);
+      final enrollment = ShopConnectedSiteEnrollmentStore(
+        database: database,
+        nowMillis: () => now.millisecondsSinceEpoch,
+      );
+      final dependencies = ShopConnectedCoordinatorServerDependencies(
+        pairingResponse: CoordinatorPairingV1(
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          coordinatorDeviceId: 'coordinator-1',
+          certificateSha256: 'b' * 64,
+          address: '192.168.1.10',
+          port: 8443,
+          nonce: 'pairing-nonce-1234567890',
+          issuedAt: now.subtract(const Duration(seconds: 10)).toIso8601String(),
+          expiresAt: now.add(const Duration(minutes: 2)).toIso8601String(),
+        ),
+        leaseVerifier: const ShopOfflineStaffLeaseVerifier(),
+        timeAuthority: const ShopConnectedSiteTimeUnavailable(),
+        health: const _Health(),
+        cafeStore: foreignCafeStore,
+      );
+      expect(
+        () => dependencies.build(
+          ShopConnectedCoordinatorTransportContext(
+            database: database,
+            enrollment: enrollment,
+            sharedWrites: ShopConnectedSharedWriteGate(),
+            now: () => now,
+          ),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'connected_transport_cafe_database_mismatch',
+          ),
+        ),
+      );
+      expect(await _pairingNonceCount(database), 0);
+    },
+  );
 }
 
 Future<ConnectedRuntimeAuthorityState> _authorityState(
@@ -297,12 +462,15 @@ const _enabledCapabilities = ShopRuntimeCapabilities(
   loopbackPrinter: false,
 );
 
-ConnectedPlatformIdentity _identity({String keyId = 'key-1'}) {
+ConnectedPlatformIdentity _identity({
+  String keyId = 'key-1',
+  String alias = 'coordinator-1',
+}) {
   final publicKey = Uint8List.fromList(
     List<int>.generate(32, (index) => index),
   );
   return ConnectedPlatformIdentity(
-    alias: 'coordinator-1',
+    alias: alias,
     keyId: keyId,
     algorithm: 'ed25519',
     publicKeyBase64: base64Encode(publicKey),
@@ -321,8 +489,22 @@ class _Transport implements ConnectedCoordinatorTransport {
   ConnectedSharedWriteGate get sharedWrites => gate!;
 
   @override
+  Future<void> prepare({
+    required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
+    required ConnectedEphemeralTlsIdentity tlsIdentity,
+  }) async {}
+
+  @override
   Future<void> start({
     required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
     required ConnectedEphemeralTlsIdentity tlsIdentity,
   }) async {
     starts += 1;
@@ -443,4 +625,25 @@ Future<int> _authorityRowCount(ShopDatabase database) async {
       )
       .getSingle();
   return payloads.read<int>('count') + checkpoints.read<int>('count');
+}
+
+Future<int> _pairingNonceCount(ShopDatabase database) async =>
+    (await database
+            .customSelect(
+              'SELECT count(*) AS count FROM shop_site_pairing_nonces',
+            )
+            .getSingle())
+        .read<int>('count');
+
+class _Health implements CoordinatorHealthProvider {
+  const _Health();
+
+  @override
+  Future<CoordinatorHealthV1> readHealth() async => const CoordinatorHealthV1(
+    sharedWritesAvailable: false,
+    internetAvailable: false,
+    cloudSyncHealthy: false,
+    backupCurrent: false,
+    pendingConflictCount: 0,
+  );
 }

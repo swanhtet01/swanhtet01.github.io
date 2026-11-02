@@ -1,21 +1,129 @@
 import 'package:drift/drift.dart';
 
+import 'shop_cafe_order_contract.dart';
+import 'shop_cafe_order_store.dart';
 import 'shop_connected_application_boundary.dart';
 import 'shop_connected_coordinator_host.dart';
 import 'shop_connected_platform_security.dart';
 import 'shop_connected_runtime.dart';
 import 'shop_connected_site_authority_store.dart';
+import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_database_adapter.dart';
 import 'shop_connected_site_enrollment_store.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_site_reconciliation_store.dart';
 import 'shop_database.dart';
+import 'shop_offline_staff_lease.dart';
 import 'shop_runtime_profile.dart';
 import 'shop_site_coordinator.dart';
 
 typedef ShopConnectedCoordinatorTransportFactory =
     ConnectedCoordinatorTransport Function(
-      ShopConnectedSharedWriteGate sharedWrites,
+      ShopConnectedCoordinatorTransportContext context,
     );
+
+/// The exact stateful boundaries owned by the composition root.
+///
+/// A transport factory receives these instances instead of discovering or
+/// constructing alternatives. This keeps request authentication, commands,
+/// replication and runtime lifecycle on one database, enrollment store and
+/// shared-write gate.
+class ShopConnectedCoordinatorTransportContext {
+  const ShopConnectedCoordinatorTransportContext({
+    required this.database,
+    required this.enrollment,
+    required this.sharedWrites,
+    required this.now,
+  });
+
+  final ShopDatabase database;
+  final ShopConnectedSiteEnrollmentStore enrollment;
+  final ShopConnectedSharedWriteGate sharedWrites;
+  final DateTime Function() now;
+}
+
+/// Explicit authorities and projections needed to construct the reviewed LAN
+/// coordinator server. None has an ambient or permissive default.
+class ShopConnectedCoordinatorServerDependencies {
+  const ShopConnectedCoordinatorServerDependencies({
+    required this.pairingResponse,
+    required this.leaseVerifier,
+    required this.timeAuthority,
+    required this.health,
+    this.stationReadPolicy = const CoordinatorStationReadPolicyUnavailable(),
+    this.cafeStore,
+    this.cafeModifierCatalog = const {},
+  });
+
+  final CoordinatorPairingV1 pairingResponse;
+  final ShopOfflineStaffLeaseVerifier leaseVerifier;
+  final ShopConnectedSiteCoordinatorTimeAuthority timeAuthority;
+  final CoordinatorHealthProvider health;
+  final CoordinatorStationReadPolicy stationReadPolicy;
+  final ShopCafeOrderStore? cafeStore;
+  final Map<String, CafeModifierSnapshot> cafeModifierCatalog;
+
+  ConnectedCoordinatorTransport build(
+    ShopConnectedCoordinatorTransportContext context,
+  ) {
+    pairingResponse.requireValidAt(context.now());
+    if (!identical(context.enrollment.database, context.database)) {
+      throw StateError('connected_transport_enrollment_database_mismatch');
+    }
+    if (cafeStore != null &&
+        !identical(cafeStore!.database, context.database)) {
+      throw StateError('connected_transport_cafe_database_mismatch');
+    }
+    final requestAuthenticator = Ed25519CoordinatorRequestAuthenticator(
+      clients: context.enrollment,
+      nonces: context.enrollment,
+      now: context.now,
+    );
+    final commandSignatureVerifier = Ed25519SiteCommandSignatureVerifier(
+      clients: context.enrollment,
+      coordinatorDeviceId: pairingResponse.coordinatorDeviceId,
+    );
+    final siteAuthorization = OfflineLeaseCoordinatorSiteAuthorizer(
+      leases: ShopConnectedSiteLeaseSource(context.enrollment),
+      verifier: leaseVerifier,
+      stationReadPolicy: stationReadPolicy,
+      nowMillis: () => context.now().toUtc().millisecondsSinceEpoch,
+    );
+    final commands = ShopConnectedSiteDatabaseCommandHandler(
+      database: context.database,
+      timeAuthority: timeAuthority,
+      cafeStore: cafeStore,
+      cafeModifierCatalog: cafeModifierCatalog,
+      connectedSiteEnabled: true,
+    );
+    final replication = ShopConnectedSiteDatabaseReplicationReader(
+      database: context.database,
+      workspaceId: pairingResponse.workspaceId,
+      siteId: pairingResponse.siteId,
+    );
+    final server = SiteCoordinatorServer(
+      pairing: context.enrollment,
+      requestAuthenticator: requestAuthenticator,
+      commands: commands,
+      replication: replication,
+      health: health,
+      pairingResponse: pairingResponse,
+      sharedWriteAvailability: context.sharedWrites,
+      commandSignatureVerifier: commandSignatureVerifier,
+      deviceEnrollment: context.enrollment,
+      siteAuthorization: siteAuthorization,
+      commandCapabilities: const ShopConnectedSiteDatabaseCapabilityResolver(),
+      now: context.now,
+      runtimeEnabled: true,
+    );
+    return SiteCoordinatorServerTransport(
+      server: server,
+      enrollment: context.enrollment,
+      sharedWrites: context.sharedWrites,
+      now: context.now,
+    );
+  }
+}
 
 /// Explicit dependencies for the still-default-off connected-site runtime.
 ///
@@ -136,7 +244,14 @@ class ShopConnectedComposition {
       sharedWrites: sharedWrites,
       sessions: sessionRegistry,
     );
-    final transport = dependencies.transportFactory(sharedWrites);
+    final transport = dependencies.transportFactory(
+      ShopConnectedCoordinatorTransportContext(
+        database: dependencies.database,
+        enrollment: enrollment,
+        sharedWrites: sharedWrites,
+        now: now,
+      ),
+    );
     final coordinator = ConnectedCoordinatorRuntimeHost(
       platform: dependencies.platformLifecycle,
       transport: transport,

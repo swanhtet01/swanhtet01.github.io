@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'shop_connected_platform_security.dart';
 import 'shop_connected_runtime.dart';
+import 'shop_connected_site_enrollment_store.dart';
 import 'shop_site_coordinator.dart';
 
 /// Visible native lifecycle required before the Dart TLS listener may accept
@@ -428,8 +429,21 @@ class UnavailableConnectedCoordinatorPlatformLifecycle
 abstract interface class ConnectedCoordinatorTransport {
   ConnectedSharedWriteGate get sharedWrites;
 
+  Future<void> prepare({
+    required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
+    required ConnectedEphemeralTlsIdentity tlsIdentity,
+  });
+
   Future<void> start({
     required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
     required ConnectedEphemeralTlsIdentity tlsIdentity,
   });
 
@@ -442,44 +456,156 @@ abstract interface class ConnectedCoordinatorTransport {
 class SiteCoordinatorServerTransport implements ConnectedCoordinatorTransport {
   SiteCoordinatorServerTransport({
     required this.server,
+    this.enrollment,
     required this.sharedWrites,
-  }) {
+    DateTime Function()? now,
+  }) : now = now ?? (() => DateTime.now().toUtc()) {
     if (!identical(server.sharedWriteAvailability, sharedWrites)) {
       throw StateError('connected_transport_shared_write_gate_mismatch');
     }
   }
 
   final SiteCoordinatorServer server;
+  final ShopConnectedSiteEnrollmentStore? enrollment;
+  final DateTime Function() now;
+  _ConnectedPreparedTransport? _prepared;
 
   @override
   final ConnectedSharedWriteGate sharedWrites;
 
   @override
-  Future<void> start({
+  Future<void> prepare({
     required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
     required ConnectedEphemeralTlsIdentity tlsIdentity,
   }) async {
+    final pairing = server.pairingResponse;
+    if (_prepared != null || server.isRunning) {
+      throw StateError('connected_transport_already_prepared');
+    }
+    if (workspaceId != pairing.workspaceId ||
+        siteId != pairing.siteId ||
+        coordinatorDeviceId != pairing.coordinatorDeviceId ||
+        bindAddress != pairing.address ||
+        identity.tlsCertificateFingerprintSha256 != pairing.certificateSha256 ||
+        tlsIdentity.certificateFingerprintSha256 != pairing.certificateSha256) {
+      throw StateError('connected_transport_runtime_scope_mismatch');
+    }
+    pairing.requireValidAt(now());
+    final registrar = enrollment;
+    if (registrar == null) {
+      throw StateError('connected_transport_enrollment_unavailable');
+    }
+    await registrar.registerPairingNonce(
+      tenantId: pairing.workspaceId,
+      siteId: pairing.siteId,
+      coordinatorDeviceId: pairing.coordinatorDeviceId,
+      nonce: pairing.nonce,
+      issuedAtMillis: DateTime.parse(pairing.issuedAt)
+          .toUtc()
+          .millisecondsSinceEpoch,
+      expiresAtMillis: DateTime.parse(pairing.expiresAt)
+          .toUtc()
+          .millisecondsSinceEpoch,
+    );
+    _prepared = _ConnectedPreparedTransport(
+      bindAddress: bindAddress,
+      workspaceId: workspaceId,
+      siteId: siteId,
+      coordinatorDeviceId: coordinatorDeviceId,
+      identityAlias: identity.alias,
+      certificateFingerprintSha256: tlsIdentity.certificateFingerprintSha256,
+    );
+  }
+
+  @override
+  Future<void> start({
+    required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
+    required ConnectedEphemeralTlsIdentity tlsIdentity,
+  }) async {
+    final request = _ConnectedPreparedTransport(
+      bindAddress: bindAddress,
+      workspaceId: workspaceId,
+      siteId: siteId,
+      coordinatorDeviceId: coordinatorDeviceId,
+      identityAlias: identity.alias,
+      certificateFingerprintSha256: tlsIdentity.certificateFingerprintSha256,
+    );
+    if (_prepared != request) {
+      throw StateError('connected_transport_not_prepared');
+    }
     final address = InternetAddress.tryParse(bindAddress);
     if (address == null || address.type != InternetAddressType.IPv4) {
       throw StateError('connected_site_bind_rejected');
     }
-    final identity = CoordinatorTlsIdentity.fromPem(
+    final coordinatorTlsIdentity = CoordinatorTlsIdentity.fromPem(
       certificateChainPem: tlsIdentity.certificatePem,
       privateKeyPem: tlsIdentity.privateKeyPem,
     );
-    if (identity.leafCertificateSha256 !=
+    if (coordinatorTlsIdentity.leafCertificateSha256 !=
         tlsIdentity.certificateFingerprintSha256) {
       throw StateError('connected_site_tls_identity_mismatch');
     }
     await server.start(
       address: address,
       port: server.pairingResponse.port,
-      tlsIdentity: identity,
+      tlsIdentity: coordinatorTlsIdentity,
     );
   }
 
   @override
-  Future<void> stop() => server.stop();
+  Future<void> stop() async {
+    try {
+      await server.stop();
+    } finally {
+      _prepared = null;
+    }
+  }
+}
+
+class _ConnectedPreparedTransport {
+  const _ConnectedPreparedTransport({
+    required this.bindAddress,
+    required this.workspaceId,
+    required this.siteId,
+    required this.coordinatorDeviceId,
+    required this.identityAlias,
+    required this.certificateFingerprintSha256,
+  });
+
+  final String bindAddress;
+  final String workspaceId;
+  final String siteId;
+  final String coordinatorDeviceId;
+  final String identityAlias;
+  final String certificateFingerprintSha256;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ConnectedPreparedTransport &&
+      other.bindAddress == bindAddress &&
+      other.workspaceId == workspaceId &&
+      other.siteId == siteId &&
+      other.coordinatorDeviceId == coordinatorDeviceId &&
+      other.identityAlias == identityAlias &&
+      other.certificateFingerprintSha256 == certificateFingerprintSha256;
+
+  @override
+  int get hashCode => Object.hash(
+    bindAddress,
+    workspaceId,
+    siteId,
+    coordinatorDeviceId,
+    identityAlias,
+    certificateFingerprintSha256,
+  );
 }
 
 /// One transactional host lifecycle for the native visible service and Dart
@@ -504,20 +630,40 @@ class ConnectedCoordinatorRuntimeHost implements ConnectedCoordinatorHost {
 
   bool _platformStarted = false;
   bool _transportStarted = false;
+  bool _transportPrepared = false;
 
   @override
   Future<void> start({
     required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
     required ConnectedPlatformIdentity identity,
     required ConnectedEphemeralTlsIdentity tlsIdentity,
   }) async {
-    if (_platformStarted || _transportStarted) {
+    if (_platformStarted || _transportStarted || _transportPrepared) {
       throw StateError('connected_coordinator_host_already_started');
     }
     try {
+      await transport.prepare(
+        bindAddress: bindAddress,
+        workspaceId: workspaceId,
+        siteId: siteId,
+        coordinatorDeviceId: coordinatorDeviceId,
+        identity: identity,
+        tlsIdentity: tlsIdentity,
+      );
+      _transportPrepared = true;
       await platform.start(coordinatorAlias: identity.alias);
       _platformStarted = true;
-      await transport.start(bindAddress: bindAddress, tlsIdentity: tlsIdentity);
+      await transport.start(
+        bindAddress: bindAddress,
+        workspaceId: workspaceId,
+        siteId: siteId,
+        coordinatorDeviceId: coordinatorDeviceId,
+        identity: identity,
+        tlsIdentity: tlsIdentity,
+      );
       _transportStarted = true;
       await platform.markListening(coordinatorAlias: identity.alias);
     } catch (error, stackTrace) {
@@ -533,10 +679,11 @@ class ConnectedCoordinatorRuntimeHost implements ConnectedCoordinatorHost {
   }
 
   Future<bool> _rollbackStart() async {
-    if (_transportStarted) {
+    if (_transportStarted || _transportPrepared) {
       try {
         await transport.stop();
         _transportStarted = false;
+        _transportPrepared = false;
       } catch (_) {
         // Keep the transport and visible platform marked started. A listener
         // with unknown stop outcome must remain visible and retryable.
@@ -556,10 +703,11 @@ class ConnectedCoordinatorRuntimeHost implements ConnectedCoordinatorHost {
 
   @override
   Future<void> stop() async {
-    if (_transportStarted) {
+    if (_transportStarted || _transportPrepared) {
       try {
         await transport.stop();
         _transportStarted = false;
+        _transportPrepared = false;
       } catch (error, stackTrace) {
         Error.throwWithStackTrace(error, stackTrace);
       }

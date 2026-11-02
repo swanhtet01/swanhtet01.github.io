@@ -181,6 +181,9 @@ abstract interface class ConnectedCoordinatorHost {
 
   Future<void> start({
     required String bindAddress,
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
     required ConnectedPlatformIdentity identity,
     required ConnectedEphemeralTlsIdentity tlsIdentity,
   });
@@ -274,6 +277,9 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
       _tlsIdentity = tlsIdentity;
       await coordinator.start(
         bindAddress: request.bindAddress,
+        workspaceId: request.workspaceId,
+        siteId: request.siteId,
+        coordinatorDeviceId: request.coordinatorDeviceId,
         identity: identity,
         tlsIdentity: tlsIdentity,
       );
