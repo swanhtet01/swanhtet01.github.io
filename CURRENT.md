@@ -2679,6 +2679,19 @@ physical scanner/printer support, signed downloads, domestic competitor parity,
 or current-platform availability. The contact path provides guidance; it does
 not create an account or grant access.
 
+## Competitive parity and R&D contract — 2026-11-03
+
+The previously referenced domestic benchmark ledger now exists at
+[`docs/SHOP-DOMESTIC-RETAIL-CAFE-GAP.md`](docs/SHOP-DOMESTIC-RETAIL-CAFE-GAP.md).
+It records official-source benchmark input from KMO, ZayTap, Shopify, Square,
+Toast, Lightspeed and Oracle Simphony; separates pilot parity from expansion
+gaps; defines the enterprise engineering contract; and gates bounded AI/R&D
+experiments from money, stock, authority and publication. This is a durable
+product contract, not installed or merchant evidence. Partial returns/exchanges,
+split tender, recipe/BOM, multi-location, physical hardware breadth and
+automatic coordinator failover remain explicit gaps or exclusions. No release
+status, production authority or public parity claim changed.
+
 ## Connected pilot Phase 2 checkpoint — 2026-10-31
 
 Private commit `af51d53a2a9b0b6c0e93a0ed35e45a9eedf77106`, tree
