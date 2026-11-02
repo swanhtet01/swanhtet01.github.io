@@ -7,6 +7,53 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private request-bound trusted-time protocol successor
+
+- **SOURCE PASS / PROTOCOL-ONLY / DEFAULT-OFF:** implementation
+  `bfd26a5e80ad890bbd34e4b004b66fff0f56c4c9` (repository tree
+  `c4b2357b3d5223b76c61c69a062597313fa02737`, native tree
+  `5015692516697db906506280e93effa89e7f76b1`, native `lib/` tree
+  `ffcc5448e25980f3ca55d227138c09fb1b6820c2`, binary patch SHA-256
+  `14cefa5c32f745692d2a284739bee2c16342adee7147eab2b53d3a885b581ac7`)
+  defines exact versioned approval, challenge and observation records for the
+  previously missing request-bound trusted-time boundary. No production
+  runtime imports or mounts this file.
+- The owner approval binds the dedicated time-signing usage, workspace, site,
+  coordinator, approved coordinator-binding digest and generation, time-key
+  ID/fingerprint/generation, validity and owner-authority key. The challenge
+  binds the client device/fingerprint, session generation, one-time nonce,
+  platform boot-session evidence and monotonic start. The signed observation
+  binds the exact challenge digest and fields, authority key, epoch, strictly
+  representable sequence, observed time and a maximum two-minute validity.
+- Parsers require exact field sets and string keys, recompute every digest and
+  reject substituted fields. Owner and observation signatures require the
+  canonical unpadded base64url encoding of exactly 64 bytes. Unavailable clock
+  and authority-verifier adapters fail closed; the slice does not infer issuer
+  trust from TLS, an endpoint, a URL or a stored payload.
+- Targeted analyzer is **PASS** with no issues; focused protocol tests are
+  **5/5 PASS**. Formatting and diff checks are **PASS**. Independent
+  adversarial review is **ACCEPT** after finding and verifying fixes for a
+  permissive owner-signature representation and non-string map-key coercion.
+  Reviewed file SHA-256 identities are
+  `b8be11b214097cb1b470506660326793a9625ea77d8b723c7a5fb1f6c28a2c83`
+  for the contract and
+  `2acd0345a5992a7a104c25a5f409fcaff4ede04315e03cff2d66930122d92fd0`
+  for its test.
+- **BLOCKED / NOT RUN:** this source slice deliberately provides no database
+  migration, store, replay head, runtime adapter or effective-time result.
+  Durable atomic one-shot consumption, sequence/epoch rollback prevention,
+  restart and multi-instance exclusion, backup/restore semantics and an
+  unpersisted same-process completion capability remain required. Real
+  owner/time-authority cryptographic verification and key custody plus
+  installed Android/Windows boot-session and monotonic-clock evidence also
+  remain required. An ordinary monotonic clock cannot authorize a new offline
+  window across reboot without a separately reviewed protected anti-rollback
+  source. The earlier static-payload adapter and rejected mutable-head store
+  draft remain excluded.
+- Capacity at `2026-11-02T02:54:01Z`: durable `/workspace` had `349,663,232`
+  bytes free and `/dev/shm` had `5,313,941,504` bytes free. No build, cleanup,
+  network, credential, provider, publication or production action occurred.
+
 ### Private joining-device replica synchronization successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
