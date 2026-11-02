@@ -16,6 +16,8 @@ import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 void main() {
   late ShopDatabase database;
   late ShopConnectedSiteAttemptStore store;
@@ -594,6 +596,10 @@ void main() {
 
       final raw = sqlite.sqlite3.open(file.path);
       try {
+        dropHistoricalShopSchemaDefinitionGroup(
+          raw,
+          shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+        );
         raw.execute(
           'DROP TRIGGER shop_connected_reservation_session_bindings_no_update',
         );
@@ -608,7 +614,7 @@ void main() {
 
       persisted = ShopDatabase(NativeDatabase(file));
       await persisted.verifyReadyForUse();
-      expect(persisted.schemaVersion, 37);
+      expect(persisted.schemaVersion, 38);
       final retained = await persisted
           .customSelect(
             'SELECT reserve_command_id, reserve_command_digest FROM '
@@ -659,6 +665,10 @@ void main() {
 
         final raw = sqlite.sqlite3.open(file.path);
         try {
+          dropHistoricalShopSchemaDefinitionGroup(
+            raw,
+            shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+          );
           raw.execute('DROP TABLE shop_site_request_envelopes');
           raw.execute('PRAGMA user_version = 28');
         } finally {

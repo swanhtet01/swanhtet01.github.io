@@ -9,6 +9,8 @@ import 'package:supermega_shop/shop_connected_trusted_time_contract.dart';
 import 'package:supermega_shop/shop_connected_trusted_time_store.dart';
 import 'package:supermega_shop/shop_database.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 void main() {
   test(
     'v37 consumes once and restart cannot reuse capability or head',
@@ -282,6 +284,10 @@ void main() {
       await database.verifyReadyForUse();
       await database.close();
       final raw = sqlite.sqlite3.open(file.path);
+      dropHistoricalShopSchemaDefinitionGroup(
+        raw,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      );
       for (final name in shopConnectedTrustedTimeSchemaDefinitionsV37().keys) {
         raw.execute(
           'DROP ${name.contains('_no_') ? 'TRIGGER' : 'TABLE'} IF EXISTS $name',
@@ -292,7 +298,7 @@ void main() {
       database = ShopDatabase(NativeDatabase(file));
       addTearDown(database.close);
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 37);
+      expect(database.schemaVersion, 38);
       final count = await database
           .customSelect(
             'SELECT COUNT(*) AS total FROM shop_connected_time_requests',

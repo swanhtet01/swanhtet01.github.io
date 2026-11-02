@@ -1,9 +1,10 @@
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_database.dart';
 
-const historicalShopFixtureSupportedSchemaVersion = 37;
+const historicalShopFixtureSupportedSchemaVersion = 38;
 
 Set<String> historicalShopPostV15SchemaObjectNames() => <String>{
+  ...shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
   ...shopMemberSchemaDefinitionsV16().keys,
   ...shopCorrectionConsumptionSchemaDefinitionsV17().keys,
   ...shopCashMovementSchemaDefinitionsV18().keys,
@@ -20,6 +21,38 @@ Set<String> historicalShopPostV15SchemaObjectNames() => <String>{
   ...shopConnectedReplicaSchemaDefinitionsV33().keys,
   ...shopConnectedCloudProofSchemaDefinitionsV35().keys,
 };
+
+void dropHistoricalShopSchemaDefinitionGroup(
+  sqlite.Database connection,
+  Map<String, String> definitions,
+) {
+  for (final definition in definitions.entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+}
+
+Future<void> dropHistoricalShopSchemaDefinitionGroupInDatabase(
+  ShopDatabase database,
+  Map<String, String> definitions,
+) async {
+  for (final definition in definitions.entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+}
 
 void requireNoPostV15SchemaObjects(sqlite.Database connection) {
   final forbidden = historicalShopPostV15SchemaObjectNames();

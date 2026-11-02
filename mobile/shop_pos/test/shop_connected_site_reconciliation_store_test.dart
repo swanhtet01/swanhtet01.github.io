@@ -14,6 +14,8 @@ import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation_store.dart';
 import 'package:supermega_shop/shop_database.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 const _now = 2000000000000;
 const _workspace = 'workspace-cloud-store';
 const _site = 'site-cloud-store';
@@ -513,7 +515,7 @@ void main() {
       await expectLater(database.verifyReadyForUse(), throwsStateError);
       await database.close();
       expect(
-        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 35),
+        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 38),
         throwsA(anything),
       );
     } finally {
@@ -692,6 +694,14 @@ void main() {
           leases: leases,
         ),
         isFalse,
+      );
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      );
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedTrustedTimeSchemaDefinitionsV37(),
       );
       await database.customStatement('PRAGMA user_version = 34');
       await database.close();
@@ -902,7 +912,7 @@ void main() {
         await database.verifyReadyForUse();
         final snapshot = File('${root.path}/revoked-snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
-        ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 36);
+        ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 38);
         await expectLater(
           ShopConnectedSiteReconciliationStore(
             database: database,
@@ -968,6 +978,18 @@ void main() {
         await database.customStatement('DROP TABLE shop_site_cloud_proofs');
         await database.customStatement(
           'DROP TABLE shop_site_offline_lease_payloads',
+        );
+        await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+          database,
+          shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+        );
+        await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+          database,
+          shopConnectedTrustedTimeSchemaDefinitionsV37(),
+        );
+        await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+          database,
+          shopConnectedAuthorityCheckpointSchemaDefinitionsV36(),
         );
         await database.customStatement('PRAGMA user_version = 33');
         await database.close();

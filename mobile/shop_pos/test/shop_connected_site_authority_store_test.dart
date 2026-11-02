@@ -12,6 +12,8 @@ import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_database.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 const _workspace = 'workspace-authority-store';
 const _site = 'site-authority-store';
 const _device = 'device-authority-store';
@@ -363,6 +365,10 @@ void main() {
                   )
                   .getSingle())
               .read<String>('source_digest');
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      );
       for (final entry
           in shopConnectedAttemptSchemaDefinitionsV28().entries
               .toList()
@@ -1175,6 +1181,10 @@ void main() {
     final file = File('${root.path}/shop.sqlite');
     var database = ShopDatabase(NativeDatabase(file));
     try {
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      );
       for (final definitions in [
         shopConnectedAuthorityCheckpointSchemaDefinitionsV36(),
         shopConnectedCloudProofSchemaDefinitionsV35(),
@@ -1216,7 +1226,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 37);
+      expect(database.schemaVersion, 38);
       expect(await _count(database, 'shop_site_authority_payloads'), 0);
       expect(await _count(database, 'shop_site_authority_members'), 0);
       expect(await _count(database, 'shop_site_configuration_snapshots'), 0);
@@ -1232,6 +1242,10 @@ void main() {
     final file = File('${root.path}/shop.sqlite');
     var database = ShopDatabase(NativeDatabase(file));
     try {
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      );
       for (final entry
           in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries
               .toList()
@@ -1247,7 +1261,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 37);
+      expect(database.schemaVersion, 38);
       expect(await _count(database, 'shop_site_authority_checkpoints'), 0);
       expect(
         await _count(database, 'shop_site_authority_bootstrap_provenance'),

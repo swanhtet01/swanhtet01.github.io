@@ -12,6 +12,8 @@ import 'package:supermega_shop/shop_connected_site_enrollment_store.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 const _now = 2000000000000;
 const _tenant = 'tenant-enrollment';
 const _site = 'site-enrollment';
@@ -98,6 +100,10 @@ void main() {
     var database = ShopDatabase(NativeDatabase(file));
     try {
       await database.verifyReadyForUse();
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      );
       for (final entry
           in shopConnectedAuthoritySchemaDefinitionsV27().entries
               .toList()
@@ -140,7 +146,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 37);
+      expect(database.schemaVersion, 38);
       for (final table in const [
         'shop_site_pairing_nonces',
         'shop_site_pending_enrollments',
@@ -206,6 +212,10 @@ void main() {
           sessionGeneration: 1,
         ),
         verifier: const _EvidenceVerifier(true),
+      );
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
       );
       for (final entry
           in shopConnectedAuthoritySchemaDefinitionsV27().entries

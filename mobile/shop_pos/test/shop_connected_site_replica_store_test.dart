@@ -13,6 +13,8 @@ import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_replica_store.dart';
 import 'package:supermega_shop/shop_database.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 void main() {
   late ShopDatabase database;
   late String client;
@@ -449,7 +451,7 @@ void main() {
       raw.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 34),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 38),
       throwsFormatException,
     );
   });
@@ -581,6 +583,10 @@ void main() {
     await source.close();
     final raw = sqlite.sqlite3.open(file.path);
     try {
+      dropHistoricalShopSchemaDefinitionGroup(
+        raw,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      );
       for (final definition
           in shopConnectedTrustedTimeSchemaDefinitionsV37().entries
               .toList()
@@ -653,7 +659,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 37);
+    expect(migrated.schemaVersion, 38);
     await migrated.verifyConnectedReplicaEvidence();
   });
 
@@ -695,6 +701,10 @@ void main() {
     await source.close();
     final raw = sqlite.sqlite3.open(file.path);
     try {
+      dropHistoricalShopSchemaDefinitionGroup(
+        raw,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      );
       for (final definition
           in shopConnectedTrustedTimeSchemaDefinitionsV37().entries
               .toList()
@@ -783,7 +793,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 37);
+    expect(migrated.schemaVersion, 38);
     expect(
       await migrated
           .customSelect(

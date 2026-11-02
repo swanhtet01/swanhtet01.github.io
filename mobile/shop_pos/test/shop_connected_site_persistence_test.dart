@@ -18,6 +18,8 @@ import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 const _now = 2000000000000;
 const _tenant = 'tenant-1';
 const _site = 'site-1';
@@ -26,10 +28,10 @@ const _device = 'device-1';
 final _leaseDigest = _leaseFor().payloadDigest;
 
 void main() {
-  test('connected-site persistence is default-off and schema is v37', () async {
+  test('connected-site persistence is default-off and schema is v38', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 37);
+      expect(database.schemaVersion, 38);
       final tables =
           (await database
                   .customSelect(
@@ -1587,6 +1589,10 @@ void main() {
       var database = ShopDatabase(NativeDatabase(file));
       try {
         await database.verifyReadyForUse();
+        await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+          database,
+          shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+        );
         for (final entry
             in shopConnectedEnvelopeSchemaDefinitionsV29().entries
                 .toList()
@@ -1644,7 +1650,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 37);
+        expect(database.schemaVersion, 38);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(
@@ -1955,6 +1961,10 @@ void main() {
           Variable<int>(_now),
           Variable<int>(_now + 1000),
         ],
+      );
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
       );
       for (final entry
           in shopConnectedAuthoritySchemaDefinitionsV27().entries
