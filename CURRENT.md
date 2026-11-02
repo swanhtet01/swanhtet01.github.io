@@ -26,6 +26,19 @@
   substitute. Cross-device live sync is a pilot requirement and remains off
   until the authority, transport, migration and recovery evidence all pass.
 
+- **FAIL / SECURITY REVIEW HOLD:** an independent source review identified a
+  lost-response retry gap in both v15 repositories: they compare the client's
+  original `after_cursor` with the server's advanced cursor before consulting
+  retained acknowledgements. A first candidate that accepted stale-cursor
+  replay was rejected because v15 retains no device cursor-to-command/event
+  binding; a reordered or substituted batch could be mislabeled a replay.
+  That candidate was withdrawn and the source restored. The required repair is
+  a durable, tenant/site/device-scoped immutable batch or per-cursor binding,
+  committed atomically with the ACK and cursor, with tests for identical lost
+  response, reordered/substituted batch, changed digest, concurrent retries,
+  tenant isolation and no duplicate money/stock effects. No sync-ready claim
+  or production enablement follows from the current 10/10 baseline unit pass.
+
 ## 2026-11-03 private Android pilot-successor preflight
 
 - **SOURCE PASS / PRIVATE:** implementation
