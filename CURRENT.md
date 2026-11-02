@@ -7,6 +7,61 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private connected runtime composition successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `38de79b9c87e4a133bcf4cb821c868500cbb084b`, repository tree
+  `705a24915227a087fe585dbb0c48180e432c02d8`, native tree
+  `46553787eb84c22d7e696681f42671ae942895ea`, and native `lib/` tree
+  `19f77a6e3a8463658909ede322cfdf6d179b4d83`. Its exact predecessor is
+  ledger `741941c1999f17e09827c2e9231a872df55d2ee2`; binary patch SHA-256 is
+  `8bd6a36b517aa33fd00b20de0be0ab81bc18a0453c1550f4f4e097b3c39e20f2`.
+  This successor is private and unpublished.
+- One explicit, still-unmounted composition root now binds the reviewed
+  database, retained enrollment evidence, signed authority payload store,
+  authenticated cloud wire, reconciliation store, authority delta store,
+  platform identity custody, native coordinator lifecycle, LAN transport and
+  one shared write gate. Disabled shipping capabilities never invoke even the
+  dependency factory. Enabled composition without complete explicit
+  dependencies remains visibly blocked; no endpoint, credential, key or
+  platform implementation is discovered from ambient state.
+- Startup now proves database readiness, loaded platform identity, exact
+  retained device enrollment and its session generation before a
+  session-bound authority refresh may verify or retain cloud evidence. A
+  mismatched response generation fails before signature verification or
+  receipt retention. Revalidation pauses and drains shared writes before any
+  identity/enrollment/cloud check, resumes only after the complete check, and
+  stays paused after revocation or failure.
+- Reconciliation is exposed only through a runtime-session-bound facade. It
+  holds the same shared-write gate for the complete refresh, upload, outcome
+  persistence and authority-delta transaction, with active enrollment
+  fingerprint/generation checks before and after cloud I/O. The composition
+  receipt no longer exposes its raw cloud client, mutable gate, readiness,
+  coordinator or concrete runtime, and the application boundary retains its
+  runtime only in a private field. Direct pre-runtime reconciliation, wrong
+  identity and pending enrollment make zero cloud calls and retain zero
+  authority rows.
+- The exact connected authority/reconciliation/store/application/runtime
+  suite is **88/88 PASS** serially in 2:10. The constructor-only final
+  clarification then passed exact composition/application tests **12/12**;
+  targeted eight-file analyzer, formatting and `git diff --check` are
+  **PASS**. Independent security/correctness review is **ACCEPT** after four
+  rounds that first found and then verified closure of pre-enrollment cloud
+  mutation, unbound reconciliation, writes remaining open during
+  revalidation, raw receipt-side escape hatches and one constructor-call
+  ambiguity.
+- **BLOCKED / NOT RUN:** this is source composition only. `main.dart` does not
+  mount it and all shipping profiles keep connected-site capability off. Real
+  issuer keys, production authenticated endpoints, Android Keystore/Windows
+  DPAPI custody, installed-device private-LAN TLS, PostgreSQL/RLS acceptance,
+  signed artifacts, restart/restore on installed targets, physical hardware,
+  merchant and production acceptance remain **NOT RUN / BLOCKED**. No live
+  endpoint, credential, APK, publication, deployment or merchant data was
+  used.
+- Capacity at `2026-11-02T01:10:06Z`: durable `/workspace` had 273,866,752
+  bytes free and `/dev/shm` had 5,313,847,296 bytes free. The durable artifact
+  build gate remains blocked; no cleanup or speculative build was attempted.
+
 ### Private cloud authority bootstrap integration successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
