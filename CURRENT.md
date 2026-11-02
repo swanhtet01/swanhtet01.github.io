@@ -1,9 +1,34 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-02 22:50 UTC
+- Last verified: 2026-11-02 23:02 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-02 23:02 UTC Windows backup UI gate
+
+- Exact public PR #752 head `2de3202161176b0a8e1ffeb4f7ced2cbae9bd8b9`
+  Native run `41538964926` is terminal **FAIL**. Windows PC completed 101/102
+  backup tests but failed `export screen validates the password before opening
+  Save As` at `test/shop_backup_test.dart:1732`: the validation text was not
+  found. Android failed earlier at the known native inventory contract; full
+  Android tests, gallery and APK packaging were **NOT RUN**. Four isolated QA
+  platform jobs and the iPad/iOS job passed separately; they do not override
+  either failed job.
+- Private implementation `01b41856de4b4846a463c0de4cd2240a6a401edd`
+  (tree `0a0ccaab5b686e92c232a0e66362d09f84150614`) scrolls the existing
+  live-region validation message into view on short windows and makes the
+  test explicitly scroll to the lazily built Save As button. The 12-rune
+  password check, mismatch check and no-picker-before-validation assertion
+  remain. Pinned Flutter 3.47.8 with existing LLVM ran the exact failing
+  case **1/1 PASS**, adjacent export widget tests **5/5 PASS**, targeted
+  `flutter analyze` **PASS**, Dart formatting **PASS** and independent source
+  review **PASS**. Windows hosted execution of this private fix is **NOT RUN**.
+- The prior private native-inventory and opt-in PostgreSQL 17 tests remain
+  unpublished at this checkpoint. A real PostgreSQL 17 repository run, full
+  Android job and signed installed recovery are still **NOT RUN** for the
+  private source; dependency security remains **FAIL**. No release or pilot
+  readiness follows from the local UI result.
 
 ## 2026-11-02 22:48 UTC exact-head CI and private successor
 
