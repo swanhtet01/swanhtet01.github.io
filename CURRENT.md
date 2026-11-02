@@ -5,6 +5,37 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 exact-head `108f9700` Native pass and pilot artifact boundary
+
+- **PUBLIC DRAFT HEAD / NATIVE PASS:** the specifically authorized non-force
+  fast-forward advanced draft PR #752 from
+  `553927848f6b2ac0760e292a545d989da75da6f6` to
+  `108f97004cc119210736b9780aa7ac8ed4c71533` (tree
+  `6567d8bdbd05e7d4f2afc3a1745a3b49644a6e2d`). Automatic Native run
+  `41454966155` is **PASS across all six jobs**. The full Android job proves
+  the complete serial Flutter shards, all 14 real process-interruption
+  scenarios, analysis, 43/43 synthetic captures, release-signing rejection,
+  debug APK build, checksum and retention. Windows PC recovery plus unsigned
+  packaging, isolated Android/Windows/iOS QA, and iPad/iOS jobs also **PASS**.
+- **QA ARTIFACTS ARE NOT PILOT INSTALLATION EVIDENCE:** provider metadata
+  binds Android debug artifact `13153110192`, gallery artifact `13150936977`
+  and unsigned Windows artifact `13148320285` to exact head `108f9700`.
+  Their archive names use the provider synthetic-merge identity
+  `a69fa6dc4c8ac5c0de6727f6f5c57ab9a330377b`; that identity must not replace
+  the recorded PR head. BD is independently processing the gallery archive.
+  Production signing, artifact-content review, installation, force-stop,
+  fresh-target restore, physical hardware and merchant acceptance remain
+  **NOT RUN**.
+- **REMAINING EXACT-HEAD GATES:** Kernel run `41454966713` is **PASS**. App
+  run `41454958319` is **FAIL** in `Build and verify canonical app`; the exact
+  log payload could not be re-read because the provider log redirect returned
+  HTTP 403. This three-file Native-only successor does not change the known
+  fail-closed PostgreSQL rehearsal path. Dependency run `41454966124` is
+  **FAIL/BLOCKED** in the app and Kernel audits while platform, Python and
+  added-line credential scans **PASS**; no dependency files changed in this
+  successor. GitGuardian remains **FAIL/BLOCKED** on the two historical
+  findings. No merge, deployment, signing or production enablement occurred.
+
 ## 2026-11-02 exact-head `34f14439` CI and process-interruption repair
 
 - **PUBLIC DRAFT HEAD / CONNECTED SHARD PASS:** the specifically authorized
