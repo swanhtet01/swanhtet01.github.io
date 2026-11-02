@@ -7,6 +7,41 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private scope-bound coordinator health successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `34e6957d4caff61f38fc0960700a81da893a4ed7` (repository tree
+  `ff72f63abca9771a62deca9e689cd5621487823c`, native tree
+  `e177756a302866b8ebdd55284668a7756a371ba7`, native `lib/` tree
+  `e7c2407f5662acd011ab99cc1a9d368d203805c7`, binary patch SHA-256
+  `00503c804ec49a7a3fccc8ceff11cd2c5bf0fe7f348404a5c958bdff2fba6df3`)
+  replaces arbitrary coordinator-health injection with a projection constructed
+  inside composition from the exact coordinator database, shared-write gate,
+  workspace, site and device scope.
+- Shared-write health now follows the real command gate. Pending conflicts are
+  counted only through commands in the exact workspace/site and only while
+  pending; foreign, resolved and quarantined conflicts do not contribute.
+  Internet, cloud-sync and backup health remain false unless an explicit
+  exact-scope observer supplies them; absent or unreadable observers fail
+  closed, substituted scope is rejected, and cloud sync cannot report healthy
+  without observed internet.
+- Lease expiry remains absent because no active actor/device lease selection or
+  trusted-time source is mounted. The unauthenticated LAN health response
+  remains minimal and exposes none of these detailed fields. No issuer, key
+  custody, freshness, endpoint or authority is inferred.
+- Targeted analyzer is **PASS** with no issues. Provider, composition and
+  coordinator protocol tests are **41/41 PASS** serially; formatting and diff
+  checks are **PASS**. Independent review is **ACCEPT** with no blocking
+  findings after separately running analyzer and **14/14 PASS** focused tests.
+- **BLOCKED / NOT RUN:** a real platform observation adapter must still prove
+  freshness and truthful internet/cloud/backup semantics. Trusted time, real
+  issuer/key custody, active lease selection, installed-device LAN/TLS,
+  cloud/RLS acceptance, signed artifacts, hardware and merchant evidence remain
+  separate gates. Connected mode remains default-off and unmounted.
+- Capacity at `2026-11-02T02:18:08Z`: durable `/workspace` had `270,237,696`
+  bytes free and `/dev/shm` had `5,313,449,984` bytes free. No build, cleanup,
+  network, credential, provider, publication or production action occurred.
+
 ### Complete historical/migration affected-matrix receipt
 
 - **PASS:** exact source `22392605413698d410c87f5238563b2871271c1a`
