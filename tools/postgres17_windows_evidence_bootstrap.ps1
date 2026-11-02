@@ -183,6 +183,32 @@ $registryPolicyPath = Join-Path $root 'hq\research\postgres17-official-source-po
 $registryPolicy = Read-Json $registryPolicyPath
 if ($profile.runtimeRootName -ne [System.IO.Path]::GetFileName($profile.runtimeRootName)
   -or [string]::IsNullOrWhiteSpace($profile.runtimeRootName)) { Fail 'bootstrap_runtime_root_name_invalid' }
+if ($Stage -eq 'Rehearsal') {
+  # Reject a pending authority before creating a workspace or downloading the
+  # installer. Capture remains the separate, non-executing evidence stage.
+  if ($policy.status -ne 'reviewed' -or $policy.approval.status -ne 'reviewed'
+    -or $publisherPolicy.status -ne 'reviewed' -or $publisherPolicy.approval.status -ne 'reviewed'
+    -or $registryPolicy.status -ne 'reviewed' -or $registryPolicy.approval.status -ne 'reviewed'
+    -or $profile.status -ne 'reviewed' -or $profile.approval.status -ne 'reviewed'
+    -or $profile.loadClosureComplete -ne $true -or $profile.loadClosure.status -ne 'reviewed') {
+    Fail 'bootstrap_stage2_authority_unapproved'
+  }
+  if ($policy.closureObserver.status -ne 'reviewed'
+    -or $policy.closureObserver.captureMethod -ne 'windows-kernel-process-image-events-v1'
+    -or $policy.closureObserver.requiresCaptureBeforeSpawn -ne $true
+    -or $policy.closureObserver.requiresDroppedEvents -ne 0
+    -or $policy.closureObserver.requiresDroppedBuffers -ne 0
+    -or $policy.closureObserver.requiresCompleteDescendantCorrelation -ne $true
+    -or [string]::IsNullOrWhiteSpace($policy.closureObserver.command)
+    -or $policy.closureObserver.sha256 -notmatch '^[0-9a-f]{64}$') {
+    Fail 'bootstrap_closure_observer_unapproved'
+  }
+  foreach ($component in @('python', 'psycopg', 'psycopg_binary', 'openssl', 'node', 'git')) {
+    if (@($registryPolicy.artifacts | Where-Object { $_.component -eq $component }).Count -lt 1) {
+      Fail "bootstrap_registry_component_missing_$component"
+    }
+  }
+}
 
 $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
 if ([string]::IsNullOrWhiteSpace($userProfile)) { Fail 'bootstrap_user_profile_missing' }
@@ -222,32 +248,10 @@ try {
     Fail 'bootstrap_authenticode_identity_mismatch'
   }
   if ($Stage -eq 'Rehearsal') {
-    if ($policy.status -ne 'reviewed' -or $policy.approval.status -ne 'reviewed'
-      -or $publisherPolicy.status -ne 'reviewed' -or $publisherPolicy.approval.status -ne 'reviewed'
-      -or $registryPolicy.status -ne 'reviewed' -or $registryPolicy.approval.status -ne 'reviewed'
-      -or $profile.status -ne 'reviewed' -or $profile.approval.status -ne 'reviewed'
-      -or $profile.loadClosureComplete -ne $true -or $profile.loadClosure.status -ne 'reviewed') {
-      Fail 'bootstrap_stage2_authority_unapproved'
-    }
     if (@($publisherPolicy.approvedSigners.certificateSha256) -notcontains $observation.signerCertificateSha256
       -or @($publisherPolicy.approvedTimestampCertificateSha256) -notcontains $observation.timestampCertificateSha256
       -or @($publisherPolicy.requiredEkuOids) -notcontains '1.3.6.1.5.5.7.3.3') {
       Fail 'bootstrap_publisher_identity_unapproved'
-    }
-    if ($policy.closureObserver.status -ne 'reviewed'
-      -or $policy.closureObserver.captureMethod -ne 'windows-kernel-process-image-events-v1'
-      -or $policy.closureObserver.requiresCaptureBeforeSpawn -ne $true
-      -or $policy.closureObserver.requiresDroppedEvents -ne 0
-      -or $policy.closureObserver.requiresDroppedBuffers -ne 0
-      -or $policy.closureObserver.requiresCompleteDescendantCorrelation -ne $true
-      -or [string]::IsNullOrWhiteSpace($policy.closureObserver.command)
-      -or $policy.closureObserver.sha256 -notmatch '^[0-9a-f]{64}$') {
-      Fail 'bootstrap_closure_observer_unapproved'
-    }
-    foreach ($component in @('python', 'psycopg', 'psycopg_binary', 'openssl', 'node', 'git')) {
-      if (@($registryPolicy.artifacts | Where-Object { $_.component -eq $component }).Count -lt 1) {
-        Fail "bootstrap_registry_component_missing_$component"
-      }
     }
     foreach ($artifact in @($registryPolicy.artifacts)) {
       $artifactUri = [Uri]$artifact.artifactUrl; $metadataUri = [Uri]$artifact.metadataUrl

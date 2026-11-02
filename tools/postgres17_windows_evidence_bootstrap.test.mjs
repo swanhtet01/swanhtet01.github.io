@@ -164,6 +164,17 @@ test('PowerShell bootstrap separates non-executing capture from reviewed full-re
   const gate = source.indexOf("Fail 'bootstrap_closure_observer_unapproved'")
   const execute = source.indexOf('$process.StartInfo.FileName = $observer')
   assert.ok(download > 0 && download < stage2 && stage2 < gate && gate < execute)
+  const workspaceCreation = source.indexOf('[System.IO.Directory]::CreateDirectory($workRoot)')
+  const installerDownload = source.indexOf('Download-Exact ([Uri]$policy.installer.url)')
+  assert.ok(workspaceCreation > 0 && workspaceCreation < installerDownload)
+  for (const prerequisite of [
+    "Fail 'bootstrap_stage2_authority_unapproved'",
+    "Fail 'bootstrap_closure_observer_unapproved'",
+    'Fail "bootstrap_registry_component_missing_$component"',
+  ]) {
+    const rejection = source.indexOf(prerequisite)
+    assert.ok(rejection > stage2 && rejection < workspaceCreation, prerequisite)
+  }
   for (const required of [
     'bootstrap_source_head_mismatch', 'bootstrap_source_tree_dirty',
     'control-plane-only', 'bootstrap_source_tree_invalid',
