@@ -106,6 +106,27 @@
   isolation and cleanup remain injected attestations until executed against
   an authorized pinned Android target. No production signing, physical
   hardware or promotion eligibility is established.
+- **SOURCE PASS / PRIVATE ADAPTER:** source-only successor
+  `8428ffa169d3b25e739d3c4b95b4116d0b1cb7de` (tree
+  `56a861b15f1b2800c92f82df0bea4a77dda632eb`) adds only the injected ADB
+  adapter and its adversarial fake-executor tests. Its two-file binary-diff
+  SHA-256 is `b4ed578b7826bbe3b5c34c5f0a7fd74ff823e936710ae19a0f3317c81ce9f2bc`.
+  It fails closed on target authorization/isolation, target-wide atomic lock
+  ownership, exact installed base/split APK bytes and single signer, per-step
+  UI transition authority, metrics/recovery authority digests, staging,
+  post-restore readback, timeout abort/join, privacy, foreign-lock replacement
+  and post-clean absence. Adapter tests are **13/13 PASS** and the combined
+  adapter/protocol/validator matrix is **86/86 PASS**; diff check is **PASS**.
+  Independent security review initially **HELD** the draft for session-scoped
+  locking, package-only identity and self-attested device observations, then
+  **ACCEPTED** the revised final source after adversarial coverage closed those
+  source defects.
+- **NOT RUN / BLOCKED:** the adapter intentionally contains no concrete process
+  executor, UI driver, metrics/recovery observer, atomic lock backend, workflow
+  or provider integration. No ADB command, download, emulator, device,
+  installation, `pm clear`, staged copy, restore or cleanup ran. An authorized
+  remote target and independently bound concrete backends are still required
+  before installed acceptance can begin.
 
 ## 2026-11-03 installed Android selector checkpoint
 
