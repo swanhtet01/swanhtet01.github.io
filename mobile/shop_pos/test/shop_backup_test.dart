@@ -1740,6 +1740,10 @@ void main() {
     tester,
   ) async {
     for (final myanmar in [false, true]) {
+      tester.view.physicalSize = myanmar
+          ? const Size(768, 1024)
+          : const Size(390, 800);
+      tester.view.devicePixelRatio = 1;
       await tester.pumpWidget(
         MaterialApp(
           home: ShopBackupExportScreen(
@@ -1761,7 +1765,15 @@ void main() {
       );
       expect(find.textContaining('in-app restore'), findsNothing);
       expect(find.textContaining('အက်ပ်အတွင်း ပြန်လည်ရယူခြင်း'), findsNothing);
+      expect(find.bySemanticsIdentifier('shop.backup.password'), findsOne);
+      expect(
+        find.bySemanticsIdentifier('shop.backup.password-confirm'),
+        findsOne,
+      );
+      expect(find.bySemanticsIdentifier('shop.backup.export'), findsOne);
     }
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
   });
 
   testWidgets('cancelled export never reports that a backup was saved', (
@@ -3716,11 +3728,16 @@ void main() {
       final startButton = find.widgetWithText(FilledButton, 'Start new Shop');
       expect(tester.getSize(startButton).height, greaterThanOrEqualTo(48));
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
-      await tester.tap(find.text('Restore backup'));
+      await tester.tap(find.bySemanticsIdentifier('shop.setup.restore.choose'));
       await _pumpUntil(tester, find.text('Restore and open Shop'));
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
-      await tester.enterText(find.byType(TextField), _password);
-      await tester.tap(find.text('Restore and open Shop'));
+      await tester.enterText(
+        find.bySemanticsIdentifier('shop.setup.restore.password'),
+        _password,
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier('shop.setup.restore.confirm'),
+      );
       await _pumpUntil(
         tester,
         find.text('Opened Shop'),
@@ -3777,6 +3794,11 @@ void main() {
         );
         await _pumpUntil(tester, find.text('Shop အသစ် စတင်ရန်'));
         expect(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'), findsOneWidget);
+        expect(find.bySemanticsIdentifier('shop.setup.start-new'), findsOne);
+        expect(
+          find.bySemanticsIdentifier('shop.setup.restore.choose'),
+          findsOne,
+        );
         expect(find.text('ပြန်ယူပြီး Shop ဖွင့်ရန်'), findsNothing);
         expect(tester.takeException(), isNull);
       } finally {
@@ -3819,16 +3841,18 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.tap(find.text('Start new Shop'));
+      await tester.tap(find.bySemanticsIdentifier('shop.setup.start-new'));
       await tester.pumpAndSettle();
       expect(find.text('Start a new Shop?'), findsOneWidget);
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
-      await tester.tap(find.text('Start new Shop'));
+      await tester.tap(find.bySemanticsIdentifier('shop.setup.start-new'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('shop-start-new-confirm')));
+      await tester.tap(
+        find.bySemanticsIdentifier('shop.setup.start-new.confirm'),
+      );
       await _pumpUntil(
         tester,
         find.text('Opened Shop'),

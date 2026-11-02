@@ -27,6 +27,7 @@ import 'shop_copy.dart';
 import 'shop_correction_authorization_service.dart';
 import 'shop_connected_application_boundary.dart';
 import 'shop_database.dart';
+import 'shop_installed_qa_selectors.dart';
 import 'shop_models.dart';
 import 'shop_runtime_profile.dart';
 import 'shop_runtime_scope.dart';
@@ -1324,7 +1325,7 @@ class _ShopHomeState extends State<ShopHome> {
                     : 'အရောင်းစစ်ရန် · ${shopNumber(count, myanmar: true)} ခု · ${_mmk(_cartTotal(products))}',
               ),
             ),
-          );
+          ).withInstalledQaIdentifier('shop.cart.review');
         },
       ),
     );
@@ -2055,7 +2056,7 @@ class _ShopHomeState extends State<ShopHome> {
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
         label: Text(shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်')),
-      );
+      ).withInstalledQaIdentifier('shop.product.new.full');
       // A portrait tablet has a split basket but only a narrow catalog header.
       // Keep product creation visible without adding a second header row.
       final compactTabletHeader =
@@ -2073,7 +2074,7 @@ class _ShopHomeState extends State<ShopHome> {
           icon: const Icon(Icons.add, size: 18),
           label: Text(shopCopy(widget.myanmar, 'New', 'အသစ်')),
         ),
-      );
+      ).withInstalledQaIdentifier('shop.product.new.compact');
       final productActions = PopupMenuButton<String>(
         key: const ValueKey('shop-product-actions'),
         tooltip: shopCopy(
@@ -2607,7 +2608,7 @@ class _ShopHomeState extends State<ShopHome> {
                       'ပထမကုန်ပစ္စည်းထည့်ရန်',
                     ),
                   ),
-                ),
+                ).withInstalledQaIdentifier('shop.product.empty.add'),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: _openMenuImport,
@@ -2816,7 +2817,7 @@ class _ShopHomeState extends State<ShopHome> {
                   ],
                 ),
               ),
-            ),
+            ).withInstalledQaIdentifier('shop.catalog.product.${item.id}'),
           ),
         );
       },
@@ -3110,7 +3111,7 @@ class _ShopHomeState extends State<ShopHome> {
                         )
                       : const Icon(Icons.check),
                   label: Text(shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား')),
-                );
+                ).withInstalledQaIdentifier('shop.checkout.cash');
                 final wallet = OutlinedButton.icon(
                   onPressed:
                       !_checkoutReady ||
@@ -4271,7 +4272,7 @@ class _ShopHomeState extends State<ShopHome> {
                       ),
                       helperText: widget.myanmar ? 'မထည့်လည်းရ' : null,
                     ),
-                  ),
+                  ).withInstalledQaIdentifier('shop.checkout.cash.given'),
                   if (tenderedMmk != null && !isShort) ...[
                     const SizedBox(height: 12),
                     Text(shopCopy(widget.myanmar, 'Change', 'ပြန်အမ်းငွေ')),
@@ -4324,7 +4325,7 @@ class _ShopHomeState extends State<ShopHome> {
                   child: Text(
                     shopCopy(widget.myanmar, 'Complete sale', 'အတည်ပြုရန်'),
                   ),
-                ),
+                ).withInstalledQaIdentifier('shop.checkout.cash.confirm'),
               ],
             );
           },
@@ -5607,7 +5608,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
     decoration: InputDecoration(
       labelText: shopCopy(widget.myanmar, 'Barcode', 'ဘားကုဒ်'),
     ),
-  );
+  ).withInstalledQaIdentifier('shop.product.barcode');
 
   Future<void> _saveProduct() async {
     if (_saving || !(_formKey.currentState?.validate() ?? false)) return;
@@ -5693,7 +5694,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                             'အမည်ထည့်ပါ။',
                           )
                         : null,
-                  ),
+                  ).withInstalledQaIdentifier('shop.product.name'),
                   const SizedBox(height: 10),
                   TextFormField(
                     key: const ValueKey('shop-product-category'),
@@ -5714,7 +5715,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                             'အမျိုးအစားအမည် ရှည်လွန်းပါသည်။',
                           )
                         : null,
-                  ),
+                  ).withInstalledQaIdentifier('shop.product.category'),
                   // A scanned code stays visible near the name so the cashier can
                   // verify it. During manual entry, keep the three required fields
                   // together before asking for an optional barcode.
@@ -5747,7 +5748,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                             )
                           : null;
                     },
-                  ),
+                  ).withInstalledQaIdentifier('shop.product.price'),
                   const SizedBox(height: 10),
                   TextFormField(
                     key: const ValueKey('shop-product-stock'),
@@ -5770,28 +5771,32 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                             )
                           : null;
                     },
-                  ),
+                  ).withInstalledQaIdentifier('shop.product.stock'),
                   if (widget.initialBarcode.trim().isEmpty &&
                       !_showManualBarcode) ...[
                     const SizedBox(height: 10),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: TextButton(
-                        key: const ValueKey('shop-product-add-barcode'),
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(0, 48),
-                        ),
-                        onPressed: _saving
-                            ? null
-                            : () => setState(() => _showManualBarcode = true),
-                        child: Text(
-                          shopCopy(
-                            widget.myanmar,
-                            'Add barcode',
-                            'ဘားကုဒ်ထည့်ရန်',
+                      child:
+                          TextButton(
+                            key: const ValueKey('shop-product-add-barcode'),
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                            ),
+                            onPressed: _saving
+                                ? null
+                                : () =>
+                                      setState(() => _showManualBarcode = true),
+                            child: Text(
+                              shopCopy(
+                                widget.myanmar,
+                                'Add barcode',
+                                'ဘားကုဒ်ထည့်ရန်',
+                              ),
+                            ),
+                          ).withInstalledQaIdentifier(
+                            'shop.product.barcode.reveal',
                           ),
-                        ),
-                      ),
                     ),
                   ] else if (widget.initialBarcode.trim().isEmpty) ...[
                     const SizedBox(height: 10),
@@ -5826,7 +5831,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                               'သိမ်းရန်',
                             ),
                           ),
-                        ),
+                        ).withInstalledQaIdentifier('shop.product.save'),
                       ),
                       TextButton(
                         onPressed: _saving
@@ -5852,7 +5857,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                   child: Text(
                     shopCopy(widget.myanmar, 'Save product', 'သိမ်းရန်'),
                   ),
-                ),
+                ).withInstalledQaIdentifier('shop.product.save'),
               ],
       ),
     );

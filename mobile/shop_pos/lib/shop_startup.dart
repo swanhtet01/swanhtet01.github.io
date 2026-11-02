@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'shop_backup.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_installed_qa_selectors.dart';
 import 'shop_qa_evidence_store.dart';
 import 'shop_runtime_scope.dart';
 
@@ -317,7 +318,7 @@ class _ShopStartupState extends State<ShopStartup> {
             child: Text(
               shopCopy(_myanmar, 'Start new Shop', 'Shop အသစ် စတင်ရန်'),
             ),
-          ),
+          ).withInstalledQaIdentifier('shop.setup.start-new.confirm'),
         ],
       ),
     );
@@ -697,7 +698,7 @@ class _ShopStartupState extends State<ShopStartup> {
                           'Shop အသစ် စတင်ရန်',
                         ),
                       ),
-                    ),
+                    ).withInstalledQaIdentifier('shop.setup.start-new'),
                     const SizedBox(height: 12),
                     if (_backupRestoreAvailable)
                       OutlinedButton(
@@ -713,7 +714,7 @@ class _ShopStartupState extends State<ShopStartup> {
                                 : 'အရန်ကူးဖိုင် ပြန်ယူရန်',
                           ),
                         ),
-                      ),
+                      ).withInstalledQaIdentifier('shop.setup.restore.choose'),
                   ] else ...[
                     Text(
                       _selectedName ?? '',
@@ -735,7 +736,7 @@ class _ShopStartupState extends State<ShopStartup> {
                         ),
                         border: const OutlineInputBorder(),
                       ),
-                    ),
+                    ).withInstalledQaIdentifier('shop.setup.restore.password'),
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: _busy ? null : _restore,
@@ -746,7 +747,7 @@ class _ShopStartupState extends State<ShopStartup> {
                           'ပြန်ယူပြီး Shop ဖွင့်ရန်',
                         ),
                       ),
-                    ),
+                    ).withInstalledQaIdentifier('shop.setup.restore.confirm'),
                     TextButton(
                       onPressed: _busy ? null : _cancelBackup,
                       child: Text(shopCopy(_myanmar, 'Cancel', 'ပယ်ဖျက်ရန်')),

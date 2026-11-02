@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import 'shop_backup.dart';
 import 'shop_copy.dart';
+import 'shop_installed_qa_selectors.dart';
 import 'shop_database.dart';
 import 'shop_qa_evidence_store.dart';
 import 'shop_runtime_scope.dart';
@@ -312,7 +313,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                     'အရန်ကူးစကားဝှက်',
                   ),
                 ),
-              ),
+              ).withInstalledQaIdentifier('shop.backup.password'),
               const SizedBox(height: 12),
               TextField(
                 controller: _confirmation,
@@ -327,7 +328,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                     'စကားဝှက်ကို ထပ်မံရိုက်ထည့်ပါ',
                   ),
                 ),
-              ),
+              ).withInstalledQaIdentifier('shop.backup.password-confirm'),
               const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: !widget.backupSavingAllowed || _busy
@@ -353,7 +354,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                               : 'သိမ်းမည့်နေရာ ရွေးပါ',
                         ),
                 ),
-              ),
+              ).withInstalledQaIdentifier('shop.backup.export'),
               if (_message != null) ...[
                 const SizedBox(height: 16),
                 Semantics(liveRegion: true, child: Text(_message!)),
