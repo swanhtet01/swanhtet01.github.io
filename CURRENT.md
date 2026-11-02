@@ -5,6 +5,28 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 exact-head `3c02a2bf` hosted CI receipt
+
+- Draft PR #752 was updated by the exact authorized non-force fast-forward to
+  `3c02a2bfca9c6012b1a667d0191291099bb6005b` (tree
+  `ce89ef6a80849d6128d20d732de61eb01733d5dd`). It remains open, draft,
+  unmerged and undeployed.
+- Kernel run `41485851316` is **PASS**. App run `41485843414` passed through
+  step 637/668 and is **FAIL/BLOCKED** at step 638 `hq:verify` only because
+  `supermega.hq.database-rehearsal.v3` reports
+  `database_rehearsal_evidence_stale`; later App steps are **NOT RUN**.
+- Dependency run `41485851475` is **FAIL/BLOCKED** only in the App and Kernel
+  locked-dependency audits for the known minimatch advisory (10 App and 5
+  Kernel moderate records). Runtime/Python, platform and added-line credential
+  scans are **PASS**. GitGuardian's external status is terminal **NEUTRAL**;
+  this does not resolve or dismiss its historical findings.
+- Native run `41485851468` completed with overall **FAIL/INCOMPLETE** because
+  both `macos-latest` jobs were cancelled before a runner was assigned and ran
+  no steps. Android full analyze/test/gallery/debug package, isolated Android,
+  Windows PC and isolated Windows jobs are **PASS**. iPad/iOS and isolated iOS
+  are **NOT RUN**, not product failures. These are unsigned CI artifacts, not
+  signed or installed-device acceptance.
+
 ## 2026-11-02 receipt-bound sale completion checkpoint
 
 - **SOURCE PASS / PRIVATE:** implementation
