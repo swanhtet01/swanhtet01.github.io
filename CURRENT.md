@@ -1,9 +1,49 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-02 23:16 UTC
+- Last verified: 2026-11-02 23:42 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-02 23:42 UTC terminal native CI, private wallet test repair, Windows rehearsal
+
+- Draft PR #752 remains open and unmerged at
+  `9806fbfe16741fcf6a0dde79f0f3ff664fe3338b`. Native run
+  `41542621302` is terminal **FAIL**: the full Android `behavior_checkout`
+  shard reached 79 passes and one substantive failure, `cancelling a member
+  wallet intent restores a walk-in basket`. The preceding `Mobile money` tap
+  missed its target at `test/widget_test_support.dart:7127`, so the pending
+  wallet member card was absent. This is a reproduced test reachability
+  failure, not evidence that the wallet transaction itself failed. Android
+  gallery and APK stages were **NOT RUN**. The other five native jobs passed,
+  including Windows PC's 102 backup tests and unsigned QA build; none proves
+  signed or installed acceptance.
+- Private implementation `5f7aa0e60c1a1c054295262831067bdbdf6b87c5`
+  (tree `0a3ed1e79583a849cf0e9d10912943f990474488`) adds only
+  `ensureVisible` and a settled frame before that existing test tap; all
+  pending-member, cancellation, single-sale and stock assertions remain.
+  Exact failing case **1/1 PASS** locally; full checkout widget file **80/80
+  PASS** in 6m57s; changed-file Flutter analysis, Dart formatting, whitespace
+  and independent read-only review **PASS**. Exact-head hosted verification
+  of this private successor is **NOT RUN**. No PR update is authorized or
+  performed by this checkpoint.
+- PR #753 remains open/draft at
+  `6e3d1511a9711e752a8b5529164d8ecb54a4bf3f`, targeting `main`.
+  Its one-file workflow registration is **BLOCKED** by the older-main
+  Dependency Security checks and branch review rules; `main` remains
+  `5479c5d1ece3d697cf5c505e7feb431dc88baf75` without the workflow.
+  Observer-probe, capture and rehearsal dispatches are **NOT RUN**. The
+  source-only Windows workflow/profile/observer tests pass **53/53** locally,
+  but the source registry has no approved Python, Psycopg, OpenSSL, Node or
+  Git artifacts; the toolchain profile has no executable bindings and no
+  complete runtime closure. The EDB installer identity observation is not a
+  retained, approved toolchain profile. A fresh authoritative PostgreSQL 17
+  Windows receipt remains **BLOCKED**, and App CI remains **FAIL** at
+  `database_rehearsal_evidence_stale`. The hosted disposable PostgreSQL
+  3/3 synthetic tests do not satisfy this gate. Next owner actions are to
+  resolve #753's dependency/review requirements, authorize only a reviewed
+  exact-ref observer probe, independently authenticate and bind all runtime
+  sources and closure, then separately authorize a controlled rehearsal.
 
 ## 2026-11-02 23:16 UTC published successor and exact-head CI
 
