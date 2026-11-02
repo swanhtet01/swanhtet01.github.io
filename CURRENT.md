@@ -47,6 +47,16 @@
   replay/reset across adapters and restarts. Real issuer/key enrollment,
   installed Android/Windows LAN/TLS operation, cloud/RLS reconciliation,
   signed artifacts and merchant acceptance remain separate gates.
+- Trusted-time audit confirms this is a protocol/schema prerequisite, not a
+  safe one-file adapter. The next source slice must bind a fresh request to the
+  workspace, site, coordinator, client device/fingerprint, session generation
+  and nonce; bind the signed response to that request plus an owner-authorized
+  coordinator signing key, authority epoch/sequence and validity; and retain
+  immutable one-shot request/observation evidence atomically with monotonic
+  trusted time. A persisted old request must not be completable after restart.
+  Existing monotonic time rows, inbound request nonces and the TLS certificate
+  do not prove those properties. Real issuer keys and installed platform
+  boot/monotonic-clock evidence remain **NOT RUN**.
 - Capacity after verification: durable `/workspace` had `268,193,792` bytes
   free and `/dev/shm` had `5,313,249,280` bytes free. No build, cleanup,
   network, credential, provider, publication or production action occurred.
