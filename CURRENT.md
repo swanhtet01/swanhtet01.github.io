@@ -7,6 +7,8 @@
 
 ## 2026-11-02 22:48 UTC exact-head CI and private successor
 
+- Pre-existing `2026-11-03` headings below are retained checkpoint labels;
+  they are not a later UTC verification of this exact-head CI status.
 - Draft PR #752 was updated by one guarded non-force fast-forward from
   `fe02f283d51bb546db7fab0feabfcff0a43673ee` to
   `2de3202161176b0a8e1ffeb4f7ced2cbae9bd8b9` (tree
@@ -34,7 +36,8 @@
   CI invocation. The production `connected_enabled=false` source check stays
   required; only the synthetic disposable fixture relaxes it. Python syntax,
   non-PG authority/runtime suite **28/28 PASS**, three PG tests **SKIPPED**
-  locally because PostgreSQL 17 is absent, claims guard **179 PASS**, and
+  locally with the opt-in flag unset (a PostgreSQL 17 binary is also absent),
+  claims guard **179 PASS**, and
   independent static review **PASS**. Actual PG SQL behavior, full v14→v16
   migration, authoritative Windows rehearsal and CI runtime are **NOT RUN**.
   Local `verify_app_deploy_workflow.mjs` is **BLOCKED** by the installed Python
