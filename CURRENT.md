@@ -5,6 +5,32 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 canonical Android QA v3 handoff checkpoint
+
+- **SOURCE PASS / PRIVATE:** implementation
+  `bed37993500e2960ad124d73db2eb4a1b4035261` (tree
+  `311d92c26924b06f33375e275939afeed3ba08f8`, parent published ledger
+  `517dd97a12b01b9e042b55d794a54a6dc45b3199`) fixes a source-only
+  compatibility defect between the canonical Android QA handoff and the
+  remote installed-QA preflight. The preflight now recognizes only exact v2
+  and canonical v3 handoff contracts as capability-aware; v1 and unknown
+  contracts remain blocked. The two-file patch SHA-256 is
+  `4039f8cd14cb3f6ff4b38fca840ac24e1d4e4916fbb937eb71eac5d0a673cf52`.
+- Combined handoff/preflight tests are **42/42 PASS**; Node syntax and diff
+  checks are **PASS**. Independent review **ACCEPTS** the exact final diff and
+  confirms canonical v3 still requires artifact/signing/provenance identity
+  and cannot promote itself to observed installed evidence.
+- **BLOCKED / NOT RUN:** the result remains `BLOCKED_OFFLINE_PLAN` on
+  `external_remote_observation_required`; emulator/cloud execution flags stay
+  false. The current GitHub Ubuntu runner advertises Android command-line,
+  build and platform tools but not an emulator or system image, and the Shop
+  source has no installed-app automation harness. A same-job emulator path
+  therefore still requires an immutable official emulator/image lock,
+  explicit Android license authority, verified KVM/no-egress containment,
+  a reviewed exact-APK runner and a separate guarded workflow decision. No
+  package was downloaded or executed, no emulator ran, and no CI workflow was
+  changed or dispatched.
+
 ## 2026-11-02 trusted-time active-binding recheck checkpoint
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
