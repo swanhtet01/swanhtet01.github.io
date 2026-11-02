@@ -21,7 +21,12 @@ enum ConnectedApplicationState {
 /// listener. A future enabled profile must inject a fully reviewed runtime and
 /// still call [start] with issuer-backed enrollment data explicitly.
 class ShopConnectedApplicationBoundary {
-  ShopConnectedApplicationBoundary({required this.capabilities, this._runtime});
+  factory ShopConnectedApplicationBoundary({
+    required ShopRuntimeCapabilities capabilities,
+    ConnectedRuntimeControl? runtime,
+  }) => ShopConnectedApplicationBoundary._(capabilities, runtime);
+
+  ShopConnectedApplicationBoundary._(this.capabilities, this._runtime);
 
   final ShopRuntimeCapabilities capabilities;
   final ConnectedRuntimeControl? _runtime;
