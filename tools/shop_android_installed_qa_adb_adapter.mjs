@@ -50,6 +50,13 @@ function safePath(value, prefix, suffix = '') {
     && !value.includes('..') && !value.includes('//') && /^[A-Za-z0-9_./-]+$/.test(value)
 }
 
+function futureIso(value, nowMillis) {
+  if (typeof value !== 'string' || !Number.isFinite(nowMillis)) return false
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value
+    && parsed > nowMillis
+}
+
 function text(output) {
   return Buffer.isBuffer(output) ? output.toString('utf8') : String(output ?? '')
 }
@@ -123,7 +130,7 @@ export class ShopAndroidInstalledQaAdbAdapter {
         || authorization.adbTcpipEnabled !== false || authorization.adbListenAll !== false
         || authorization.providerAccessFromApp !== false || authorization.noEgress !== true
         || authorization.loopbackOnly !== true
-        || Date.parse(authorization.expiresAt) <= this.clock.now()) fail('shop_android_adb_authorization_invalid')
+        || !futureIso(authorization.expiresAt, this.clock.now())) fail('shop_android_adb_authorization_invalid')
     const authorityDigest = sha256(authorization)
     const startedAt = new Date(this.clock.now()).toISOString()
     const special = ['abort_and_join_timed_out_operation', 'cleanup_and_release'].includes(request.step)
@@ -152,7 +159,7 @@ export class ShopAndroidInstalledQaAdbAdapter {
         || request.sessionNonce !== this.plan.sessionNonce || request.targetId !== this.plan.targetId
         || !Number.isInteger(request.sequence) || !SHA64.test(request.requestDigest)
         || !SHA64.test(request.previousAck) || typeof request.step !== 'string'
-        || typeof request.deadlineAt !== 'string' || Date.parse(request.deadlineAt) <= this.clock.now()
+        || !futureIso(request.deadlineAt, this.clock.now())
         || !signal || typeof signal.aborted !== 'boolean') fail('shop_android_adb_request_invalid')
   }
 

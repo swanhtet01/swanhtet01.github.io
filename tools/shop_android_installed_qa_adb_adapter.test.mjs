@@ -253,11 +253,48 @@ test('authorization and isolation observations fail closed', async () => {
     (error) => error.code === 'shop_android_installed_qa_cleanup_failed')
   assert.equal(executor.calls.length, 0)
 
+  for (const expiresAt of ['not-a-date', '2026-99-99T00:00:00.000Z', '2026-11-03']) {
+    const invalidExecutor = new FakeExecutor(source)
+    const invalidAdapter = new ShopAndroidInstalledQaAdbAdapter(dependencies(source, {
+      executor: invalidExecutor,
+      authorizationVerifier: async () => ({ authorized: true, targetId: TARGET,
+        containmentId: CONTAINMENT, expiresAt,
+        adbTcpipEnabled: false, adbListenAll: false, providerAccessFromApp: false,
+        noEgress: true, loopbackOnly: true }),
+    }))
+    await assert.rejects(runShopAndroidInstalledQaProtocol(source, invalidAdapter))
+    assert.equal(invalidExecutor.calls.length, 0)
+  }
+
   const exposed = new FakeExecutor(source, { mutate(result, command) {
     if (command === 'ss') return ok('LISTEN 0 4096 0.0.0.0:5037 0.0.0.0:*')
   } })
   await assert.rejects(runShopAndroidInstalledQaProtocol(source,
     new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: exposed }))))
+})
+
+test('malformed request deadline fails at adapter boundary before authorization', async () => {
+  const source = plan()
+  const executor = new FakeExecutor(source)
+  let authorized = false
+  const adapter = new ShopAndroidInstalledQaAdbAdapter(dependencies(source, {
+    executor,
+    authorizationVerifier: async () => { authorized = true; throw new Error('unreachable') },
+  }))
+  const request = {
+    contract: SHOP_ANDROID_INSTALLED_QA_PROTOCOL,
+    sessionNonce: source.sessionNonce,
+    targetId: source.targetId,
+    sequence: 1,
+    step: 'observe_target',
+    requestDigest: 'a'.repeat(64),
+    previousAck: 'b'.repeat(64),
+    deadlineAt: 'not-a-date',
+  }
+  await assert.rejects(adapter.observe(request, { signal: new AbortController().signal }),
+    /shop_android_adb_request_invalid/)
+  assert.equal(authorized, false)
+  assert.equal(executor.calls.length, 0)
 })
 
 test('artifact and UI identifier substitutions never reach a claimed pass', async () => {

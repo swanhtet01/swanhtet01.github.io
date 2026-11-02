@@ -19999,10 +19999,11 @@ class ShopDatabase extends _$ShopDatabase {
 
   /// Reads the synthetic installed-QA counters from one SQLite snapshot.
   ///
-  /// The single statement is deliberately count-only. It never selects row
-  /// payloads, and the immutable store reference is hashed before leaving this
-  /// method. The surrounding read transaction prevents a writer from mixing
-  /// counts from different database states.
+  /// The first statement reads counts and the store reference; the latter is
+  /// hashed before leaving this method. The following queries read rows into
+  /// process memory only to hash one stable database snapshot. No row payload
+  /// is returned or written to the QA evidence sidecar. The transaction keeps
+  /// counts and the snapshot digest on the same database state.
   Future<ShopQaMetricsSnapshot> readQaMetricsSnapshot() =>
       transaction(() async {
         final row = await customSelect('''
