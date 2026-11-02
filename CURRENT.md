@@ -5,6 +5,44 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 exact-head `680a237d` connected-proof fixture repair
+
+- **PUBLIC DRAFT HEAD / NO PROMOTION:** draft PR #752 is at
+  `680a237ddc93fb59ae69d399d76ab7097d3fac24` (tree
+  `aa19184e698ebfb0961025cccccc68466e55b792`). Automatic Native run
+  `41418763937` is terminal **FAIL**: Windows PC, isolated Windows QA,
+  isolated Android QA, isolated iOS QA and iPad/iOS jobs **PASS**; the full
+  Android job failed in the connected persistence shard before analysis,
+  capture and APK packaging. No Android artifact exists for this head.
+- **ROOT CAUSE / PRODUCTION VERIFIER PRESERVED:** seven connected stock tests
+  failed with `FormatException: connected_site_cloud_proof_binding`. Their
+  synthetic command helper signed internal event names as `SiteCommandV1`
+  command types. The production adapter already emits the required semantic
+  `retail.stock.reserve.v1`, `cafe.stock.reserve.v1`,
+  `retail.stock.release.v1` and `cafe.stock.release.v1` types; the hardened v2
+  coordinator-derived proof correctly rejected the stale fixtures.
+- **PRIVATE REPAIR PASS / HOSTED NOT RUN:** implementation
+  `339313e97b8aa77b7cfba6696e46a224d181b6e2` (tree
+  `98cb7f7f3735b36130add035577cce9ef4437b3c`) changes only
+  `shop_connected_site_persistence_test.dart` so reserve/release fixtures use
+  the production semantic command vocabulary. Production adapter, proof
+  generator and strict v2 verifier bytes are unchanged. The complete focused
+  persistence file is **18/18 PASS**. The exact 19-file hosted connected shard
+  is **285/285 PASS** in 505 seconds under its 600-second bound. Targeted
+  analyzer **PASS**; Native CI contract **21/21 PASS** with verifier **PASS**;
+  QA isolation **33/33 PASS** and audit strict-ready; diff check **PASS**.
+  Independent security review **ACCEPTS** the repair and confirms the
+  unsupported-domain fallback remains fail-closed. Exact hosted CI is **NOT
+  RUN** and no publication, merge, deployment, signing, manual dispatch or
+  production enablement occurred.
+- **OTHER EXACT-HEAD GATES:** App run `41418756028` is **FAIL/BLOCKED** at HQ
+  1/37 with `database_rehearsal_evidence_stale` and
+  `secretValuesExposed:false`; Kernel run `41418764007` is **PASS**;
+  Dependency run `41418763971` remains **FAIL/BLOCKED** on the unsuppressed
+  minimatch advisory; GitGuardian remains **FAIL/BLOCKED** on two historical
+  findings. Production signing, installed recovery, physical hardware,
+  merchant acceptance and joint go/no-go remain **NOT RUN/BLOCKED**.
+
 ## 2026-11-02 exact-head `770e217a` CI and private shard-budget repair
 
 - **PUBLIC DRAFT HEAD / NO PROMOTION:** the specifically authorized non-force
