@@ -108,6 +108,80 @@ void main() {
   });
 
   test(
+    'v2 trusted time client and server verify one signed loopback exchange',
+    () async {
+      final keys = _LoopbackClientKeys(signer);
+      final requestNonces = _LoopbackRequestNonces();
+      final authority = _LoopbackTimeAuthority();
+      final server = SiteCoordinatorServer(
+        runtimeEnabled: true,
+        trustedTimeV2Enabled: true,
+        trustedTimeAuthority: authority,
+        pairing: const _LoopbackPairingNonces(),
+        requestAuthenticator: Ed25519CoordinatorRequestAuthenticator(
+          clients: keys,
+          nonces: requestNonces,
+          now: () => DateTime.parse('2026-10-31T12:01:00.000Z'),
+        ),
+        commands: const _LoopbackCommands(),
+        deviceEnrollment: const _LoopbackEnrollment(),
+        replication: const _LoopbackReplication(),
+        health: const _LoopbackHealth(),
+        pairingResponse: pairing,
+        now: () => DateTime.parse('2026-10-31T12:01:00.000Z'),
+      );
+      final bridge = _LoopbackTransport(server);
+      final firstClient = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: bridge,
+        nonce: () => 'request_nonce_loopback_0001',
+      );
+      final firstWire = _trustedTimeWire(signer);
+
+      final accepted = await firstClient.requestTrustedTime(firstWire);
+
+      expect(
+        accepted.challenge.requestDigest,
+        firstWire.request.challenge.requestDigest,
+      );
+      expect(authority.calls, 1);
+      expect(bridge.requests, 1);
+      expect(requestNonces.consumed, hasLength(1));
+      await expectLater(
+        firstClient.requestTrustedTime(firstWire),
+        throwsA(
+          isA<ConnectedSiteTransportException>().having(
+            (error) => error.code,
+            'code',
+            'coordinator_http_403',
+          ),
+        ),
+      );
+      expect(authority.calls, 1);
+
+      final secondClient = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: bridge,
+        nonce: () => 'request_nonce_loopback_0002',
+      );
+      final fresh = _trustedTimeWire(
+        signer,
+        challengeNonce: 'trusted_time_client_nonce_2',
+      );
+      expect(
+        (await secondClient.requestTrustedTime(fresh)).challenge.requestDigest,
+        fresh.request.challenge.requestDigest,
+      );
+      expect(authority.calls, 2);
+      expect(requestNonces.consumed, hasLength(2));
+    },
+  );
+
+  test(
     'v2 trusted time is default-off and rejects stale binding scope',
     () async {
       final disabled = SiteCoordinatorClient(
@@ -583,7 +657,7 @@ SiteCoordinatorClient _client({
   required CoordinatorPairingV1 pairing,
   required _Signer signer,
   required _Attempts attempts,
-  required _Transport transport,
+  required ConnectedSiteHttpTransport transport,
   String Function()? nonce,
 }) => SiteCoordinatorClient(
   pairing: pairing,
@@ -647,6 +721,7 @@ ConnectedTrustedTimeWireRequestV2 _trustedTimeWire(
   int sessionGeneration = 1,
   int bindingGeneration = 1,
   String bindingDigest = _binding,
+  String challengeNonce = 'trusted_time_client_nonce_1',
 }) => ConnectedTrustedTimeWireRequestV2(
   request: ConnectedTrustedTimeObservationRequestV1(
     approvalDigest: _approval().approvalDigest,
@@ -659,7 +734,7 @@ ConnectedTrustedTimeWireRequestV2 _trustedTimeWire(
       sessionGeneration: sessionGeneration,
       coordinatorBindingDigest: bindingDigest,
       coordinatorBindingGeneration: bindingGeneration,
-      nonce: 'trusted_time_client_nonce_1',
+      nonce: challengeNonce,
       bootSessionId: '3' * 64,
       startedMonotonicMillis: 5000,
     ),
@@ -904,4 +979,151 @@ class _Signer implements ConnectedSiteDeviceSigner {
   Future<String> sign(List<int> message) async => base64Url
       .encode((await Ed25519().sign(message, keyPair: keyPair)).bytes)
       .replaceAll('=', '');
+}
+
+class _LoopbackTransport implements ConnectedSiteHttpTransport {
+  _LoopbackTransport(this.server);
+
+  final SiteCoordinatorServer server;
+  int requests = 0;
+
+  @override
+  Future<ConnectedSiteHttpResponse> send({
+    required Uri uri,
+    required String method,
+    required Map<String, String> headers,
+    required Uint8List body,
+    required String certificateSha256,
+  }) async {
+    requests += 1;
+    expect(certificateSha256, _certificate);
+    final response = await server.dispatch(
+      SiteCoordinatorRequest(
+        method: method,
+        path: uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path,
+        headers: Map<String, String>.from(headers),
+        body: Uint8List.fromList(body),
+      ),
+    );
+    final responseBody = response.canonicalJson
+        ? canonicalConnectedSiteJson(response.body)
+        : jsonEncode(response.body);
+    return ConnectedSiteHttpResponse(
+      statusCode: response.statusCode,
+      contentType: 'application/json; charset=utf-8',
+      body: Uint8List.fromList(utf8.encode(responseBody)),
+    );
+  }
+}
+
+class _LoopbackClientKeys implements CoordinatorClientKeyStore {
+  const _LoopbackClientKeys(this.signer);
+
+  final _Signer signer;
+
+  @override
+  Future<EnrolledCoordinatorClientV1?> find({
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required String deviceId,
+    required String fingerprint,
+  }) async {
+    if (workspaceId != 'workspace-1' ||
+        siteId != 'site-1' ||
+        coordinatorDeviceId != 'counter-1' ||
+        deviceId != signer.deviceId ||
+        fingerprint != signer.clientFingerprint) {
+      return null;
+    }
+    return EnrolledCoordinatorClientV1(
+      workspaceId: workspaceId,
+      siteId: siteId,
+      coordinatorDeviceId: coordinatorDeviceId,
+      deviceId: deviceId,
+      fingerprint: fingerprint,
+      signingKeyId: signer.signingKeyId,
+      publicKey: signer.publicKey,
+      active: true,
+    );
+  }
+}
+
+class _LoopbackRequestNonces implements CoordinatorRequestNonceStore {
+  final consumed = <String>{};
+
+  @override
+  Future<bool> consume({
+    required String clientFingerprint,
+    required String nonce,
+    required DateTime expiresAt,
+  }) async => consumed.add('$clientFingerprint:$nonce');
+}
+
+class _LoopbackEnrollment implements CoordinatorDeviceEnrollmentAuthorizer {
+  const _LoopbackEnrollment();
+
+  @override
+  Future<CoordinatorDeviceEnrollmentState> stateFor({
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required String deviceId,
+    required String clientFingerprint,
+  }) async => CoordinatorDeviceEnrollmentState.approved;
+}
+
+class _LoopbackTimeAuthority
+    implements ConnectedTrustedTimeCoordinatorAuthority {
+  int calls = 0;
+
+  @override
+  Future<ConnectedTrustedTimeObservationV1> observe(
+    ConnectedTrustedTimeObservationRequestV1 request,
+  ) async {
+    calls += 1;
+    return _trustedTimeObservation(request.challenge);
+  }
+}
+
+class _LoopbackPairingNonces implements PairingNonceStore {
+  const _LoopbackPairingNonces();
+
+  @override
+  Future<bool> consumeAndCreatePending(PairingNonceClaim claim) async => false;
+}
+
+class _LoopbackCommands implements SiteCommandHandler {
+  const _LoopbackCommands();
+
+  @override
+  Future<SiteCommandAckV1> handle(
+    String clientFingerprint,
+    SiteCommandV1 command,
+  ) => throw StateError('loopback_commands_unavailable');
+}
+
+class _LoopbackReplication implements SiteReplicationReader {
+  const _LoopbackReplication();
+
+  @override
+  Future<SiteDeltaV1> readDelta(String clientFingerprint, int afterCursor) =>
+      throw StateError('loopback_replication_unavailable');
+
+  @override
+  Future<SiteSnapshotV1> readSnapshot(String clientFingerprint) =>
+      throw StateError('loopback_replication_unavailable');
+}
+
+class _LoopbackHealth implements CoordinatorHealthProvider {
+  const _LoopbackHealth();
+
+  @override
+  Future<CoordinatorHealthV1> readHealth() async => const CoordinatorHealthV1(
+    sharedWritesAvailable: false,
+    internetAvailable: false,
+    cloudSyncHealthy: false,
+    backupCurrent: false,
+    pendingConflictCount: 0,
+  );
 }
