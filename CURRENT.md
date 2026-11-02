@@ -67,8 +67,9 @@
   `3969b9c486a210b99ce6b3360727b26b301625da`) extracts deterministic
   Android QA manifest plus v1/v2/v3 handoff authority into a module importing
   only `node:crypto`. Existing CLI/writer exports remain compatible and all
-  exported authority structures are deeply frozen. Its four-file patch
-  SHA-256 is `f11373254be755aba364a7da7def6fd7427e2b67933c74dfcac27b9a44ae127a`.
+  exported authority structures are deeply frozen. Its committed four-file
+  binary-diff SHA-256 is
+  `5f127f07bbb067898335eb8a7bfc7e4ac7c4caf40abcfcdb8ba6fa3c93bacfa2`.
 - Handoff/preflight/writer tests are **53/53 PASS**; both self-tests and the
   997-script syntax verifier are **PASS**; QA isolation is **33/33 PASS**,
   Native contract **22/22 PASS**, and release preflight **5/5 PASS** while
