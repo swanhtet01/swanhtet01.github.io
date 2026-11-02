@@ -59,6 +59,9 @@ jobs:
           dart format lib/shop_connected_site_attempt_store.dart test/shop_connected_site_attempt_store_test.dart
           git diff --exit-code -- lib/shop_connected_site_attempt_store.dart test/shop_connected_site_attempt_store_test.dart
 
+      - name: Check QA metrics evidence formatting
+        run: dart format --output=none --set-exit-if-changed lib/shop_qa_metrics_evidence.dart test/shop_qa_metrics_evidence_test.dart
+
       - name: Check connected successor formatting
         run: |
           dart format --output=none --set-exit-if-changed \
@@ -163,6 +166,7 @@ jobs:
           test/shop_pending_cash_checkout_test.dart
           test/shop_process_interrupt_worker_test.dart
           test/shop_qa_evidence_store_test.dart
+          test/shop_qa_metrics_evidence_test.dart
           test/shop_responsiveness_test.dart
           test/shop_runtime_profile_test.dart
           test/shop_runtime_scope_test.dart
@@ -357,6 +361,7 @@ jobs:
               test/shop_operational_export_database_test.dart \
               test/shop_pending_cash_checkout_test.dart \
               test/shop_qa_evidence_store_test.dart \
+              test/shop_qa_metrics_evidence_test.dart \
               test/shop_sqlite_full_recovery_test.dart \
               test/shop_staff_authorization_test.dart \
               test/visual_capture_test.dart
