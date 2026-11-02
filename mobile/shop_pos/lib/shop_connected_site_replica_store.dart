@@ -247,6 +247,32 @@ class ShopConnectedSiteReplicaStore {
     });
   }
 
+  /// Pauses a previously established replica when the approved binding can no
+  /// longer be resolved (for example after revocation or expiry). This is a
+  /// local fail-closed transition only: it cannot unpause or apply data.
+  Future<void> markBindingUnavailable({
+    required String workspaceId,
+    required String siteId,
+    required String clientFingerprint,
+    required int observedAtMillis,
+  }) async {
+    _requireScope(workspaceId, siteId);
+    if (!runtimeEnabled ||
+        clientFingerprint != localClientFingerprint ||
+        observedAtMillis <= 0) {
+      throw StateError('connected_replica_unavailable');
+    }
+    await database.transaction(() async {
+      final head = await _head(workspaceId, siteId, clientFingerprint);
+      if (head == null) return;
+      await database.customStatement(
+        'UPDATE shop_connected_replica_heads SET writes_paused = 1, updated_at_millis = ? '
+        'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ?',
+        [observedAtMillis, workspaceId, siteId, clientFingerprint],
+      );
+    });
+  }
+
   Future<List<Map<String, Object?>>> readProjections({
     required String workspaceId,
     required String siteId,
@@ -283,6 +309,21 @@ class ShopConnectedSiteReplicaStore {
     }
     final head = await _head(workspaceId, siteId, clientFingerprint);
     return head == null || head.read<int>('writes_paused') == 1;
+  }
+
+  /// Returns the durable continuation cursor for this exact client replica.
+  /// A missing head means the client must start from an authenticated snapshot.
+  Future<int?> continuationCursor({
+    required String workspaceId,
+    required String siteId,
+    required String clientFingerprint,
+  }) async {
+    _requireScope(workspaceId, siteId);
+    if (!runtimeEnabled || clientFingerprint != localClientFingerprint) {
+      throw StateError('connected_replica_unavailable');
+    }
+    final head = await _head(workspaceId, siteId, clientFingerprint);
+    return head?.read<int>('continuation_cursor');
   }
 
   Future<QueryRow?> _head(

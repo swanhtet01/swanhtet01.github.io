@@ -548,8 +548,6 @@ class SiteCoordinatorClient {
 
   static String _secureNonce() {
     final random = Random.secure();
-    return base64Url
-        .encode(List<int>.generate(24, (_) => random.nextInt(256)))
-        .replaceAll('=', '');
+    return 'n${base64Url.encode(List<int>.generate(24, (_) => random.nextInt(256))).replaceAll('=', '')}';
   }
 }
