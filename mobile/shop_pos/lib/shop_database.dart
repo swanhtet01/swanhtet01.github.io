@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -15,6 +16,7 @@ import 'shop_connected_site_contracts.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
 import 'shop_connected_trusted_time_contract.dart';
+import 'shop_connected_trusted_time_stream.dart';
 import 'shop_site_coordinator.dart';
 import 'shop_correction_consumption.dart';
 import 'shop_correction_receipt.dart';
@@ -2821,6 +2823,152 @@ Map<String, String> shopConnectedTrustedTimeSchemaDefinitionsV37() => {
   },
 };
 
+const shopConnectedTrustedTimeIssuerStreamsV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_streams (
+    stream_digest TEXT PRIMARY KEY CHECK (length(stream_digest) = 64),
+    stream_json TEXT NOT NULL CHECK (json_valid(stream_json)),
+    acknowledged_sequence INTEGER NOT NULL DEFAULT 0 CHECK (acknowledged_sequence >= 0),
+    acknowledged_entry_digest TEXT CHECK (acknowledged_entry_digest IS NULL OR length(acknowledged_entry_digest) = 64),
+    pending_entry_digest TEXT UNIQUE CHECK (pending_entry_digest IS NULL OR length(pending_entry_digest) = 64),
+    CHECK ((acknowledged_sequence = 0) = (acknowledged_entry_digest IS NULL))
+  )
+''';
+
+const shopConnectedTrustedTimeIssuerStateV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_state (
+    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+    issuance_suspended INTEGER NOT NULL CHECK (issuance_suspended IN (0, 1))
+  )
+''';
+
+const shopConnectedTrustedTimeIssuerStateTransitionV38Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_time_issuer_state_guard_update
+  BEFORE UPDATE ON shop_connected_time_issuer_state
+  WHEN OLD.singleton_id != NEW.singleton_id
+    OR OLD.issuance_suspended = 1
+    OR NEW.issuance_suspended != 1
+  BEGIN
+    SELECT RAISE(ABORT, 'Trusted-time issuer lifecycle transition is invalid');
+  END
+''';
+
+const shopConnectedTrustedTimeIssuerStateInsertV38Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_time_issuer_state_guard_insert
+  BEFORE INSERT ON shop_connected_time_issuer_state
+  WHEN EXISTS (SELECT 1 FROM shop_connected_time_issuer_state)
+  BEGIN
+    SELECT RAISE(ABORT, 'Trusted-time issuer lifecycle already exists');
+  END
+''';
+
+const shopConnectedTrustedTimeIssuerStreamTransitionV38Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_time_issuer_streams_guard_update
+  BEFORE UPDATE ON shop_connected_time_issuer_streams
+  WHEN NEW.stream_digest != OLD.stream_digest
+    OR NEW.stream_json != OLD.stream_json
+    OR NOT (
+      (OLD.pending_entry_digest IS NULL
+        AND NEW.pending_entry_digest IS NOT NULL
+        AND NEW.acknowledged_sequence = OLD.acknowledged_sequence
+        AND NEW.acknowledged_entry_digest IS OLD.acknowledged_entry_digest
+        AND EXISTS (
+          SELECT 1 FROM shop_connected_time_issuer_allocations allocation
+          WHERE allocation.entry_digest = NEW.pending_entry_digest
+            AND allocation.stream_digest = OLD.stream_digest
+            AND allocation.authority_sequence = OLD.acknowledged_sequence + 1
+            AND allocation.previous_entry_digest IS OLD.acknowledged_entry_digest
+        ))
+      OR
+      (OLD.pending_entry_digest IS NOT NULL
+        AND NEW.pending_entry_digest IS NULL
+        AND NEW.acknowledged_sequence = OLD.acknowledged_sequence + 1
+        AND NEW.acknowledged_entry_digest = OLD.pending_entry_digest
+        AND EXISTS (
+          SELECT 1 FROM shop_connected_time_issuer_acks ack
+          JOIN shop_connected_time_issuer_allocations allocation
+            ON allocation.entry_digest = ack.entry_digest
+          WHERE ack.entry_digest = OLD.pending_entry_digest
+            AND allocation.stream_digest = OLD.stream_digest
+            AND allocation.authority_sequence = OLD.acknowledged_sequence + 1
+        ))
+    )
+  BEGIN
+    SELECT RAISE(ABORT, 'Trusted-time issuer stream transition is invalid');
+  END
+''';
+
+const shopConnectedTrustedTimeIssuerAllocationsV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_allocations (
+    entry_digest TEXT PRIMARY KEY CHECK (length(entry_digest) = 64),
+    stream_digest TEXT NOT NULL REFERENCES shop_connected_time_issuer_streams(stream_digest),
+    authority_sequence INTEGER NOT NULL CHECK (authority_sequence > 0),
+    previous_entry_digest TEXT CHECK (previous_entry_digest IS NULL OR length(previous_entry_digest) = 64),
+    unsigned_entry_json TEXT NOT NULL CHECK (json_valid(unsigned_entry_json)),
+    UNIQUE (stream_digest, authority_sequence),
+    CHECK ((authority_sequence = 1) = (previous_entry_digest IS NULL))
+  )
+''';
+
+const shopConnectedTrustedTimeIssuerSignedEntriesV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_signed_entries (
+    entry_digest TEXT PRIMARY KEY REFERENCES shop_connected_time_issuer_allocations(entry_digest),
+    signed_entry_json TEXT NOT NULL CHECK (json_valid(signed_entry_json)),
+    signed_entry_digest TEXT NOT NULL CHECK (length(signed_entry_digest) = 64)
+  )
+''';
+
+const shopConnectedTrustedTimeIssuerAcksV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_acks (
+    ack_digest TEXT PRIMARY KEY CHECK (length(ack_digest) = 64),
+    entry_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_issuer_signed_entries(entry_digest),
+    ack_json TEXT NOT NULL CHECK (json_valid(ack_json)),
+    ack_bytes_digest TEXT NOT NULL CHECK (length(ack_bytes_digest) = 64)
+  )
+''';
+
+Map<String, String> shopConnectedTrustedTimeIssuerSchemaDefinitionsV38() => {
+  'shop_connected_time_issuer_state': shopConnectedTrustedTimeIssuerStateV38Sql,
+  'shop_connected_time_issuer_streams':
+      shopConnectedTrustedTimeIssuerStreamsV38Sql,
+  'shop_connected_time_issuer_allocations':
+      shopConnectedTrustedTimeIssuerAllocationsV38Sql,
+  'shop_connected_time_issuer_signed_entries':
+      shopConnectedTrustedTimeIssuerSignedEntriesV38Sql,
+  'shop_connected_time_issuer_acks': shopConnectedTrustedTimeIssuerAcksV38Sql,
+  'shop_connected_time_issuer_state_guard_update':
+      shopConnectedTrustedTimeIssuerStateTransitionV38Sql,
+  'shop_connected_time_issuer_state_guard_insert':
+      shopConnectedTrustedTimeIssuerStateInsertV38Sql,
+  'shop_connected_time_issuer_streams_guard_update':
+      shopConnectedTrustedTimeIssuerStreamTransitionV38Sql,
+  'shop_connected_time_issuer_state_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_time_issuer_state',
+    operation: 'delete',
+    message: 'Connected trusted-time issuer lifecycle is retained',
+  ),
+  'shop_connected_time_issuer_streams_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_time_issuer_streams',
+    operation: 'delete',
+    message: 'Connected trusted-time issuer streams are retained',
+  ),
+  for (final table in const [
+    'shop_connected_time_issuer_allocations',
+    'shop_connected_time_issuer_signed_entries',
+    'shop_connected_time_issuer_acks',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected trusted-time issuer evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected trusted-time issuer evidence is immutable',
+    ),
+  },
+};
+
 /// Verifies the exact proof shape emitted by the unreleased v34 checkpoint.
 ///
 /// V34 did not retain issuer evidence bytes, coordinator-binding evidence, or
@@ -5352,7 +5500,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 37) return const {};
+  if (schemaVersion < 5 || schemaVersion > 38) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -6370,6 +6518,7 @@ class ShopDatabase extends _$ShopDatabase {
     try {
       await database.verifyReadyForUse();
       await database.markCorrectionRestorePending();
+      await database._suspendTrustedTimeIssuerAfterRestoreV38();
       await database.verifyReadyForUse();
       final row = await database
           .customSelect('PRAGMA user_version')
@@ -6442,7 +6591,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 38;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6496,15 +6645,25 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV36Schema();
       await _createConnectedTrustedTimeSchemaV37();
       await _requireUnifiedV37Schema();
+      await _createConnectedTrustedTimeIssuerSchemaV38();
+      await _requireUnifiedV38Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 37) {
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        return;
+      }
       if (from == 36) {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       if (from == 35) {
@@ -6513,6 +6672,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       if (from == 34) {
@@ -6525,6 +6686,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       if (from == 33) {
@@ -6537,6 +6700,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       if (from == 32) {
@@ -6552,6 +6717,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       if (from == 31) {
@@ -6568,6 +6735,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       if (from == 30) {
@@ -6587,6 +6756,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       final origin = await _classifyUpgradeOrigin(from);
@@ -6609,6 +6780,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       if (from == 28) {
@@ -6645,6 +6818,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV36Schema();
         await _createConnectedTrustedTimeSchemaV37();
         await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
         return;
       }
       if (from < 2) {
@@ -6877,14 +7052,16 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV36Schema();
       await _createConnectedTrustedTimeSchemaV37();
       await _requireUnifiedV37Schema();
+      await _createConnectedTrustedTimeIssuerSchemaV38();
+      await _requireUnifiedV38Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV37Schema();
+      await _requireUnifiedV38Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV37Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV38Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
@@ -7407,6 +7584,24 @@ class ShopDatabase extends _$ShopDatabase {
         in shopConnectedTrustedTimeSchemaDefinitionsV37().values) {
       await customStatement(definition);
     }
+  }
+
+  Future<void> _createConnectedTrustedTimeIssuerSchemaV38() async {
+    for (final definition
+        in shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().values) {
+      await customStatement(definition);
+    }
+    await customInsert(
+      'INSERT OR IGNORE INTO shop_connected_time_issuer_state '
+      '(singleton_id, issuance_suspended) VALUES (1, 0)',
+    );
+  }
+
+  Future<void> _suspendTrustedTimeIssuerAfterRestoreV38() async {
+    await customUpdate(
+      'UPDATE shop_connected_time_issuer_state SET issuance_suspended = 1 '
+      'WHERE singleton_id = 1 AND issuance_suspended = 0',
+    );
   }
 
   /// V32 retained deltas as individually valid events, but did not retain the
@@ -9065,6 +9260,10 @@ class ShopDatabase extends _$ShopDatabase {
     final hasTrustedTimeV37 = shopConnectedTrustedTimeSchemaDefinitionsV37()
         .keys
         .every(objects.containsKey);
+    final hasTrustedTimeIssuerV38 =
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys.every(
+          objects.containsKey,
+        );
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -9147,6 +9346,11 @@ class ShopDatabase extends _$ShopDatabase {
             in shopConnectedTrustedTimeSchemaDefinitionsV37().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasTrustedTimeIssuerV38)
+        for (final entry
+            in shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -9188,6 +9392,8 @@ class ShopDatabase extends _$ShopDatabase {
         ...shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys,
       if (hasTrustedTimeV37)
         ...shopConnectedTrustedTimeSchemaDefinitionsV37().keys,
+      if (hasTrustedTimeIssuerV38)
+        ...shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -10062,6 +10268,201 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v37 trusted-time schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV38Schema() async {
+    await runZoned(
+      _requireUnifiedV37Schema,
+      zoneValues: const {#shopAllowV38NestedSchemaVerification: true},
+    );
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {#shopAllowV38NestedSchemaVerification: false},
+    );
+    final definitions = shopConnectedTrustedTimeIssuerSchemaDefinitionsV38();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    final rowsValid = await _v38ConnectedTrustedTimeIssuerRowsValid();
+    if (!definitionsValid || !rowsValid) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map((entry) => entry.key)
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v38 trusted-time issuer schema failed verification '
+        '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<bool> _v38ConnectedTrustedTimeIssuerRowsValid() async {
+    try {
+      final states = await customSelect(
+        'SELECT * FROM shop_connected_time_issuer_state',
+      ).get();
+      if (states.length != 1 || states.single.read<int>('singleton_id') != 1) {
+        return false;
+      }
+      final streams = await customSelect(
+        'SELECT * FROM shop_connected_time_issuer_streams',
+      ).get();
+      final streamsByDigest = <String, QueryRow>{};
+      for (final row in streams) {
+        final json = row.read<String>('stream_json');
+        final value = jsonDecode(json);
+        if (canonicalConnectedSiteJson(value) != json ||
+            connectedSiteSha256(value) != row.read<String>('stream_digest')) {
+          return false;
+        }
+        streamsByDigest[row.read<String>('stream_digest')] = row;
+      }
+      final allocations = await customSelect(
+        'SELECT * FROM shop_connected_time_issuer_allocations '
+        'ORDER BY stream_digest, authority_sequence',
+      ).get();
+      final allocationsByStream = <String, List<QueryRow>>{};
+      for (final row in allocations) {
+        final json = row.read<String>('unsigned_entry_json');
+        final entry = parseConnectedTrustedTimeUnsignedEntryV2(
+          utf8.encode(json),
+        );
+        if (entry.entryDigest != row.read<String>('entry_digest')) {
+          return false;
+        }
+        final streamValue = <String, Object?>{
+          'workspaceId': entry.workspaceId,
+          'siteId': entry.siteId,
+          'coordinatorDeviceId': entry.coordinatorDeviceId,
+          'clientDeviceId': entry.clientDeviceId,
+          'clientFingerprint': entry.clientFingerprint,
+          'sessionGeneration': entry.sessionGeneration,
+          'coordinatorBindingDigest': entry.coordinatorBindingDigest,
+          'coordinatorBindingGeneration': entry.coordinatorBindingGeneration,
+          'authorityKeyId': entry.authorityKeyId,
+          'authorityKeyFingerprint': entry.authorityKeyFingerprint,
+          'authorityKeyGeneration': entry.authorityKeyGeneration,
+          'authorityEpoch': entry.authorityEpoch,
+        };
+        if (connectedSiteSha256(streamValue) !=
+                row.read<String>('stream_digest') ||
+            entry.authoritySequence != row.read<int>('authority_sequence') ||
+            entry.previousEntryDigest !=
+                row.readNullable<String>('previous_entry_digest')) {
+          return false;
+        }
+        allocationsByStream
+            .putIfAbsent(row.read<String>('stream_digest'), () => [])
+            .add(row);
+      }
+      final signedEntries = await customSelect(
+        'SELECT entry_digest, signed_entry_json, signed_entry_digest FROM '
+        'shop_connected_time_issuer_signed_entries',
+      ).get();
+      final signedByDigest = <String, ConnectedTrustedTimeStreamEntryV2>{};
+      for (final row in signedEntries) {
+        final json = row.read<String>('signed_entry_json');
+        final entry = ConnectedTrustedTimeStreamEntryV2.fromCanonicalBytes(
+          utf8.encode(json),
+        );
+        if (entry.entryDigest != row.read<String>('entry_digest') ||
+            crypto.sha256.convert(utf8.encode(json)).toString() !=
+                row.read<String>('signed_entry_digest')) {
+          return false;
+        }
+        signedByDigest[entry.entryDigest] = entry;
+      }
+      final acknowledgements = await customSelect(
+        'SELECT ack_digest, entry_digest, ack_json, ack_bytes_digest FROM '
+        'shop_connected_time_issuer_acks',
+      ).get();
+      final ackByEntry = <String, ConnectedTrustedTimeStreamAckV1>{};
+      for (final row in acknowledgements) {
+        final json = row.read<String>('ack_json');
+        final ack = ConnectedTrustedTimeStreamAckV1.fromCanonicalBytes(
+          utf8.encode(json),
+        );
+        if (ack.ackDigest != row.read<String>('ack_digest') ||
+            ack.entryDigest != row.read<String>('entry_digest') ||
+            crypto.sha256.convert(utf8.encode(json)).toString() !=
+                row.read<String>('ack_bytes_digest')) {
+          return false;
+        }
+        ackByEntry[ack.entryDigest] = ack;
+      }
+      for (final streamEntry in streamsByDigest.entries) {
+        final stream = streamEntry.value;
+        final streamAllocations = allocationsByStream[streamEntry.key] ?? [];
+        String? predecessor;
+        for (var index = 0; index < streamAllocations.length; index++) {
+          final allocation = streamAllocations[index];
+          final sequence = index + 1;
+          final digest = allocation.read<String>('entry_digest');
+          if (allocation.read<int>('authority_sequence') != sequence ||
+              allocation.readNullable<String>('previous_entry_digest') !=
+                  predecessor) {
+            return false;
+          }
+          if (sequence <= stream.read<int>('acknowledged_sequence')) {
+            final signed = signedByDigest[digest];
+            final ack = ackByEntry[digest];
+            if (signed == null ||
+                ack == null ||
+                ack.authoritySequence != sequence ||
+                ack.entryDigest != digest ||
+                ack.workspaceId != signed.workspaceId ||
+                ack.siteId != signed.siteId ||
+                ack.coordinatorDeviceId != signed.coordinatorDeviceId ||
+                ack.clientDeviceId != signed.clientDeviceId ||
+                ack.clientFingerprint != signed.clientFingerprint ||
+                ack.sessionGeneration != signed.sessionGeneration ||
+                ack.coordinatorBindingDigest !=
+                    signed.coordinatorBindingDigest ||
+                ack.coordinatorBindingGeneration !=
+                    signed.coordinatorBindingGeneration ||
+                ack.authorityKeyGeneration != signed.authorityKeyGeneration ||
+                ack.authorityEpoch != signed.authorityEpoch) {
+              return false;
+            }
+          } else if (sequence ==
+              stream.read<int>('acknowledged_sequence') + 1) {
+            if (stream.readNullable<String>('pending_entry_digest') != digest ||
+                ackByEntry.containsKey(digest)) {
+              return false;
+            }
+          } else {
+            return false;
+          }
+          predecessor = digest;
+        }
+        final acknowledged = stream.read<int>('acknowledged_sequence');
+        final pending = stream.readNullable<String>('pending_entry_digest');
+        if (acknowledged > streamAllocations.length ||
+            (acknowledged == 0
+                ? stream.readNullable<String>('acknowledged_entry_digest') !=
+                      null
+                : stream.readNullable<String>('acknowledged_entry_digest') !=
+                      streamAllocations[acknowledged - 1].read<String>(
+                        'entry_digest',
+                      )) ||
+            (pending == null
+                ? streamAllocations.length != acknowledged
+                : streamAllocations.length != acknowledged + 1)) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
     }
   }
 
@@ -11839,6 +12240,12 @@ class ShopDatabase extends _$ShopDatabase {
     final objects = <String, _ShopSchemaObject>{};
     for (final row in rows) {
       final name = row.read<String>('name').toLowerCase();
+      if (Zone.current[#shopAllowV38NestedSchemaVerification] == true &&
+          shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().containsKey(
+            name,
+          )) {
+        continue;
+      }
       if (objects.containsKey(name)) {
         throw StateError('The Shop database has duplicate schema names.');
       }
@@ -11859,9 +12266,10 @@ class ShopDatabase extends _$ShopDatabase {
   bool _sameSchemaObjectNames(
     Map<String, _ShopSchemaObject> objects,
     Set<String> expected,
-  ) =>
-      objects.length == expected.length &&
-      objects.keys.toSet().containsAll(expected);
+  ) {
+    return objects.length == expected.length &&
+        objects.keys.toSet().containsAll(expected);
+  }
 
   Future<bool> _baseSchemaExact(
     int version,

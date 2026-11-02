@@ -14,6 +14,7 @@ import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
+import 'shop_connected_trusted_time_stream.dart';
 
 enum ShopStorePresence { empty, existing, interrupted, unsafe }
 
@@ -64,7 +65,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 37;
+  static const supportedSchemaVersion = 38;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1934,6 +1935,9 @@ abstract final class ShopBackup {
     final trustedTimeDefinitions = schemaVersion >= 37
         ? shopConnectedTrustedTimeSchemaDefinitionsV37()
         : const <String, String>{};
+    final trustedTimeIssuerDefinitions = schemaVersion >= 38
+        ? shopConnectedTrustedTimeIssuerSchemaDefinitionsV38()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1957,7 +1961,8 @@ abstract final class ShopBackup {
             schemaVersion == 34 ||
             schemaVersion == 35 ||
             schemaVersion == 36 ||
-            schemaVersion == 37) &&
+            schemaVersion == 37 ||
+            schemaVersion == 38) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -2016,6 +2021,14 @@ abstract final class ShopBackup {
               trustedTimeDefinitions.keys.toSet(),
             )) &&
         (schemaVersion < 37 || _v37ConnectedTrustedTimeRowsValid(connection)) &&
+        (schemaVersion < 38 ||
+            _v38ConnectedTrustedTimeIssuerRowsValid(connection)) &&
+        (schemaVersion < 38 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              trustedTimeIssuerDefinitions,
+              trustedTimeIssuerDefinitions.keys.toSet(),
+            )) &&
         (schemaVersion < 31 ||
             _snapshotDefinitionGroupExact(
               objects,
@@ -2072,6 +2085,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 34) cloudProofDefinitions,
           if (schemaVersion >= 36) authorityCheckpointDefinitions,
           if (schemaVersion >= 37) trustedTimeDefinitions,
+          if (schemaVersion >= 38) trustedTimeIssuerDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2093,6 +2107,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 34) ...cloudProofDefinitions.keys,
           if (schemaVersion >= 36) ...authorityCheckpointDefinitions.keys,
           if (schemaVersion >= 37) ...trustedTimeDefinitions.keys,
+          if (schemaVersion >= 38) ...trustedTimeIssuerDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3626,6 +3641,145 @@ abstract final class ShopBackup {
         bootstrapProvenance: rows('shop_site_authority_bootstrap_provenance'),
         payloads: rows('shop_site_authority_payloads'),
       );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v38ConnectedTrustedTimeIssuerRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      final states = rows('shop_connected_time_issuer_state');
+      if (states.length != 1 || states.single['singleton_id'] != 1) {
+        return false;
+      }
+      final streams = rows('shop_connected_time_issuer_streams');
+      final streamByDigest = <String, Map<String, Object?>>{};
+      for (final row in streams) {
+        final text = row['stream_json'];
+        if (text is! String) return false;
+        final value = jsonDecode(text);
+        if (canonicalConnectedSiteJson(value) != text ||
+            connectedSiteSha256(value) != row['stream_digest']) {
+          return false;
+        }
+        streamByDigest[row['stream_digest']! as String] = row;
+      }
+      final byStream = <String, List<Map<String, Object?>>>{};
+      for (final row in rows('shop_connected_time_issuer_allocations')) {
+        final text = row['unsigned_entry_json'];
+        if (text is! String) return false;
+        final entry = parseConnectedTrustedTimeUnsignedEntryV2(
+          utf8.encode(text),
+        );
+        if (entry.entryDigest != row['entry_digest']) {
+          return false;
+        }
+        final streamValue = <String, Object?>{
+          'workspaceId': entry.workspaceId,
+          'siteId': entry.siteId,
+          'coordinatorDeviceId': entry.coordinatorDeviceId,
+          'clientDeviceId': entry.clientDeviceId,
+          'clientFingerprint': entry.clientFingerprint,
+          'sessionGeneration': entry.sessionGeneration,
+          'coordinatorBindingDigest': entry.coordinatorBindingDigest,
+          'coordinatorBindingGeneration': entry.coordinatorBindingGeneration,
+          'authorityKeyId': entry.authorityKeyId,
+          'authorityKeyFingerprint': entry.authorityKeyFingerprint,
+          'authorityKeyGeneration': entry.authorityKeyGeneration,
+          'authorityEpoch': entry.authorityEpoch,
+        };
+        if (connectedSiteSha256(streamValue) != row['stream_digest'] ||
+            entry.authoritySequence != row['authority_sequence'] ||
+            entry.previousEntryDigest != row['previous_entry_digest']) {
+          return false;
+        }
+        byStream
+            .putIfAbsent(row['stream_digest']! as String, () => [])
+            .add(row);
+      }
+      final signed = <String, ConnectedTrustedTimeStreamEntryV2>{};
+      for (final row in rows('shop_connected_time_issuer_signed_entries')) {
+        final text = row['signed_entry_json']! as String;
+        final entry = ConnectedTrustedTimeStreamEntryV2.fromCanonicalBytes(
+          utf8.encode(text),
+        );
+        if (entry.entryDigest != row['entry_digest'] ||
+            crypto.sha256.convert(utf8.encode(text)).toString() !=
+                row['signed_entry_digest']) {
+          return false;
+        }
+        signed[entry.entryDigest] = entry;
+      }
+      final acks = <String, ConnectedTrustedTimeStreamAckV1>{};
+      for (final row in rows('shop_connected_time_issuer_acks')) {
+        final text = row['ack_json']! as String;
+        final ack = ConnectedTrustedTimeStreamAckV1.fromCanonicalBytes(
+          utf8.encode(text),
+        );
+        if (ack.ackDigest != row['ack_digest'] ||
+            ack.entryDigest != row['entry_digest'] ||
+            crypto.sha256.convert(utf8.encode(text)).toString() !=
+                row['ack_bytes_digest']) {
+          return false;
+        }
+        acks[ack.entryDigest] = ack;
+      }
+      for (final streamEntry in streamByDigest.entries) {
+        final stream = streamEntry.value;
+        final allocations = byStream[streamEntry.key] ?? [];
+        allocations.sort(
+          (a, b) => (a['authority_sequence']! as int).compareTo(
+            b['authority_sequence']! as int,
+          ),
+        );
+        String? predecessor;
+        for (var index = 0; index < allocations.length; index++) {
+          final row = allocations[index];
+          final sequence = index + 1;
+          final digest = row['entry_digest']! as String;
+          if (row['authority_sequence'] != sequence ||
+              row['previous_entry_digest'] != predecessor) {
+            return false;
+          }
+          if (sequence <= (stream['acknowledged_sequence']! as int)) {
+            final entry = signed[digest];
+            final ack = acks[digest];
+            if (entry == null ||
+                ack == null ||
+                ack.authoritySequence != sequence ||
+                ack.clientDeviceId != entry.clientDeviceId ||
+                ack.coordinatorBindingDigest !=
+                    entry.coordinatorBindingDigest) {
+              return false;
+            }
+          } else if (sequence ==
+              (stream['acknowledged_sequence']! as int) + 1) {
+            if (stream['pending_entry_digest'] != digest ||
+                acks.containsKey(digest)) {
+              return false;
+            }
+          } else {
+            return false;
+          }
+          predecessor = digest;
+        }
+        final head = stream['acknowledged_sequence']! as int;
+        if (head > allocations.length ||
+            (head == 0
+                ? stream['acknowledged_entry_digest'] != null
+                : stream['acknowledged_entry_digest'] !=
+                      allocations[head - 1]['entry_digest']) ||
+            (stream['pending_entry_digest'] == null
+                ? allocations.length != head
+                : allocations.length != head + 1)) {
+          return false;
+        }
+      }
+      return true;
     } on Object {
       return false;
     }

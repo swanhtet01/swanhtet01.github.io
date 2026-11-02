@@ -178,6 +178,28 @@ final class ConnectedTrustedTimeStreamEntryV2 {
   }
 }
 
+ConnectedTrustedTimeStreamEntryV2 parseConnectedTrustedTimeUnsignedEntryV2(
+  List<int> bytes,
+) {
+  final text = _canonicalText(
+    bytes,
+    'trusted-time unsigned stream entry bytes',
+  );
+  final value = jsonDecode(text);
+  if (value is! Map<String, dynamic> || value.length != _entryKeys.length - 2) {
+    throw const FormatException('trusted-time unsigned stream entry');
+  }
+  final result = ConnectedTrustedTimeStreamEntryV2.fromJson({
+    ...value,
+    'entryDigest': connectedSiteSha256(value),
+    'authoritySignature': _unsignedPlaceholderSignature,
+  });
+  if (text != result.canonicalSigningPayload) {
+    throw const FormatException('trusted-time unsigned stream entry bytes');
+  }
+  return result;
+}
+
 /// Device-signed acknowledgement of one processed stream entry.
 ///
 /// The resulting client head for this protocol is the exact processed entry
@@ -432,3 +454,7 @@ const _ackKeys = <String>{
   'ackDigest',
   'clientSignature',
 };
+
+final String _unsignedPlaceholderSignature = base64UrlEncode(
+  List<int>.filled(64, 0),
+).replaceAll('=', '');
