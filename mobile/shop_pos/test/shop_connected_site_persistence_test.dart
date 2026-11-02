@@ -26,10 +26,10 @@ const _device = 'device-1';
 final _leaseDigest = _leaseFor().payloadDigest;
 
 void main() {
-  test('connected-site persistence is default-off and schema is v31', () async {
+  test('connected-site persistence is default-off and schema is v36', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 35);
+      expect(database.schemaVersion, 36);
       final tables =
           (await database
                   .customSelect(
@@ -1644,7 +1644,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 35);
+        expect(database.schemaVersion, 36);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(

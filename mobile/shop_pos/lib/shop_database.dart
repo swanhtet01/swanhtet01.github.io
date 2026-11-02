@@ -2658,6 +2658,67 @@ Map<String, String> shopConnectedCloudProofSchemaDefinitionsV35() => {
   ),
 };
 
+const shopSiteAuthorityCheckpointsV36Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_checkpoints (
+    checkpoint_digest TEXT PRIMARY KEY NOT NULL CHECK (length(checkpoint_digest) = 64),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    issuer_key_id TEXT NOT NULL CHECK (length(issuer_key_id) BETWEEN 1 AND 128),
+    first_authority_sequence INTEGER NOT NULL CHECK (first_authority_sequence = 1),
+    last_authority_sequence INTEGER NOT NULL CHECK (last_authority_sequence >= first_authority_sequence),
+    chain_digest TEXT NOT NULL CHECK (length(chain_digest) = 64),
+    checkpoint_bytes TEXT NOT NULL CHECK (json_valid(checkpoint_bytes)),
+    signature TEXT NOT NULL CHECK (length(signature) BETWEEN 32 AND 4096),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis >= issued_at_millis),
+    UNIQUE (tenant_id, site_id, device_id),
+    FOREIGN KEY (tenant_id, site_id, last_authority_sequence) REFERENCES
+      shop_site_authority_payloads(tenant_id, site_id, authority_sequence)
+  )
+''';
+
+const shopSiteAuthorityBootstrapProvenanceV36Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_bootstrap_provenance (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    bootstrap_mode TEXT NOT NULL CHECK (bootstrap_mode = 'checkpoint_joined'),
+    checkpoint_digest TEXT NOT NULL CHECK (length(checkpoint_digest) = 64),
+    recorded_at_millis INTEGER NOT NULL CHECK (recorded_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, device_id),
+    FOREIGN KEY (checkpoint_digest) REFERENCES shop_site_authority_checkpoints(checkpoint_digest)
+  )
+''';
+
+Map<String, String> shopConnectedAuthorityCheckpointSchemaDefinitionsV36() => {
+  'shop_site_authority_checkpoints': shopSiteAuthorityCheckpointsV36Sql,
+  'shop_site_authority_bootstrap_provenance':
+      shopSiteAuthorityBootstrapProvenanceV36Sql,
+  'shop_site_authority_checkpoints_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_authority_checkpoints',
+    operation: 'update',
+    message: 'Connected authority checkpoint evidence is immutable',
+  ),
+  'shop_site_authority_checkpoints_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_authority_checkpoints',
+    operation: 'delete',
+    message: 'Connected authority checkpoint evidence is immutable',
+  ),
+  'shop_site_authority_bootstrap_provenance_no_update':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_site_authority_bootstrap_provenance',
+        operation: 'update',
+        message: 'Connected authority bootstrap provenance is immutable',
+      ),
+  'shop_site_authority_bootstrap_provenance_no_delete':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_site_authority_bootstrap_provenance',
+        operation: 'delete',
+        message: 'Connected authority bootstrap provenance is immutable',
+      ),
+};
+
 /// Verifies the exact proof shape emitted by the unreleased v34 checkpoint.
 ///
 /// V34 did not retain issuer evidence bytes, coordinator-binding evidence, or
@@ -3168,6 +3229,162 @@ bool shopConnectedAuthorityPayloadRowsValidV30({
           return false;
         }
       }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+bool shopConnectedAuthorityCheckpointRowsValidV36({
+  required Iterable<Map<String, Object?>> checkpoints,
+  required Iterable<Map<String, Object?>> bootstrapProvenance,
+  required Iterable<Map<String, Object?>> payloads,
+}) {
+  try {
+    final hex = RegExp(r'^[0-9a-f]{64}$');
+    bool exact(Map value, Set<String> keys) =>
+        value.length == keys.length && value.keys.every(keys.contains);
+    final payloadByKey = <String, Map<String, Object?>>{
+      for (final row in payloads)
+        '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['authority_sequence']}':
+            row,
+    };
+    final checkpointByScope = <String, Map<String, Object?>>{};
+    for (final row in checkpoints) {
+      final bytes = row['checkpoint_bytes'];
+      final signature = row['signature'];
+      final observedAt = row['observed_at_millis'];
+      if (bytes is! String ||
+          utf8.encode(bytes).length > 1024 * 1024 ||
+          signature is! String ||
+          signature.length < 32 ||
+          signature.length > 4096 ||
+          observedAt is! int ||
+          canonicalConnectedSiteJson(jsonDecode(bytes)) != bytes) {
+        return false;
+      }
+      final decoded = jsonDecode(bytes);
+      if (decoded is! Map ||
+          !exact(decoded, const {
+            'schemaId',
+            'protocolVersion',
+            'workspaceId',
+            'siteId',
+            'deviceId',
+            'issuedAtMillis',
+            'issuerKeyId',
+            'firstAuthoritySequence',
+            'lastAuthoritySequence',
+            'payloads',
+            'chainDigest',
+            'checkpointDigest',
+          }) ||
+          decoded['schemaId'] != 'ConnectedSiteAuthorityCheckpointV1' ||
+          decoded['protocolVersion'] != 1 ||
+          decoded['workspaceId'] != row['tenant_id'] ||
+          decoded['siteId'] != row['site_id'] ||
+          decoded['deviceId'] != row['device_id'] ||
+          decoded['issuedAtMillis'] != row['issued_at_millis'] ||
+          decoded['issuerKeyId'] != row['issuer_key_id'] ||
+          decoded['firstAuthoritySequence'] != 1 ||
+          decoded['firstAuthoritySequence'] !=
+              row['first_authority_sequence'] ||
+          decoded['lastAuthoritySequence'] != row['last_authority_sequence'] ||
+          decoded['chainDigest'] != row['chain_digest'] ||
+          decoded['checkpointDigest'] != row['checkpoint_digest'] ||
+          decoded['issuedAtMillis'] is! int ||
+          (decoded['issuedAtMillis'] as int) < 1 ||
+          observedAt < (decoded['issuedAtMillis'] as int) ||
+          observedAt - (decoded['issuedAtMillis'] as int) >
+              const Duration(minutes: 15).inMilliseconds ||
+          !hex.hasMatch(row['chain_digest']! as String) ||
+          !hex.hasMatch(row['checkpoint_digest']! as String)) {
+        return false;
+      }
+      final unsigned = Map<String, Object?>.from(decoded)
+        ..remove('checkpointDigest');
+      if (connectedSiteSha256(unsigned) != row['checkpoint_digest']) {
+        return false;
+      }
+      final entries = decoded['payloads'];
+      if (entries is! List ||
+          entries.isEmpty ||
+          entries.length > 256 ||
+          entries.length != decoded['lastAuthoritySequence']) {
+        return false;
+      }
+      final chainBindings = <Map<String, Object?>>[];
+      String? previous;
+      for (var index = 0; index < entries.length; index += 1) {
+        final entry = entries[index];
+        if (entry is! Map ||
+            !exact(entry, const {'canonicalPayloadBytes', 'signature'}) ||
+            entry['canonicalPayloadBytes'] is! String ||
+            entry['signature'] is! String) {
+          return false;
+        }
+        final payloadBytes = entry['canonicalPayloadBytes']! as String;
+        final payloadSignature = entry['signature']! as String;
+        final payload =
+            payloadByKey['${row['tenant_id']}\u0000${row['site_id']}\u0000${index + 1}'];
+        if (payload == null ||
+            payload['payload_bytes'] != payloadBytes ||
+            payload['signature'] != payloadSignature ||
+            payload['previous_authority_digest'] != previous) {
+          return false;
+        }
+        previous = payload['payload_digest']! as String;
+        chainBindings.add({
+          'authoritySequence': index + 1,
+          'payloadDigest': previous,
+          'signatureDigest': crypto.sha256
+              .convert(utf8.encode(payloadSignature))
+              .toString(),
+        });
+      }
+      if (connectedSiteSha256(chainBindings) != row['chain_digest']) {
+        return false;
+      }
+      final scope =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['device_id']}';
+      if (checkpointByScope.containsKey(scope)) return false;
+      checkpointByScope[scope] = row;
+    }
+    final provenanceScopes = <String>{};
+    for (final row in bootstrapProvenance) {
+      if (row.keys.toSet().difference(const {
+            'tenant_id',
+            'site_id',
+            'device_id',
+            'bootstrap_mode',
+            'checkpoint_digest',
+            'recorded_at_millis',
+          }).isNotEmpty ||
+          row['tenant_id'] is! String ||
+          row['site_id'] is! String ||
+          row['device_id'] is! String ||
+          row['bootstrap_mode'] is! String ||
+          row['recorded_at_millis'] is! int ||
+          (row['recorded_at_millis']! as int) < 1) {
+        return false;
+      }
+      final scope =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['device_id']}';
+      if (!provenanceScopes.add(scope)) return false;
+      final mode = row['bootstrap_mode'];
+      final digest = row['checkpoint_digest'];
+      final checkpoint = checkpointByScope[scope];
+      if (mode != 'checkpoint_joined' ||
+          digest is! String ||
+          !hex.hasMatch(digest) ||
+          checkpoint == null ||
+          checkpoint['checkpoint_digest'] != digest) {
+        return false;
+      }
+    }
+    for (final scope in checkpointByScope.keys) {
+      if (!provenanceScopes.contains(scope)) return false;
     }
     return true;
   } on Object {
@@ -4644,7 +4861,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 35) return const {};
+  if (schemaVersion < 5 || schemaVersion > 36) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -5734,7 +5951,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5784,17 +6001,27 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV34Schema();
       await _createConnectedCloudProofBoundaryV35();
       await _requireUnifiedV35Schema();
+      await _createConnectedAuthorityCheckpointSchemaV36();
+      await _requireUnifiedV36Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 35) {
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        return;
+      }
       if (from == 34) {
         await _requireUnifiedV34Schema(historical4d9Proofs: true);
         await _createConnectedCloudProofBoundaryV35(
           quarantineUnverifiableV34Proofs: true,
         );
         await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
         return;
       }
       if (from == 33) {
@@ -5803,6 +6030,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV34Schema();
         await _createConnectedCloudProofBoundaryV35();
         await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
         return;
       }
       if (from == 32) {
@@ -5814,6 +6043,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV34Schema();
         await _createConnectedCloudProofBoundaryV35();
         await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
         return;
       }
       if (from == 31) {
@@ -5826,6 +6057,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV34Schema();
         await _createConnectedCloudProofBoundaryV35();
         await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
         return;
       }
       if (from == 30) {
@@ -5841,6 +6074,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV34Schema();
         await _createConnectedCloudProofBoundaryV35();
         await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
         return;
       }
       final origin = await _classifyUpgradeOrigin(from);
@@ -5859,6 +6094,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV34Schema();
         await _createConnectedCloudProofBoundaryV35();
         await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
         return;
       }
       if (from == 28) {
@@ -5891,6 +6128,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV34Schema();
         await _createConnectedCloudProofBoundaryV35();
         await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
         return;
       }
       if (from < 2) {
@@ -6119,14 +6358,16 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV34Schema();
       await _createConnectedCloudProofBoundaryV35();
       await _requireUnifiedV35Schema();
+      await _createConnectedAuthorityCheckpointSchemaV36();
+      await _requireUnifiedV36Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV35Schema();
+      await _requireUnifiedV36Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV35Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV36Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
@@ -6348,7 +6589,8 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> verifyConnectedAuthorityEvidence() async {
     if (!await _v27ConnectedAuthorityRowsValid() ||
-        !await _v30ConnectedAuthorityPayloadRowsValid()) {
+        !await _v30ConnectedAuthorityPayloadRowsValid() ||
+        !await _v36ConnectedAuthorityCheckpointRowsValid()) {
       throw StateError('Connected authority observation evidence is invalid.');
     }
   }
@@ -6627,6 +6869,13 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(row.read<int>('received_at_millis')),
         ],
       );
+    }
+  }
+
+  Future<void> _createConnectedAuthorityCheckpointSchemaV36() async {
+    for (final definition
+        in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().values) {
+      await customStatement(definition);
     }
   }
 
@@ -8279,6 +8528,10 @@ class ShopDatabase extends _$ShopDatabase {
         .every(objects.containsKey);
     final hasCloudProofV35 = shopConnectedCloudProofSchemaDefinitionsV35().keys
         .every(objects.containsKey);
+    final hasAuthorityCheckpointV36 =
+        shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys.every(
+          objects.containsKey,
+        );
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -8351,6 +8604,11 @@ class ShopDatabase extends _$ShopDatabase {
                 .entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasAuthorityCheckpointV36)
+        for (final entry
+            in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -8388,6 +8646,8 @@ class ShopDatabase extends _$ShopDatabase {
         ...(hasCloudProofV35
             ? shopConnectedCloudProofSchemaDefinitionsV35().keys
             : shopConnectedCloudProofSchemaDefinitionsV34().keys),
+      if (hasAuthorityCheckpointV36)
+        ...shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -8582,6 +8842,10 @@ class ShopDatabase extends _$ShopDatabase {
         .every(objects.containsKey);
     final hasCloudProofV35 = shopConnectedCloudProofSchemaDefinitionsV35().keys
         .every(objects.containsKey);
+    final hasAuthorityCheckpointV36 =
+        shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys.every(
+          objects.containsKey,
+        );
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -8623,6 +8887,8 @@ class ShopDatabase extends _$ShopDatabase {
         ...(hasCloudProofV35
             ? shopConnectedCloudProofSchemaDefinitionsV35().keys
             : shopConnectedCloudProofSchemaDefinitionsV34().keys),
+      if (hasAuthorityCheckpointV36)
+        ...shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -9219,6 +9485,40 @@ class ShopDatabase extends _$ShopDatabase {
     ).getSingle();
     if (invalidBoundary.read<int>('total') != 0) {
       throw StateError('Connected cloud legacy boundary was relabelled.');
+    }
+  }
+
+  Future<void> _requireUnifiedV36Schema() async {
+    await _requireUnifiedV35Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedAuthorityCheckpointSchemaDefinitionsV36();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v36ConnectedAuthorityCheckpointRowsValid()) {
+      throw StateError(
+        'The unified Shop v36 authority-checkpoint schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v36ConnectedAuthorityCheckpointRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedAuthorityCheckpointRowsValidV36(
+        checkpoints: await rows('shop_site_authority_checkpoints'),
+        bootstrapProvenance: await rows(
+          'shop_site_authority_bootstrap_provenance',
+        ),
+        payloads: await rows('shop_site_authority_payloads'),
+      );
+    } on Object {
+      return false;
     }
   }
 

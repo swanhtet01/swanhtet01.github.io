@@ -440,6 +440,164 @@ class ConnectedSiteAuthorityPayloadV1 {
   }
 }
 
+class ConnectedSiteAuthorityCheckpointV1 {
+  ConnectedSiteAuthorityCheckpointV1._({
+    required this.canonicalBytes,
+    required this.signature,
+    required this.checkpointDigest,
+    required this.workspaceId,
+    required this.siteId,
+    required this.deviceId,
+    required this.issuedAtMillis,
+    required this.issuerKeyId,
+    required this.chainDigest,
+    required this.payloads,
+  });
+
+  static const schemaId = 'ConnectedSiteAuthorityCheckpointV1';
+  static const maximumPayloadCount = 256;
+  static const maximumCanonicalBytes = 1024 * 1024;
+
+  final String canonicalBytes;
+  final String signature;
+  final String checkpointDigest;
+  final String workspaceId;
+  final String siteId;
+  final String deviceId;
+  final int issuedAtMillis;
+  final String issuerKeyId;
+  final String chainDigest;
+  final List<ConnectedSiteAuthorityPayloadV1> payloads;
+
+  static ConnectedSiteAuthorityCheckpointV1 parse({
+    required String canonicalBytes,
+    required String signature,
+  }) {
+    Never invalid(String code) => throw ConnectedSiteReconciliationException(
+      'connected_site_authority_checkpoint_$code',
+    );
+    if (canonicalBytes.isEmpty ||
+        utf8.encode(canonicalBytes).length > maximumCanonicalBytes ||
+        signature.length < 32 ||
+        signature.length > 4096) {
+      invalid('size');
+    }
+    final decoded = jsonDecode(canonicalBytes);
+    if (decoded is! Map<String, dynamic> ||
+        canonicalConnectedSiteJson(decoded) != canonicalBytes) {
+      invalid('noncanonical');
+    }
+    const keys = {
+      'schemaId',
+      'protocolVersion',
+      'workspaceId',
+      'siteId',
+      'deviceId',
+      'issuedAtMillis',
+      'issuerKeyId',
+      'firstAuthoritySequence',
+      'lastAuthoritySequence',
+      'payloads',
+      'chainDigest',
+      'checkpointDigest',
+    };
+    if (decoded.keys.length != keys.length ||
+        decoded.keys.toSet().difference(keys).isNotEmpty ||
+        decoded['schemaId'] != schemaId ||
+        decoded['protocolVersion'] != connectedSiteProtocolVersion) {
+      invalid('shape');
+    }
+    String identifier(Object? value, String field) {
+      if (value is! String ||
+          value.isEmpty ||
+          value.trim() != value ||
+          value.length > 128 ||
+          !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:@/-]*$').hasMatch(value)) {
+        invalid(field);
+      }
+      return value;
+    }
+
+    String digest(Object? value, String field) {
+      if (value is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(value)) {
+        invalid(field);
+      }
+      return value;
+    }
+
+    final rawPayloads = decoded['payloads'];
+    if (rawPayloads is! List ||
+        rawPayloads.isEmpty ||
+        rawPayloads.length > maximumPayloadCount ||
+        decoded['firstAuthoritySequence'] != 1 ||
+        decoded['lastAuthoritySequence'] != rawPayloads.length) {
+      invalid('range');
+    }
+    final workspaceId = identifier(decoded['workspaceId'], 'workspace');
+    final siteId = identifier(decoded['siteId'], 'site');
+    final payloads = <ConnectedSiteAuthorityPayloadV1>[];
+    final chainBindings = <Map<String, Object?>>[];
+    String? previousDigest;
+    for (var index = 0; index < rawPayloads.length; index += 1) {
+      final raw = rawPayloads[index];
+      const payloadKeys = {'canonicalPayloadBytes', 'signature'};
+      if (raw is! Map<String, dynamic> ||
+          raw.keys.length != payloadKeys.length ||
+          raw.keys.toSet().difference(payloadKeys).isNotEmpty ||
+          raw['canonicalPayloadBytes'] is! String ||
+          raw['signature'] is! String) {
+        invalid('payload_shape');
+      }
+      final payload = ConnectedSiteAuthorityPayloadV1.parse(
+        canonicalBytes: raw['canonicalPayloadBytes']! as String,
+        signature: raw['signature']! as String,
+      );
+      if (payload.workspaceId != workspaceId ||
+          payload.siteId != siteId ||
+          payload.authoritySequence != index + 1 ||
+          payload.previousAuthorityDigest != previousDigest) {
+        invalid('payload_chain');
+      }
+      previousDigest = payload.payloadDigest;
+      payloads.add(payload);
+      chainBindings.add({
+        'authoritySequence': payload.authoritySequence,
+        'payloadDigest': payload.payloadDigest,
+        'signatureDigest': crypto.sha256
+            .convert(utf8.encode(payload.signature))
+            .toString(),
+      });
+    }
+    final chainDigest = digest(decoded['chainDigest'], 'chain_digest');
+    if (connectedSiteSha256(chainBindings) != chainDigest) {
+      invalid('chain_digest');
+    }
+    final unsigned = Map<String, Object?>.from(decoded)
+      ..remove('checkpointDigest');
+    final checkpointDigest = digest(
+      decoded['checkpointDigest'],
+      'checkpoint_digest',
+    );
+    if (connectedSiteSha256(unsigned) != checkpointDigest) {
+      invalid('checkpoint_digest');
+    }
+    final issuedAt = decoded['issuedAtMillis'];
+    if (issuedAt is! int || issuedAt < 1) invalid('issued_at');
+    return ConnectedSiteAuthorityCheckpointV1._(
+      canonicalBytes: canonicalBytes,
+      signature: signature,
+      checkpointDigest: checkpointDigest,
+      workspaceId: workspaceId,
+      siteId: siteId,
+      deviceId: identifier(decoded['deviceId'], 'device'),
+      issuedAtMillis: issuedAt,
+      issuerKeyId: identifier(decoded['issuerKeyId'], 'issuer'),
+      chainDigest: chainDigest,
+      payloads: List.unmodifiable(payloads),
+    );
+  }
+}
+
 /// Reuses the retained-authority parser and the independently supplied
 /// signature verifier for cloud observations. This keeps one exact authority
 /// grammar across online refresh, restart recovery, and offline lease checks.
@@ -535,6 +693,7 @@ class ShopConnectedSiteAuthorityPayloadStore {
       );
     }
     await reverifyRetainedPayloads();
+    await _requireBootstrapProvenance(scope);
     final row = await database
         .customSelect(
           'SELECT payload_bytes, signature FROM shop_site_authority_payloads '
@@ -588,6 +747,28 @@ class ShopConnectedSiteAuthorityPayloadStore {
         issuerKeyId: payload.issuerKeyId,
       );
     }
+    final checkpoints = await database
+        .customSelect(
+          'SELECT checkpoint_bytes, signature, issuer_key_id '
+          'FROM shop_site_authority_checkpoints ORDER BY tenant_id, site_id, device_id',
+        )
+        .get();
+    for (final row in checkpoints) {
+      final checkpoint = ConnectedSiteAuthorityCheckpointV1.parse(
+        canonicalBytes: row.read<String>('checkpoint_bytes'),
+        signature: row.read<String>('signature'),
+      );
+      if (checkpoint.issuerKeyId != row.read<String>('issuer_key_id')) {
+        throw const ConnectedSiteReconciliationException(
+          'connected_site_authority_checkpoint_issuer_mismatch',
+        );
+      }
+      await verifier.verify(
+        canonicalPayloadBytes: checkpoint.canonicalBytes,
+        signature: checkpoint.signature,
+        issuerKeyId: checkpoint.issuerKeyId,
+      );
+    }
     _retainedPayloadsVerified = true;
   }
 
@@ -605,6 +786,13 @@ class ShopConnectedSiteAuthorityPayloadStore {
       );
     }
     await database.verifyConnectedAuthorityEvidence();
+    await _requireBootstrapProvenance(
+      ConnectedSiteScope(
+        workspaceId: lease.workspaceId,
+        siteId: lease.siteId,
+        deviceId: lease.deviceId,
+      ),
+    );
     final latest = await database
         .customSelect(
           'SELECT authority_sequence, revocation_generation FROM '
@@ -646,6 +834,123 @@ class ShopConnectedSiteAuthorityPayloadStore {
     }
   }
 
+  /// Imports a complete, freshly signed authority chain for an enrolled
+  /// joining device. The store deliberately retains the sequence-one origin;
+  /// a checkpoint cannot replace or splice an existing local chain.
+  Future<void> applyCheckpoint(
+    ConnectedSiteScope scope, {
+    required String canonicalCheckpointBytes,
+    required String signature,
+  }) async {
+    if (!runtimeEnabled) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_payload_disabled',
+      );
+    }
+    final checkpoint = ConnectedSiteAuthorityCheckpointV1.parse(
+      canonicalBytes: canonicalCheckpointBytes,
+      signature: signature,
+    );
+    if (checkpoint.workspaceId != scope.workspaceId ||
+        checkpoint.siteId != scope.siteId ||
+        checkpoint.deviceId != scope.deviceId) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_checkpoint_scope_mismatch',
+      );
+    }
+    final observedAt = nowMillis();
+    if (observedAt < checkpoint.issuedAtMillis ||
+        observedAt - checkpoint.issuedAtMillis >
+            const Duration(minutes: 15).inMilliseconds ||
+        checkpoint.payloads.any(
+          (payload) => payload.issuedAtMillis > checkpoint.issuedAtMillis,
+        )) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_checkpoint_stale',
+      );
+    }
+    final firstObservedAt = observedAt - checkpoint.payloads.length + 1;
+    if (firstObservedAt < 1) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_checkpoint_time_invalid',
+      );
+    }
+    await reverifyRetainedPayloads();
+    await verifier.verify(
+      canonicalPayloadBytes: checkpoint.canonicalBytes,
+      signature: checkpoint.signature,
+      issuerKeyId: checkpoint.issuerKeyId,
+    );
+    for (final payload in checkpoint.payloads) {
+      await verifier.verify(
+        canonicalPayloadBytes: payload.canonicalBytes,
+        signature: payload.signature,
+        issuerKeyId: payload.issuerKeyId,
+      );
+    }
+    await database.verifyConnectedAuthorityEvidence();
+    await database.transaction(() async {
+      final existing = await database
+          .customSelect(
+            'SELECT COUNT(*) AS count FROM shop_site_authority_payloads '
+            'WHERE tenant_id = ? AND site_id = ?',
+            variables: [
+              Variable<String>(scope.workspaceId),
+              Variable<String>(scope.siteId),
+            ],
+          )
+          .getSingle();
+      if (existing.read<int>('count') != 0) {
+        throw const ConnectedSiteReconciliationException(
+          'connected_site_authority_checkpoint_existing_chain',
+        );
+      }
+      for (var index = 0; index < checkpoint.payloads.length; index += 1) {
+        await _retainPayload(
+          scope,
+          checkpoint.payloads[index],
+          firstObservedAt + index,
+          transactionOwned: true,
+          bootstrapProvenanceOwned: true,
+        );
+      }
+      await database.customStatement(
+        'INSERT INTO shop_site_authority_checkpoints ('
+        'checkpoint_digest, tenant_id, site_id, device_id, issued_at_millis, '
+        'issuer_key_id, first_authority_sequence, last_authority_sequence, '
+        'chain_digest, checkpoint_bytes, signature, observed_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)',
+        [
+          checkpoint.checkpointDigest,
+          checkpoint.workspaceId,
+          checkpoint.siteId,
+          checkpoint.deviceId,
+          checkpoint.issuedAtMillis,
+          checkpoint.issuerKeyId,
+          checkpoint.payloads.length,
+          checkpoint.chainDigest,
+          checkpoint.canonicalBytes,
+          checkpoint.signature,
+          observedAt,
+        ],
+      );
+      await database.customStatement(
+        'INSERT INTO shop_site_authority_bootstrap_provenance ('
+        'tenant_id, site_id, device_id, bootstrap_mode, checkpoint_digest, recorded_at_millis) '
+        "VALUES (?, ?, ?, 'checkpoint_joined', ?, ?)",
+        [
+          checkpoint.workspaceId,
+          checkpoint.siteId,
+          checkpoint.deviceId,
+          checkpoint.checkpointDigest,
+          observedAt,
+        ],
+      );
+      await database.verifyConnectedAuthorityEvidence();
+    });
+    _retainedPayloadsVerified = true;
+  }
+
   Future<void> apply(
     ConnectedSiteScope scope, {
     required String canonicalPayloadBytes,
@@ -680,8 +985,18 @@ class ShopConnectedSiteAuthorityPayloadStore {
       signature: signature,
       issuerKeyId: payload.issuerKeyId,
     );
+    await _retainPayload(scope, payload, observedAt);
+  }
+
+  Future<void> _retainPayload(
+    ConnectedSiteScope scope,
+    ConnectedSiteAuthorityPayloadV1 payload,
+    int observedAt, {
+    bool transactionOwned = false,
+    bool bootstrapProvenanceOwned = false,
+  }) async {
     await database.verifyConnectedAuthorityEvidence();
-    await database.transaction(() async {
+    Future<void> retain() async {
       final device = await database
           .customSelect(
             "SELECT 1 FROM shop_site_devices WHERE device_id = ? AND tenant_id = ? AND site_id = ? AND state = 'active'",
@@ -703,10 +1018,28 @@ class ShopConnectedSiteAuthorityPayloadStore {
             variables: [Variable(scope.workspaceId), Variable(scope.siteId)],
           )
           .getSingleOrNull();
+      if (!bootstrapProvenanceOwned) {
+        final provenance = await database
+            .customSelect(
+              'SELECT 1 FROM shop_site_authority_bootstrap_provenance '
+              'WHERE tenant_id = ? AND site_id = ? AND device_id = ?',
+              variables: [
+                Variable<String>(scope.workspaceId),
+                Variable<String>(scope.siteId),
+                Variable<String>(scope.deviceId),
+              ],
+            )
+            .getSingleOrNull();
+        if (provenance == null) {
+          throw const ConnectedSiteReconciliationException(
+            'connected_site_authority_checkpoint_required',
+          );
+        }
+      }
       if (latest != null &&
           latest.read<int>('authority_sequence') == payload.authoritySequence &&
           latest.read<String>('payload_digest') == payload.payloadDigest &&
-          latest.read<String>('signature') == signature) {
+          latest.read<String>('signature') == payload.signature) {
         return;
       }
       if (latest != null &&
@@ -856,6 +1189,49 @@ class ShopConnectedSiteAuthorityPayloadStore {
         ],
       );
       await database.verifyConnectedAuthorityEvidence();
-    });
+    }
+
+    if (transactionOwned) {
+      await retain();
+    } else {
+      await database.transaction(retain);
+    }
+  }
+
+  Future<void> _requireBootstrapProvenance(ConnectedSiteScope scope) async {
+    final row = await database
+        .customSelect(
+          'SELECT bootstrap_mode, checkpoint_digest FROM '
+          'shop_site_authority_bootstrap_provenance WHERE tenant_id = ? '
+          'AND site_id = ? AND device_id = ?',
+          variables: [
+            Variable<String>(scope.workspaceId),
+            Variable<String>(scope.siteId),
+            Variable<String>(scope.deviceId),
+          ],
+        )
+        .getSingleOrNull();
+    if (row == null) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_bootstrap_provenance_missing',
+      );
+    }
+    final checkpoint = await database
+        .customSelect(
+          'SELECT 1 FROM shop_site_authority_checkpoints WHERE tenant_id = ? '
+          'AND site_id = ? AND device_id = ? AND checkpoint_digest = ?',
+          variables: [
+            Variable<String>(scope.workspaceId),
+            Variable<String>(scope.siteId),
+            Variable<String>(scope.deviceId),
+            Variable<String>(row.read<String>('checkpoint_digest')),
+          ],
+        )
+        .getSingleOrNull();
+    if (checkpoint == null) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_checkpoint_required',
+      );
+    }
   }
 }
