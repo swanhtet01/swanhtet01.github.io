@@ -1711,6 +1711,12 @@ void main() {
   testWidgets('export screen validates the password before opening Save As', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     var pickerOpened = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -1727,12 +1733,17 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Choose where to save'));
-    await tester.pump();
-    expect(
-      find.text('Use a password of at least 12 characters.'),
-      findsOneWidget,
+    await tester.scrollUntilVisible(
+      find.text('Choose where to save'),
+      160,
+      scrollable: find.byType(Scrollable).first,
     );
+    await tester.pump();
+    await tester.tap(find.text('Choose where to save'));
+    await tester.pumpAndSettle();
+    final warning = find.text('Use a password of at least 12 characters.');
+    expect(warning, findsOneWidget);
+    expect(tester.getRect(warning).bottom, lessThanOrEqualTo(600));
     expect(pickerOpened, isFalse);
   });
 

@@ -139,8 +139,23 @@ class ShopBackupExportScreen extends StatefulWidget {
 class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
+  final _scroll = ScrollController();
   bool _busy = false;
   String? _message;
+
+  void _showValidationMessage(String message) {
+    setState(() => _message = message);
+    // The message follows the Save As button in a lazy ListView. On a short
+    // window it otherwise exists below the viewport with no visible feedback.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   Future<String?> _saveAs(File archive, String suggestedName) {
     final runtimeScope = widget.runtimeScope;
@@ -163,34 +178,34 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   Future<void> _export() async {
     if (_busy) return;
     if (!widget.backupSavingAllowed) {
-      setState(() {
-        _message = shopCopy(
+      _showValidationMessage(
+        shopCopy(
           widget.myanmar,
           'External backup files are unavailable in this synthetic preview.',
           'ဤစမ်းသပ်မြင်ကွင်းတွင် ပြင်ပအရန်ကူးဖိုင်များ အသုံးပြု၍မရပါ။',
-        );
-      });
+        ),
+      );
       return;
     }
     final password = _password.text;
     if (password.runes.length < 12) {
-      setState(() {
-        _message = shopCopy(
+      _showValidationMessage(
+        shopCopy(
           widget.myanmar,
           'Use a password of at least 12 characters.',
           'စကားဝှက်ကို အနည်းဆုံး စာလုံး ၁၂ လုံး သုံးပါ။',
-        );
-      });
+        ),
+      );
       return;
     }
     if (password != _confirmation.text) {
-      setState(() {
-        _message = shopCopy(
+      _showValidationMessage(
+        shopCopy(
           widget.myanmar,
           'The passwords do not match.',
           'စကားဝှက်နှစ်ခု မတူပါ။',
-        );
-      });
+        ),
+      );
       return;
     }
 
@@ -265,6 +280,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   void dispose() {
     _password.dispose();
     _confirmation.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -281,6 +297,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
           child: ListView(
+            controller: _scroll,
             padding: const EdgeInsets.all(20),
             children: [
               Text(
