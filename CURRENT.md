@@ -7,6 +7,23 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Complete historical/migration affected-matrix receipt
+
+- **PASS:** exact source `22392605413698d410c87f5238563b2871271c1a`
+  (tree `a169d8693a23b32542d0a6d604dd70b01ca00f0d`) ran the nine
+  complete affected Flutter files serially with `--no-pub --concurrency=1`:
+  café orders, cash movements, connected attempts, enrollment, replication,
+  foundation, member identity, operational export and pending cash checkout.
+- Result: **173/173 PASS**, zero reported skips, exit `0`, elapsed **554
+  seconds**, from `2026-11-02T01:44:03Z` through
+  `2026-11-02T01:53:17Z`. This includes migrations, encrypted backup/restore,
+  restart/idempotency, transaction rollback, tamper rejection, stock/payment
+  safety and the repaired historical fixtures. Existing Drift warnings were
+  emitted only by deliberate concurrent snapshot/restore database handles;
+  no assertion failed.
+- No source changed during the run. No build, network, credential, provider,
+  deployment or production action occurred; connected mode remains off.
+
 ### Private historical-schema fixture successor
 
 - **PASS / test-only:** `eee4671683d87b76c1a88245704b890302341379`
