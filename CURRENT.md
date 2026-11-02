@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-02 23:42 UTC
+- Last verified: 2026-11-02 23:57 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-02 23:57 UTC guarded PR update and private Windows preflight
+
+- Draft PR #752 was non-force fast-forwarded from
+  `9806fbfe16741fcf6a0dde79f0f3ff664fe3338b` to
+  `289ec76de4b80cd2de437afc3b28cfe76192ec1e` (tree
+  `33edf49840b8b2c60677153c33198a4b3313c16b`), after remote-head,
+  clean-tree, ancestry, diff-scope and terminal-prior-CI checks. Remote and PR
+  readback matched; it remains open/draft and unmerged. The three included
+  commits are one exact-head status checkpoint, the two-line wallet test
+  reachability repair and its status checkpoint. No merge, deployment,
+  release signing, manual workflow dispatch or connected-mode enablement.
+- At this ledger timestamp, exact-head Kernel run `41549050241` **PASS**,
+  Dependency Security run `41549050479` **FAIL**, App CI run `41549042445`
+  **IN PROGRESS**, and Native run `41549050338` **IN PROGRESS**. The redundant
+  same-head App pull-request run `41549050393` is **SKIPPED**, not a pass.
+  Full Android, gallery, APK and installed-device outcomes on this head must
+  not be inferred while Native remains in progress.
+- Private, unpublished Windows bootstrap hardening
+  `2e5940807e4956d07b0ac3ca3894d4dd6a793c22` (tree
+  `9747d2abc008310710c4c9d3ea8c40c6f1d1baab`) moves the existing
+  Rehearsal-only approval, closure-observer and required-component rejection
+  before temporary workspace creation and installer download. Capture and
+  downstream Authenticode/runtime/receipt checks remain unchanged. Focused
+  Node source contracts **53/53 PASS**, whitespace and independent security
+  source review **PASS**; executable Windows/PowerShell rehearsal validation
+  is **NOT RUN**. This change does not approve any source, register #753 on
+  main, authorize a dispatch or clear the stale PostgreSQL receipt.
 
 ## 2026-11-02 23:42 UTC terminal native CI, private wallet test repair, Windows rehearsal
 
