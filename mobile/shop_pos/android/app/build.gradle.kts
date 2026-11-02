@@ -177,6 +177,11 @@ val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
             "expectedBundleDigest",
             "expectedIdentity",
             "PENDING_TTL_MINUTES = 10L",
+            "\"readTrustedTimeClock\" -> readTrustedTimeClock(arguments(call))",
+            "Settings.Global.BOOT_COUNT",
+            "SystemClock.elapsedRealtime()",
+            "supermega.android-boot-count.v1|",
+            "android_system_clock_elapsed_realtime_boot_count_v1",
         )
         check(required.all(text::contains)) {
             "connected_platform_security_source_contract_missing"

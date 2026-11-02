@@ -23,7 +23,7 @@ bool IsKnownMethod(const std::string& method) {
          method == "abortIdentityPreparation" ||
          method == "reconcileIdentity" || method == "loadIdentity" ||
          method == "sign" || method == "openTlsIdentity" ||
-         method == "deleteIdentity";
+         method == "deleteIdentity" || method == "readTrustedTimeClock";
 }
 
 }  // namespace

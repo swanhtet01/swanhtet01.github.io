@@ -2,8 +2,10 @@ package dev.supermega.supermega_shop
 
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.provider.Settings
 import android.util.Base64
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -79,6 +81,7 @@ internal class ConnectedPlatformSecurityAndroid(
                 "sign" -> sign(arguments(call))
                 "openTlsIdentity" -> openTlsIdentity(arguments(call))
                 "deleteIdentity" -> deleteIdentity(arguments(call))
+                "readTrustedTimeClock" -> readTrustedTimeClock(arguments(call))
                 else -> {
                     result.notImplemented()
                     return
@@ -96,6 +99,29 @@ internal class ConnectedPlatformSecurityAndroid(
         } catch (_: Throwable) {
             result.error(OPERATION_FAILED, null, null)
         }
+    }
+
+    private fun readTrustedTimeClock(args: Map<String, Any?>): Map<String, Any?> {
+        exactKeys(args, setOf("schema"))
+        requireValue(
+            args,
+            "schema",
+            "supermega.connected-trusted-time-platform-clock-request.v1",
+        )
+        val bootCount = Settings.Global.getInt(
+            appContext.contentResolver,
+            Settings.Global.BOOT_COUNT,
+        )
+        if (bootCount < 0) throw PlatformSecurityError(OPERATION_FAILED)
+        val bootSessionId = sha256(
+            "supermega.android-boot-count.v1|$bootCount".toByteArray(StandardCharsets.UTF_8),
+        )
+        return mapOf(
+            "schema" to "supermega.connected-trusted-time-platform-clock.v1",
+            "source" to "android_system_clock_elapsed_realtime_boot_count_v1",
+            "bootSessionId" to bootSessionId,
+            "monotonicMillis" to SystemClock.elapsedRealtime(),
+        )
     }
 
     private fun prepare(args: Map<String, Any?>): Map<String, Any?> {
