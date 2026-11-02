@@ -231,4 +231,3 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
                 "select workspace_id from app_private.connected_sites order by workspace_id"
             ).fetchall()
         self.assertEqual(rows, [(self.authority.workspace_id,)])
-
