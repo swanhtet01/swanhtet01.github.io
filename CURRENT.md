@@ -5,6 +5,35 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-03 Android synthetic receipt evidence checkpoint
+
+- **SOURCE PASS / PRIVATE:** implementation
+  `ab97796b82ff415edb40fe45bbd42cad94c39494` (tree
+  `4c9cb547b76ed00723e8171b0a3591bc7f2039c7`, parent published Android
+  handoff ledger `fe02f283d51bb546db7fab0feabfcff0a43673ee`) adds an
+  explicit synthetic-QA-only loopback receipt evidence path and stable,
+  locale-independent accessibility identifiers for Recent Sales, saved
+  receipt and reprint actions. The nine-file patch SHA-256 is
+  `d8f742fb7db04db9212523bbb2eff74697a7de00362bddb04c1836d71976684c`.
+- The evidence sidecar is private to the existing Android debug `run-as`
+  boundary and contains only contract/profile/platform identities, immutable
+  receipt/render SHA-256 digests, language and capture count. It stores no
+  receipt rows, product, customer or payment payload. Atomic flush/rename and
+  per-path serialization protect concurrent captures; the exact sidecar name
+  is excluded from backup-restore candidates.
+- Focused synthetic redaction, fixed-digest substitution, concurrency and
+  no-sale/stock/outbox-effect tests are **PASS**. Production/default
+  fail-closed, trusted network printing, semantic-selector reprint,
+  device-only completion/recent navigation, EN/MY responsive task navigation,
+  targeted analyzer and QA evidence coexistence/restore are **PASS**; the full
+  evidence-store suite is **7/7 PASS**. Independent re-review **ACCEPTS** the
+  final diff.
+- **NOT RUN / BLOCKED:** this is source readiness, not installed acceptance.
+  Real APK installation, Android force-stop/reopen, UIAutomator interaction,
+  `run-as` extraction, emulator/device execution and physical printer evidence
+  remain required. No public PR update, deployment or production enablement
+  is included in this checkpoint.
+
 ## 2026-11-02 canonical Android QA v3 handoff checkpoint
 
 - **SOURCE PASS / PRIVATE:** implementation
