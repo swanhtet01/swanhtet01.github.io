@@ -7,6 +7,40 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private trusted-time authority request prerequisite
+
+- **SOURCE PASS / DEFAULT-UNAVAILABLE / UNMOUNTED:** implementation
+  `15d7ca82617091edc8b1e6da921cd394c28ff2b8` (repository tree
+  `41209e78db9e13fc3465e08a7cd85e363a022be7`, native tree
+  `2111937dd3c2d0167264129f7f888daa1f4eb20c`, native `lib/` tree
+  `0843db53cae449fc35dab9ed3f43e8c725d163e9`, binary patch SHA-256
+  `929729722d6dd214429bb790adef58127bce7640ac735f6c41661bb006ae46a4`)
+  adds the transport-neutral trusted-time observation request and a
+  default-unavailable coordinator authority seam.
+- The canonical request carries only schema/version, retained approval digest,
+  the complete device/session/binding-scoped challenge and a deterministic
+  request digest. Exact-schema parsing rejects missing/extra/wrongly typed
+  fields, approval/challenge/digest substitution, malformed UTF-8 and every
+  noncanonical byte encoding. Raw approval bytes and bearer credentials are
+  deliberately excluded.
+- The authority interface explicitly requires a future implementation to
+  resolve an independently owner-verified retained approval, revalidate exact
+  enrollment/revocation and complete challenge scope, and sign through
+  protected platform custody. Its only current implementation fails closed as
+  unavailable.
+- Targeted analyzer is **PASS**; focused tests are **4/4 PASS**; diff checks are
+  **PASS**; independent review is **ACCEPT**. Reviewed file SHA-256 identities
+  are `6258f728ae505e883cc7f30617b160157c98362875392344cc17373c979a0c99`
+  for the authority/request contract and
+  `8635670f0d7548cab9c0bfac84f4e76e9691b9aba67ea036df3463c6588ed5c2`
+  for its tests.
+- **BLOCKED / NOT RUN:** the frozen LAN v1 endpoint set is unchanged; no
+  trusted-time endpoint, approval resolver, enrollment/revocation adapter,
+  protected signer, observation transport, Windows clock, runtime mount,
+  installed-device or pilot evidence exists. A separately reviewed protocol
+  amendment and platform key-custody implementation are required before this
+  seam can issue time.
+
 ### Private scoped trusted-time exchange composition successor
 
 - **SOURCE PASS / DEFAULT-OFF / UNMOUNTED:** implementation
