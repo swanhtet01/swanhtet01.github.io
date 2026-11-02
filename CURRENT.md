@@ -7,6 +7,33 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private trusted-time v2 wire-contract successor
+
+- **SOURCE PASS / DEFAULT-OFF / UNMOUNTED:** implementation
+  `7bd3e653570434b5787236be04db031a25280498` (repository tree
+  `4b297d095aea1192e9dacb6bfd1f17bd9e1bab1a`, native tree
+  `034d6aba1712c4138fdbe698e94c1ba884ffdb26`, native `lib/` tree
+  `119a229eedd182e4240dbac04aa32f53160322fb`, binary patch SHA-256
+  `99bbd9e4f9a931831c9d5b2687ba6d80fb84ff5a0651bd8d33604b33513840d0`)
+  adds strict v2 wire request/response envelopes around the reviewed v1
+  trusted-time authority request without changing any v1 contract or route.
+- The v2 request digest binds its schema/version and complete v1 request. The
+  v2 response must echo that exact digest and contain an observation parsed
+  against the exact original challenge. Both exact four-field schemas enforce
+  canonical UTF-8/JSON and a 16 KiB semantic limit before parsing; malformed,
+  alternate, oversized, missing/extra, wrong-version and substituted values
+  fail closed.
+- Targeted analyzer is **PASS**; focused tests are **7/7 PASS**; diff checks
+  are **PASS**; independent review is **ACCEPT**. Reviewed file SHA-256
+  identities are `95dbb078e5ce43197938490a419b421450c130d4ca5c81b9d0db101c8b70736a`
+  for the authority/wire contract and
+  `d1225c958aa1ccfd05af4e4f2d5fc4a0c823968715892b12f7ab94a03cbf5c82`
+  for its tests.
+- **BLOCKED / NOT RUN:** no `/v2/trusted-time` endpoint, proof-version router,
+  protected authority, signer/key custody, clock bootstrap, runtime mount,
+  Windows clock or installed-device evidence exists. Frozen v1 endpoints and
+  signing bytes remain unchanged; connected mode remains default-off.
+
 ### Private coordinator-binding session-generation successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
