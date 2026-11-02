@@ -7,6 +7,48 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private default-off trusted-time client stream acceptance
+
+- **SOURCE PASS / DEFAULT-OFF / VOLATILE:** implementation
+  `ebdf92515c5b1678df25709de4becef241dbc978` (repository tree
+  `760abc3981b461e965dfff0f234773d8ed3a15ba`, native tree
+  `ab5dc10c18e9baea6359c5f69e05be93f07875dd`, native `lib/` tree
+  `1652c115158fed77d07b070f6ed6283350b64894`, binary patch SHA-256
+  `0488c37caef0dcd5d3bf9c2da318234a96c35bb5b03fddc5062f10b3480f8fc8`)
+  adds an injected client boundary for one authority-signed stream entry and
+  its exact device-signed acknowledgement.
+- Acceptance binds the complete stream scope, authority key/epoch, exact
+  sequence and predecessor, boot session and monotonic progress. Continuity
+  advances the immutable head but grants no time; time entries reject
+  rollback; identical replay preserves the original acknowledgement and
+  rechecks boot/monotonic state. Authority and device custody are injected and
+  signer identity is checked before and after asynchronous signing.
+- Combined acceptance/stream tests are **14/14 PASS**; targeted analyzer and
+  diff checks are **PASS**. Independent adversarial review first returned
+  **HOLD** for signer-identity substitution and stale replay, then **ACCEPT**
+  after both were fixed and retested. Source/test SHA-256 identities are
+  `e97b33ba698440934867e3e15c5d9aa8703982bb8b29b40be2bab2d56adeccc8`
+  and `23c26807c6a55193b9e972b1d26c6b143060af7e4034cd99a0c4730ad7e284ea`.
+- **BLOCKED / NOT RUN:** accepted state is intentionally volatile. No durable
+  client head restoration, endpoint transport, production composition, real
+  key custody, protected clock, compilation or installed-device evidence
+  exists. Restart cannot resume past sequence one. Connected mode stays off.
+
+### Schema-v38 historical fixture closure
+
+- **TEST PASS:** fixture-only commit
+  `827ee9b45afc14e644f0b505d44f90a69f59c819` (tree
+  `429ee08595afbca36c65a716348052edb83cf1aa`, binary patch SHA-256
+  `cbf929501f1e290e276c331b883f15ad99cd25ee844f3ba1d50b7e3f39ee19a4`)
+  advances current-schema assertions to v38 and removes v38 issuer objects
+  from fabricated older schemas before migration. Current-schema tamper tests
+  now verify against v38 instead of passing from a version mismatch.
+- Foundation/export are **82/82 PASS**; member identity is **19/19 PASS**;
+  targeted historical migrations are **14/14 PASS**; cash v17 is **1/1
+  PASS**; six reconciliation/backup tamper cases are **6/6 PASS**; analyzer
+  and diff checks are **PASS**. Independent review is **ACCEPT**. Production
+  migrations and fail-closed verifiers were not weakened.
+
 ### Private schema-v38 trusted-time issuer persistence
 
 - **SOURCE PASS / DEFAULT-OFF / PERSISTENCE-ONLY:** implementation
