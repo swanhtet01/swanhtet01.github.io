@@ -5,6 +5,27 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-03 cross-device pilot gate recheck
+
+- **SOURCE PASS / DEFAULT-OFF:** the v15 migration defines eight private
+  connected-site tables, forces row-level security, revokes browser roles,
+  and constrains `connected_enabled` to false. Native source contains the LAN
+  coordinator, joining client, durable attempts and replica, and cloud
+  reconciliation boundaries. The server runtime requires an injected issuer,
+  member/device authority and repository; defaults remain unavailable.
+- **LOCAL PASS:** `python -m unittest -q tests.test_connected_site_v15
+  tests.test_connected_site_runtime tests.test_connected_site_lease_issuer`
+  completed 35/35. The PGlite migration verifier was **NOT RUN** because
+  `@electric-sql/pglite` is absent in this worktree; Dart/Flutter native tests
+  were **NOT RUN** because those tools are absent. Neither missing dependency
+  was installed.
+- **BLOCKED:** no source-bound deployment of the eight tables, trusted cloud
+  issuer, platform key custody, two synthetic-tenant hosted denial proof, or
+  installed two-device WAN-loss/reconnect/restart/restore receipt is recorded
+  for this candidate. Do not turn on Realtime or direct browser grants as a
+  substitute. Cross-device live sync is a pilot requirement and remains off
+  until the authority, transport, migration and recovery evidence all pass.
+
 ## 2026-11-03 private Android pilot-successor preflight
 
 - **SOURCE PASS / PRIVATE:** implementation
