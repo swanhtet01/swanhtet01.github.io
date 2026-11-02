@@ -7,6 +7,8 @@ const _requestSchema =
     'supermega.connected-trusted-time-platform-clock-request.v1';
 const _responseSchema = 'supermega.connected-trusted-time-platform-clock.v1';
 const _androidSource = 'android_system_clock_elapsed_realtime_boot_count_v1';
+const _windowsSource = 'windows_system_boot_identifier_get_tick_count64_v1';
+const _platformSources = {_androidSource, _windowsSource};
 
 /// Current-boot platform clock adapter for the default-off connected runtime.
 ///
@@ -75,7 +77,7 @@ class _PlatformClockReading {
     if (map.keys.toSet().difference(_keys).isNotEmpty ||
         _keys.difference(map.keys.toSet()).isNotEmpty ||
         map['schema'] != _responseSchema ||
-        map['source'] != _androidSource ||
+        !_platformSources.contains(map['source']) ||
         map['bootSessionId'] is! String ||
         !_digest.hasMatch(map['bootSessionId']! as String) ||
         map['monotonicMillis'] is! int ||

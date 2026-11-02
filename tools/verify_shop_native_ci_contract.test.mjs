@@ -196,6 +196,27 @@ test('both generated Windows runners apply the fail-closed security overlay', ()
   assert.ok(windowsSecurityBridge.includes('result->NotImplemented()'))
   assert.ok(windowsSecurityBridge.includes('SupportsPersistentNonExportableEd25519'))
   assert.ok(windowsSecurityBridge.includes('RegisterConnectedCoordinatorHostChannel(engine, false)'))
+  for (const token of [
+    'call.method_name() == "readTrustedTimeClock"',
+    'supermega.connected-trusted-time-platform-clock-request.v1',
+    'windows_system_boot_identifier_get_tick_count64_v1',
+    'NtQuerySystemInformation',
+    'kSystemBootEnvironmentInformation = 90',
+    'environment.boot_identifier',
+    'std::any_of(guid',
+    'GetTickCount64()',
+    'BCryptHashData',
+    'connected_trusted_time_platform_clock_unavailable',
+  ]) {
+    assert.ok(windowsSecurityBridge.includes(token), token)
+  }
+  assert.ok(
+    windowsSecurityBridge.indexOf(
+      'call.method_name() == "readTrustedTimeClock"',
+    ) < windowsSecurityBridge.indexOf('if (IsKnownMethod(call.method_name()))'),
+  )
+  assert.equal(windowsSecurityBridge.includes('GetSystemTime'), false)
+  assert.equal(windowsSecurityBridge.includes('system_clock'), false)
   assert.ok(windowsSecurityStore.includes('CRYPTPROTECT_UI_FORBIDDEN'))
   assert.ok(windowsSecurityStore.includes('PROTECTED_DACL_SECURITY_INFORMATION'))
   assert.ok(windowsSecurityStore.includes("std::vector<uint8_t> identity{'S', 'M', 'C', 'S', '1'}"))

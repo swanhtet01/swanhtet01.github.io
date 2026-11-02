@@ -26,6 +26,19 @@ void main() {
     expect(await clock.monotonicMillis(), 42);
   });
 
+  test('accepts the reviewed Windows boot identifier clock source', () async {
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => _reading(
+        source: 'windows_system_boot_identifier_get_tick_count64_v1',
+        monotonic: 73,
+      ),
+    );
+    final clock = MethodChannelConnectedTrustedTimePlatformClock();
+    expect(await clock.bootSessionId(), 'a' * 64);
+    expect(await clock.monotonicMillis(), 73);
+  });
+
   test('rejects extra missing malformed and negative fields', () async {
     for (final response in <Object?>[
       {..._reading(), 'extra': true},
@@ -89,13 +102,16 @@ void main() {
   });
 }
 
-Map<String, Object?> _reading({String? boot, int monotonic = 1}) =>
-    <String, Object?>{
-      'schema': 'supermega.connected-trusted-time-platform-clock.v1',
-      'source': 'android_system_clock_elapsed_realtime_boot_count_v1',
-      'bootSessionId': boot ?? 'a' * 64,
-      'monotonicMillis': monotonic,
-    };
+Map<String, Object?> _reading({
+  String? boot,
+  String source = 'android_system_clock_elapsed_realtime_boot_count_v1',
+  int monotonic = 1,
+}) => <String, Object?>{
+  'schema': 'supermega.connected-trusted-time-platform-clock.v1',
+  'source': source,
+  'bootSessionId': boot ?? 'a' * 64,
+  'monotonicMillis': monotonic,
+};
 
 Matcher _state(String message) =>
     isA<StateError>().having((error) => error.message, 'message', message);
