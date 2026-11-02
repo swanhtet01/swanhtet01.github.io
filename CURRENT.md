@@ -63,6 +63,13 @@
   checks do not satisfy the PostgreSQL rehearsal or pilot sync gate. Connected
   mode remains default-off; no PR update, provider change or deployment was
   performed.
+- **FOLLOW-UP SOURCE TEST:** `b3a962356bae45c3e52e732fc73f298af464e9a2`
+  (tree `4b7b056f21203606b7fae3b0cd0c502b077f8154`) proves an older
+  identical batch still replays after a later batch advances the same device
+  cursor; the affected Python authority/runtime suite is **39/39 PASS**.
+  `npm run database:migrations:verify` is **PASS** with 153 private migration
+  checks and the 27-table public baseline inventory. PostgreSQL 17 and
+  installed two-device evidence remain **NOT RUN**.
 
 ## 2026-11-03 private Android pilot-successor preflight
 
