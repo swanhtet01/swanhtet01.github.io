@@ -7,6 +7,49 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private scoped trusted-time exchange composition successor
+
+- **SOURCE PASS / DEFAULT-OFF / UNMOUNTED:** implementation
+  `cc62e2ca6463227a6bbaea5e005e1f62ece61c62` (repository tree
+  `3b186bafaa3db73d8d2718ea2848c975f1682109`, native tree
+  `4ffe8d7d16088366fa9db328ddd38799f7c8a8d0`, native `lib/` tree
+  `c20471cc1e369938cb67141792979e960087e0cc`, binary patch SHA-256
+  `6199deec5ec1f406590522a2e93610c8b3c11288c91b18372cb4665daf094e1a`)
+  adds a separate trusted-time facade without mounting it in a shipping
+  composition.
+- The facade pins one immutable approval snapshot, exact workspace/site,
+  coordinator and client identities, client fingerprint, session generation,
+  coordinator-binding digest/generation, verifier, database/store, platform
+  clock, nonce source and explicit signed-observation exchange. Disabled
+  resolution is lazy and does not touch dependencies. A refresh retains the
+  challenge before exchange and exposes effective time only through the exact
+  pinned scope; exchange, scope, key, observation, clock and replay failures
+  remain fail closed.
+- Store capability disposal now checks object identity before removing an
+  active entry. A foreign capability with the same request digest is zeroized
+  but cannot evict the legitimate retained capability through either
+  `abandon` or `complete`.
+- Targeted analyzer is **PASS** with no issues. Contract, durable-store and
+  facade tests are **16/16 PASS** serially; formatting and diff checks are
+  **PASS**. Independent review first returned **HOLD** for the cross-store
+  same-digest eviction case, then returned **ACCEPT** after the identity-order
+  correction and adversarial regression test. Reviewed file SHA-256 identities
+  are `b15e45c8c99730c87ed9bc05e919b346c8bfe536221503fa9fe9906260556a92`
+  for the facade, `818efc9dbf214e0a62a2bda9193a049cf0bbed4c432fbcd93dda4dbb37f3454d`
+  for the store, `ba3ad95bba6487a2e49016e8e0cdd9865c16655452e5c03fdf30fcb26095a532`
+  for the facade tests and
+  `8ff8d67e4776d6cf1cbf5a3e2730277f6a9a5d045a9abcc6e1e0a11ca6560000`
+  for the store tests.
+- **BLOCKED / NOT RUN:** no signed observation transport/exchange
+  implementation, production issuer or key custody, coordinator/lease runtime
+  mount, Windows trusted clock, Android/Windows compilation, installed-device
+  or pilot evidence exists. Connected mode remains default-off. This source
+  boundary is not synchronization, trusted-time readiness or release
+  acceptance.
+- Capacity after verification: durable `/workspace` had `337,989,632` bytes
+  free and `/dev/shm` had `5,313,351,680` bytes free. No build, cleanup,
+  network, credential, provider, publication or production action occurred.
+
 ### Complete schema-v37 affected migration and backup matrix
 
 - **PASS:** exact ledger source
