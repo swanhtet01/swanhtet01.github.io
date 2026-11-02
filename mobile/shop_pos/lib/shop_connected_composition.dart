@@ -55,23 +55,13 @@ class ShopConnectedEnabledDependencies {
 class ShopConnectedComposition {
   const ShopConnectedComposition._({
     required this.boundary,
-    this.runtime,
-    this.readiness,
-    this.sharedWrites,
-    this.cloud,
     this.reconciliation,
-    this.coordinator,
   });
 
   final ShopConnectedApplicationBoundary boundary;
-  final ShopConnectedRuntime? runtime;
-  final ShopConnectedRuntimeReadiness? readiness;
-  final ShopConnectedSharedWriteGate? sharedWrites;
-  final ConnectedSiteCloudWireClient? cloud;
   final ShopConnectedReconciliationRuntime? reconciliation;
-  final ConnectedCoordinatorRuntimeHost? coordinator;
 
-  bool get enabled => runtime != null;
+  bool get enabled => reconciliation != null;
 
   static ShopConnectedComposition resolve({
     required ShopRuntimeCapabilities capabilities,
@@ -164,12 +154,7 @@ class ShopConnectedComposition {
         capabilities: capabilities,
         runtime: runtime,
       ),
-      runtime: runtime,
-      readiness: readiness,
-      sharedWrites: sharedWrites,
-      cloud: cloud,
       reconciliation: reconciliation,
-      coordinator: coordinator,
     );
   }
 }

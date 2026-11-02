@@ -81,15 +81,20 @@ void main() {
 
     expect(factoryCalls, 1);
     expect(composition.enabled, isTrue);
-    expect(observedGate, same(composition.sharedWrites));
+    expect(observedGate != null, isTrue);
+    expect(observedGate!.sharedWritesAvailable, isFalse);
+    expect(() => (composition as dynamic).cloud, throwsNoSuchMethodError);
     expect(
-      composition.coordinator!.sharedWrites,
-      same(composition.sharedWrites),
+      () => (composition as dynamic).sharedWrites,
+      throwsNoSuchMethodError,
     );
-    expect(composition.runtime!.sharedWrites, same(composition.sharedWrites));
-    expect(composition.runtime!.coordinator, same(composition.coordinator));
-    expect(composition.runtime!.readiness, same(composition.readiness));
-    expect(composition.readiness!.database, same(database));
+    expect(() => (composition as dynamic).readiness, throwsNoSuchMethodError);
+    expect(() => (composition as dynamic).runtime, throwsNoSuchMethodError);
+    expect(() => (composition as dynamic).coordinator, throwsNoSuchMethodError);
+    expect(
+      () => (composition.boundary as dynamic).runtime,
+      throwsNoSuchMethodError,
+    );
     await composition.boundary.initialize();
     expect(composition.boundary.state, ConnectedApplicationState.ready);
     await expectLater(

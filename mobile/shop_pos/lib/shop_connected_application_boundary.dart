@@ -21,10 +21,10 @@ enum ConnectedApplicationState {
 /// listener. A future enabled profile must inject a fully reviewed runtime and
 /// still call [start] with issuer-backed enrollment data explicitly.
 class ShopConnectedApplicationBoundary {
-  ShopConnectedApplicationBoundary({required this.capabilities, this.runtime});
+  ShopConnectedApplicationBoundary({required this.capabilities, this._runtime});
 
   final ShopRuntimeCapabilities capabilities;
-  final ConnectedRuntimeControl? runtime;
+  final ConnectedRuntimeControl? _runtime;
 
   ConnectedApplicationState _state = ConnectedApplicationState.uninitialized;
   String? _reason;
@@ -42,7 +42,7 @@ class ShopConnectedApplicationBoundary {
       _reason = 'connected_site_capability_disabled';
       return;
     }
-    if (runtime == null) {
+    if (_runtime == null) {
       _state = ConnectedApplicationState.blocked;
       _reason = 'connected_site_runtime_unavailable';
       return;
@@ -57,7 +57,7 @@ class ShopConnectedApplicationBoundary {
             _state == ConnectedApplicationState.disabled) {
           throw StateError('connected_site_capability_disabled');
         }
-        final connectedRuntime = runtime;
+        final connectedRuntime = _runtime;
         if (connectedRuntime == null ||
             _state == ConnectedApplicationState.blocked) {
           throw StateError('connected_site_runtime_unavailable');
@@ -80,7 +80,7 @@ class ShopConnectedApplicationBoundary {
       });
 
   Future<void> revalidate() => _serialize(() async {
-    final connectedRuntime = runtime;
+    final connectedRuntime = _runtime;
     if (_state != ConnectedApplicationState.running ||
         connectedRuntime == null) {
       throw StateError('connected_application_not_running');
@@ -97,7 +97,7 @@ class ShopConnectedApplicationBoundary {
   /// Stops an owned runtime. Disabled and never-started boundaries are no-ops.
   /// A failed stop remains visible and retryable instead of claiming cleanup.
   Future<void> close() => _serialize(() async {
-    final connectedRuntime = runtime;
+    final connectedRuntime = _runtime;
     if (_state == ConnectedApplicationState.uninitialized ||
         _state == ConnectedApplicationState.disabled ||
         _state == ConnectedApplicationState.blocked ||
