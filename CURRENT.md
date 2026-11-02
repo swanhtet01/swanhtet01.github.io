@@ -7,6 +7,35 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private coordinator-binding approval-generation successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `b2f5ae871d2b1a218c7e612ab38b21dc71dadc74` (repository tree
+  `414501c2deb75ef2245b98d0f07f6e555ef3509d`, native tree
+  `ca7a0f748b80a4e2f0a7af4065ed7c9aa653644a`, native `lib/` tree
+  `31c4f369b0c5a7567135904e8fcaa1557d3073e2`, binary patch SHA-256
+  `8afa691572f3a3f611333721c20a02e59abe95fdf0b6c454fc95951d5c9dd76e`)
+  exposes the retained signed coordinator approval generation through the
+  resolved approved-binding object.
+- No schema change was needed: `approval_generation` was already stored and
+  covered by the canonical signed approval/binding digest. Binding resolution
+  continues to require the exact workspace/site/device/fingerprint/signing
+  key, latest non-revoked generation, active enrollment, expiry and verified
+  authority signature before returning that generation.
+- Targeted analyzer is **PASS**; attempt-store, reservation-session, client and
+  platform-signer tests are **36/36 PASS** on the final source; diff checks are
+  **PASS**; independent review is **ACCEPT**. An earlier analyzer-only run
+  caught a mechanical field insertion into the neighboring class before any
+  tests ran; the final diff removes that error. Reviewed primary file SHA-256
+  identities are `db7fb20a5e9e5e90e38301ca40ac001d67368852564ac4fccf1bf95f3f59d6ab`
+  for the store and
+  `d744f9b052e04f270ebf89375d41dc3600811cc88c2956a92aa30069fc8ab491`
+  for its focused real-store tests.
+- **BLOCKED / NOT RUN:** this makes full binding generation available to a
+  future trusted-time authority but does not add session-generation transport,
+  an issuer, protected signer, LAN endpoint, runtime mount or installed-device
+  evidence. Connected mode remains default-off.
+
 ### Private trusted-time authority request prerequisite
 
 - **SOURCE PASS / DEFAULT-UNAVAILABLE / UNMOUNTED:** implementation
