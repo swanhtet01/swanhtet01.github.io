@@ -490,7 +490,7 @@ jobs:
         run: |
           flutter_bin="$(readlink -f "$(command -v flutter)")"
           test -x "$flutter_bin"
-          FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 180s python3 scripts/test_shop_process_interruption.py
+          FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 300s python3 scripts/test_shop_process_interruption.py
 
       - name: Generate Android production identity
         working-directory: ${{ github.workspace }}

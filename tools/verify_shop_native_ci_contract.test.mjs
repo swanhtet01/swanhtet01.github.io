@@ -568,7 +568,7 @@ test('production identity is generated only after every default-profile test sha
 
   const missingProcessHarness = verifyShopNativeCiContract(
     workflow.replace(
-      'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 180s python3 scripts/test_shop_process_interruption.py',
+      'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 300s python3 scripts/test_shop_process_interruption.py',
       'true',
     ),
     gradleWrapper,

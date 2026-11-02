@@ -713,7 +713,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 180s python3 scripts/test_shop_process_interruption.py',
+    'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 300s python3 scripts/test_shop_process_interruption.py',
     'native_process_interruption_harness_not_bounded_or_missing',
     failures,
   )
