@@ -453,8 +453,9 @@ class SiteCoordinatorClient {
         'trusted_time_response_invalid',
       );
     }
+    late final ConnectedTrustedTimeObservationV1 observation;
     try {
-      return ConnectedTrustedTimeWireResponseV2.fromCanonicalBytes(
+      observation = ConnectedTrustedTimeWireResponseV2.fromCanonicalBytes(
         response.body,
         request: wire,
       ).observation;
@@ -463,7 +464,31 @@ class SiteCoordinatorClient {
         'trusted_time_response_invalid',
       );
     }
+    final activeBinding = await _approvedBinding();
+    if (!_sameApprovedBinding(binding, activeBinding)) {
+      throw const ConnectedSiteTransportException(
+        'trusted_time_binding_rejected',
+      );
+    }
+    return observation;
   }
+
+  static bool _sameApprovedBinding(
+    ConnectedSiteApprovedBinding first,
+    ConnectedSiteApprovedBinding second,
+  ) =>
+      first.bindingDigest == second.bindingDigest &&
+      first.workspaceId == second.workspaceId &&
+      first.siteId == second.siteId &&
+      first.coordinatorDeviceId == second.coordinatorDeviceId &&
+      first.clientDeviceId == second.clientDeviceId &&
+      first.clientFingerprint == second.clientFingerprint &&
+      first.clientSigningKeyId == second.clientSigningKeyId &&
+      first.approvalGeneration == second.approvalGeneration &&
+      first.sessionGeneration == second.sessionGeneration &&
+      first.address == second.address &&
+      first.port == second.port &&
+      first.certificateSha256 == second.certificateSha256;
 
   Future<ConnectedSiteHttpResponse> _send({
     required String path,

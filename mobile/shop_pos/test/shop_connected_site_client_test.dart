@@ -105,7 +105,92 @@ void main() {
       wire.request.challenge.requestDigest,
     );
     expect(transport.requests, hasLength(1));
+    expect(attempts.bindingResolutions, 2);
   });
+
+  test(
+    'v2 trusted time rejects a binding revoked while response is in flight',
+    () async {
+      final wire = _trustedTimeWire(signer);
+      transport.handler = (request) async {
+        final decoded = ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+          request.body,
+        );
+        attempts.active = false;
+        return ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'application/json',
+          body: Uint8List.fromList(
+            ConnectedTrustedTimeWireResponseV2(
+              request: decoded,
+              observation: _trustedTimeObservation(decoded.request.challenge),
+            ).canonicalBytes,
+          ),
+        );
+      };
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+
+      await expectLater(
+        client.requestTrustedTime(wire),
+        throwsA(
+          isA<ConnectedSiteTransportException>().having(
+            (error) => error.code,
+            'code',
+            'coordinator_binding_unavailable',
+          ),
+        ),
+      );
+      expect(transport.requests, hasLength(1));
+      expect(attempts.bindingResolutions, 2);
+    },
+  );
+
+  test(
+    'v2 trusted time rejects binding rotation while response is in flight',
+    () async {
+      final wire = _trustedTimeWire(signer);
+      transport.handler = (request) async {
+        final decoded = ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+          request.body,
+        );
+        attempts.approvalGeneration = 2;
+        return ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'application/json',
+          body: Uint8List.fromList(
+            ConnectedTrustedTimeWireResponseV2(
+              request: decoded,
+              observation: _trustedTimeObservation(decoded.request.challenge),
+            ).canonicalBytes,
+          ),
+        );
+      };
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+
+      await expectLater(
+        client.requestTrustedTime(wire),
+        throwsA(
+          isA<ConnectedSiteTransportException>().having(
+            (error) => error.code,
+            'code',
+            'trusted_time_binding_rejected',
+          ),
+        ),
+      );
+      expect(transport.requests, hasLength(1));
+      expect(attempts.bindingResolutions, 2);
+    },
+  );
 
   test(
     'v2 trusted time client and server verify one signed loopback exchange',
@@ -858,6 +943,8 @@ class _Attempts implements ConnectedSiteCommandAttemptStore {
   final results = <String, SiteCommandAckV1>{};
   var transmissions = 0;
   var active = true;
+  var approvalGeneration = 1;
+  var bindingResolutions = 0;
 
   @override
   Future<PreparedConnectedCommandV28> prepare({
@@ -890,6 +977,7 @@ class _Attempts implements ConnectedSiteCommandAttemptStore {
     required String clientFingerprint,
     required String clientSigningKeyId,
   }) async {
+    bindingResolutions += 1;
     if (!active) throw StateError('revoked');
     return ConnectedSiteApprovedBinding(
       bindingDigest: bindingDigest,
@@ -899,7 +987,7 @@ class _Attempts implements ConnectedSiteCommandAttemptStore {
       clientDeviceId: clientDeviceId,
       clientFingerprint: clientFingerprint,
       clientSigningKeyId: clientSigningKeyId,
-      approvalGeneration: 1,
+      approvalGeneration: approvalGeneration,
       sessionGeneration: 1,
       address: '192.168.10.4',
       port: 9443,
