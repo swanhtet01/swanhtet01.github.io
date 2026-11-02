@@ -72,53 +72,72 @@ class ShopConnectedTrustedTimeStore {
     secret.fillRange(0, secret.length, 0);
     final approvalJson = canonicalConnectedSiteJson(approval.toJson());
     final challengeJson = canonicalConnectedSiteJson(challenge.toJson());
-    await database.transaction(() async {
-      final existingApproval = await database
-          .customSelect(
-            'SELECT approval_json FROM shop_connected_time_approvals '
-            'WHERE approval_digest = ?',
-            variables: [Variable<String>(approval.approvalDigest)],
-          )
-          .getSingleOrNull();
-      if (existingApproval == null) {
+    try {
+      await database.transaction(() async {
+        final existingApproval = await database
+            .customSelect(
+              'SELECT approval_json FROM shop_connected_time_approvals '
+              'WHERE approval_digest = ?',
+              variables: [Variable<String>(approval.approvalDigest)],
+            )
+            .getSingleOrNull();
+        if (existingApproval == null) {
+          await database.customInsert(
+            'INSERT INTO shop_connected_time_approvals '
+            '(approval_digest, approval_json, retained_at_monotonic_millis) '
+            'VALUES (?, ?, ?)',
+            variables: [
+              Variable<String>(approval.approvalDigest),
+              Variable<String>(approvalJson),
+              Variable<int>(monotonic),
+            ],
+          );
+        } else if (existingApproval.read<String>('approval_json') !=
+            approvalJson) {
+          throw StateError('connected_trusted_time_approval_substituted');
+        }
+        final existingRequest = await database
+            .customSelect(
+              'SELECT 1 FROM shop_connected_time_requests WHERE request_digest = ?',
+              variables: [Variable<String>(challenge.requestDigest)],
+            )
+            .getSingleOrNull();
+        if (existingRequest != null) {
+          throw StateError('connected_trusted_time_request_replayed');
+        }
         await database.customInsert(
-          'INSERT INTO shop_connected_time_approvals '
-          '(approval_digest, approval_json, retained_at_monotonic_millis) '
-          'VALUES (?, ?, ?)',
+          'INSERT INTO shop_connected_time_requests '
+          '(request_digest, approval_digest, challenge_json, capability_hash, '
+          'requested_at_monotonic_millis) VALUES (?, ?, ?, ?, ?)',
           variables: [
+            Variable<String>(challenge.requestDigest),
             Variable<String>(approval.approvalDigest),
-            Variable<String>(approvalJson),
-            Variable<int>(monotonic),
+            Variable<String>(challengeJson),
+            Variable<String>(capabilityHash),
+            Variable<int>(challenge.startedMonotonicMillis),
           ],
         );
-      } else if (existingApproval.read<String>('approval_json') !=
-          approvalJson) {
-        throw StateError('connected_trusted_time_approval_substituted');
-      }
-      final existingRequest = await database
-          .customSelect(
-            'SELECT 1 FROM shop_connected_time_requests WHERE request_digest = ?',
-            variables: [Variable<String>(challenge.requestDigest)],
-          )
-          .getSingleOrNull();
-      if (existingRequest != null) {
-        throw StateError('connected_trusted_time_request_replayed');
-      }
-      await database.customInsert(
-        'INSERT INTO shop_connected_time_requests '
-        '(request_digest, approval_digest, challenge_json, capability_hash, '
-        'requested_at_monotonic_millis) VALUES (?, ?, ?, ?, ?)',
-        variables: [
-          Variable<String>(challenge.requestDigest),
-          Variable<String>(approval.approvalDigest),
-          Variable<String>(challengeJson),
-          Variable<String>(capabilityHash),
-          Variable<int>(challenge.startedMonotonicMillis),
-        ],
-      );
-    });
+      });
+    } on Object {
+      capability._erase();
+      rethrow;
+    }
     _active[challenge.requestDigest] = capability;
     return capability;
+  }
+
+  /// Forgets an in-process completion capability after an exchange failure.
+  ///
+  /// The immutable request remains retained as audit evidence and can never be
+  /// completed after abandonment or process restart.
+  void abandon(ConnectedTrustedTimeCapability capability) {
+    final active = _active[capability.requestDigest];
+    if (!identical(active, capability)) {
+      capability._erase();
+      return;
+    }
+    _active.remove(capability.requestDigest);
+    capability._erase();
   }
 
   Future<ConnectedTrustedTimeAccepted> complete({
@@ -126,12 +145,13 @@ class ShopConnectedTrustedTimeStore {
     required ConnectedTrustedTimeAuthorityApprovalV1 approval,
     required ConnectedTrustedTimeObservationV1 observation,
   }) async {
-    final active = _active.remove(capability.requestDigest);
+    final active = _active[capability.requestDigest];
     if (!identical(active, capability) ||
         capability.requestDigest != observation.challenge.requestDigest) {
       capability._erase();
       throw StateError('connected_trusted_time_capability_invalid');
     }
+    _active.remove(capability.requestDigest);
     try {
       return await _completeOnce(
         capability: capability,

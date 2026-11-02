@@ -150,6 +150,82 @@ void main() {
   );
 
   test(
+    'foreign same-digest capability cannot evict the retained capability',
+    () async {
+      final abandonOwnerDatabase = ShopDatabase(NativeDatabase.memory());
+      final abandonForeignDatabase = ShopDatabase(NativeDatabase.memory());
+      final completeOwnerDatabase = ShopDatabase(NativeDatabase.memory());
+      final completeForeignDatabase = ShopDatabase(NativeDatabase.memory());
+      addTearDown(abandonOwnerDatabase.close);
+      addTearDown(abandonForeignDatabase.close);
+      addTearDown(completeOwnerDatabase.close);
+      addTearDown(completeForeignDatabase.close);
+      final clock = _Clock();
+
+      final abandonOwner = ShopConnectedTrustedTimeStore(
+        database: abandonOwnerDatabase,
+        clock: clock,
+        verifier: const _Verifier(),
+      );
+      final abandonForeign = ShopConnectedTrustedTimeStore(
+        database: abandonForeignDatabase,
+        clock: clock,
+        verifier: const _Verifier(),
+      );
+      final abandonChallenge = _challenge(5, clock);
+      final abandonOwnerCapability = await abandonOwner.retainChallenge(
+        approval: _approval(),
+        challenge: abandonChallenge,
+      );
+      final abandonForeignCapability = await abandonForeign.retainChallenge(
+        approval: _approval(),
+        challenge: abandonChallenge,
+      );
+
+      abandonOwner.abandon(abandonForeignCapability);
+      await abandonOwner.complete(
+        capability: abandonOwnerCapability,
+        approval: _approval(),
+        observation: _observation(abandonChallenge, sequence: 30),
+      );
+
+      final completeOwner = ShopConnectedTrustedTimeStore(
+        database: completeOwnerDatabase,
+        clock: clock,
+        verifier: const _Verifier(),
+      );
+      final completeForeign = ShopConnectedTrustedTimeStore(
+        database: completeForeignDatabase,
+        clock: clock,
+        verifier: const _Verifier(),
+      );
+      final completeChallenge = _challenge(6, clock);
+      final completeOwnerCapability = await completeOwner.retainChallenge(
+        approval: _approval(),
+        challenge: completeChallenge,
+      );
+      final completeForeignCapability = await completeForeign.retainChallenge(
+        approval: _approval(),
+        challenge: completeChallenge,
+      );
+
+      await expectLater(
+        completeOwner.complete(
+          capability: completeForeignCapability,
+          approval: _approval(),
+          observation: _observation(completeChallenge, sequence: 31),
+        ),
+        throwsA(_state('connected_trusted_time_capability_invalid')),
+      );
+      await completeOwner.complete(
+        capability: completeOwnerCapability,
+        approval: _approval(),
+        observation: _observation(completeChallenge, sequence: 31),
+      );
+    },
+  );
+
+  test(
     'head deletion or mutation fails completion inside transaction',
     () async {
       final database = ShopDatabase(NativeDatabase.memory());
