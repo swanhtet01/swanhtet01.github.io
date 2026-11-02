@@ -8,23 +8,26 @@
 ## 2026-11-03 private Android pilot-successor preflight
 
 - **SOURCE PASS / PRIVATE:** implementation
-  `9edfa8fc73fa5a3b73c44a6448a596abe50d909b` (tree
-  `5fe9b32c7d332d9887d8779072225b39d73e7d8e`, native tree
-  `8717de271cc830211f4967dbaa552428778bd290`) is a strict descendant of
+  `905f29110cda29d641905930952931a3584cb183` (tree
+  `27307a405209ff03e12bc505d5c607d8faa61806`, native tree
+  `0a47b2275e2027ba50e0487453e3143f7e8f0da7`) is a strict descendant of
   draft PR #752's public head `fe02f283d51bb546db7fab0feabfcff0a43673ee`.
-  The exact 25-path standard binary diff is SHA-256
-  `b28401ee2e2cdcb525abaf00defa8d14631b7aa15a6f61d6496650b096eb3f86`.
+  The exact 28-path standard binary diff is SHA-256
+  `88987ac280af295b5971fe1d8e037efe7469596a8c14ed701610b7a79ceefe38`.
   It composes synthetic receipt evidence, stable installed-journey selectors,
   pure handoff/protocol authority, the source-only fail-closed ADB adapter,
-  operator-clarity fixes and the first two Android visual-system slices.
+  signed count-only QA metrics, operator-clarity fixes and the first two
+  Android visual-system slices.
 - Final-source release contracts plus adapter/protocol/handoff tests are
   **163/163 PASS**. Final native-tree focused evidence is: hidden filtered
   matches **2/2 PASS**, explicit shift difference/close **2/2 PASS**, backup
   guidance **1/1 PASS**, design tokens **4/4 PASS**, Sell/checkout responsive
   hierarchy **13/13 PASS**, and targeted analyzers **PASS**. The complete
   range `git diff --check` is **PASS** after the recorded one-line EOF
-  correction. Independent reviews accept each final source slice; combined
-  candidate review is required before publication.
+  correction. Metrics **9/9**, legacy QA evidence **7/7**, protocol/ADB
+  **86/86** and QA isolation **33/33** are additionally **PASS**. Independent
+  reviews accept each final source slice; combined candidate review is required
+  before publication.
 - **NOT RUN / BLOCKED:** this implementation has no exact-head hosted CI,
   rebuilt artifact, authorized remote installation or device observation.
   PostgreSQL rehearsal evidence remains stale and dependency security remains
@@ -171,6 +174,28 @@
   installation, `pm clear`, staged copy, restore or cleanup ran. An authorized
   remote target and independently bound concrete backends are still required
   before installed acceptance can begin.
+- **SOURCE PASS / PRIVATE METRICS:** implementation
+  `905f29110cda29d641905930952931a3584cb183` (tree
+  `27307a405209ff03e12bc505d5c607d8faa61806`, native tree
+  `0a47b2275e2027ba50e0487453e3143f7e8f0da7`) adds a synthetic-QA-only,
+  loopback-only signed count observation for sales, stock movements, receipts,
+  outbox, on-hand and shifts. Its six-file binary-diff SHA-256 is
+  `196a85c36f5918bd9ec5eb8d5c760f9599b0133a7790ccb85c4ace4ff0587b54`.
+  Counts and the canonical relevant-table state digest are captured inside one
+  read transaction, while the emitted evidence contains no merchant rows,
+  customer/product/payment/receipt content. Session, request, target, sequence,
+  authority and pre/post/fresh-restore transition grammar are bound; production,
+  default and network-printer paths fail closed.
+- Metrics tests are **9/9 PASS**, legacy QA evidence tests **7/7 PASS**,
+  protocol/ADB tests **86/86 PASS**, QA isolation **33/33 PASS**, targeted
+  analyzer and diff checks **PASS**. Independent security review first
+  **REJECTED** unkeyed/hash-only and underconstrained transitions, then
+  **ACCEPTED** the detached-signature, full-state-digest and exact-transition
+  revision with recompute/splice/replay tests.
+- **NOT RUN / BLOCKED:** this remains an injected signing interface, not Android
+  Keystore custody. A non-exportable device key, host-pinned raw public-key
+  digest/algorithm, rotation/rollback/restart validation, concrete adapter
+  wiring and real installed-device evidence remain required.
 
 ## 2026-11-03 installed Android selector checkpoint
 
