@@ -5,6 +5,39 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 current-base Windows trusted-time checkpoint
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `72dd4899c28c299efbfb086fb08e95d73d18c87e` (tree
+  `dabadf6c3c8232a6d212a1adf7b197d534a87ef7`, parent exact-head Native-pass
+  ledger `2efcc307169837f65d0d26803fa1bccabd4c7c9e`) adds the reviewed Windows
+  current-boot identifier and monotonic clock to the current `108f9700`
+  lineage. The four-file patch has SHA-256
+  `3684e7c64fb146a39721eafd0fb37a1dc0b5dda63bfeafb424fba69021c3d89a`
+  and stable patch ID `80191436e0bc7d20de94eb132d6342995cc4f4b1`, exactly matching the
+  previously accepted Windows-clock implementation.
+- The method-channel request accepts exactly the one-field v1 schema. Windows
+  reads a nonzero system boot GUID, hashes it with a domain separator through
+  CNG SHA-256, and reports `GetTickCount64` monotonic milliseconds. Missing
+  `ntdll`/CNG symbols, failed or short queries, zero GUIDs, hash failure and
+  integer overflow fail closed as clock unavailable. Dart rejects unknown
+  sources, malformed IDs/types, boot substitution and monotonic regression.
+- Focused clock tests are **5/5 PASS** and targeted analyzer is **PASS** using
+  Flutter `3.47.8`, PUB cache `/workspace/.pub-cache`, and pinned LLVM at
+  `/workspace/.toolchains/llvm-21.1.8-local/usr/lib/llvm-21/bin`. Native CI
+  contracts are **22/22 PASS** with verifier **PASS**; QA isolation contracts
+  are **24/24 PASS** with strict verifier **PASS**; formatting and diff checks
+  are **PASS**. An initial fresh-worktree test attempt without pinned LLVM
+  stopped during native-asset toolchain setup and is not product evidence.
+  Independent security review **ACCEPTS** the exact final diff.
+- **HELD / NOT RUN:** impact is high because this clock participates in
+  offline authority, while regression protection remains partial until exact
+  MSVC compilation, supported-Windows same-boot restart, real reboot boot-ID
+  change and installed-device behavior run. Identity, command signing and TLS
+  remain `NotImplemented`; coordinator host registration stays false and every
+  shipping profile keeps connected operation disabled. No publication, merge,
+  deployment, signing, installation or production enablement occurred.
+
 ## 2026-11-02 exact-head `108f9700` Native pass and pilot artifact boundary
 
 - **PUBLIC DRAFT HEAD / NATIVE PASS:** the specifically authorized non-force
