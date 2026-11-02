@@ -5,6 +5,35 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 receipt-bound sale completion checkpoint
+
+- **SOURCE PASS / PRIVATE:** implementation
+  `9e0ac41d99b1acafba13b9d2a9de3b22651e2947` (tree
+  `45afe737f1b1421bf58e8fe0dd4c8da7486dc4a7`, parent trusted-time
+  composition ledger `fac86b7870af1ccf2a110558d5ae407853cc70e4`)
+  replaces the replaceable post-sale SnackBar with one session-persistent card
+  bound to the exact immutable saved receipt. The two-file patch SHA-256 is
+  `ad816a5e8fd7b4c0eca5ae2e5424bf5c064c9d62ee2b65ef1a858c41b1314d4c`.
+- The card distinguishes sale saved, payment record, change and printer state;
+  printer `sent` still says paper needs checking, ambiguous delivery retains
+  the may-have-printed warning, and wallet wording remains a local record. Its
+  explicit reprint action calls the existing saved-receipt print path and never
+  records another sale. A later completion replaces the complete prior receipt
+  binding; a late print result can update only the same full receipt ID.
+- The EN/MY completion boundary is a semantic live region. The focused
+  ambiguous-printer/two-sale and slow-printer/change tests are **2/2 PASS**;
+  targeted analyzer is **PASS**. The two-sale regression proves sale B removes
+  sale A's completion key, reprint sends sale B's receipt again, and sale,
+  stock and outbox totals remain exactly two effects. QA-isolation contracts
+  are **24/24 PASS** with strict verifier **PASS**; Native CI contracts are
+  **22/22 PASS** with verifier **PASS**. Independent review initially **HELD**
+  for live-region and replacement-proof gaps, then **ACCEPTED** the final diff.
+- **NOT RUN / BLOCKED:** this is source/widget evidence, not physical printer,
+  installed Android/Windows, large-text or merchant acceptance. The completion
+  card is intentionally session-persistent; after restart, durable receipt,
+  payment and change remain available through Recent Sales. This private
+  successor has not been pushed, merged, deployed or enabled in production.
+
 ## 2026-11-02 trusted-time V2 composition checkpoint
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
