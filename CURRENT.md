@@ -5,6 +5,42 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 exact-head `34f14439` CI and process-interruption repair
+
+- **PUBLIC DRAFT HEAD / CONNECTED SHARD PASS:** the specifically authorized
+  non-force update advanced draft PR #752 from
+  `680a237ddc93fb59ae69d399d76ab7097d3fac24` to
+  `34f14439118d40593d364e5db5fadf7f588e8a42` (tree
+  `d976275781486f9bb2bfd7a0d331078ece0e6fd0`). Exact-head Native run
+  `41428571872` proves the complete serial Flutter shard suite, including the
+  repaired 285-test connected shard, passed in 56m55s. Windows PC recovery and
+  unsigned packaging, isolated Android/Windows/iOS QA, and iPad/iOS jobs all
+  **PASS**. The full Android job then failed only because the separate real
+  process-interruption harness hit its outer 180-second timeout; analysis,
+  capture and Android debug packaging were **NOT RUN**. Missing gallery files
+  are downstream noise, not independent evidence.
+- **PRIVATE TIMEOUT-ENVELOPE REPAIR / HOSTED NOT RUN:** implementation
+  `a74becbb6f0f98693488885ec44a129fabad912b` (tree
+  `bc687cadf98b4a92d551251775ae407f309e3a91`) retains all 14 real OS
+  kill/reopen scenarios, their order, process-group/descendant `SIGKILL`,
+  negative signal-result assertion, database reopen, and rollback/commit
+  verification. Internal 90-second marker and 120-second verification limits
+  are unchanged. It adds flushed per-scenario start/pass timing and changes
+  only the outer harness envelope from 180 to 300 seconds. The unchanged local
+  harness is **14/14 PASS** in 166 seconds; the patched exact harness is
+  **14/14 PASS** in 163 seconds with each scenario attributable at about
+  11--13 seconds. Native CI contract **21/21 PASS** with verifier **PASS**;
+  QA isolation **33/33 PASS** and audit strict-ready; Python compile and diff
+  checks **PASS**. Independent review **ACCEPTS** the 300-second cap as bounded
+  and evidence-based. Exact hosted validation is **NOT RUN** and no new push,
+  merge, deployment, signing or manual dispatch occurred.
+- **OTHER EXACT-HEAD CHECKS:** Kernel run `41428572078` **PASS**. App run
+  `41428561578` passed checks 1--637 and failed at HQ 1/37 with
+  `database_rehearsal_evidence_stale`, `secretValuesExposed:false`.
+  Dependency run `41428571740` remains **FAIL/BLOCKED** only on the known app
+  and Kernel minimatch paths; platform, Python and added-line credential scans
+  **PASS**. GitGuardian remains **FAIL/BLOCKED** on the historical findings.
+
 ## 2026-11-02 exact-head `680a237d` connected-proof fixture repair
 
 - **PUBLIC DRAFT HEAD / NO PROMOTION:** draft PR #752 is at
