@@ -59,6 +59,43 @@ jobs:
           dart format lib/shop_connected_site_attempt_store.dart test/shop_connected_site_attempt_store_test.dart
           git diff --exit-code -- lib/shop_connected_site_attempt_store.dart test/shop_connected_site_attempt_store_test.dart
 
+      - name: Check connected successor formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/shop_connected_composition.dart \
+            lib/shop_connected_coordinator_health.dart \
+            lib/shop_connected_site_client_composition.dart \
+            lib/shop_connected_site_device_signer.dart \
+            lib/shop_connected_trusted_time_authority.dart \
+            lib/shop_connected_trusted_time_client_schema.dart \
+            lib/shop_connected_trusted_time_client_store.dart \
+            lib/shop_connected_trusted_time_composition.dart \
+            lib/shop_connected_trusted_time_contract.dart \
+            lib/shop_connected_trusted_time_exchange.dart \
+            lib/shop_connected_trusted_time_head.dart \
+            lib/shop_connected_trusted_time_issuer_store.dart \
+            lib/shop_connected_trusted_time_platform_clock.dart \
+            lib/shop_connected_trusted_time_store.dart \
+            lib/shop_connected_trusted_time_stream.dart \
+            lib/shop_connected_trusted_time_stream_acceptance.dart \
+            lib/shop_connected_trusted_time_verifier.dart \
+            test/historical_shop_fixture_support.dart \
+            test/shop_connected_composition_test.dart \
+            test/shop_connected_coordinator_health_test.dart \
+            test/shop_connected_site_client_composition_test.dart \
+            test/shop_connected_site_device_signer_test.dart \
+            test/shop_connected_trusted_time_authority_test.dart \
+            test/shop_connected_trusted_time_client_store_test.dart \
+            test/shop_connected_trusted_time_composition_test.dart \
+            test/shop_connected_trusted_time_contract_test.dart \
+            test/shop_connected_trusted_time_head_test.dart \
+            test/shop_connected_trusted_time_issuer_store_test.dart \
+            test/shop_connected_trusted_time_platform_clock_test.dart \
+            test/shop_connected_trusted_time_store_test.dart \
+            test/shop_connected_trusted_time_stream_acceptance_test.dart \
+            test/shop_connected_trusted_time_stream_test.dart \
+            test/shop_connected_trusted_time_verifier_test.dart
+
       - name: Check first-sale widget in isolation
         run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_checkout_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
 
@@ -81,6 +118,8 @@ jobs:
           test/shop_cash_movement_test.dart
           test/shop_catalog_search_test.dart
           test/shop_connected_application_boundary_test.dart
+          test/shop_connected_composition_test.dart
+          test/shop_connected_coordinator_health_test.dart
           test/shop_connected_coordinator_host_test.dart
           test/shop_connected_onboarding_test.dart
           test/shop_connected_platform_security_test.dart
@@ -88,15 +127,28 @@ jobs:
           test/shop_connected_runtime_test.dart
           test/shop_connected_site_attempt_store_test.dart
           test/shop_connected_site_authority_store_test.dart
+          test/shop_connected_site_client_composition_test.dart
           test/shop_connected_site_client_test.dart
           test/shop_connected_site_contracts_test.dart
           test/shop_connected_site_database_adapter_test.dart
+          test/shop_connected_site_device_signer_test.dart
           test/shop_connected_site_enrollment_store_test.dart
           test/shop_connected_site_persistence_test.dart
           test/shop_connected_site_reconciliation_store_test.dart
           test/shop_connected_site_reconciliation_test.dart
           test/shop_connected_site_replica_store_test.dart
           test/shop_connected_stock_reservation_test.dart
+          test/shop_connected_trusted_time_authority_test.dart
+          test/shop_connected_trusted_time_client_store_test.dart
+          test/shop_connected_trusted_time_composition_test.dart
+          test/shop_connected_trusted_time_contract_test.dart
+          test/shop_connected_trusted_time_head_test.dart
+          test/shop_connected_trusted_time_issuer_store_test.dart
+          test/shop_connected_trusted_time_platform_clock_test.dart
+          test/shop_connected_trusted_time_store_test.dart
+          test/shop_connected_trusted_time_stream_acceptance_test.dart
+          test/shop_connected_trusted_time_stream_test.dart
+          test/shop_connected_trusted_time_verifier_test.dart
           test/shop_core_internal_acceptance_test.dart
           test/shop_correction_authorization_service_test.dart
           test/shop_correction_consumption_test.dart
@@ -135,8 +187,10 @@ jobs:
           persistence_a_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-a.XXXXXX")"
           persistence_b_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-b.XXXXXX")"
           connected_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected.XXXXXX")"
+          connected_successor_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected-successor.XXXXXX")"
+          trusted_time_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-trusted-time.XXXXXX")"
           cleanup() {
-            rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"
+            rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp" "$connected_successor_tmp" "$trusted_time_tmp"
           }
           trap cleanup EXIT
           calculate_shard_budget() {
@@ -309,6 +363,51 @@ jobs:
             exit 124
           fi
           test "$connected_status" -eq 0
+
+          connected_successor_budget="$(calculate_shard_budget)" || exit "$?"
+          connected_successor_started_at="$(date +%s)"
+          set +e
+          (
+            TMPDIR="$connected_successor_tmp" timeout --signal=TERM --kill-after=10s "${connected_successor_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_connected_composition_test.dart \
+              test/shop_connected_coordinator_health_test.dart \
+              test/shop_connected_site_client_composition_test.dart \
+              test/shop_connected_site_device_signer_test.dart
+          )
+          connected_successor_status="$?"
+          set -e
+          connected_successor_elapsed="$(( $(date +%s) - connected_successor_started_at ))"
+          if [ "$connected_successor_elapsed" -gt "$connected_successor_budget" ]; then
+            echo "shop_flutter_test_connected_successor_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$connected_successor_status" -eq 0
+
+          trusted_time_budget="$(calculate_shard_budget)" || exit "$?"
+          trusted_time_started_at="$(date +%s)"
+          set +e
+          (
+            TMPDIR="$trusted_time_tmp" timeout --signal=TERM --kill-after=10s "${trusted_time_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_connected_trusted_time_authority_test.dart \
+              test/shop_connected_trusted_time_client_store_test.dart \
+              test/shop_connected_trusted_time_composition_test.dart \
+              test/shop_connected_trusted_time_contract_test.dart \
+              test/shop_connected_trusted_time_head_test.dart \
+              test/shop_connected_trusted_time_issuer_store_test.dart \
+              test/shop_connected_trusted_time_platform_clock_test.dart \
+              test/shop_connected_trusted_time_store_test.dart \
+              test/shop_connected_trusted_time_stream_acceptance_test.dart \
+              test/shop_connected_trusted_time_stream_test.dart \
+              test/shop_connected_trusted_time_verifier_test.dart
+          )
+          trusted_time_status="$?"
+          set -e
+          trusted_time_elapsed="$(( $(date +%s) - trusted_time_started_at ))"
+          if [ "$trusted_time_elapsed" -gt "$trusted_time_budget" ]; then
+            echo "shop_flutter_test_trusted_time_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$trusted_time_status" -eq 0
           overall_elapsed="$(( $(date +%s) - overall_started_at ))"
           if [ "$overall_elapsed" -gt "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then
             echo "shop_flutter_test_total_budget_exhausted" >&2

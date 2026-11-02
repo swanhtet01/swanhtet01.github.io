@@ -106,6 +106,41 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
   'test/widget_shell_test.dart',
   'test/widget_test_support.dart',
 ])
+const CONNECTED_SUCCESSOR_DART_FORMAT_PATHS = Object.freeze([
+  'lib/shop_connected_composition.dart',
+  'lib/shop_connected_coordinator_health.dart',
+  'lib/shop_connected_site_client_composition.dart',
+  'lib/shop_connected_site_device_signer.dart',
+  'lib/shop_connected_trusted_time_authority.dart',
+  'lib/shop_connected_trusted_time_client_schema.dart',
+  'lib/shop_connected_trusted_time_client_store.dart',
+  'lib/shop_connected_trusted_time_composition.dart',
+  'lib/shop_connected_trusted_time_contract.dart',
+  'lib/shop_connected_trusted_time_exchange.dart',
+  'lib/shop_connected_trusted_time_head.dart',
+  'lib/shop_connected_trusted_time_issuer_store.dart',
+  'lib/shop_connected_trusted_time_platform_clock.dart',
+  'lib/shop_connected_trusted_time_store.dart',
+  'lib/shop_connected_trusted_time_stream.dart',
+  'lib/shop_connected_trusted_time_stream_acceptance.dart',
+  'lib/shop_connected_trusted_time_verifier.dart',
+  'test/historical_shop_fixture_support.dart',
+  'test/shop_connected_composition_test.dart',
+  'test/shop_connected_coordinator_health_test.dart',
+  'test/shop_connected_site_client_composition_test.dart',
+  'test/shop_connected_site_device_signer_test.dart',
+  'test/shop_connected_trusted_time_authority_test.dart',
+  'test/shop_connected_trusted_time_client_store_test.dart',
+  'test/shop_connected_trusted_time_composition_test.dart',
+  'test/shop_connected_trusted_time_contract_test.dart',
+  'test/shop_connected_trusted_time_head_test.dart',
+  'test/shop_connected_trusted_time_issuer_store_test.dart',
+  'test/shop_connected_trusted_time_platform_clock_test.dart',
+  'test/shop_connected_trusted_time_store_test.dart',
+  'test/shop_connected_trusted_time_stream_acceptance_test.dart',
+  'test/shop_connected_trusted_time_stream_test.dart',
+  'test/shop_connected_trusted_time_verifier_test.dart',
+])
 
 function requireToken(source, token, failure, failures) {
   if (!source.includes(token)) failures.push(failure)
@@ -151,6 +186,18 @@ function declaredTestInventory(source) {
     .map(line => line.trim())
     .filter(line => /^test\/.+_test\.dart$/.test(line))
     .sort()
+}
+
+function isolatedShardTestCounts(source) {
+  const match = source.match(
+    /- name: Run isolated Flutter test shards[\s\S]*?(?=\n      - name:)/,
+  )
+  if (!match) return new Map()
+  const counts = new Map()
+  for (const testPath of match[0].match(/test\/[A-Za-z0-9_]+_test\.dart/g) ?? []) {
+    counts.set(testPath, (counts.get(testPath) ?? 0) + 1)
+  }
+  return counts
 }
 
 function checkoutSteps(source) {
@@ -215,6 +262,24 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
       failures.push(`qa_dart_format_gate_duplicate:${path}`)
     }
   }
+  const successorFormatMatch = source.match(
+    /- name: Check connected successor formatting[\s\S]*?(?=\n      - name:)/,
+  )
+  const successorFormatBlock = successorFormatMatch?.[0] ?? ''
+  requireToken(
+    successorFormatBlock,
+    'dart format --output=none --set-exit-if-changed',
+    'connected_successor_format_gate_not_fail_closed',
+    failures,
+  )
+  for (const path of CONNECTED_SUCCESSOR_DART_FORMAT_PATHS) {
+    const count = successorFormatBlock.split(/\s+/).filter(token => token.replace(/\\$/, '') === path).length
+    if (count === 0) {
+      failures.push(`connected_successor_format_gate_missing:${path}`)
+    } else if (count !== 1) {
+      failures.push(`connected_successor_format_gate_duplicate:${path}`)
+    }
+  }
   requireToken(
     source,
     'name: Verify pinned native toolchain contract',
@@ -251,6 +316,18 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     const actual = [...actualTestPaths].sort()
     if (JSON.stringify(declared) !== JSON.stringify(actual)) {
       failures.push('native_test_inventory_does_not_match_filesystem')
+    }
+    const shardCounts = isolatedShardTestCounts(source)
+    const externallyExercised = new Set(['test/shop_process_interrupt_worker_test.dart'])
+    for (const testPath of actual) {
+      const count = shardCounts.get(testPath) ?? 0
+      if (externallyExercised.has(testPath)) {
+        if (count !== 0) failures.push(`native_test_shard_assignment_duplicate:${testPath}`)
+      } else if (count === 0) {
+        failures.push(`native_test_shard_assignment_missing:${testPath}`)
+      } else if (count !== 1) {
+        failures.push(`native_test_shard_assignment_duplicate:${testPath}`)
+      }
     }
   }
   requireToken(
@@ -336,6 +413,18 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
+    'connected_successor_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected-successor.XXXXXX")"',
+    'native_connected_successor_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'trusted_time_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-trusted-time.XXXXXX")"',
+    'native_trusted_time_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
     'TMPDIR="$behavior_core_tmp" timeout --signal=TERM --kill-after=10s "${behavior_core_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
     'native_behavior_core_shard_not_bounded_or_sequential',
     failures,
@@ -372,7 +461,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"',
+    'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp" "$connected_successor_tmp" "$trusted_time_tmp"',
     'native_test_shard_cleanup_incomplete',
     failures,
   )
@@ -384,7 +473,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   if (/[ \t]&[ \t]*$/m.test(isolatedShardBlock) || /_pid="\$!"/.test(isolatedShardBlock)) {
     failures.push('native_test_shards_not_strictly_serial')
   }
-  const shards = ['behavior_core', 'behavior_shell', 'behavior_checkout', 'persistence_backup', 'persistence_a', 'persistence_b', 'connected']
+  const shards = ['behavior_core', 'behavior_shell', 'behavior_checkout', 'persistence_backup', 'persistence_a', 'persistence_b', 'connected', 'connected_successor', 'trusted_time']
   const shardPaths = (start, end) => {
     const startIndex = isolatedShardBlock.indexOf(start)
     const endIndex = isolatedShardBlock.indexOf(end)
@@ -414,6 +503,25 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   const expectedBehaviorShellPaths = ['test/widget_shell_test.dart']
   const expectedBehaviorCheckoutPaths = ['test/widget_checkout_test.dart']
   const expectedPersistenceBackupPaths = ['test/shop_backup_test.dart']
+  const expectedConnectedSuccessorPaths = [
+    'test/shop_connected_composition_test.dart',
+    'test/shop_connected_coordinator_health_test.dart',
+    'test/shop_connected_site_client_composition_test.dart',
+    'test/shop_connected_site_device_signer_test.dart',
+  ]
+  const expectedTrustedTimePaths = [
+    'test/shop_connected_trusted_time_authority_test.dart',
+    'test/shop_connected_trusted_time_client_store_test.dart',
+    'test/shop_connected_trusted_time_composition_test.dart',
+    'test/shop_connected_trusted_time_contract_test.dart',
+    'test/shop_connected_trusted_time_head_test.dart',
+    'test/shop_connected_trusted_time_issuer_store_test.dart',
+    'test/shop_connected_trusted_time_platform_clock_test.dart',
+    'test/shop_connected_trusted_time_store_test.dart',
+    'test/shop_connected_trusted_time_stream_acceptance_test.dart',
+    'test/shop_connected_trusted_time_stream_test.dart',
+    'test/shop_connected_trusted_time_verifier_test.dart',
+  ]
   if (JSON.stringify(shardPaths(
     'behavior_core_started_at="$(date +%s)"',
     'behavior_shell_started_at="$(date +%s)"',
@@ -437,6 +545,18 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     'persistence_a_started_at="$(date +%s)"',
   )) !== JSON.stringify(expectedPersistenceBackupPaths)) {
     failures.push('native_persistence_backup_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'connected_successor_started_at="$(date +%s)"',
+    'trusted_time_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedConnectedSuccessorPaths)) {
+    failures.push('native_connected_successor_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'trusted_time_started_at="$(date +%s)"',
+    'overall_elapsed="$(( $(date +%s) - overall_started_at ))"',
+  )) !== JSON.stringify(expectedTrustedTimePaths)) {
+    failures.push('native_trusted_time_shard_inventory_or_order_wrong')
   }
   for (const shard of shards) {
     const command = `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m`
@@ -533,7 +653,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   }
   requireOrder(
     source,
-    'test "$connected_status" -eq 0',
+    'test "$trusted_time_status" -eq 0',
     'overall_elapsed="$(( $(date +%s) - overall_started_at ))"',
     'native_test_total_budget_checked_before_all_shards_verified',
     failures,

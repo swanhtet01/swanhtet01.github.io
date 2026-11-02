@@ -379,6 +379,19 @@ test('native CI pins one exact Flutter SDK across production and QA native jobs'
     workflow.replaceAll('lib/shop_correction_consumption.dart', 'lib/shop_correction_consumption_omitted.dart'),
     gradleWrapper,
   )
+
+  const missingSuccessorFormat = verifyShopNativeCiContract(
+    workflow.replace(
+      '            lib/shop_connected_trusted_time_client_store.dart \\\n',
+      '',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingSuccessorFormat.failures.includes(
+      'connected_successor_format_gate_missing:lib/shop_connected_trusted_time_client_store.dart',
+    ),
+  )
   assert.ok(
     missingCorrectionFormat.failures.includes(
       'qa_dart_format_gate_missing:lib/shop_correction_consumption.dart',
@@ -523,6 +536,34 @@ test('production identity is generated only after every default-profile test sha
   )
   assert.ok(
     missingWorkerInventory.failures.includes('native_test_inventory_does_not_match_filesystem'),
+  )
+
+  const missingSuccessorShard = verifyShopNativeCiContract(
+    workflow.replace(
+      '              test/shop_connected_trusted_time_client_store_test.dart \\\n',
+      '',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(
+    missingSuccessorShard.failures.includes(
+      'native_test_shard_assignment_missing:test/shop_connected_trusted_time_client_store_test.dart',
+    ),
+  )
+
+  const duplicateSuccessorShard = verifyShopNativeCiContract(
+    workflow.replace(
+      '              test/shop_connected_trusted_time_client_store_test.dart \\\n',
+      '              test/shop_connected_trusted_time_client_store_test.dart \\\n              test/shop_connected_trusted_time_client_store_test.dart \\\n',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(
+    duplicateSuccessorShard.failures.includes(
+      'native_test_shard_assignment_duplicate:test/shop_connected_trusted_time_client_store_test.dart',
+    ),
   )
 
   const missingProcessHarness = verifyShopNativeCiContract(
