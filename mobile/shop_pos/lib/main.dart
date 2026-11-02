@@ -2548,7 +2548,11 @@ class _ShopHomeState extends State<ShopHome> {
     final narrowProductRow = catalogWidth < 380;
     final enlargedNarrowRow =
         narrowProductRow && MediaQuery.textScalerOf(context).scale(1) > 1.2;
-    final photoExtent = narrowProductRow ? 48.0 : 58.0;
+    final photoExtent = narrowProductRow
+        ? 56.0
+        : compactProductRow
+        ? 64.0
+        : 72.0;
     final catalogPriceStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: Theme.of(context).colorScheme.onSurface,
       fontWeight: FontWeight.w600,
@@ -3079,9 +3083,11 @@ class _ShopHomeState extends State<ShopHome> {
           compactCart ? cartLines : Expanded(child: cartLines),
           const Divider(height: 20),
           LayoutBuilder(
+            key: const ValueKey('shop-checkout-summary'),
             builder: (context, constraints) {
               final label = Text(
                 shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
+                style: Theme.of(context).textTheme.titleMedium,
               );
               final amount = Text(
                 hasUnavailableProducts
@@ -3149,6 +3155,7 @@ class _ShopHomeState extends State<ShopHome> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final cash = FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 56)),
                   onPressed:
                       !_checkoutReady ||
                           hasUnavailableProducts ||
@@ -3171,6 +3178,9 @@ class _ShopHomeState extends State<ShopHome> {
                   label: Text(shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား')),
                 ).withInstalledQaIdentifier('shop.checkout.cash');
                 final wallet = OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 56),
+                  ),
                   onPressed:
                       !_checkoutReady ||
                           hasUnavailableProducts ||

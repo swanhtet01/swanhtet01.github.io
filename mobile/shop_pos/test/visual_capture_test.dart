@@ -873,10 +873,20 @@ void main() {
               .first;
           expect(tester.getSize(add).width, greaterThanOrEqualTo(48));
           expect(tester.getSize(add).height, greaterThanOrEqualTo(48));
+          await _resolveVisibleProductPhotos(tester);
+          final productMedia = find
+              .byWidgetPredicate(
+                (widget) =>
+                    widget.key is ValueKey<String> &&
+                    (widget.key! as ValueKey<String>).value.startsWith(
+                      'shop-product-media:',
+                    ),
+              )
+              .first;
+          expect(tester.getSize(productMedia).width, 64);
           expect(tester.takeException(), isNull);
 
           if (_capture) {
-            await _resolveVisibleProductPhotos(tester);
             await expectLater(
               find.byKey(_captureKey),
               matchesGoldenFile(
@@ -884,6 +894,25 @@ void main() {
               ),
             );
           }
+
+          await tester.tap(add);
+          await tester.pumpAndSettle();
+          if (width == 390) {
+            await tester.tap(find.bySemanticsIdentifier('shop.cart.review'));
+            await tester.pumpAndSettle();
+          }
+          final summary = find.byKey(const ValueKey('shop-checkout-summary'));
+          expect(summary, findsOneWidget);
+          final total = find.text(language == 'my' ? 'စုစုပေါင်း' : 'Total');
+          expect(total, findsOneWidget);
+          expect(
+            tester.widget<Text>(total).style?.fontWeight,
+            theme.textTheme.titleMedium?.fontWeight,
+          );
+          final cash = find.bySemanticsIdentifier('shop.checkout.cash');
+          expect(cash, findsOneWidget);
+          expect(tester.getSize(cash).height, greaterThanOrEqualTo(56));
+          expect(tester.takeException(), isNull);
         } finally {
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 1));
