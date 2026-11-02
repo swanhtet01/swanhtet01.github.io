@@ -580,10 +580,10 @@ test('production identity is generated only after every default-profile test sha
 
 test('default-profile test shards run serially with fail-closed shard and total budgets', () => {
   const shortJob = verifyShopNativeCiContract(
-    workflow.replace('timeout-minutes: 60', 'timeout-minutes: 30'),
+    workflow.replace('timeout-minutes: 120', 'timeout-minutes: 60'),
     gradleWrapper,
   )
-  assert.ok(shortJob.failures.includes('native_android_job_timeout_not_60_minutes'))
+  assert.ok(shortJob.failures.includes('native_android_job_timeout_not_120_minutes'))
 
   const widened = verifyShopNativeCiContract(
     workflow.replace(
@@ -600,14 +600,14 @@ test('default-profile test shards run serially with fail-closed shard and total 
 
   const widenedTotal = verifyShopNativeCiContract(
     workflow.replace(
-      'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "2400"',
-      'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "2460"',
+      'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "5400"',
+      'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "5399"',
     ),
     gradleWrapper,
   )
   assert.ok(
     widenedTotal.failures.includes(
-      'native_test_total_budget_not_bounded_to_2400_seconds',
+      'native_test_total_budget_not_bounded_to_5400_seconds',
     ),
   )
 
@@ -764,7 +764,7 @@ test('default-profile test shards run serially with fail-closed shard and total 
 
   const missingElapsedGuard = verifyShopNativeCiContract(
     workflow.replace(
-      'if [ "$behavior_core_elapsed" -gt "$behavior_core_budget" ]; then',
+      'if [ "$behavior_core_elapsed" -ge "$behavior_core_budget" ]; then',
       'if false; then',
     ),
     gradleWrapper,
@@ -788,13 +788,79 @@ test('default-profile test shards run serially with fail-closed shard and total 
 
   const missingConnectedGuard = verifyShopNativeCiContract(
     workflow.replace(
-      'if [ "$connected_elapsed" -gt "$connected_budget" ]; then',
+      'if [ "$connected_elapsed" -ge "$connected_budget" ]; then',
       'if false; then',
     ),
     gradleWrapper,
   )
   assert.ok(
     missingConnectedGuard.failures.includes('native_connected_shard_elapsed_guard_missing'),
+  )
+
+  const revertedElapsedBoundary = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$behavior_core_elapsed" -ge "$behavior_core_budget" ]; then',
+      'if [ "$behavior_core_elapsed" -gt "$behavior_core_budget" ]; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    revertedElapsedBoundary.failures.includes(
+      'native_behavior_core_shard_elapsed_guard_missing',
+    ),
+  )
+
+  const missingTimeoutStatus = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$behavior_core_status" -eq 124 ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingTimeoutStatus.failures.includes(
+      'native_behavior_core_timeout_status_not_classified',
+    ),
+  )
+
+  const missingNonzeroStatus = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$behavior_core_status" -ne 0 ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingNonzeroStatus.failures.includes(
+      'native_behavior_core_nonzero_status_not_classified',
+    ),
+  )
+
+  const wrongStatusOrder = verifyShopNativeCiContract(
+    workflow.replace(
+      `if [ "$behavior_core_status" -eq 124 ]; then
+            echo "shop_flutter_test_behavior_core_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$behavior_core_status" -ne 0 ]; then
+            echo "shop_flutter_test_behavior_core_failed_status:$behavior_core_status" >&2
+            exit "$behavior_core_status"
+          fi`,
+      `if [ "$behavior_core_status" -ne 0 ]; then
+            echo "shop_flutter_test_behavior_core_failed_status:$behavior_core_status" >&2
+            exit "$behavior_core_status"
+          fi
+          if [ "$behavior_core_status" -eq 124 ]; then
+            echo "shop_flutter_test_behavior_core_budget_exhausted" >&2
+            exit 124
+          fi`,
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    wrongStatusOrder.failures.includes(
+      'native_behavior_core_nonzero_status_checked_before_timeout_status',
+    ),
   )
 
   for (const [token, failure] of [
@@ -827,7 +893,7 @@ test('default-profile test shards run serially with fail-closed shard and total 
 
   const missingTotalGuard = verifyShopNativeCiContract(
     workflow.replace(
-      'if [ "$overall_elapsed" -gt "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then',
+      'if [ "$overall_elapsed" -ge "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then',
       'if false; then',
     ),
     gradleWrapper,

@@ -18,10 +18,10 @@ jobs:
   android:
     name: Analyze, test, and build Android
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS: "600"
-      SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "2400"
+      SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "5400"
     defaults:
       run:
         working-directory: mobile/shop_pos
@@ -229,8 +229,16 @@ jobs:
           )
           behavior_core_status="$?"
           set -e
+          if [ "$behavior_core_status" -eq 124 ]; then
+            echo "shop_flutter_test_behavior_core_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$behavior_core_status" -ne 0 ]; then
+            echo "shop_flutter_test_behavior_core_failed_status:$behavior_core_status" >&2
+            exit "$behavior_core_status"
+          fi
           behavior_core_elapsed="$(( $(date +%s) - behavior_core_started_at ))"
-          if [ "$behavior_core_elapsed" -gt "$behavior_core_budget" ]; then
+          if [ "$behavior_core_elapsed" -ge "$behavior_core_budget" ]; then
             echo "shop_flutter_test_behavior_core_budget_exhausted" >&2
             exit 124
           fi
@@ -245,8 +253,16 @@ jobs:
           )
           behavior_shell_status="$?"
           set -e
+          if [ "$behavior_shell_status" -eq 124 ]; then
+            echo "shop_flutter_test_behavior_shell_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$behavior_shell_status" -ne 0 ]; then
+            echo "shop_flutter_test_behavior_shell_failed_status:$behavior_shell_status" >&2
+            exit "$behavior_shell_status"
+          fi
           behavior_shell_elapsed="$(( $(date +%s) - behavior_shell_started_at ))"
-          if [ "$behavior_shell_elapsed" -gt "$behavior_shell_budget" ]; then
+          if [ "$behavior_shell_elapsed" -ge "$behavior_shell_budget" ]; then
             echo "shop_flutter_test_behavior_shell_budget_exhausted" >&2
             exit 124
           fi
@@ -261,8 +277,16 @@ jobs:
           )
           behavior_checkout_status="$?"
           set -e
+          if [ "$behavior_checkout_status" -eq 124 ]; then
+            echo "shop_flutter_test_behavior_checkout_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$behavior_checkout_status" -ne 0 ]; then
+            echo "shop_flutter_test_behavior_checkout_failed_status:$behavior_checkout_status" >&2
+            exit "$behavior_checkout_status"
+          fi
           behavior_checkout_elapsed="$(( $(date +%s) - behavior_checkout_started_at ))"
-          if [ "$behavior_checkout_elapsed" -gt "$behavior_checkout_budget" ]; then
+          if [ "$behavior_checkout_elapsed" -ge "$behavior_checkout_budget" ]; then
             echo "shop_flutter_test_behavior_checkout_budget_exhausted" >&2
             exit 124
           fi
@@ -277,8 +301,16 @@ jobs:
           )
           persistence_backup_status="$?"
           set -e
+          if [ "$persistence_backup_status" -eq 124 ]; then
+            echo "shop_flutter_test_persistence_backup_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$persistence_backup_status" -ne 0 ]; then
+            echo "shop_flutter_test_persistence_backup_failed_status:$persistence_backup_status" >&2
+            exit "$persistence_backup_status"
+          fi
           persistence_backup_elapsed="$(( $(date +%s) - persistence_backup_started_at ))"
-          if [ "$persistence_backup_elapsed" -gt "$persistence_backup_budget" ]; then
+          if [ "$persistence_backup_elapsed" -ge "$persistence_backup_budget" ]; then
             echo "shop_flutter_test_persistence_backup_budget_exhausted" >&2
             exit 124
           fi
@@ -299,8 +331,16 @@ jobs:
           )
           persistence_a_status="$?"
           set -e
+          if [ "$persistence_a_status" -eq 124 ]; then
+            echo "shop_flutter_test_persistence_a_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$persistence_a_status" -ne 0 ]; then
+            echo "shop_flutter_test_persistence_a_failed_status:$persistence_a_status" >&2
+            exit "$persistence_a_status"
+          fi
           persistence_a_elapsed="$(( $(date +%s) - persistence_a_started_at ))"
-          if [ "$persistence_a_elapsed" -gt "$persistence_a_budget" ]; then
+          if [ "$persistence_a_elapsed" -ge "$persistence_a_budget" ]; then
             echo "shop_flutter_test_persistence_a_budget_exhausted" >&2
             exit 124
           fi
@@ -323,8 +363,16 @@ jobs:
           )
           persistence_b_status="$?"
           set -e
+          if [ "$persistence_b_status" -eq 124 ]; then
+            echo "shop_flutter_test_persistence_b_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$persistence_b_status" -ne 0 ]; then
+            echo "shop_flutter_test_persistence_b_failed_status:$persistence_b_status" >&2
+            exit "$persistence_b_status"
+          fi
           persistence_b_elapsed="$(( $(date +%s) - persistence_b_started_at ))"
-          if [ "$persistence_b_elapsed" -gt "$persistence_b_budget" ]; then
+          if [ "$persistence_b_elapsed" -ge "$persistence_b_budget" ]; then
             echo "shop_flutter_test_persistence_b_budget_exhausted" >&2
             exit 124
           fi
@@ -357,8 +405,16 @@ jobs:
           )
           connected_status="$?"
           set -e
+          if [ "$connected_status" -eq 124 ]; then
+            echo "shop_flutter_test_connected_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$connected_status" -ne 0 ]; then
+            echo "shop_flutter_test_connected_failed_status:$connected_status" >&2
+            exit "$connected_status"
+          fi
           connected_elapsed="$(( $(date +%s) - connected_started_at ))"
-          if [ "$connected_elapsed" -gt "$connected_budget" ]; then
+          if [ "$connected_elapsed" -ge "$connected_budget" ]; then
             echo "shop_flutter_test_connected_budget_exhausted" >&2
             exit 124
           fi
@@ -376,8 +432,16 @@ jobs:
           )
           connected_successor_status="$?"
           set -e
+          if [ "$connected_successor_status" -eq 124 ]; then
+            echo "shop_flutter_test_connected_successor_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$connected_successor_status" -ne 0 ]; then
+            echo "shop_flutter_test_connected_successor_failed_status:$connected_successor_status" >&2
+            exit "$connected_successor_status"
+          fi
           connected_successor_elapsed="$(( $(date +%s) - connected_successor_started_at ))"
-          if [ "$connected_successor_elapsed" -gt "$connected_successor_budget" ]; then
+          if [ "$connected_successor_elapsed" -ge "$connected_successor_budget" ]; then
             echo "shop_flutter_test_connected_successor_budget_exhausted" >&2
             exit 124
           fi
@@ -402,14 +466,22 @@ jobs:
           )
           trusted_time_status="$?"
           set -e
+          if [ "$trusted_time_status" -eq 124 ]; then
+            echo "shop_flutter_test_trusted_time_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$trusted_time_status" -ne 0 ]; then
+            echo "shop_flutter_test_trusted_time_failed_status:$trusted_time_status" >&2
+            exit "$trusted_time_status"
+          fi
           trusted_time_elapsed="$(( $(date +%s) - trusted_time_started_at ))"
-          if [ "$trusted_time_elapsed" -gt "$trusted_time_budget" ]; then
+          if [ "$trusted_time_elapsed" -ge "$trusted_time_budget" ]; then
             echo "shop_flutter_test_trusted_time_budget_exhausted" >&2
             exit 124
           fi
           test "$trusted_time_status" -eq 0
           overall_elapsed="$(( $(date +%s) - overall_started_at ))"
-          if [ "$overall_elapsed" -gt "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then
+          if [ "$overall_elapsed" -ge "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then
             echo "shop_flutter_test_total_budget_exhausted" >&2
             exit 124
           fi

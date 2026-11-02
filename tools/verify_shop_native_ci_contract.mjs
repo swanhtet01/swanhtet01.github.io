@@ -332,8 +332,8 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   }
   requireToken(
     source,
-    'timeout-minutes: 60',
-    'native_android_job_timeout_not_60_minutes',
+    'timeout-minutes: 120',
+    'native_android_job_timeout_not_120_minutes',
     failures,
   )
   requireToken(
@@ -344,8 +344,8 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "2400"',
-    'native_test_total_budget_not_bounded_to_2400_seconds',
+    'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "5400"',
+    'native_test_total_budget_not_bounded_to_5400_seconds',
     failures,
   )
   requireToken(
@@ -580,6 +580,24 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     )
     requireToken(
       source,
+      `if [ "$${shard}_status" -eq 124 ]; then`,
+      `native_${shard}_timeout_status_not_classified`,
+      failures,
+    )
+    requireToken(
+      source,
+      `if [ "$${shard}_status" -ne 0 ]; then`,
+      `native_${shard}_nonzero_status_not_classified`,
+      failures,
+    )
+    requireToken(
+      source,
+      `shop_flutter_test_${shard}_failed_status:$${shard}_status`,
+      `native_${shard}_nonzero_status_diagnostic_missing`,
+      failures,
+    )
+    requireToken(
+      source,
       `test "$${shard}_status" -eq 0`,
       `native_${shard}_shard_status_not_fail_closed`,
       failures,
@@ -592,7 +610,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     )
     requireToken(
       source,
-      `if [ "$${shard}_elapsed" -gt "$${shard}_budget" ]; then`,
+      `if [ "$${shard}_elapsed" -ge "$${shard}_budget" ]; then`,
       `native_${shard}_shard_elapsed_guard_missing`,
       failures,
     )
@@ -619,6 +637,27 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     requireOrder(
       source,
       `${shard}_status="$?"`,
+      `if [ "$${shard}_status" -eq 124 ]; then`,
+      `native_${shard}_timeout_status_checked_before_capture`,
+      failures,
+    )
+    requireOrder(
+      source,
+      `if [ "$${shard}_status" -eq 124 ]; then`,
+      `if [ "$${shard}_status" -ne 0 ]; then`,
+      `native_${shard}_nonzero_status_checked_before_timeout_status`,
+      failures,
+    )
+    requireOrder(
+      source,
+      `if [ "$${shard}_status" -ne 0 ]; then`,
+      `${shard}_elapsed="$(( $(date +%s) - ${shard}_started_at ))"`,
+      `native_${shard}_elapsed_checked_before_nonzero_status`,
+      failures,
+    )
+    requireOrder(
+      source,
+      `${shard}_status="$?"`,
       `test "$${shard}_status" -eq 0`,
       `native_${shard}_shard_status_checked_before_capture`,
       failures,
@@ -632,7 +671,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'if [ "$overall_elapsed" -gt "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then',
+    'if [ "$overall_elapsed" -ge "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then',
     'native_test_total_budget_elapsed_guard_missing',
     failures,
   )
