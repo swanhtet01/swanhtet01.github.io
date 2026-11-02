@@ -667,6 +667,42 @@ class ShopConnectedSiteVerifiedAuthorityReceiptStore
     canonicalPayloadBytes: canonicalPayloadBytes,
     signature: signature,
   );
+
+  @override
+  Future<void> retainCheckpoint(
+    ConnectedSiteScope scope, {
+    required ConnectedSiteVerifiedAuthorityReceipt receipt,
+    required String canonicalPayloadBytes,
+    required String payloadSignature,
+    required String canonicalCheckpointBytes,
+    required String checkpointSignature,
+  }) async {
+    final checkpoint = ConnectedSiteAuthorityCheckpointV1.parse(
+      canonicalBytes: canonicalCheckpointBytes,
+      signature: checkpointSignature,
+    );
+    final current = checkpoint.payloads.last;
+    if (current.canonicalBytes != canonicalPayloadBytes ||
+        current.signature != payloadSignature ||
+        current.workspaceId != receipt.workspaceId ||
+        current.siteId != receipt.siteId ||
+        current.authoritySequence != receipt.authoritySequence ||
+        current.payloadDigest != receipt.payloadDigest ||
+        current.issuerKeyId != receipt.issuerKeyId ||
+        current.revocationGeneration != receipt.revocationGeneration ||
+        current.membershipDigest != receipt.membershipDigest ||
+        current.configurationVersion != receipt.configurationVersion ||
+        current.configurationDigest != receipt.configurationDigest) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_checkpoint_current_mismatch',
+      );
+    }
+    await payloadStore.applyCheckpoint(
+      scope,
+      canonicalCheckpointBytes: canonicalCheckpointBytes,
+      signature: checkpointSignature,
+    );
+  }
 }
 
 class ShopConnectedSiteAuthorityPayloadStore {
@@ -693,7 +729,6 @@ class ShopConnectedSiteAuthorityPayloadStore {
       );
     }
     await reverifyRetainedPayloads();
-    await _requireBootstrapProvenance(scope);
     final row = await database
         .customSelect(
           'SELECT payload_bytes, signature FROM shop_site_authority_payloads '
@@ -703,6 +738,7 @@ class ShopConnectedSiteAuthorityPayloadStore {
         )
         .getSingleOrNull();
     if (row == null) return null;
+    await _requireBootstrapProvenance(scope);
     final payload = ConnectedSiteAuthorityPayloadV1.parse(
       canonicalBytes: row.read<String>('payload_bytes'),
       signature: row.read<String>('signature'),

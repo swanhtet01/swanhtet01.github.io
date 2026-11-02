@@ -562,6 +562,24 @@ void main() {
         shopConnectedCloudProofSchemaDefinitionsV34()['shop_site_cloud_proofs_no_update']!,
       );
       await database.customStatement(
+        'DROP TRIGGER shop_site_authority_bootstrap_provenance_no_update',
+      );
+      await database.customStatement(
+        'DROP TRIGGER shop_site_authority_bootstrap_provenance_no_delete',
+      );
+      await database.customStatement(
+        'DROP TABLE shop_site_authority_bootstrap_provenance',
+      );
+      await database.customStatement(
+        'DROP TRIGGER shop_site_authority_checkpoints_no_update',
+      );
+      await database.customStatement(
+        'DROP TRIGGER shop_site_authority_checkpoints_no_delete',
+      );
+      await database.customStatement(
+        'DROP TABLE shop_site_authority_checkpoints',
+      );
+      await database.customStatement(
         'DROP TRIGGER shop_site_cloud_proof_legacy_boundary_no_update',
       );
       await database.customStatement(
@@ -884,7 +902,7 @@ void main() {
         await database.verifyReadyForUse();
         final snapshot = File('${root.path}/revoked-snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
-        ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 35);
+        ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 36);
         await expectLater(
           ShopConnectedSiteReconciliationStore(
             database: database,

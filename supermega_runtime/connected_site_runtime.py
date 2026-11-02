@@ -115,6 +115,10 @@ class ConnectedSiteRuntimeService:
         issuer_key_id = authority.authority_payload.get("issuerKeyId")
         if not isinstance(issuer_key_id, str):
             raise ConnectedSiteV15Error("connected_site_authority_issuer")
+        checkpoint_evidence = authority.authority_checkpoints.get(principal.device_id)
+        if checkpoint_evidence is None:
+            raise ConnectedSiteV15Error("connected_site_authority_checkpoint_unavailable")
+        checkpoint, checkpoint_signature = checkpoint_evidence
         return {
             "contract": AUTHORITY_RESPONSE_CONTRACT,
             "protocolVersion": 1,
@@ -130,6 +134,9 @@ class ConnectedSiteRuntimeService:
             "authorityPayloadDigest": authority.authority_payload_digest,
             "authoritySignature": authority.authority_signature,
             "issuerKeyId": issuer_key_id,
+            "authorityCheckpointBytes": canonical_json(checkpoint),
+            "authorityCheckpointDigest": checkpoint["checkpointDigest"],
+            "authorityCheckpointSignature": checkpoint_signature,
         }
 
     def reconcile(

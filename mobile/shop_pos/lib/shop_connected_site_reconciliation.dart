@@ -693,6 +693,15 @@ abstract interface class ConnectedSiteVerifiedAuthorityReceiptStore {
     required String canonicalPayloadBytes,
     required String signature,
   });
+
+  Future<void> retainCheckpoint(
+    ConnectedSiteScope scope, {
+    required ConnectedSiteVerifiedAuthorityReceipt receipt,
+    required String canonicalPayloadBytes,
+    required String payloadSignature,
+    required String canonicalCheckpointBytes,
+    required String checkpointSignature,
+  });
 }
 
 class UnavailableConnectedSiteVerifiedAuthorityReceiptStore
@@ -712,6 +721,18 @@ class UnavailableConnectedSiteVerifiedAuthorityReceiptStore
     required ConnectedSiteVerifiedAuthorityReceipt receipt,
     required String canonicalPayloadBytes,
     required String signature,
+  }) => throw const ConnectedSiteReconciliationException(
+    'connected_site_cloud_authority_store_unavailable',
+  );
+
+  @override
+  Future<void> retainCheckpoint(
+    ConnectedSiteScope scope, {
+    required ConnectedSiteVerifiedAuthorityReceipt receipt,
+    required String canonicalPayloadBytes,
+    required String payloadSignature,
+    required String canonicalCheckpointBytes,
+    required String checkpointSignature,
   }) => throw const ConnectedSiteReconciliationException(
     'connected_site_cloud_authority_store_unavailable',
   );
@@ -783,6 +804,9 @@ class ConnectedSiteCloudWireClient
       'authorityPayloadDigest',
       'authoritySignature',
       'issuerKeyId',
+      'authorityCheckpointBytes',
+      'authorityCheckpointDigest',
+      'authorityCheckpointSignature',
     });
     if (json['contract'] != connectedSiteCloudAuthorityResponseContract ||
         json['protocolVersion'] != connectedSiteProtocolVersion ||
@@ -804,7 +828,14 @@ class ConnectedSiteCloudWireClient
         json['authoritySignature'] is! String ||
         (json['authoritySignature']! as String).isEmpty ||
         json['issuerKeyId'] is! String ||
-        !_isIdentifier(json['issuerKeyId']! as String)) {
+        !_isIdentifier(json['issuerKeyId']! as String) ||
+        (json['authorityCheckpointBytes'] != null &&
+            json['authorityCheckpointBytes'] is! String) ||
+        (json['authorityCheckpointDigest'] != null &&
+            (json['authorityCheckpointDigest'] is! String ||
+                !_isDigest(json['authorityCheckpointDigest']! as String))) ||
+        (json['authorityCheckpointSignature'] != null &&
+            json['authorityCheckpointSignature'] is! String)) {
       throw const ConnectedSiteReconciliationException(
         'connected_site_cloud_authority_response_invalid',
       );
@@ -848,12 +879,44 @@ class ConnectedSiteCloudWireClient
         );
       }
     }
-    await authorityReceiptStore.retain(
-      scope,
-      receipt: receipt,
-      canonicalPayloadBytes: canonicalPayload,
-      signature: json['authoritySignature']! as String,
-    );
+    if (previous == null) {
+      final checkpointBytes = json['authorityCheckpointBytes'];
+      final checkpointDigest = json['authorityCheckpointDigest'];
+      final checkpointSignature = json['authorityCheckpointSignature'];
+      if (checkpointBytes is! String ||
+          checkpointDigest is! String ||
+          checkpointSignature is! String ||
+          checkpointSignature.isEmpty) {
+        throw const ConnectedSiteReconciliationException(
+          'connected_site_cloud_authority_checkpoint_required',
+        );
+      }
+      final checkpoint = _canonicalObjectText(checkpointBytes);
+      if (checkpoint['checkpointDigest'] != checkpointDigest ||
+          checkpoint['workspaceId'] != scope.workspaceId ||
+          checkpoint['siteId'] != scope.siteId ||
+          checkpoint['deviceId'] != scope.deviceId ||
+          checkpoint['lastAuthoritySequence'] != receipt.authoritySequence) {
+        throw const ConnectedSiteReconciliationException(
+          'connected_site_cloud_authority_checkpoint_mismatch',
+        );
+      }
+      await authorityReceiptStore.retainCheckpoint(
+        scope,
+        receipt: receipt,
+        canonicalPayloadBytes: canonicalPayload,
+        payloadSignature: json['authoritySignature']! as String,
+        canonicalCheckpointBytes: checkpointBytes,
+        checkpointSignature: checkpointSignature,
+      );
+    } else {
+      await authorityReceiptStore.retain(
+        scope,
+        receipt: receipt,
+        canonicalPayloadBytes: canonicalPayload,
+        signature: json['authoritySignature']! as String,
+      );
+    }
     _verifiedAuthorityByScope[key] = receipt;
     final observedAt = now().toUtc();
     final expiresAt = observedAt.add(authorityFreshness);

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 import unittest
 
 from cryptography.hazmat.primitives import serialization
@@ -46,7 +47,14 @@ DEVICE_A = _Key(4)
 DEVICE_B = _Key(5)
 
 
-def _authority(workspace: str, site: str, device_id: str, key: _Key) -> SiteAuthority:
+def _authority(
+    workspace: str,
+    site: str,
+    device_id: str,
+    key: _Key,
+    *,
+    authority_sequence: int = 1,
+) -> SiteAuthority:
     device = DeviceAuthority(
         device_id=device_id,
         signing_key_id=f"key-{device_id}",
@@ -57,31 +65,83 @@ def _authority(workspace: str, site: str, device_id: str, key: _Key) -> SiteAuth
         session_generation=2,
     )
     member = CurrentMember("actor-1", "cashierCounter", ("counterSale",), 2)
-    authority_unsigned = {
-        "schemaId": "ConnectedSiteAuthorityPayloadV1",
+    if authority_sequence not in (1, 4):
+        raise ValueError("unsupported synthetic authority sequence")
+    revocations = [3] if authority_sequence == 1 else [1, 1, 2, 3]
+    configurations = [7] if authority_sequence == 1 else [4, 5, 6, 7]
+    payload_entries: list[dict[str, str]] = []
+    previous_authority_digest: str | None = None
+    authority_payload: dict = {}
+    authority_signature = ""
+    for sequence, (revocation, configuration) in enumerate(
+        zip(revocations, configurations, strict=True),
+        1,
+    ):
+        authority_unsigned = {
+            "schemaId": "ConnectedSiteAuthorityPayloadV1",
+            "protocolVersion": 1,
+            "authorityEventId": (
+                f"authority-{workspace}-{site}"
+                if authority_sequence == 1
+                else f"authority-{workspace}-{site}-{sequence}"
+            ),
+            "authoritySequence": sequence,
+            "previousAuthorityDigest": previous_authority_digest,
+            "workspaceId": workspace,
+            "siteId": site,
+            "issuedAtMillis": 1793530800000 + sequence - 1,
+            "issuerKeyId": "issuer-1",
+            "membershipSnapshot": {
+                "revocationGeneration": revocation,
+                "members": [{"actorId": "actor-1", "role": "cashierCounter", "capabilities": ["counterSale"], "sessionGeneration": 2}],
+            },
+            "configurationSnapshot": {
+                "configurationVersion": configuration,
+                "businessProfile": {"schemaId": "profile-v1", "templateId": "retail", "templateVersion": 1},
+                "catalogReference": {"catalogVersion": 1, "catalogDigest": digest({"catalog": site})},
+            },
+        }
+        authority_payload = {
+            **authority_unsigned,
+            "payloadDigest": digest(authority_unsigned),
+        }
+        authority_signature = ISSUER.sign(authority_payload)
+        canonical_payload = canonical_json(authority_payload)
+        payload_entries.append({
+            "canonicalPayloadBytes": canonical_payload,
+            "signature": authority_signature,
+        })
+        previous_authority_digest = sha256(canonical_payload.encode()).hexdigest()
+    checkpoint_unsigned = {
+        "schemaId": "ConnectedSiteAuthorityCheckpointV1",
         "protocolVersion": 1,
-        "authorityEventId": f"authority-{workspace}-{site}",
-        "authoritySequence": 1,
-        "previousAuthorityDigest": None,
         "workspaceId": workspace,
         "siteId": site,
-        "issuedAtMillis": 1793530800000,
+        "deviceId": device_id,
+        "issuedAtMillis": 1793534340000,
         "issuerKeyId": "issuer-1",
-        "membershipSnapshot": {
-            "revocationGeneration": 3,
-            "members": [{"actorId": "actor-1", "role": "cashierCounter", "capabilities": ["counterSale"], "sessionGeneration": 2}],
-        },
-        "configurationSnapshot": {
-            "configurationVersion": 7,
-            "businessProfile": {"schemaId": "profile-v1", "templateId": "retail", "templateVersion": 1},
-            "catalogReference": {"catalogVersion": 1, "catalogDigest": digest({"catalog": site})},
-        },
+        "firstAuthoritySequence": 1,
+        "lastAuthoritySequence": authority_sequence,
+        "payloads": payload_entries,
+        "chainDigest": digest([
+            {
+                "authoritySequence": sequence,
+                "payloadDigest": sha256(
+                    entry["canonicalPayloadBytes"].encode()
+                ).hexdigest(),
+                "signatureDigest": sha256(entry["signature"].encode()).hexdigest(),
+            }
+            for sequence, entry in enumerate(payload_entries, 1)
+        ]),
     }
-    authority_payload = {**authority_unsigned, "payloadDigest": digest(authority_unsigned)}
+    checkpoint = {
+        **checkpoint_unsigned,
+        "checkpointDigest": digest(checkpoint_unsigned),
+    }
     return SiteAuthority(
         workspace_id=workspace,
         site_id=site,
-        authority_generation=1,
+        authority_generation=authority_sequence,
         configuration_generation=7,
         revocation_generation=3,
         authority_payload_digest=digest(authority_payload),
@@ -89,8 +149,9 @@ def _authority(workspace: str, site: str, device_id: str, key: _Key) -> SiteAuth
         devices={device_id: device},
         members={"actor-1": member},
         authority_payload=authority_payload,
-        authority_signature=ISSUER.sign(authority_payload),
+        authority_signature=authority_signature,
         authority_issuer_keys={"issuer-1": ISSUER.public},
+        authority_checkpoints={device_id: (checkpoint, ISSUER.sign(checkpoint))},
         enabled=True,
     )
 

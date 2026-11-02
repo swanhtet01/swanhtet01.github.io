@@ -134,8 +134,40 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
                 request=request,
             ),
         }
+        authority_response = generated["authorityResponse"]
+        checkpoint = json.loads(authority_response["authorityCheckpointBytes"])
+        self.assertEqual(
+            checkpoint["checkpointDigest"],
+            authority_response["authorityCheckpointDigest"],
+        )
+        self.assertEqual(checkpoint["deviceId"], self.principal.device_id)
+        self.assertEqual(checkpoint["lastAuthoritySequence"], 1)
         fixture = Path(
             "mobile/shop_pos/test/fixtures/connected_site_cloud_wire_v1.json"
+        ).read_text(encoding="utf-8").rstrip("\n")
+        self.assertEqual(canonical_json(generated), fixture)
+
+    def test_cross_runtime_full_chain_checkpoint_golden_is_byte_exact(self) -> None:
+        authority = _authority(
+            "workspace-a",
+            "site-a",
+            "device-a",
+            DEVICE_A,
+            authority_sequence=4,
+        )
+        service = ConnectedSiteRuntimeService(
+            authority_provider=_Authorities(authority),
+            repository=MemoryConnectedSiteRepository(),
+            runtime_enabled=True,
+            now=lambda: NOW,
+        )
+        generated = service.authority(
+            principal=self.principal,
+            workspace_id="workspace-a",
+            site_id="site-a",
+        )
+        fixture = Path(
+            "mobile/shop_pos/test/fixtures/connected_site_authority_bootstrap_v1.json"
         ).read_text(encoding="utf-8").rstrip("\n")
         self.assertEqual(canonical_json(generated), fixture)
 
@@ -339,9 +371,30 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
                 sort_keys=True,
             ),
         )
+        checkpoint = json.loads(payload["authorityCheckpointBytes"])
+        self.assertEqual(checkpoint["deviceId"], "device-a")
+        self.assertEqual(
+            checkpoint["checkpointDigest"],
+            payload["authorityCheckpointDigest"],
+        )
+        self.assertEqual(checkpoint["lastAuthoritySequence"], 1)
         self.assertNotIn("private", response.text.casefold())
         self.assertNotIn("password", response.text.casefold())
         self.assertEqual(response.headers["cache-control"], "no-store")
+
+    def test_authority_refresh_fails_closed_without_signed_device_checkpoint(self) -> None:
+        self.authorities.values[("workspace-a", "site-a")] = replace(
+            self.authority_a,
+            authority_checkpoints={},
+        )
+        response = self.client().get(
+            "/api/connected-site/v1/workspaces/workspace-a/sites/site-a/authority"
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["detail"]["error"],
+            "authority_checkpoint_unavailable",
+        )
 
     def test_reconcile_binds_exact_refreshed_authority_snapshot(self) -> None:
         request = _request(self.authority_a, _upload(self.authority_a, key=DEVICE_A))

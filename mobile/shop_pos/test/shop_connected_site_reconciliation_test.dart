@@ -1,12 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:drift/drift.dart' show Variable;
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_cloud_http.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
+import 'package:supermega_shop/shop_database.dart';
 
 void main() {
   final now = DateTime.utc(2026, 10, 31, 12);
@@ -578,6 +582,178 @@ void main() {
       expect(executor.calls, 0);
     });
 
+    test('shared full-chain golden bootstraps then accepts exact next payload', () async {
+      final bootstrapText = File(
+        'test/fixtures/connected_site_authority_bootstrap_v1.json',
+      ).readAsStringSync().trim();
+      final bootstrapResponse = Map<String, Object?>.from(
+        jsonDecode(bootstrapText) as Map,
+      );
+      expect(canonicalConnectedSiteJson(bootstrapResponse), bootstrapText);
+      final bootstrapScope = ConnectedSiteScope(
+        workspaceId: bootstrapResponse['workspaceId']! as String,
+        siteId: bootstrapResponse['siteId']! as String,
+        deviceId: bootstrapResponse['deviceId']! as String,
+      );
+      final bootstrapNow = DateTime.utc(2026, 11, 1, 12);
+      var currentNow = bootstrapNow;
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.customInsert(
+          'INSERT INTO shop_site_devices '
+          '(device_id, tenant_id, site_id, public_key_fingerprint, '
+          'session_generation, state, enrolled_at_millis) '
+          "VALUES (?, ?, ?, ?, 2, 'active', ?)",
+          variables: [
+            Variable<String>(bootstrapScope.deviceId),
+            Variable<String>(bootstrapScope.workspaceId),
+            Variable<String>(bootstrapScope.siteId),
+            Variable<String>('a' * 64),
+            Variable<int>(
+              bootstrapNow
+                  .subtract(const Duration(minutes: 5))
+                  .millisecondsSinceEpoch,
+            ),
+          ],
+        );
+        await database.customInsert(
+          'INSERT INTO shop_site_revocation_observations '
+          '(tenant_id, site_id, generation, observed_at_millis, source_digest) '
+          'VALUES (?, ?, 1, ?, ?)',
+          variables: [
+            Variable<String>(bootstrapScope.workspaceId),
+            Variable<String>(bootstrapScope.siteId),
+            Variable<int>(
+              bootstrapNow
+                  .subtract(const Duration(minutes: 5))
+                  .millisecondsSinceEpoch,
+            ),
+            Variable<String>('b' * 64),
+          ],
+        );
+        var currentResponse = bootstrapResponse;
+        final executor = _CloudExecutor()
+          ..handler = ({
+            required uri,
+            required method,
+            required headers,
+            required body,
+            required maxResponseBytes,
+          }) async => _cloudHttpJson(currentResponse, effectiveUri: uri);
+        final payloadStore = ShopConnectedSiteAuthorityPayloadStore(
+          database: database,
+          nowMillis: () => currentNow.millisecondsSinceEpoch,
+          verifier: _AcceptingSignatureVerifier(),
+          runtimeEnabled: true,
+        );
+        final client = ConnectedSiteCloudWireClient(
+          baseUri: Uri.parse('https://cloud.example.invalid'),
+          executor: executor,
+          authorityVerifier: ShopConnectedSiteCloudAuthorityVerifier(
+            verifier: _AcceptingSignatureVerifier(),
+          ),
+          authorityReceiptStore: ShopConnectedSiteVerifiedAuthorityReceiptStore(
+            payloadStore: payloadStore,
+          ),
+          runtimeEnabled: true,
+          now: () => currentNow,
+        );
+
+        expect(
+          await payloadStore.latestVerifiedReceipt(bootstrapScope),
+          isNull,
+        );
+        final refreshed = await client.refresh(bootstrapScope);
+        expect(refreshed.authorityGeneration, 4);
+        expect(
+          (await payloadStore.latestVerifiedReceipt(bootstrapScope))
+              ?.authoritySequence,
+          4,
+        );
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS count FROM shop_site_authority_payloads',
+                  )
+                  .getSingle())
+              .read<int>('count'),
+          4,
+        );
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS count FROM '
+                    'shop_site_authority_bootstrap_provenance',
+                  )
+                  .getSingle())
+              .read<int>('count'),
+          1,
+        );
+
+        final currentPayload = Map<String, Object?>.from(
+          jsonDecode(bootstrapResponse['authorityPayloadBytes']! as String)
+              as Map,
+        );
+        final nextUnsigned = <String, Object?>{
+          ...currentPayload,
+          'authorityEventId': 'authority-workspace-a-site-a-5',
+          'authoritySequence': 5,
+          'previousAuthorityDigest': connectedSiteSha256(currentPayload),
+          'issuedAtMillis': bootstrapNow.millisecondsSinceEpoch,
+          'membershipSnapshot': <String, Object?>{
+            ...(currentPayload['membershipSnapshot']! as Map),
+            'revocationGeneration': 4,
+          },
+          'configurationSnapshot': <String, Object?>{
+            ...(currentPayload['configurationSnapshot']! as Map),
+            'configurationVersion': 8,
+          },
+        }..remove('payloadDigest');
+        final nextPayload = <String, Object?>{
+          ...nextUnsigned,
+          'payloadDigest': connectedSiteSha256(nextUnsigned),
+        };
+        currentNow = bootstrapNow.add(const Duration(seconds: 1));
+        currentResponse = <String, Object?>{
+          ...bootstrapResponse,
+          'authorityGeneration': 5,
+          'configurationGeneration': 8,
+          'revocationGeneration': 4,
+          'authorityPayloadBytes': canonicalConnectedSiteJson(nextPayload),
+          'authorityPayloadDigest': connectedSiteSha256(nextPayload),
+          'authoritySignature': 's' * 64,
+        };
+        final incremented = await client.refresh(bootstrapScope);
+        expect(incremented.authorityGeneration, 5);
+        expect(
+          (await payloadStore.latestVerifiedReceipt(bootstrapScope))
+              ?.authoritySequence,
+          5,
+        );
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS count FROM shop_site_authority_payloads',
+                  )
+                  .getSingle())
+              .read<int>('count'),
+          5,
+        );
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS count FROM '
+                    'shop_site_authority_bootstrap_provenance',
+                  )
+                  .getSingle())
+              .read<int>('count'),
+          1,
+        );
+      } finally {
+        await database.close();
+      }
+    });
+
     test('requires a retained verified authority before upload', () async {
       final executor = _CloudExecutor();
       final client = ConnectedSiteCloudWireClient(
@@ -607,6 +783,41 @@ void main() {
       );
       expect(executor.calls, 0);
     });
+
+    test(
+      'fresh refresh rejects missing checkpoint before receipt retention',
+      () async {
+        final response = _cloudAuthorityResponse(scope)
+          ..['authorityCheckpointBytes'] = null
+          ..['authorityCheckpointDigest'] = null
+          ..['authorityCheckpointSignature'] = null;
+        final executor = _CloudExecutor()
+          ..response = _cloudHttpJson(
+            response,
+            effectiveUri: _cloudAuthorityUri,
+          );
+        final receipts = _CloudAuthorityReceiptStore();
+        final client = ConnectedSiteCloudWireClient(
+          baseUri: Uri.parse('https://cloud.example.invalid'),
+          executor: executor,
+          authorityVerifier: _CloudAuthorityVerifier(),
+          authorityReceiptStore: receipts,
+          runtimeEnabled: true,
+          now: () => now,
+        );
+
+        await expectLater(
+          client.refresh(scope),
+          throwsA(
+            _reconciliationCode(
+              'connected_site_cloud_authority_checkpoint_required',
+            ),
+          ),
+        );
+        expect(receipts.retainCalls, 0);
+        expect(receipts.checkpointCalls, 0);
+      },
+    );
 
     test(
       'verifies signed authority before canonical reconciliation upload',
@@ -1482,6 +1693,8 @@ class _CloudAuthorityVerifier extends ShopConnectedSiteCloudAuthorityVerifier {
 class _CloudAuthorityReceiptStore
     implements ConnectedSiteVerifiedAuthorityReceiptStore {
   ConnectedSiteVerifiedAuthorityReceipt? receipt;
+  int retainCalls = 0;
+  int checkpointCalls = 0;
 
   @override
   Future<ConnectedSiteVerifiedAuthorityReceipt?> latest(
@@ -1495,6 +1708,20 @@ class _CloudAuthorityReceiptStore
     required String canonicalPayloadBytes,
     required String signature,
   }) async {
+    retainCalls += 1;
+    this.receipt = receipt;
+  }
+
+  @override
+  Future<void> retainCheckpoint(
+    ConnectedSiteScope scope, {
+    required ConnectedSiteVerifiedAuthorityReceipt receipt,
+    required String canonicalPayloadBytes,
+    required String payloadSignature,
+    required String canonicalCheckpointBytes,
+    required String checkpointSignature,
+  }) async {
+    checkpointCalls += 1;
     this.receipt = receipt;
   }
 }
@@ -1551,45 +1778,93 @@ Map<String, Object?> _cloudAuthorityResponse(
   ConnectedSiteScope scope, {
   String? workspaceId,
 }) {
-  final membership = <String, Object?>{
-    'revocationGeneration': 3,
-    'members': <Object?>[
-      <String, Object?>{
-        'actorId': 'actor-test',
-        'role': 'cashierCounter',
-        'capabilities': <Object?>['counterSale'],
-        'sessionGeneration': 3,
+  final payloads = <Map<String, Object?>>[];
+  String? previousDigest;
+  for (var sequence = 1; sequence <= 4; sequence += 1) {
+    final membership = <String, Object?>{
+      'revocationGeneration': sequence < 3 ? 1 : sequence - 1,
+      'members': <Object?>[
+        <String, Object?>{
+          'actorId': 'actor-test',
+          'role': 'cashierCounter',
+          'capabilities': <Object?>['counterSale'],
+          'sessionGeneration': 3,
+        },
+      ],
+    };
+    final configuration = <String, Object?>{
+      'configurationVersion': sequence + 2,
+      'businessProfile': <String, Object?>{
+        'schemaId': 'business-profile-v1',
+        'templateId': 'retail',
+        'templateVersion': 1,
       },
-    ],
-  };
-  final configuration = <String, Object?>{
-    'configurationVersion': 6,
-    'businessProfile': <String, Object?>{
-      'schemaId': 'business-profile-v1',
-      'templateId': 'retail',
-      'templateVersion': 1,
-    },
-    'catalogReference': <String, Object?>{
-      'catalogVersion': 1,
-      'catalogDigest': 'c' * 64,
-    },
-  };
-  final unsigned = <String, Object?>{
-    'schemaId': 'ConnectedSiteAuthorityPayloadV1',
-    'protocolVersion': connectedSiteProtocolVersion,
-    'authorityEventId': 'authority-event-4',
-    'authoritySequence': 4,
-    'previousAuthorityDigest': 'd' * 64,
-    'workspaceId': scope.workspaceId,
-    'siteId': scope.siteId,
-    'issuedAtMillis': DateTime.utc(2026, 10, 31, 11).millisecondsSinceEpoch,
+      'catalogReference': <String, Object?>{
+        'catalogVersion': sequence == 4 ? 1 : sequence,
+        'catalogDigest': sequence == 4
+            ? 'c' * 64
+            : connectedSiteSha256({'catalog': sequence}),
+      },
+    };
+    final unsigned = <String, Object?>{
+      'schemaId': 'ConnectedSiteAuthorityPayloadV1',
+      'protocolVersion': connectedSiteProtocolVersion,
+      'authorityEventId': 'authority-event-$sequence',
+      'authoritySequence': sequence,
+      'previousAuthorityDigest': previousDigest,
+      'workspaceId': scope.workspaceId,
+      'siteId': scope.siteId,
+      'issuedAtMillis': DateTime.utc(
+        2026,
+        10,
+        31,
+        11,
+        sequence,
+      ).millisecondsSinceEpoch,
+      'issuerKeyId': 'authority-key-1',
+      'membershipSnapshot': membership,
+      'configurationSnapshot': configuration,
+    };
+    final payload = <String, Object?>{
+      ...unsigned,
+      'payloadDigest': connectedSiteSha256(unsigned),
+    };
+    previousDigest = connectedSiteSha256(payload);
+    payloads.add(payload);
+  }
+  final payload = payloads.last;
+  final signature = 's' * 64;
+  final checkpointUnsigned = <String, Object?>{
+    'chainDigest': connectedSiteSha256([
+      for (var index = 0; index < payloads.length; index += 1)
+        <String, Object?>{
+          'authoritySequence': index + 1,
+          'payloadDigest': connectedSiteSha256(payloads[index]),
+          'signatureDigest': crypto.sha256
+              .convert(utf8.encode(signature))
+              .toString(),
+        },
+    ]),
+    'deviceId': scope.deviceId,
+    'firstAuthoritySequence': 1,
+    'issuedAtMillis': DateTime.utc(2026, 10, 31, 11, 59).millisecondsSinceEpoch,
     'issuerKeyId': 'authority-key-1',
-    'membershipSnapshot': membership,
-    'configurationSnapshot': configuration,
+    'lastAuthoritySequence': payloads.length,
+    'payloads': [
+      for (final entry in payloads)
+        <String, Object?>{
+          'canonicalPayloadBytes': canonicalConnectedSiteJson(entry),
+          'signature': signature,
+        },
+    ],
+    'protocolVersion': connectedSiteProtocolVersion,
+    'schemaId': ConnectedSiteAuthorityCheckpointV1.schemaId,
+    'siteId': scope.siteId,
+    'workspaceId': scope.workspaceId,
   };
-  final payload = <String, Object?>{
-    ...unsigned,
-    'payloadDigest': connectedSiteSha256(unsigned),
+  final checkpoint = <String, Object?>{
+    ...checkpointUnsigned,
+    'checkpointDigest': connectedSiteSha256(checkpointUnsigned),
   };
   return <String, Object?>{
     'contract': connectedSiteCloudAuthorityResponseContract,
@@ -1604,8 +1879,11 @@ Map<String, Object?> _cloudAuthorityResponse(
     'revocationGeneration': 3,
     'authorityPayloadBytes': canonicalConnectedSiteJson(payload),
     'authorityPayloadDigest': connectedSiteSha256(payload),
-    'authoritySignature': 's' * 64,
+    'authoritySignature': signature,
     'issuerKeyId': 'authority-key-1',
+    'authorityCheckpointBytes': canonicalConnectedSiteJson(checkpoint),
+    'authorityCheckpointDigest': checkpoint['checkpointDigest'],
+    'authorityCheckpointSignature': signature,
   };
 }
 

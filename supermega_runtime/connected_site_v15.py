@@ -175,6 +175,9 @@ class SiteAuthority:
     authority_payload: Mapping[str, Any]
     authority_signature: str
     authority_issuer_keys: Mapping[str, str]
+    authority_checkpoints: Mapping[str, tuple[Mapping[str, Any], str]] = field(
+        default_factory=dict
+    )
     enabled: bool = False
 
     def __post_init__(self) -> None:
@@ -213,6 +216,92 @@ class SiteAuthority:
         if issuer_key is None:
             _fail("authority_issuer")
         _verify(issuer_key, self.authority_signature, canonical_json(payload).encode(), "authority_signature")
+        for device_id, evidence in self.authority_checkpoints.items():
+            if device_id not in self.devices or not isinstance(evidence, tuple) or len(evidence) != 2:
+                _fail("authority_checkpoint_device")
+            checkpoint, checkpoint_signature = evidence
+            if not isinstance(checkpoint, Mapping):
+                _fail("authority_checkpoint_shape")
+            checkpoint = dict(checkpoint)
+            expected_keys = {
+                "schemaId", "protocolVersion", "workspaceId", "siteId",
+                "deviceId", "issuedAtMillis", "issuerKeyId",
+                "firstAuthoritySequence", "lastAuthoritySequence", "payloads",
+                "chainDigest", "checkpointDigest",
+            }
+            if set(checkpoint) != expected_keys:
+                _fail("authority_checkpoint_shape")
+            unsigned_checkpoint = dict(checkpoint)
+            checkpoint_digest = unsigned_checkpoint.pop("checkpointDigest", None)
+            if (
+                checkpoint.get("schemaId") != "ConnectedSiteAuthorityCheckpointV1"
+                or checkpoint.get("protocolVersion") != PROTOCOL_VERSION
+                or checkpoint.get("workspaceId") != self.workspace_id
+                or checkpoint.get("siteId") != self.site_id
+                or checkpoint.get("deviceId") != device_id
+                or checkpoint.get("firstAuthoritySequence") != 1
+                or checkpoint.get("lastAuthoritySequence") != self.authority_generation
+                or checkpoint_digest != digest(unsigned_checkpoint)
+            ):
+                _fail("authority_checkpoint_binding")
+            entries = checkpoint.get("payloads")
+            if not isinstance(entries, list) or len(entries) != self.authority_generation or not entries:
+                _fail("authority_checkpoint_chain")
+            chain_bindings: list[dict[str, Any]] = []
+            previous: str | None = None
+            current_payload: Mapping[str, Any] | None = None
+            current_signature: str | None = None
+            for sequence, entry in enumerate(entries, 1):
+                if not isinstance(entry, dict) or set(entry) != {"canonicalPayloadBytes", "signature"}:
+                    _fail("authority_checkpoint_chain")
+                payload_bytes = entry.get("canonicalPayloadBytes")
+                payload_signature = entry.get("signature")
+                if not isinstance(payload_bytes, str) or not isinstance(payload_signature, str):
+                    _fail("authority_checkpoint_chain")
+                try:
+                    chained_payload = json.loads(payload_bytes)
+                except (TypeError, ValueError):
+                    _fail("authority_checkpoint_chain")
+                if (
+                    not isinstance(chained_payload, dict)
+                    or canonical_json(chained_payload) != payload_bytes
+                    or chained_payload.get("workspaceId") != self.workspace_id
+                    or chained_payload.get("siteId") != self.site_id
+                    or chained_payload.get("authoritySequence") != sequence
+                    or chained_payload.get("previousAuthorityDigest") != previous
+                ):
+                    _fail("authority_checkpoint_chain")
+                payload_unsigned = dict(chained_payload)
+                inner_digest = payload_unsigned.pop("payloadDigest", None)
+                if inner_digest != digest(payload_unsigned):
+                    _fail("authority_checkpoint_chain")
+                payload_issuer = self.authority_issuer_keys.get(chained_payload.get("issuerKeyId"))
+                if payload_issuer is None:
+                    _fail("authority_checkpoint_issuer")
+                _verify(payload_issuer, payload_signature, payload_bytes.encode(), "authority_checkpoint_payload_signature")
+                previous = sha256(payload_bytes.encode()).hexdigest()
+                chain_bindings.append({
+                    "authoritySequence": sequence,
+                    "payloadDigest": previous,
+                    "signatureDigest": sha256(payload_signature.encode()).hexdigest(),
+                })
+                current_payload = chained_payload
+                current_signature = payload_signature
+            if (
+                checkpoint.get("chainDigest") != digest(chain_bindings)
+                or current_payload != payload
+                or current_signature != self.authority_signature
+            ):
+                _fail("authority_checkpoint_current")
+            checkpoint_issuer = self.authority_issuer_keys.get(checkpoint.get("issuerKeyId"))
+            if checkpoint_issuer is None:
+                _fail("authority_checkpoint_issuer")
+            _verify(
+                checkpoint_issuer,
+                checkpoint_signature,
+                canonical_json(checkpoint).encode(),
+                "authority_checkpoint_signature",
+            )
         for key_id, key in self.issuer_keys.items():
             _identifier(key_id, "lease_issuer")
             _decode(key, 32, "lease_issuer_key")
