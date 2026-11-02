@@ -19,25 +19,35 @@
   reached the 2,400-second aggregate test ceiling with no preceding assertion
   failure. Hosted measurements were behavior core 448 seconds / 212 tests,
   shell 346 / 74, checkout 431 / 80, backup 430 / 101, persistence A 334 / 68,
-  then persistence B ran about 394 seconds and reached 66 passing tests before
-  its dynamically shortened timeout. SQLite-full recovery and all connected,
+  for **535 completed passing tests** across those five shards. Persistence B
+  then ran about 394 seconds and showed **66 additional passing tests** before
+  its dynamically shortened timeout; those observations do not make the
+  incomplete shard a terminal pass. SQLite-full recovery and all connected,
   connected-successor and trusted-time shards were **NOT RUN**. The missing
   render archive is downstream noise; Android analysis, process-interruption
   proof, production-profile build and debug APK are **NOT RUN**.
 - **PRIVATE SOURCE REPAIR / HOSTED NOT RUN:** implementation
   `75ffea78f9323d8960f7ed2d97ae1e89e45d766d` (tree
   `a0fba0dc2ef9d6231ee32f879ff3061de24b1eeb`) preserves all 68/68 exact-once
-  test assignments and strict serial ordering. Each of the nine shards retains
-  its 600-second ceiling; the aggregate is now the coherent 9 x 600 = 5,400
-  seconds and the Android job is bounded at 120 minutes. Every shard classifies
-  timeout status 124 first, any other nonzero status second with its exact
-  diagnostic, and elapsed `>=` budget only after a zero process status.
+  test assignments and strict serial ordering; it does **not** introduce
+  parallel jobs. Each of the nine shards retains its 600-second ceiling; the
+  serial aggregate is now the coherent 9 x 600 = 5,400 seconds (90 minutes)
+  and the Android job is bounded at 120 minutes. The nominal 30-minute
+  difference is only gross headroom for setup, formatting, interruption tests,
+  analysis, capture and packaging; it is not guaranteed remaining build time.
+  Every shard classifies timeout status 124 first, any other nonzero status
+  second with its exact diagnostic, and elapsed `>=` budget only after a zero
+  process status.
   Production identity and packaging remain after every shard passes. Native CI
   contracts are **21/21 PASS**, verifier **PASS**, QA isolation command is
   **33/33 PASS** with audit **PASS/strict-ready**, diff check and shell syntax
   are **PASS**, and independent review **ACCEPTS** the fail-closed repair.
   Exact hosted validation is **NOT RUN** and requires a separately guarded
-  publication decision.
+  publication decision. Standard hosted compute for this public repository is
+  expected to remain in GitHub's public-repository free class, but account
+  policy, future billing treatment and artifact/cache storage charges were not
+  independently verified; the longer ceiling can increase consumed runner
+  minutes even when no direct compute charge is applied.
 - **OTHER EXACT-HEAD RESULTS:** App run `41409457577` passed steps 1--637 and
   failed at step 638 / HQ 1 of 37 with
   `database_rehearsal_evidence_stale`, `secretValuesExposed:false`.
