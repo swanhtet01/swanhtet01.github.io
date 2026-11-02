@@ -7,6 +7,55 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private cloud authority bootstrap integration successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `4175ac1c05bd4dc2537e952e46011ebbc5ad7163`, repository tree
+  `5b59bee7ddbae8c9a73d4273a93aab81d7d6ce51`, native tree
+  `ff217b15c417bcb7a2a4b709491150014fdf80ca`, native `lib/` tree
+  `9df67e9512df1282f0eedd874d1122ae6b1543a1`, and server runtime tree
+  `e6594e20c6269fa8c437eaea9da352ee00e7b946`. Its exact predecessor is
+  ledger `d61e6f61a81aa3f4ce3accdd91917502b0a2d6ad`; binary patch SHA-256 is
+  `75710d2970ea992865d3a609cd21722c2404318c67e295a77f5985862169a1a3`.
+  This successor is private and unpublished.
+- The real connected-cloud authority response now carries the canonical,
+  signed, device-bound full-chain checkpoint required by a later-joining
+  device. A genuinely empty SQLite authority store accepts only that complete
+  checkpoint and atomically imports its payloads and immutable provenance;
+  any existing payload row still requires prior bootstrap provenance.
+  Incremental refresh remains exactly-next and rejects replay, gaps, digest,
+  scope, device or current-payload substitution. The server fails closed when
+  its authenticated device has no checkpoint evidence. Connected execution
+  remains independently default-off before HTTP.
+- Cross-runtime evidence no longer synthesizes separate checkpoint bytes.
+  Python and Dart share one byte-exact signed one-payload wire fixture and a
+  second Python-emitted four-payload bootstrap fixture, SHA-256
+  `d27b5c36d25377ca1f4821d381c0d45755f6b5616f6322bf0b88404b5583abd9`.
+  Dart imports the latter through the real SQLite receipt store, proves four
+  retained payloads plus one provenance row, then accepts generation five as
+  the exact-next incremental while retaining the single provenance record.
+- Python runtime/v15/lease tests are **33/33 PASS**. Native reconciliation,
+  durable store and authority tests are **63/63 PASS** serially in 1:55;
+  targeted four-file analyzer, formatting and `git diff --check` are
+  **PASS**. The first broader native run used an unpinned compiler path and is
+  not product evidence; the next run exposed two stale historical fixtures,
+  one retaining v36 objects while claiming v34 and one expecting schema 35
+  from a schema-36 database. Both focused regressions and the final serial
+  suite pass without relaxing production verification. Independent final
+  security/correctness review is **ACCEPT** after first holding the change for
+  a missing byte-exact multi-payload Python/Dart golden and post-bootstrap
+  incremental wire proof.
+- **BLOCKED / NOT RUN:** this establishes source and local verification only.
+  The connected router/client remain unmounted and default-off. A real issuer,
+  source-pinned production public key, Android Keystore/Windows DPAPI custody,
+  installed-device LAN TLS, PostgreSQL/RLS acceptance, signed artifacts,
+  restart/restore on installed targets, hardware, merchant and production
+  acceptance remain **NOT RUN / BLOCKED**. No APK, publication, deployment,
+  credential, live service or merchant data was used.
+- Capacity at `2026-11-02T00:46:04Z`: durable `/workspace` had 276,320,256
+  bytes free and `/dev/shm` had 5,313,478,656 bytes free. The durable artifact
+  build gate remains blocked; no cleanup or speculative build was attempted.
+
 ### Private joining-device authority checkpoint successor
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
