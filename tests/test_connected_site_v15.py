@@ -188,7 +188,32 @@ def _upload(
         "payloadDigest": digest(lease_unsigned),
         "signature": ISSUER.sign(lease_unsigned),
     }
-    payload = {"totalMmk": 1500}
+    lines = [{"productId": "product-1", "quantity": 1}]
+    reservation_unsigned = {
+        "schemaVersion": 1,
+        "reservationId": f"reservation:{command_id}",
+        "workspaceId": authority.workspace_id,
+        "siteId": authority.site_id,
+        "actorId": "actor-1",
+        "deviceId": device.device_id,
+        "workflowType": "retailCart",
+        "subjectId": aggregate_id,
+        "capability": "counterSale",
+        "lines": lines,
+        "basketDigest": digest({"schemaVersion": 1, "lines": lines}),
+        "issuedAt": issued_at.isoformat().replace("+00:00", "Z"),
+        "expiresAt": (issued_at + timedelta(hours=2)).isoformat().replace("+00:00", "Z"),
+        "state": "held",
+        "stateVersion": 1,
+    }
+    reservation = {
+        **reservation_unsigned,
+        "reservationDigest": digest(reservation_unsigned),
+    }
+    payload = {
+        "contract": "supermega.shop.connected-stock-reserve.v1",
+        "reservation": reservation,
+    }
     command_unsigned = {
         "protocolVersion": 1,
         "commandId": command_id,
@@ -245,18 +270,24 @@ def _upload(
     return UploadEvent(cursor, command_id, command_digest, event, event_digest, proof)
 
 
-def _derived_upload(authority: SiteAuthority, *, key: _Key, source: UploadEvent) -> UploadEvent:
+def _derived_upload(
+    authority: SiteAuthority,
+    *,
+    key: _Key,
+    source: UploadEvent,
+    reservation_changes: dict[str, object] | None = None,
+) -> UploadEvent:
     source_command = source.cloud_proof["command"]
+    source_reservation = source_command["payload"]["reservation"]
     reservation_unsigned = {
-        "schemaVersion": 1, "reservationId": "reservation-1",
-        "workspaceId": authority.workspace_id, "siteId": authority.site_id,
-        "actorId": source_command["actorId"], "deviceId": source_command["deviceId"],
-        "workflowType": "retailCart", "subjectId": "basket-1", "capability": "counterSale",
-        "lines": [{"productId": "product-1", "quantity": 1}],
-        "basketDigest": digest({"schemaVersion": 1, "lines": [{"productId": "product-1", "quantity": 1}]}),
-        "issuedAt": "2026-11-01T11:00:00.000Z", "expiresAt": "2026-11-01T13:00:00.000Z",
-        "state": "held", "stateVersion": 1,
+        key: value for key, value in source_reservation.items() if key != "reservationDigest"
     }
+    reservation_unsigned.update(reservation_changes or {})
+    if reservation_changes and "lines" in reservation_changes:
+        reservation_unsigned["basketDigest"] = digest({
+            "schemaVersion": 1,
+            "lines": reservation_unsigned["lines"],
+        })
     before = {**reservation_unsigned, "reservationDigest": digest(reservation_unsigned)}
     after_unsigned = {**reservation_unsigned, "state": "committed", "stateVersion": 2}
     after = {**after_unsigned, "reservationDigest": digest(after_unsigned)}
@@ -276,21 +307,21 @@ def _derived_upload(authority: SiteAuthority, *, key: _Key, source: UploadEvent)
     payload = {
         "contract": "supermega.shop.connected-stock-terminal.v1",
         "operationId": "operation-1",
-        "reservationId": "reservation-1",
+        "reservationId": before["reservationId"],
         "beforeDigest": before["reservationDigest"],
         "afterDigest": after["reservationDigest"],
         "transitionDigest": transition_digest,
         "state": "committed",
         "transition": transition,
     }
-    identity = digest({"reservationId": "reservation-1", "transitionDigest": transition_digest, "state": "committed"})
+    identity = digest({"reservationId": before["reservationId"], "transitionDigest": transition_digest, "state": "committed"})
     command_id = f"terminal:{identity}"
     event = {
         "eventId": f"terminal-event:{identity}",
         "workspaceId": authority.workspace_id,
         "siteId": authority.site_id,
         "aggregateType": "retailCart",
-        "aggregateId": "basket-1",
+        "aggregateId": before["subjectId"],
         "aggregateVersion": 2,
         "eventType": "shop.connected_stock.committed.v1",
         "occurredAt": transition_unsigned["transitionedAt"],
@@ -305,14 +336,16 @@ def _derived_upload(authority: SiteAuthority, *, key: _Key, source: UploadEvent)
         "actorId": source_command["actorId"],
         "deviceId": source_command["deviceId"],
         "aggregateType": "retailCart",
-        "aggregateId": "basket-1",
+        "aggregateId": before["subjectId"],
         "expectedVersion": 1,
         "payloadDigest": digest(payload),
         "leaseDigest": source_command["leaseDigest"],
     }
     command_digest = digest(command_unsigned)
     derivation = {
-        "contract": "supermega.shop.connected-stock-terminal-derivation.v1",
+        "contract": "supermega.shop.connected-stock-terminal-derivation.v2",
+        "sourceCommandDigest": source.command_digest,
+        "sourceReservationDigest": source_reservation["reservationDigest"],
         "operationId": payload["operationId"],
         "reservationId": payload["reservationId"],
         "transitionDigest": payload["transitionDigest"],
@@ -502,6 +535,51 @@ class ConnectedSiteV15Tests(unittest.TestCase):
         bad = UploadEvent(3, "terminal-command-2", "1" * 64, derived.event, derived.event_digest, altered)
         with self.assertRaises(ConnectedSiteV15Error):
             self._reconcile(self.a, bad, after=2)
+
+    def test_coordinator_derived_event_cannot_substitute_signed_reservation(self) -> None:
+        source = _upload(self.a, key=DEVICE_A)
+        self._reconcile(self.a, source)
+        substitutions = {
+            "reservation": {"reservationId": "reservation:attacker"},
+            "subject": {"subjectId": "basket-attacker"},
+            "lines": {"lines": [{"productId": "product-attacker", "quantity": 99}]},
+            "workflow": {"workflowType": "cafeOrder"},
+        }
+        for label, changes in substitutions.items():
+            with self.subTest(label=label):
+                derived = _derived_upload(
+                    self.a,
+                    key=DEVICE_A,
+                    source=source,
+                    reservation_changes=changes,
+                )
+                with self.assertRaisesRegex(
+                    ConnectedSiteV15Error,
+                    "derived_source_reservation_binding",
+                ):
+                    self._reconcile(self.a, derived, after=1)
+
+    def test_security_insufficient_v1_derivation_is_rejected(self) -> None:
+        source = _upload(self.a, key=DEVICE_A)
+        self._reconcile(self.a, source)
+        derived = _derived_upload(self.a, key=DEVICE_A, source=source)
+        proof = dict(derived.cloud_proof)
+        derivation = dict(proof["derivation"])
+        derivation["contract"] = (
+            "supermega.shop.connected-stock-terminal-derivation.v1"
+        )
+        proof["derivation"] = derivation
+        proof["derivationDigest"] = digest(derivation)
+        legacy = UploadEvent(
+            derived.cursor,
+            derived.command_id,
+            derived.command_digest,
+            derived.event,
+            derived.event_digest,
+            proof,
+        )
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "derivation_binding"):
+            self._reconcile(self.a, legacy, after=1)
 
 
 if __name__ == "__main__":

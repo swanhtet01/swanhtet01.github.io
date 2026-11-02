@@ -14626,8 +14626,13 @@ class ShopDatabase extends _$ShopDatabase {
         sourceProof.proofDigest != source.read<String>('proof_digest')) {
       throw StateError('Connected reservation source proof is invalid.');
     }
+    // V2 binds the terminal transition to the exact client-signed reserve.
+    // operationId remains coordinator audit metadata; it cannot select a
+    // different reservation, basket, subject, actor, device, or stock line.
     final derivation = <String, Object?>{
-      'contract': 'supermega.shop.connected-stock-terminal-derivation.v1',
+      'contract': 'supermega.shop.connected-stock-terminal-derivation.v2',
+      'sourceCommandDigest': sourceProof.commandDigest,
+      'sourceReservationDigest': transition.before.reservationDigest,
       'operationId': operationId,
       'reservationId': transition.before.reservationId,
       'transitionDigest': transition.transitionDigest,

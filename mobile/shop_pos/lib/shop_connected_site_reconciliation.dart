@@ -311,8 +311,22 @@ class ConnectedSiteCloudProofV1 {
     } else {
       final derivation = json['derivation'];
       final payload = event['payload'];
+      final sourceProof = ConnectedSiteCloudProofV1.fromJson(
+        json['sourceProof'],
+      );
+      final sourceReservation = sourceProof.signedCommand?.payload['reservation'];
+      final transition = payload is Map ? payload['transition'] : null;
+      final before = transition is Map ? transition['before'] : null;
       if (derivation is! Map ||
           payload is! Map ||
+          sourceReservation is! Map ||
+          before is! Map ||
+          derivation['sourceCommandDigest'] != sourceProof.commandDigest ||
+          derivation['sourceReservationDigest'] !=
+              sourceReservation['reservationDigest'] ||
+          derivation['reservationId'] != sourceReservation['reservationId'] ||
+          canonicalConnectedSiteJson(before) !=
+              canonicalConnectedSiteJson(sourceReservation) ||
           derivation['eventDigest'] != eventDigest ||
           payload['operationId'] != derivation['operationId'] ||
           payload['reservationId'] != derivation['reservationId'] ||
@@ -390,12 +404,16 @@ class ConnectedSiteCloudProofV1 {
       final sourceProof = ConnectedSiteCloudProofV1.fromJson(
         source['sourceProof'],
       );
+      final sourceCommand = sourceProof.signedCommand;
+      final sourceReservation = sourceCommand?.payload['reservation'];
       final derivation = source['derivation'];
       final exactDerivation =
           derivation is Map &&
-          derivation.length == 6 &&
+          derivation.length == 8 &&
           const {
             'contract',
+            'sourceCommandDigest',
+            'sourceReservationDigest',
             'operationId',
             'reservationId',
             'transitionDigest',
@@ -408,24 +426,42 @@ class ConnectedSiteCloudProofV1 {
           source['siteId'] != sourceProof.siteId ||
           source['deviceId'] != sourceProof.deviceId ||
           source['leaseDigest'] != sourceProof.leaseDigest ||
+          sourceCommand == null ||
+          sourceCommand.payload.length != 2 ||
+          sourceCommand.payload['contract'] !=
+              'supermega.shop.connected-stock-reserve.v1' ||
+          !const {
+            'retail.stock.reserve.v1',
+            'cafe.stock.reserve.v1',
+          }.contains(sourceCommand.commandType) ||
+          sourceReservation is! Map ||
+          sourceReservation['workspaceId'] != sourceCommand.workspaceId ||
+          sourceReservation['siteId'] != sourceCommand.siteId ||
+          sourceReservation['actorId'] != sourceCommand.actorId ||
+          sourceReservation['deviceId'] != sourceCommand.deviceId ||
+          sourceReservation['workflowType'] != sourceCommand.aggregateType ||
+          sourceReservation['subjectId'] != sourceCommand.aggregateId ||
+          !exactDerivation ||
+          derivation['sourceCommandDigest'] != sourceProof.commandDigest ||
+          derivation['sourceReservationDigest'] !=
+              sourceReservation['reservationDigest'] ||
           source['commandId'] is! String ||
           !_isIdentifier(source['commandId']! as String) ||
           source['commandDigest'] is! String ||
           !_isDigest(source['commandDigest']! as String) ||
-          !exactDerivation ||
           derivation['contract'] !=
-              'supermega.shop.connected-stock-terminal-derivation.v1' ||
+              'supermega.shop.connected-stock-terminal-derivation.v2' ||
+          derivation['sourceCommandDigest'] is! String ||
+          !_isDigest(derivation['sourceCommandDigest']! as String) ||
+          derivation['sourceReservationDigest'] is! String ||
+          !_isDigest(derivation['sourceReservationDigest']! as String) ||
           derivation['operationId'] is! String ||
           !_isIdentifier(derivation['operationId']! as String) ||
           derivation['reservationId'] is! String ||
           !_isIdentifier(derivation['reservationId']! as String) ||
           derivation['transitionDigest'] is! String ||
           !_isDigest(derivation['transitionDigest']! as String) ||
-          !const {
-            'released',
-            'expired',
-            'committed',
-          }.contains(derivation['state']) ||
+          !const {'expired', 'committed'}.contains(derivation['state']) ||
           derivation['eventDigest'] is! String ||
           !_isDigest(derivation['eventDigest']! as String) ||
           source['derivationDigest'] != connectedSiteSha256(derivation)) {

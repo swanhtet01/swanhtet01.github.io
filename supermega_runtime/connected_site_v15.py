@@ -818,12 +818,41 @@ class ConnectedSiteV15Adapter:
                 _fail("derived_scope")
         derivation = _exact(
             proof["derivation"],
-            {"contract", "operationId", "reservationId", "transitionDigest", "state", "eventDigest"},
+            {
+                "contract", "sourceCommandDigest", "sourceReservationDigest",
+                "operationId", "reservationId", "transitionDigest", "state", "eventDigest",
+            },
             "derivation_shape",
         )
+        source_payload = _exact(
+            source_command["payload"],
+            {"contract", "reservation"},
+            "source_reservation_payload_shape",
+        )
+        source_reservation = self._validate_reservation(source_payload["reservation"])
+        expected_source_type = {
+            "retailCart": "retail.stock.reserve.v1",
+            "cafeOrder": "cafe.stock.reserve.v1",
+        }.get(source_reservation["workflowType"])
         if (
-            derivation["contract"] != "supermega.shop.connected-stock-terminal-derivation.v1"
-            or derivation["state"] not in {"released", "expired", "committed"}
+            derivation["contract"] != "supermega.shop.connected-stock-terminal-derivation.v2"
+            or source_payload["contract"] != "supermega.shop.connected-stock-reserve.v1"
+            or source_command["commandType"] != expected_source_type
+            or source_command["aggregateType"] != source_reservation["workflowType"]
+            or source_command["aggregateId"] != source_reservation["subjectId"]
+            or source_command["workspaceId"] != source_reservation["workspaceId"]
+            or source_command["siteId"] != source_reservation["siteId"]
+            or source_command["actorId"] != source_reservation["actorId"]
+            or source_command["deviceId"] != source_reservation["deviceId"]
+            or source_reservation["capability"]
+            != _COMMAND_POLICY[source_command["commandType"]][0]
+            or derivation["sourceCommandDigest"] != digest({
+                key: source_command[key]
+                for key in source_command
+                if key not in {"payload", "signature"}
+            })
+            or derivation["sourceReservationDigest"] != source_reservation["reservationDigest"]
+            or derivation["state"] not in {"expired", "committed"}
             or digest(derivation) != proof["derivationDigest"]
             or derivation["eventDigest"] != upload.event_digest
         ):
@@ -845,6 +874,8 @@ class ConnectedSiteV15Adapter:
         )
         before = self._validate_reservation(transition["before"])
         after = self._validate_reservation(transition["after"])
+        if canonical_json(before) != canonical_json(source_reservation):
+            _fail("derived_source_reservation_binding")
         sale_binding = transition["saleBinding"]
         transition_unsigned = {
             "schemaVersion": transition["schemaVersion"],
