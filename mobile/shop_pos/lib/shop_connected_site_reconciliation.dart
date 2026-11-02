@@ -69,6 +69,15 @@ abstract interface class ConnectedSiteAuthorityProvider {
   Future<ConnectedSiteAuthorityState> refresh(ConnectedSiteScope scope);
 }
 
+/// Authority refresh that binds the response to the already verified local
+/// device enrollment generation before any receipt is retained.
+abstract interface class ConnectedSiteSessionBoundAuthorityProvider {
+  Future<ConnectedSiteAuthorityState> refreshForSession(
+    ConnectedSiteScope scope, {
+    required int expectedSessionGeneration,
+  });
+}
+
 class UnavailableConnectedSiteAuthorityProvider
     implements ConnectedSiteAuthorityProvider {
   const UnavailableConnectedSiteAuthorityProvider();
@@ -742,7 +751,10 @@ class UnavailableConnectedSiteVerifiedAuthorityReceiptStore
 /// It accepts only canonical JSON so duplicate keys, alternate encodings and
 /// response-shape ambiguity fail before durable cursors can advance.
 class ConnectedSiteCloudWireClient
-    implements ConnectedSiteAuthorityProvider, ConnectedSiteCloudTransport {
+    implements
+        ConnectedSiteAuthorityProvider,
+        ConnectedSiteSessionBoundAuthorityProvider,
+        ConnectedSiteCloudTransport {
   ConnectedSiteCloudWireClient({
     required Uri baseUri,
     this.executor =
@@ -777,7 +789,29 @@ class ConnectedSiteCloudWireClient
   _verifiedAuthorityByScope = {};
 
   @override
-  Future<ConnectedSiteAuthorityState> refresh(ConnectedSiteScope scope) async {
+  Future<ConnectedSiteAuthorityState> refresh(ConnectedSiteScope scope) =>
+      _refresh(scope);
+
+  @override
+  Future<ConnectedSiteAuthorityState> refreshForSession(
+    ConnectedSiteScope scope, {
+    required int expectedSessionGeneration,
+  }) {
+    if (expectedSessionGeneration < 1) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_cloud_session_generation_invalid',
+      );
+    }
+    return _refresh(
+      scope,
+      expectedSessionGeneration: expectedSessionGeneration,
+    );
+  }
+
+  Future<ConnectedSiteAuthorityState> _refresh(
+    ConnectedSiteScope scope, {
+    int? expectedSessionGeneration,
+  }) async {
     _requireEnabled();
     final response = await _execute(
       uri: baseUri.resolve(
@@ -838,6 +872,12 @@ class ConnectedSiteCloudWireClient
             json['authorityCheckpointSignature'] is! String)) {
       throw const ConnectedSiteReconciliationException(
         'connected_site_cloud_authority_response_invalid',
+      );
+    }
+    if (expectedSessionGeneration != null &&
+        json['sessionGeneration'] != expectedSessionGeneration) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_cloud_session_generation_mismatch',
       );
     }
     final canonicalPayload = json['authorityPayloadBytes']! as String;

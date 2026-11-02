@@ -582,6 +582,60 @@ void main() {
       expect(executor.calls, 0);
     });
 
+    test(
+      'session-bound refresh rejects mismatch before verification or retention',
+      () async {
+        final response = Map<String, Object?>.from(
+          jsonDecode(
+            File('test/fixtures/connected_site_authority_bootstrap_v1.json')
+                .readAsStringSync(),
+          ) as Map,
+        );
+        final boundScope = ConnectedSiteScope(
+          workspaceId: response['workspaceId']! as String,
+          siteId: response['siteId']! as String,
+          deviceId: response['deviceId']! as String,
+        );
+        final executor = _CloudExecutor()
+          ..response = _cloudHttpJson(
+            response,
+            effectiveUri: Uri.parse('https://cloud.example.invalid').resolve(
+              '/api/connected-site/v1/workspaces/'
+              '${Uri.encodeComponent(boundScope.workspaceId)}/sites/'
+              '${Uri.encodeComponent(boundScope.siteId)}/authority',
+            ),
+          );
+        final verifier = _CloudAuthorityVerifier();
+        final receipts = _CloudAuthorityReceiptStore();
+        final client = ConnectedSiteCloudWireClient(
+          baseUri: Uri.parse('https://cloud.example.invalid'),
+          executor: executor,
+          authorityVerifier: verifier,
+          authorityReceiptStore: receipts,
+          runtimeEnabled: true,
+          now: () => DateTime.utc(2026, 11, 2),
+        );
+
+        await expectLater(
+          client.refreshForSession(
+            boundScope,
+            expectedSessionGeneration:
+                (response['sessionGeneration']! as int) + 1,
+          ),
+          throwsA(
+            _reconciliationCode(
+              'connected_site_cloud_session_generation_mismatch',
+            ),
+          ),
+        );
+
+        expect(executor.calls, 1);
+        expect(verifier.calls, 0);
+        expect(receipts.retainCalls, 0);
+        expect(receipts.checkpointCalls, 0);
+      },
+    );
+
     test('shared full-chain golden bootstraps then accepts exact next payload', () async {
       final bootstrapText = File(
         'test/fixtures/connected_site_authority_bootstrap_v1.json',

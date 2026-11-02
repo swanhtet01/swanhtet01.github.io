@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_application_boundary.dart';
@@ -52,6 +52,7 @@ void main() {
     var factoryCalls = 0;
     ShopConnectedSharedWriteGate? observedGate;
     final transport = _Transport();
+    final executor = _Executor();
 
     final composition = ShopConnectedComposition.resolve(
       capabilities: _enabledCapabilities,
@@ -60,13 +61,12 @@ void main() {
         return ShopConnectedEnabledDependencies(
           database: database,
           cloudBaseUri: Uri.parse('https://cloud.invalid'),
-          cloudExecutor:
-              const UnavailableConnectedSiteAuthenticatedRequestExecutor(),
+          cloudExecutor: executor,
           cloudAuthorityVerifier:
               const UnavailableConnectedSiteCloudAuthorityVerifier(),
           payloadVerifier:
               const ConnectedSiteAuthorityPayloadVerificationUnavailable(),
-          platformSecurity: const UnavailableConnectedPlatformSecurity(),
+          platformSecurity: _Security(_identity(keyId: 'wrong-key')),
           platformLifecycle:
               const UnavailableConnectedCoordinatorPlatformLifecycle(),
           transportFactory: (gate) {
@@ -110,11 +110,13 @@ void main() {
         isA<ConnectedRuntimeException>().having(
           (error) => error.code,
           'code',
-          'connected_runtime_authority_unavailable',
+          'connected_runtime_identity_mismatch',
         ),
       ),
     );
     expect(composition.boundary.state, ConnectedApplicationState.failed);
+    expect(executor.calls, 0);
+    expect(await _authorityRowCount(database), 0);
     expect(transport.starts, 0);
     expect(transport.stops, 0);
   });
@@ -130,7 +132,6 @@ void main() {
       authority: authority,
       now: () => DateTime.utc(2026, 11, 2, 12),
     );
-
     expect(await readiness.databaseReady(), isTrue);
     expect(
       await readiness.enrollmentApproved(
@@ -156,6 +157,7 @@ void main() {
       authority: authority,
       now: () => DateTime.utc(2026, 11, 2, 12),
     );
+    await _seedDevice(database);
 
     expect(
       await _authorityState(readiness),
@@ -172,6 +174,13 @@ void main() {
       await _authorityState(readiness),
       ConnectedRuntimeAuthorityState.expired,
     );
+    authority.expiresAt = DateTime.utc(2026, 11, 2, 13);
+    authority.sessionGeneration = 2;
+    expect(
+      await _authorityState(readiness),
+      ConnectedRuntimeAuthorityState.unavailable,
+    );
+    authority.sessionGeneration = 1;
     authority.failure = StateError('synthetic_authority_unavailable');
     expect(
       await _authorityState(readiness),
@@ -196,6 +205,7 @@ Future<ConnectedRuntimeAuthorityState> _authorityState(
   workspaceId: 'workspace-1',
   siteId: 'site-1',
   coordinatorDeviceId: 'coordinator-1',
+  identity: _identity(),
 );
 
 const _enabledCapabilities = ShopRuntimeCapabilities(
@@ -213,13 +223,13 @@ const _enabledCapabilities = ShopRuntimeCapabilities(
   loopbackPrinter: false,
 );
 
-ConnectedPlatformIdentity _identity() {
+ConnectedPlatformIdentity _identity({String keyId = 'key-1'}) {
   final publicKey = Uint8List.fromList(
     List<int>.generate(32, (index) => index),
   );
   return ConnectedPlatformIdentity(
     alias: 'coordinator-1',
-    keyId: 'key-1',
+    keyId: keyId,
     algorithm: 'ed25519',
     publicKeyBase64: base64Encode(publicKey),
     publicKeyFingerprintSha256: crypto.sha256.convert(publicKey).toString(),
@@ -250,6 +260,37 @@ class _Transport implements ConnectedCoordinatorTransport {
   }
 }
 
+class _Security implements ConnectedPlatformSecurity {
+  _Security(this.identity);
+
+  final ConnectedPlatformIdentity identity;
+
+  @override
+  Future<ConnectedPlatformIdentity> loadIdentity({
+    required String alias,
+  }) async => identity;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('unexpected_platform_security_call');
+}
+
+class _Executor implements ConnectedSiteAuthenticatedRequestExecutor {
+  int calls = 0;
+
+  @override
+  Future<ConnectedSiteAuthenticatedHttpResponse> execute({
+    required Uri uri,
+    required String method,
+    required Map<String, String> headers,
+    required List<int> body,
+    required int maxResponseBytes,
+  }) async {
+    calls += 1;
+    throw StateError('unexpected_cloud_call');
+  }
+}
+
 class _Enrollment implements CoordinatorDeviceEnrollmentAuthorizer {
   String? coordinatorDeviceId;
   String? deviceId;
@@ -270,21 +311,25 @@ class _Enrollment implements CoordinatorDeviceEnrollmentAuthorizer {
   }
 }
 
-class _Authority implements ConnectedSiteAuthorityProvider {
+class _Authority implements ConnectedSiteSessionBoundAuthorityProvider {
   bool active = true;
+  int sessionGeneration = 1;
   DateTime observedAt = DateTime.utc(2026, 11, 2, 11);
   DateTime expiresAt = DateTime.utc(2026, 11, 2, 13);
   Object? failure;
   ConnectedSiteScope? returnedScope;
 
   @override
-  Future<ConnectedSiteAuthorityState> refresh(ConnectedSiteScope scope) async {
+  Future<ConnectedSiteAuthorityState> refreshForSession(
+    ConnectedSiteScope scope, {
+    required int expectedSessionGeneration,
+  }) async {
     final error = failure;
     if (error != null) throw error;
     return ConnectedSiteAuthorityState(
       scope: returnedScope ?? scope,
       active: active,
-      sessionGeneration: 1,
+      sessionGeneration: sessionGeneration,
       authorityGeneration: 1,
       authorityPayloadDigest: 'a' * 64,
       revocationGeneration: 0,
@@ -292,4 +337,36 @@ class _Authority implements ConnectedSiteAuthorityProvider {
       expiresAt: expiresAt,
     );
   }
+}
+
+Future<void> _seedDevice(ShopDatabase database) async {
+  await database.verifyReadyForUse();
+  await database.customInsert(
+    'INSERT INTO shop_site_devices '
+    '(device_id, tenant_id, site_id, public_key_fingerprint, '
+    'session_generation, state, enrolled_at_millis) '
+    "VALUES (?, ?, ?, ?, ?, 'active', ?)",
+    variables: [
+      Variable<String>('coordinator-1'),
+      Variable<String>('workspace-1'),
+      Variable<String>('site-1'),
+      Variable<String>(_identity().publicKeyFingerprintSha256),
+      const Variable<int>(1),
+      Variable<int>(DateTime.utc(2026, 11, 2, 11).millisecondsSinceEpoch),
+    ],
+  );
+}
+
+Future<int> _authorityRowCount(ShopDatabase database) async {
+  final payloads = await database
+      .customSelect(
+        'SELECT count(*) AS count FROM shop_site_authority_payloads',
+      )
+      .getSingle();
+  final checkpoints = await database
+      .customSelect(
+        'SELECT count(*) AS count FROM shop_site_authority_checkpoints',
+      )
+      .getSingle();
+  return payloads.read<int>('count') + checkpoints.read<int>('count');
 }

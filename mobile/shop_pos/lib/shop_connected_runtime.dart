@@ -58,6 +58,7 @@ abstract interface class ConnectedRuntimeReadiness {
     required String workspaceId,
     required String siteId,
     required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
   });
 }
 
@@ -207,6 +208,7 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
           'connected_runtime_enrollment_unapproved',
         );
       }
+      await _verifyAuthority(request, identity);
       final tlsIdentity = await platformSecurity.openTlsIdentity(
         alias: request.identityAlias,
         sealedTlsMaterialId: identity.sealedTlsMaterialId,
@@ -286,6 +288,7 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
           'connected_runtime_enrollment_unapproved',
         );
       }
+      await _verifyAuthority(request, identity);
     } catch (error) {
       _state = ConnectedRuntimeState.paused;
       _pauseReason = _errorCode(error);
@@ -356,10 +359,17 @@ class ShopConnectedRuntime implements ConnectedRuntimeControl {
         'connected_runtime_database_unready',
       );
     }
+  }
+
+  Future<void> _verifyAuthority(
+    ConnectedRuntimeStartRequest request,
+    ConnectedPlatformIdentity identity,
+  ) async {
     final authority = await readiness.authorityState(
       workspaceId: request.workspaceId,
       siteId: request.siteId,
       coordinatorDeviceId: request.coordinatorDeviceId,
+      identity: identity,
     );
     if (authority != ConnectedRuntimeAuthorityState.active) {
       throw ConnectedRuntimeException(

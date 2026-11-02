@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart';
+
 import 'shop_connected_application_boundary.dart';
 import 'shop_connected_coordinator_host.dart';
 import 'shop_connected_platform_security.dart';
@@ -172,7 +174,7 @@ class ShopConnectedRuntimeReadiness implements ConnectedRuntimeReadiness {
 
   final ShopDatabase database;
   final CoordinatorDeviceEnrollmentAuthorizer enrollment;
-  final ConnectedSiteAuthorityProvider authority;
+  final ConnectedSiteSessionBoundAuthorityProvider authority;
   final DateTime Function() now;
 
   @override
@@ -211,18 +213,46 @@ class ShopConnectedRuntimeReadiness implements ConnectedRuntimeReadiness {
     required String workspaceId,
     required String siteId,
     required String coordinatorDeviceId,
+    required ConnectedPlatformIdentity identity,
   }) async {
     try {
-      final state = await authority.refresh(
+      Future<int?> activeSessionGeneration() async {
+        final device = await database
+            .customSelect(
+              'SELECT session_generation FROM shop_site_devices '
+              "WHERE device_id = ? AND tenant_id = ? AND site_id = ? "
+              "AND public_key_fingerprint = ? AND state = 'active'",
+              variables: [
+                Variable<String>(coordinatorDeviceId),
+                Variable<String>(workspaceId),
+                Variable<String>(siteId),
+                Variable<String>(identity.publicKeyFingerprintSha256),
+              ],
+            )
+            .getSingleOrNull();
+        return device?.read<int>('session_generation');
+      }
+
+      final expectedSessionGeneration = await activeSessionGeneration();
+      if (expectedSessionGeneration == null || expectedSessionGeneration < 1) {
+        return ConnectedRuntimeAuthorityState.unavailable;
+      }
+      final state = await authority.refreshForSession(
         ConnectedSiteScope(
           workspaceId: workspaceId,
           siteId: siteId,
           deviceId: coordinatorDeviceId,
         ),
+        expectedSessionGeneration: expectedSessionGeneration,
       );
       if (state.scope.workspaceId != workspaceId ||
           state.scope.siteId != siteId ||
           state.scope.deviceId != coordinatorDeviceId) {
+        return ConnectedRuntimeAuthorityState.unavailable;
+      }
+      final retainedSessionGeneration = await activeSessionGeneration();
+      if (retainedSessionGeneration != expectedSessionGeneration ||
+          state.sessionGeneration != expectedSessionGeneration) {
         return ConnectedRuntimeAuthorityState.unavailable;
       }
       final instant = now().toUtc();

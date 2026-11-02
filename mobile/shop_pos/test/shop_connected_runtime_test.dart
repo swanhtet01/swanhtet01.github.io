@@ -127,6 +127,7 @@ void main() {
       );
       expect(coordinator.starts, 0);
       expect(writes.resumes, 0);
+      expect(readiness.authorityCalls, 0);
 
       security.identity = _identity();
       security.tlsFingerprint = 'c' * 64;
@@ -193,6 +194,7 @@ void main() {
         runtime.start(_request()),
         throwsA(_runtimeCode('connected_runtime_enrollment_unapproved')),
       );
+      expect(readiness.authorityCalls, 0);
 
       readiness.enrollment = true;
       readiness.authority = ConnectedRuntimeAuthorityState.unavailable;
@@ -369,13 +371,18 @@ class _Readiness implements ConnectedRuntimeReadiness {
   bool enrollment = true;
   ConnectedRuntimeAuthorityState authority =
       ConnectedRuntimeAuthorityState.active;
+  int authorityCalls = 0;
 
   @override
   Future<ConnectedRuntimeAuthorityState> authorityState({
     required String workspaceId,
     required String siteId,
     required String coordinatorDeviceId,
-  }) async => authority;
+    required ConnectedPlatformIdentity identity,
+  }) async {
+    authorityCalls += 1;
+    return authority;
+  }
 
   @override
   Future<bool> databaseReady() async => database;
