@@ -29,11 +29,20 @@
 - A source-bound synthetic visual audit at predecessor
   `f250876575f79220da8b04c6af79cf5f96cd5e4f` captured and reviewed 138
   Flutter PNGs for EN/MY phone and tablet layouts; its 43/43 visual-capture
-  tests **PASS**. The bounded Android-first direction is a warm-neutral canvas,
-  white transactional surfaces, near-black type, blue decisive actions,
-  minimum 48dp targets, larger product media, restrained functional motion and
-  explicit offline/LAN/sync/lease/backup/printer states. This is design
-  evidence and a phased implementation boundary, not an installed redesign.
+  tests **PASS**. The first bounded Android-first implementation is
+  `813550ffe8ed1183b532f9d407eea13bcff432d1` (tree
+  `df2d317a7411b6cfb828e2e155a2223329971133`, native tree
+  `f0b5325173e41243b103339c75389b111f6b6efd`). Its two-file binary-diff
+  SHA-256 is `dd1c76fb2cc54b6e648512178dad4aca4d4921785837ac748b298c7104988384`.
+  It applies a warm-neutral canvas, white transactional surfaces, near-black
+  type, existing blue decisive actions, padded Material targets and explicit
+  48dp TextButton/IconButton minimums while preserving the existing EN/MY font,
+  tracking and line-height contracts. Phone/tablet EN/MY at 1.3x text are
+  **4/4 PASS**, targeted analyzer is **PASS**, and independent design,
+  accessibility and transaction-boundary review **ACCEPTS** the final diff.
+  This is a reversible visual foundation, not a complete or installed redesign;
+  richer product media, restrained motion and consolidated offline/LAN/sync/
+  lease/backup/printer state remain later bounded slices.
 - **NOT RUN / BLOCKED:** no APK was rebuilt or installed for this private
   successor, no TalkBack or physical-device pass occurred, and no scanner,
   printer, signing, merchant or production evidence is created. Connected mode
