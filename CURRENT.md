@@ -7,6 +7,29 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Complete schema-v37 affected migration and backup matrix
+
+- **PASS:** exact ledger source
+  `eba696b8ccf9c37792dc7341f7a547c3b759b6d2` (repository tree
+  `9b39350b4a95f32eace7787c073ab649b6f087cd`) ran the complete
+  13-file v37-affected Flutter matrix serially with `--no-pub
+  --concurrency=1`: backup, café order, cash movement, connected attempt,
+  authority, enrollment, persistence, replica and trusted-time stores,
+  foundation, member identity, operational export and pending cash checkout.
+- Result: **317/317 PASS**, zero reported skips, exit `0`, framework elapsed
+  **19 minutes 54 seconds**, from `2026-11-02T03:35:01Z` to
+  `2026-11-02T03:55:01Z` wall time. Coverage includes legacy migrations,
+  schema-v37 migration, semantic snapshot validation, encrypted backup and
+  fresh-target restore, replay/restart/idempotency, authority and replica
+  evidence, member identity, café/payment/stock conservation and the new
+  audit-only restored trusted-time boundary.
+- Existing Drift multiple-database warnings appeared only in deliberate
+  snapshot/restore multi-handle tests; no assertion failed. No source changed
+  during the run. Durable `/workspace` had `338,628,608` bytes free and
+  `/dev/shm` had `5,279,940,608` bytes free after completion. No build,
+  cleanup, network, credential, provider, publication or production action
+  occurred.
+
 ### Private Android current-boot trusted-time clock successor
 
 - **SOURCE PASS / ANDROID-ONLY / DEFAULT-OFF:** implementation
