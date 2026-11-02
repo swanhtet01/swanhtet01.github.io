@@ -7,6 +7,49 @@
 
 ## 2026-11-02 exact-head release checkpoint
 
+### Private pinned trusted-time verifier successor
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `a65ce554d7b23bb8d844d02dffdc3617c67831b7` (repository tree
+  `5a7986c506c0b688163416945dc85d847ecbd40e`, native tree
+  `9f61b50fcda7b53a1ea6b37a00f810ba5e3eccbc`, native `lib/` tree
+  `e7f15796be69d017759acd9ce9ef0030081a5272`, binary patch SHA-256
+  `43a3fcbc363c801452327ae81b1118d8710e28d215e74415fdec64e7cec091be`)
+  supplies a non-secret Ed25519 verifier for the accepted trusted-time
+  approval and observation protocol. No production key is embedded and no
+  runtime imports or mounts this verifier.
+- Owner approval is checked over its exact canonical evidence against a
+  caller-supplied pinned owner key. The approved time key is independently
+  pinned to the workspace, site, coordinator, coordinator-binding digest and
+  generation, key ID and generation, and the SHA-256 fingerprint of its exact
+  32-byte public key. Observation verification rechecks the owner approval,
+  exact challenge scope/binding, authority identity and approval validity
+  interval before verifying the canonical observation signature.
+- Malformed owner keys, unknown keys, duplicate authority identities, wrong
+  owner/time keys, scope/binding/generation substitutions, out-of-approval
+  observations and altered signed fields fail closed. The verifier does not
+  mistake signature validity for freshness, replay safety or platform time.
+- Targeted analyzer is **PASS** with no issues; the protocol plus verifier
+  suite is **9/9 PASS**. Formatting and diff checks are **PASS**. Independent
+  review is **ACCEPT** and independently reproduced analyzer PASS and 9/9
+  tests. Reviewed file SHA-256 identities are
+  `98a6dffa500b9e4e99956920b3dcc396d6a908d3e947341a0ccf283baebb1d38`
+  for the verifier and
+  `7fca032472a8cbaf697b49a38b4595d7dfc8a4df12aaf6836e8f402a07e82cee`
+  for its tests.
+- **BLOCKED / NOT RUN:** durable v37 request/observation/acceptance evidence,
+  atomic one-shot capability consumption, authority and device heads,
+  replay/rollback/restart/multi-instance enforcement, platform boot/monotonic
+  proof, production key enrollment/custody and runtime composition remain
+  separate gates. The v37 audit identifies database, backup and historical
+  fixture changes across multiple files; it must not be approximated with a
+  mutable single-row clock. Restored heads must remain audit-only until a fresh
+  current-boot challenge, and offline authority across reboot still requires a
+  protected anti-rollback platform source.
+- Capacity at `2026-11-02T02:57:52Z`: durable `/workspace` had `349,368,320`
+  bytes free and `/dev/shm` had `5,313,896,448` bytes free. No build, cleanup,
+  network, credential, provider, publication or production action occurred.
+
 ### Private request-bound trusted-time protocol successor
 
 - **SOURCE PASS / PROTOCOL-ONLY / DEFAULT-OFF:** implementation
