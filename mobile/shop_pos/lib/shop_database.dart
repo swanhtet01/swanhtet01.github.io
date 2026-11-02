@@ -14,6 +14,7 @@ import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
+import 'shop_connected_trusted_time_contract.dart';
 import 'shop_site_coordinator.dart';
 import 'shop_correction_consumption.dart';
 import 'shop_correction_receipt.dart';
@@ -2719,6 +2720,107 @@ Map<String, String> shopConnectedAuthorityCheckpointSchemaDefinitionsV36() => {
       ),
 };
 
+const shopConnectedTrustedTimeApprovalsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_approvals (
+    approval_digest TEXT PRIMARY KEY NOT NULL CHECK (length(approval_digest) = 64),
+    approval_json TEXT NOT NULL CHECK (json_valid(approval_json)),
+    retained_at_monotonic_millis INTEGER NOT NULL CHECK (retained_at_monotonic_millis >= 0)
+  )
+''';
+
+const shopConnectedTrustedTimeRequestsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_requests (
+    request_digest TEXT PRIMARY KEY NOT NULL CHECK (length(request_digest) = 64),
+    approval_digest TEXT NOT NULL REFERENCES shop_connected_time_approvals(approval_digest),
+    challenge_json TEXT NOT NULL CHECK (json_valid(challenge_json)),
+    capability_hash TEXT NOT NULL UNIQUE CHECK (length(capability_hash) = 64),
+    requested_at_monotonic_millis INTEGER NOT NULL CHECK (requested_at_monotonic_millis >= 0)
+  )
+''';
+
+const shopConnectedTrustedTimeObservationsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_observations (
+    observation_digest TEXT PRIMARY KEY NOT NULL CHECK (length(observation_digest) = 64),
+    request_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_requests(request_digest),
+    observation_json TEXT NOT NULL CHECK (json_valid(observation_json)),
+    received_at_monotonic_millis INTEGER NOT NULL CHECK (received_at_monotonic_millis >= 0)
+  )
+''';
+
+const shopConnectedTrustedTimeAcceptancesV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_acceptances (
+    acceptance_digest TEXT PRIMARY KEY NOT NULL CHECK (length(acceptance_digest) = 64),
+    request_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_requests(request_digest),
+    observation_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_observations(observation_digest),
+    acceptance_json TEXT NOT NULL CHECK (json_valid(acceptance_json)),
+    accepted_at_monotonic_millis INTEGER NOT NULL CHECK (accepted_at_monotonic_millis >= 0),
+    effective_at_millis INTEGER NOT NULL CHECK (effective_at_millis > 0),
+    valid_until_millis INTEGER NOT NULL CHECK (valid_until_millis >= effective_at_millis)
+  )
+''';
+
+const shopConnectedTrustedTimeAuthorityHeadsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_authority_heads (
+    workspace_id TEXT NOT NULL,
+    site_id TEXT NOT NULL,
+    coordinator_device_id TEXT NOT NULL,
+    authority_key_generation INTEGER NOT NULL CHECK (authority_key_generation > 0),
+    authority_epoch INTEGER NOT NULL CHECK (authority_epoch > 0),
+    authority_sequence INTEGER NOT NULL CHECK (authority_sequence > 0),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    acceptance_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_acceptances(acceptance_digest),
+    head_digest TEXT NOT NULL CHECK (length(head_digest) = 64),
+    PRIMARY KEY (workspace_id, site_id, coordinator_device_id)
+  )
+''';
+
+const shopConnectedTrustedTimeDeviceHeadsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_device_heads (
+    workspace_id TEXT NOT NULL,
+    site_id TEXT NOT NULL,
+    client_device_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    session_generation INTEGER NOT NULL CHECK (session_generation > 0),
+    coordinator_binding_digest TEXT NOT NULL CHECK (length(coordinator_binding_digest) = 64),
+    coordinator_binding_generation INTEGER NOT NULL CHECK (coordinator_binding_generation > 0),
+    boot_session_id TEXT NOT NULL CHECK (length(boot_session_id) = 64),
+    effective_at_millis INTEGER NOT NULL CHECK (effective_at_millis > 0),
+    valid_until_millis INTEGER NOT NULL CHECK (valid_until_millis >= effective_at_millis),
+    accepted_at_monotonic_millis INTEGER NOT NULL CHECK (accepted_at_monotonic_millis >= 0),
+    acceptance_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_acceptances(acceptance_digest),
+    head_digest TEXT NOT NULL CHECK (length(head_digest) = 64),
+    PRIMARY KEY (workspace_id, site_id, client_device_id)
+  )
+''';
+
+Map<String, String> shopConnectedTrustedTimeSchemaDefinitionsV37() => {
+  'shop_connected_time_approvals': shopConnectedTrustedTimeApprovalsV37Sql,
+  'shop_connected_time_requests': shopConnectedTrustedTimeRequestsV37Sql,
+  'shop_connected_time_observations':
+      shopConnectedTrustedTimeObservationsV37Sql,
+  'shop_connected_time_acceptances': shopConnectedTrustedTimeAcceptancesV37Sql,
+  'shop_connected_time_authority_heads':
+      shopConnectedTrustedTimeAuthorityHeadsV37Sql,
+  'shop_connected_time_device_heads': shopConnectedTrustedTimeDeviceHeadsV37Sql,
+  for (final table in const [
+    'shop_connected_time_approvals',
+    'shop_connected_time_requests',
+    'shop_connected_time_observations',
+    'shop_connected_time_acceptances',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected trusted-time evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected trusted-time evidence is immutable',
+    ),
+  },
+};
+
 /// Verifies the exact proof shape emitted by the unreleased v34 checkpoint.
 ///
 /// V34 did not retain issuer evidence bytes, coordinator-binding evidence, or
@@ -3385,6 +3487,395 @@ bool shopConnectedAuthorityCheckpointRowsValidV36({
     }
     for (final scope in checkpointByScope.keys) {
       if (!provenanceScopes.contains(scope)) return false;
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+bool shopConnectedTrustedTimeRowsValidV37({
+  required Iterable<Map<String, Object?>> approvals,
+  required Iterable<Map<String, Object?>> requests,
+  required Iterable<Map<String, Object?>> observations,
+  required Iterable<Map<String, Object?>> acceptances,
+  required Iterable<Map<String, Object?>> authorityHeads,
+  required Iterable<Map<String, Object?>> deviceHeads,
+}) {
+  try {
+    final approvalByDigest =
+        <String, ConnectedTrustedTimeAuthorityApprovalV1>{};
+    for (final row in approvals) {
+      final json = row['approval_json'];
+      if (json is! String ||
+          canonicalConnectedSiteJson(jsonDecode(json)) != json) {
+        return false;
+      }
+      final approval = ConnectedTrustedTimeAuthorityApprovalV1.fromJson(
+        jsonDecode(json),
+      );
+      if (approval.approvalDigest != row['approval_digest'] ||
+          row['retained_at_monotonic_millis'] is! int ||
+          (row['retained_at_monotonic_millis']! as int) < 0 ||
+          approvalByDigest.putIfAbsent(
+                approval.approvalDigest,
+                () => approval,
+              ) !=
+              approval) {
+        return false;
+      }
+    }
+    final requestByDigest = <String, ConnectedTrustedTimeChallengeV1>{};
+    final approvalByRequest =
+        <String, ConnectedTrustedTimeAuthorityApprovalV1>{};
+    for (final row in requests) {
+      final json = row['challenge_json'];
+      if (json is! String ||
+          canonicalConnectedSiteJson(jsonDecode(json)) != json) {
+        return false;
+      }
+      final challenge = ConnectedTrustedTimeChallengeV1.fromJson(
+        jsonDecode(json),
+      );
+      final approval = approvalByDigest[row['approval_digest']];
+      if (challenge.requestDigest != row['request_digest'] ||
+          approval == null ||
+          approval.workspaceId != challenge.workspaceId ||
+          approval.siteId != challenge.siteId ||
+          approval.coordinatorDeviceId != challenge.coordinatorDeviceId ||
+          approval.coordinatorBindingDigest !=
+              challenge.coordinatorBindingDigest ||
+          approval.coordinatorBindingGeneration !=
+              challenge.coordinatorBindingGeneration ||
+          row['capability_hash'] is! String ||
+          !RegExp(r'^[0-9a-f]{64}$')
+              .hasMatch(row['capability_hash']! as String) ||
+          row['requested_at_monotonic_millis'] !=
+              challenge.startedMonotonicMillis ||
+          requestByDigest.putIfAbsent(
+                challenge.requestDigest,
+                () => challenge,
+              ) !=
+              challenge) {
+        return false;
+      }
+      approvalByRequest[challenge.requestDigest] = approval;
+    }
+    final observationByDigest = <String, ConnectedTrustedTimeObservationV1>{};
+    final observationReceivedAt = <String, int>{};
+    final observationRequestDigests = <String>{};
+    for (final row in observations) {
+      final requestDigest = row['request_digest'];
+      final challenge = requestByDigest[requestDigest];
+      final json = row['observation_json'];
+      if (challenge == null ||
+          json is! String ||
+          canonicalConnectedSiteJson(jsonDecode(json)) != json ||
+          !observationRequestDigests.add(requestDigest! as String)) {
+        return false;
+      }
+      final observation = ConnectedTrustedTimeObservationV1.fromJson(
+        jsonDecode(json),
+        challenge,
+      );
+      if (observation.observationDigest != row['observation_digest'] ||
+          row['received_at_monotonic_millis'] is! int ||
+          (row['received_at_monotonic_millis']! as int) <
+              challenge.startedMonotonicMillis) {
+        return false;
+      }
+      observationByDigest[observation.observationDigest] = observation;
+      observationReceivedAt[observation.observationDigest] =
+          row['received_at_monotonic_millis']! as int;
+    }
+    final acceptanceByDigest = <String, Map<String, Object?>>{};
+    final acceptedRequests = <String>{};
+    for (final row in acceptances) {
+      final json = row['acceptance_json'];
+      if (json is! String ||
+          canonicalConnectedSiteJson(jsonDecode(json)) != json) {
+        return false;
+      }
+      final decoded = (jsonDecode(json) as Map).cast<String, Object?>();
+      if (decoded.keys.toSet().difference(const {
+            'schema',
+            'workspaceId',
+            'siteId',
+            'coordinatorDeviceId',
+            'clientDeviceId',
+            'clientFingerprint',
+            'sessionGeneration',
+            'coordinatorBindingDigest',
+            'coordinatorBindingGeneration',
+            'bootSessionId',
+            'requestDigest',
+            'observationDigest',
+            'authorityKeyGeneration',
+            'authorityEpoch',
+            'authoritySequence',
+            'observedAtMillis',
+            'effectiveAtMillis',
+            'validUntilMillis',
+            'acceptedAtMonotonicMillis',
+            'acceptanceDigest',
+          }).isNotEmpty ||
+          decoded.length != 20) {
+        return false;
+      }
+      final unsigned = Map<String, Object?>.from(decoded)
+        ..remove('acceptanceDigest');
+      final digest = connectedSiteSha256(unsigned);
+      final request = requestByDigest[row['request_digest']];
+      final observation = observationByDigest[row['observation_digest']];
+      final approval = approvalByRequest[row['request_digest']];
+      final acceptedAt = decoded['acceptedAtMonotonicMillis'];
+      final elapsed = request == null || acceptedAt is! int
+          ? -1
+          : acceptedAt - request.startedMonotonicMillis;
+      if (decoded['schema'] !=
+              'supermega.connected-trusted-time-acceptance.v1' ||
+          decoded['acceptanceDigest'] != digest ||
+          row['acceptance_digest'] != digest ||
+          decoded['requestDigest'] != row['request_digest'] ||
+          decoded['observationDigest'] != row['observation_digest'] ||
+          decoded['acceptedAtMonotonicMillis'] !=
+              row['accepted_at_monotonic_millis'] ||
+          decoded['effectiveAtMillis'] != row['effective_at_millis'] ||
+          decoded['validUntilMillis'] != row['valid_until_millis'] ||
+          request == null ||
+          observation == null ||
+          approval == null ||
+          observation.challenge.requestDigest != request.requestDigest ||
+          decoded['workspaceId'] != request.workspaceId ||
+          decoded['siteId'] != request.siteId ||
+          decoded['coordinatorDeviceId'] != request.coordinatorDeviceId ||
+          decoded['clientDeviceId'] != request.clientDeviceId ||
+          decoded['clientFingerprint'] != request.clientFingerprint ||
+          decoded['sessionGeneration'] != request.sessionGeneration ||
+          decoded['coordinatorBindingDigest'] !=
+              request.coordinatorBindingDigest ||
+          decoded['coordinatorBindingGeneration'] !=
+              request.coordinatorBindingGeneration ||
+          decoded['bootSessionId'] != request.bootSessionId ||
+          decoded['authorityKeyGeneration'] !=
+              observation.authorityKeyGeneration ||
+          decoded['authorityEpoch'] != observation.authorityEpoch ||
+          decoded['authoritySequence'] != observation.authoritySequence ||
+          decoded['observedAtMillis'] != observation.observedAtMillis ||
+          decoded['validUntilMillis'] != observation.validUntilMillis ||
+          observation.authorityKeyId != approval.authorityKeyId ||
+          observation.authorityKeyFingerprint !=
+              approval.authorityKeyFingerprint ||
+          observation.authorityKeyGeneration !=
+              approval.authorityKeyGeneration ||
+          observation.observedAtMillis < approval.issuedAtMillis ||
+          observation.validUntilMillis > approval.expiresAtMillis ||
+          decoded['effectiveAtMillis'] is! int ||
+          decoded['acceptedAtMonotonicMillis'] is! int ||
+          elapsed < 0 ||
+          elapsed > connectedTrustedTimeMaximumValidity.inMilliseconds ||
+          decoded['effectiveAtMillis'] !=
+              observation.observedAtMillis + elapsed ||
+          (decoded['effectiveAtMillis']! as int) >
+              observation.validUntilMillis ||
+          observationReceivedAt[observation.observationDigest] != acceptedAt ||
+          !acceptedRequests.add(row['request_digest']! as String)) {
+        return false;
+      }
+      acceptanceByDigest[digest] = decoded;
+    }
+    if (observationByDigest.length != acceptanceByDigest.length) return false;
+    final authorityHeadByScope = <String, Map<String, Object?>>{};
+    for (final row in authorityHeads) {
+      final acceptance = acceptanceByDigest[row['acceptance_digest']];
+      if (acceptance == null ||
+          acceptance['workspaceId'] != row['workspace_id'] ||
+          acceptance['siteId'] != row['site_id'] ||
+          acceptance['coordinatorDeviceId'] != row['coordinator_device_id'] ||
+          acceptance['authorityKeyGeneration'] !=
+              row['authority_key_generation'] ||
+          acceptance['authorityEpoch'] != row['authority_epoch'] ||
+          acceptance['authoritySequence'] != row['authority_sequence'] ||
+          acceptance['observedAtMillis'] != row['observed_at_millis'] ||
+          row['head_digest'] !=
+              connectedSiteSha256({
+                'schema': 'supermega.connected-trusted-time-authority-head.v1',
+                'workspaceId': row['workspace_id'],
+                'siteId': row['site_id'],
+                'coordinatorDeviceId': row['coordinator_device_id'],
+                'authorityKeyGeneration': row['authority_key_generation'],
+                'authorityEpoch': row['authority_epoch'],
+                'authoritySequence': row['authority_sequence'],
+                'observedAtMillis': row['observed_at_millis'],
+                'acceptanceDigest': row['acceptance_digest'],
+              })) {
+        return false;
+      }
+      final scope =
+          '${row['workspace_id']}\u0000${row['site_id']}\u0000${row['coordinator_device_id']}';
+      if (authorityHeadByScope.putIfAbsent(scope, () => row) != row) {
+        return false;
+      }
+    }
+    final deviceHeadByScope = <String, Map<String, Object?>>{};
+    for (final row in deviceHeads) {
+      final acceptance = acceptanceByDigest[row['acceptance_digest']];
+      if (acceptance == null ||
+          acceptance['workspaceId'] != row['workspace_id'] ||
+          acceptance['siteId'] != row['site_id'] ||
+          acceptance['clientDeviceId'] != row['client_device_id'] ||
+          acceptance['clientFingerprint'] != row['client_fingerprint'] ||
+          acceptance['sessionGeneration'] != row['session_generation'] ||
+          acceptance['coordinatorBindingDigest'] !=
+              row['coordinator_binding_digest'] ||
+          acceptance['coordinatorBindingGeneration'] !=
+              row['coordinator_binding_generation'] ||
+          acceptance['bootSessionId'] != row['boot_session_id'] ||
+          acceptance['effectiveAtMillis'] != row['effective_at_millis'] ||
+          acceptance['validUntilMillis'] != row['valid_until_millis'] ||
+          acceptance['acceptedAtMonotonicMillis'] !=
+              row['accepted_at_monotonic_millis'] ||
+          row['head_digest'] !=
+              connectedSiteSha256({
+                'schema': 'supermega.connected-trusted-time-device-head.v1',
+                'workspaceId': row['workspace_id'],
+                'siteId': row['site_id'],
+                'clientDeviceId': row['client_device_id'],
+                'clientFingerprint': row['client_fingerprint'],
+                'sessionGeneration': row['session_generation'],
+                'coordinatorBindingDigest': row['coordinator_binding_digest'],
+                'coordinatorBindingGeneration':
+                    row['coordinator_binding_generation'],
+                'bootSessionId': row['boot_session_id'],
+                'effectiveAtMillis': row['effective_at_millis'],
+                'validUntilMillis': row['valid_until_millis'],
+                'acceptedAtMonotonicMillis':
+                    row['accepted_at_monotonic_millis'],
+                'acceptanceDigest': row['acceptance_digest'],
+              })) {
+        return false;
+      }
+      final scope =
+          '${row['workspace_id']}\u0000${row['site_id']}\u0000${row['client_device_id']}';
+      if (deviceHeadByScope.putIfAbsent(scope, () => row) != row) return false;
+    }
+    final authorityChains = <String, List<Map<String, Object?>>>{};
+    final deviceChains = <String, List<Map<String, Object?>>>{};
+    for (final acceptance in acceptanceByDigest.values) {
+      authorityChains
+          .putIfAbsent(
+            '${acceptance['workspaceId']}\u0000${acceptance['siteId']}\u0000${acceptance['coordinatorDeviceId']}',
+            () => [],
+          )
+          .add(acceptance);
+      deviceChains
+          .putIfAbsent(
+            '${acceptance['workspaceId']}\u0000${acceptance['siteId']}\u0000${acceptance['clientDeviceId']}',
+            () => [],
+          )
+          .add(acceptance);
+    }
+    for (final entry in authorityChains.entries) {
+      final chain = entry.value
+        ..sort(
+          (a, b) =>
+              (a['authorityKeyGeneration']! as int).compareTo(
+                    b['authorityKeyGeneration']! as int,
+                  ) !=
+                  0
+              ? (a['authorityKeyGeneration']! as int).compareTo(
+                  b['authorityKeyGeneration']! as int,
+                )
+              : (a['authorityEpoch']! as int).compareTo(
+                      b['authorityEpoch']! as int,
+                    ) !=
+                    0
+              ? (a['authorityEpoch']! as int).compareTo(
+                  b['authorityEpoch']! as int,
+                )
+              : (a['authoritySequence']! as int).compareTo(
+                  b['authoritySequence']! as int,
+                ),
+        );
+      for (var i = 1; i < chain.length; i++) {
+        final previous = chain[i - 1];
+        final current = chain[i];
+        final next =
+            (current['authorityKeyGeneration'] ==
+                    previous['authorityKeyGeneration'] &&
+                current['authorityEpoch'] == previous['authorityEpoch'] &&
+                current['authoritySequence'] ==
+                    (previous['authoritySequence']! as int) + 1) ||
+            (current['authorityKeyGeneration'] ==
+                    previous['authorityKeyGeneration'] &&
+                current['authorityEpoch'] ==
+                    (previous['authorityEpoch']! as int) + 1 &&
+                current['authoritySequence'] == 1) ||
+            (current['authorityKeyGeneration'] ==
+                    (previous['authorityKeyGeneration']! as int) + 1 &&
+                current['authorityEpoch'] == 1 &&
+                current['authoritySequence'] == 1);
+        if (!next ||
+            (current['observedAtMillis']! as int) <
+                (previous['observedAtMillis']! as int)) {
+          return false;
+        }
+      }
+      final head = authorityHeadByScope[entry.key];
+      final last = chain.last;
+      if (head == null ||
+          head['acceptance_digest'] != last['acceptanceDigest']) {
+        return false;
+      }
+    }
+    for (final entry in deviceChains.entries) {
+      final chain = entry.value
+        ..sort(
+          (a, b) =>
+              (a['authorityKeyGeneration']! as int).compareTo(
+                    b['authorityKeyGeneration']! as int,
+                  ) !=
+                  0
+              ? (a['authorityKeyGeneration']! as int).compareTo(
+                  b['authorityKeyGeneration']! as int,
+                )
+              : (a['authorityEpoch']! as int).compareTo(
+                      b['authorityEpoch']! as int,
+                    ) !=
+                    0
+              ? (a['authorityEpoch']! as int).compareTo(
+                  b['authorityEpoch']! as int,
+                )
+              : (a['authoritySequence']! as int).compareTo(
+                  b['authoritySequence']! as int,
+                ),
+        );
+      for (var i = 1; i < chain.length; i++) {
+        final previous = chain[i - 1];
+        final current = chain[i];
+        if (current['clientFingerprint'] != previous['clientFingerprint'] ||
+            (current['sessionGeneration']! as int) <
+                (previous['sessionGeneration']! as int) ||
+            (current['coordinatorBindingGeneration']! as int) <
+                (previous['coordinatorBindingGeneration']! as int) ||
+            (current['coordinatorBindingGeneration'] ==
+                    previous['coordinatorBindingGeneration'] &&
+                current['coordinatorBindingDigest'] !=
+                    previous['coordinatorBindingDigest']) ||
+            (current['effectiveAtMillis']! as int) <
+                (previous['effectiveAtMillis']! as int)) {
+          return false;
+        }
+      }
+      final head = deviceHeadByScope[entry.key];
+      if (head == null ||
+          head['acceptance_digest'] != chain.last['acceptanceDigest']) {
+        return false;
+      }
+    }
+    if (authorityHeadByScope.length != authorityChains.length ||
+        deviceHeadByScope.length != deviceChains.length) {
+      return false;
     }
     return true;
   } on Object {
@@ -4861,7 +5352,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 36) return const {};
+  if (schemaVersion < 5 || schemaVersion > 37) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -5951,7 +6442,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 36;
+  int get schemaVersion => 37;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6003,15 +6494,25 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV35Schema();
       await _createConnectedAuthorityCheckpointSchemaV36();
       await _requireUnifiedV36Schema();
+      await _createConnectedTrustedTimeSchemaV37();
+      await _requireUnifiedV37Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 36) {
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        return;
+      }
       if (from == 35) {
         await _requireUnifiedV35Schema();
         await _createConnectedAuthorityCheckpointSchemaV36();
         await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
         return;
       }
       if (from == 34) {
@@ -6022,6 +6523,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV35Schema();
         await _createConnectedAuthorityCheckpointSchemaV36();
         await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
         return;
       }
       if (from == 33) {
@@ -6032,6 +6535,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV35Schema();
         await _createConnectedAuthorityCheckpointSchemaV36();
         await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
         return;
       }
       if (from == 32) {
@@ -6045,6 +6550,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV35Schema();
         await _createConnectedAuthorityCheckpointSchemaV36();
         await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
         return;
       }
       if (from == 31) {
@@ -6059,6 +6566,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV35Schema();
         await _createConnectedAuthorityCheckpointSchemaV36();
         await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
         return;
       }
       if (from == 30) {
@@ -6076,6 +6585,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV35Schema();
         await _createConnectedAuthorityCheckpointSchemaV36();
         await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
         return;
       }
       final origin = await _classifyUpgradeOrigin(from);
@@ -6096,6 +6607,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV35Schema();
         await _createConnectedAuthorityCheckpointSchemaV36();
         await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
         return;
       }
       if (from == 28) {
@@ -6130,6 +6643,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV35Schema();
         await _createConnectedAuthorityCheckpointSchemaV36();
         await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
         return;
       }
       if (from < 2) {
@@ -6360,14 +6875,16 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV35Schema();
       await _createConnectedAuthorityCheckpointSchemaV36();
       await _requireUnifiedV36Schema();
+      await _createConnectedTrustedTimeSchemaV37();
+      await _requireUnifiedV37Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV36Schema();
+      await _requireUnifiedV37Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV36Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV37Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
@@ -6592,6 +7109,12 @@ class ShopDatabase extends _$ShopDatabase {
         !await _v30ConnectedAuthorityPayloadRowsValid() ||
         !await _v36ConnectedAuthorityCheckpointRowsValid()) {
       throw StateError('Connected authority observation evidence is invalid.');
+    }
+  }
+
+  Future<void> verifyConnectedTrustedTimeEvidence() async {
+    if (!await _v37ConnectedTrustedTimeRowsValid()) {
+      throw StateError('Connected trusted-time evidence is invalid.');
     }
   }
 
@@ -6875,6 +7398,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedAuthorityCheckpointSchemaV36() async {
     for (final definition
         in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedTrustedTimeSchemaV37() async {
+    for (final definition
+        in shopConnectedTrustedTimeSchemaDefinitionsV37().values) {
       await customStatement(definition);
     }
   }
@@ -8532,6 +9062,9 @@ class ShopDatabase extends _$ShopDatabase {
         shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys.every(
           objects.containsKey,
         );
+    final hasTrustedTimeV37 = shopConnectedTrustedTimeSchemaDefinitionsV37()
+        .keys
+        .every(objects.containsKey);
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -8609,6 +9142,11 @@ class ShopDatabase extends _$ShopDatabase {
             in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (hasTrustedTimeV37)
+        for (final entry
+            in shopConnectedTrustedTimeSchemaDefinitionsV37().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -8648,6 +9186,8 @@ class ShopDatabase extends _$ShopDatabase {
             : shopConnectedCloudProofSchemaDefinitionsV34().keys),
       if (hasAuthorityCheckpointV36)
         ...shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys,
+      if (hasTrustedTimeV37)
+        ...shopConnectedTrustedTimeSchemaDefinitionsV37().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -8846,6 +9386,9 @@ class ShopDatabase extends _$ShopDatabase {
         shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys.every(
           objects.containsKey,
         );
+    final hasTrustedTimeV37 = shopConnectedTrustedTimeSchemaDefinitionsV37()
+        .keys
+        .every(objects.containsKey);
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -8889,6 +9432,8 @@ class ShopDatabase extends _$ShopDatabase {
             : shopConnectedCloudProofSchemaDefinitionsV34().keys),
       if (hasAuthorityCheckpointV36)
         ...shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys,
+      if (hasTrustedTimeV37)
+        ...shopConnectedTrustedTimeSchemaDefinitionsV37().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -9501,6 +10046,41 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v36 authority-checkpoint schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV37Schema() async {
+    await _requireUnifiedV36Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedTrustedTimeSchemaDefinitionsV37();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v37ConnectedTrustedTimeRowsValid()) {
+      throw StateError(
+        'The unified Shop v37 trusted-time schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v37ConnectedTrustedTimeRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedTrustedTimeRowsValidV37(
+        approvals: await rows('shop_connected_time_approvals'),
+        requests: await rows('shop_connected_time_requests'),
+        observations: await rows('shop_connected_time_observations'),
+        acceptances: await rows('shop_connected_time_acceptances'),
+        authorityHeads: await rows('shop_connected_time_authority_heads'),
+        deviceHeads: await rows('shop_connected_time_device_heads'),
+      );
+    } on Object {
+      return false;
     }
   }
 

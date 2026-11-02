@@ -64,7 +64,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 36;
+  static const supportedSchemaVersion = 37;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1931,6 +1931,9 @@ abstract final class ShopBackup {
     final authorityCheckpointDefinitions = schemaVersion >= 36
         ? shopConnectedAuthorityCheckpointSchemaDefinitionsV36()
         : const <String, String>{};
+    final trustedTimeDefinitions = schemaVersion >= 37
+        ? shopConnectedTrustedTimeSchemaDefinitionsV37()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1953,7 +1956,8 @@ abstract final class ShopBackup {
             schemaVersion == 33 ||
             schemaVersion == 34 ||
             schemaVersion == 35 ||
-            schemaVersion == 36) &&
+            schemaVersion == 36 ||
+            schemaVersion == 37) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -2005,6 +2009,13 @@ abstract final class ShopBackup {
             )) &&
         (schemaVersion < 36 ||
             _v36ConnectedAuthorityCheckpointRowsValid(connection)) &&
+        (schemaVersion < 37 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              trustedTimeDefinitions,
+              trustedTimeDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 37 || _v37ConnectedTrustedTimeRowsValid(connection)) &&
         (schemaVersion < 31 ||
             _snapshotDefinitionGroupExact(
               objects,
@@ -2060,6 +2071,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 33) replicaDeliveryDefinitions,
           if (schemaVersion >= 34) cloudProofDefinitions,
           if (schemaVersion >= 36) authorityCheckpointDefinitions,
+          if (schemaVersion >= 37) trustedTimeDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2080,6 +2092,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 33) ...replicaDeliveryDefinitions.keys,
           if (schemaVersion >= 34) ...cloudProofDefinitions.keys,
           if (schemaVersion >= 36) ...authorityCheckpointDefinitions.keys,
+          if (schemaVersion >= 37) ...trustedTimeDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3612,6 +3625,25 @@ abstract final class ShopBackup {
         checkpoints: rows('shop_site_authority_checkpoints'),
         bootstrapProvenance: rows('shop_site_authority_bootstrap_provenance'),
         payloads: rows('shop_site_authority_payloads'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v37ConnectedTrustedTimeRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedTrustedTimeRowsValidV37(
+        approvals: rows('shop_connected_time_approvals'),
+        requests: rows('shop_connected_time_requests'),
+        observations: rows('shop_connected_time_observations'),
+        acceptances: rows('shop_connected_time_acceptances'),
+        authorityHeads: rows('shop_connected_time_authority_heads'),
+        deviceHeads: rows('shop_connected_time_device_heads'),
       );
     } on Object {
       return false;
