@@ -5,6 +5,41 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-02 verified-time coordinator propagation checkpoint
+
+- **SOURCE PASS / DEFAULT-OFF:** implementation
+  `f2b0085abe26e4f90af04a7a82765d28d0699697` (tree
+  `6d054fedc4bde18de39ff0f84a93a4c1eb5b0eea`, parent verified-time bridge
+  ledger `2ac295e6b244efe938837e4afc263dd90e2d19f7`) removes the ordinary
+  wall-clock callback from the standard coordinator transport context. The
+  standard server builder now derives pairing expiry, request clock-skew,
+  offline lease expiry, transport preparation and database-command time from
+  the same workspace/site-scoped `ShopConnectedSiteCoordinatorTimeAuthority`.
+  The five-file patch SHA-256 is
+  `baf9f778de719f1a90c15e60f1d486754de560eb90703538b36782c72adaf7a5`
+  with stable patch ID `33950f6f3c894cb685262255f2836c5a00247dec`.
+- All changed time consumers accept asynchronous verified reads. Time failure
+  occurs before pairing-nonce persistence, request-nonce consumption, lease
+  authorization or command handling. The lease authorizer catches
+  `StateError` only around the time read; signature-verifier and other
+  authorization defects remain visible instead of being mislabeled as an
+  ordinary denial. Direct low-level constructors retain synchronous test
+  compatibility, while the standard composition always injects verified time.
+- Targeted analyzer is **PASS**. Focused site/coordinator composition is
+  **45/45 PASS** and the exact final coordinator/client/host/composition matrix
+  is **77/77 PASS**. Native CI contracts are **22/22 PASS** with verifier
+  **PASS**; QA-isolation contracts are **24/24 PASS** with strict verifier
+  **PASS**; formatting and diff checks are **PASS**. Independent security
+  review first **HELD** the patch for an overly broad `StateError` catch, then
+  **ACCEPTED** the final diff after the catch was narrowed and an adversarial
+  signature-verifier test proved the defect propagates.
+- **NOT RUN / BLOCKED:** these are source and fixture results, not installed
+  platform evidence. Windows MSVC compilation, real platform time behavior,
+  protected key custody, TLS identity, signed artifacts, installed recovery,
+  PostgreSQL rehearsal, dependency clearance and merchant acceptance remain
+  open. Connected operation remains unmounted and disabled in every shipping
+  profile; no publication, merge, deployment or production change occurred.
+
 ## 2026-11-02 verified-time coordinator adapter checkpoint
 
 - **SOURCE PASS / DEFAULT-OFF:** implementation
