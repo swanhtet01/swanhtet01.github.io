@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 08:44 UTC
+- Last verified: 2026-11-03 09:04 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 09:04 UTC private v40 signed-proof retention
+
+- **PASS (private source only):** implementation commit
+  `235e92d0b9b192544cca58dc5ac2f53dae720b1d`, tree
+  `861595c9ef368cd299099ed5d019fb22b843c366`, parent
+  `bfe9f910a63fe6e3a75f6988c46dc1fbed72f3b7`; two paths, staged
+  binary patch SHA-256
+  `170558e1b88cc5dc58db4064e903eb92ff1e82df1252bfb48661cab226c87f4e`.
+  The private v40 page row can retain canonical signed proof JSON as well as
+  its digest, making later reconstruction possible. The exact-schema test
+  checks the column. Independent review **ACCEPT** only while v40 remains
+  unpublished and no retained v40 store requires same-version migration.
+  This change does not authenticate JSON or permit nonempty rows.
+- **PASS (exact private source):** focused cloud schema and proof tests **7/7**,
+  Flutter analysis with no issues, Dart format with zero changes and diff
+  whitespace check. Full backup suite passed **102/102** on its final rerun
+  (6m29s). The first full backup run was **FAIL**, 102 passes and one failure;
+  its exact failing case was not captured in the truncated terminal output,
+  so root cause remains **UNVERIFIED** rather than silently relabelled.
+- **BLOCKED / NOT RUN:** nonempty authenticated application, atomic
+  header/projection/cursor commit, replay persistence, accepted-data restore
+  suspension/rebootstrap, and installed two-device sync remain unimplemented
+  or unrun. The open and encrypted-backup validators still reject every
+  nonempty cloud-feed row. A production issuer public-key pin and pin-aware
+  verification path are required; structural hashes cannot stand in for an
+  Ed25519 signature. Connected mode remains default-off and no private v40
+  successor has been pushed to PR #752.
 
 ## 2026-11-03 08:44 UTC private signed cloud-feed proof prerequisite
 
