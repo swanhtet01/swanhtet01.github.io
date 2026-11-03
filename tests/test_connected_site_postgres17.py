@@ -301,7 +301,17 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
             proceed.set()
         self.assertEqual(json.loads(signed["proofJson"])["revocationGeneration"],
                          authority.revocation_generation)
+        with patch.object(signed_fixture, "_signature", side_effect=RuntimeError("signer_failed")):
+            with self.assertRaisesRegex(RuntimeError, "signer_failed"):
+                read_and_sign_test_only_page(
+                    connection_factory=lambda: self.psycopg.connect(self.runtime_url),
+                    principal=principal, authority=authority, lease=lease,
+                    request=request, now=read_now,
+                    issuer_key_id="test_feed", issuer_seed=23,
+                )
+        # A failed seal returns no proof and must release its row locks.
         with self.psycopg.connect(self.admin_url) as connection:
+            connection.execute("set local lock_timeout = '300ms'")
             connection.execute(
                 "update app_private.connected_sites set revocation_generation="
                 "revocation_generation+1 where workspace_id=%s and site_id=%s",

@@ -10,7 +10,11 @@ from base64 import urlsafe_b64decode
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from fastapi import Request
 
+from supermega_runtime.connected_site_gateway import (
+    ConnectedSiteGatewayPrincipalResolver, GatewayPeerAttestation,
+)
 from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
 from supermega_runtime.connected_site_event_feed import read_retail_reservation_page
 from supermega_runtime.connected_site_v15 import (
@@ -22,6 +26,7 @@ from tests.connected_site_signed_page_fixture import (
 from tests import connected_site_signed_page_fixture as signed_fixture
 from tests.test_connected_site_event_feed import _Script
 from tests.test_connected_site_event_read import _fixture, _resign
+from tests.test_connected_site_runtime import _Authorities
 from tests.test_connected_site_v15 import DEVICE_B, ISSUER, NOW
 
 
@@ -210,12 +215,30 @@ class SignedPageFixtureTest(unittest.TestCase):
                 lease["issuerKeyId"], authority.issuer_keys[lease["issuerKeyId"]],
                 script.lease[9],
             )
+            http_request = Request({
+                "type": "http", "method": "GET", "path": "/test/feed",
+                "headers": [],
+            })
+            peer = GatewayPeerAttestation(
+                request=http_request, gateway_id="test-ingress",
+                workspace_id=authority.workspace_id, site_id=authority.site_id,
+                device_id=device, client_fingerprint=record.client_fingerprint,
+                session_generation=record.session_generation, observed_at=NOW,
+            )
+            resolver = ConnectedSiteGatewayPrincipalResolver(
+                gateway_id="test-ingress",
+                load_attested_peer=lambda _request: peer,
+                authority_provider=_Authorities(authority), now=lambda: NOW,
+            )
+            principal = resolver(http_request)
+            self.assertIsNotNone(principal)
+            self.assertIsNone(resolver(Request({
+                "type": "http", "method": "GET", "path": "/test/feed",
+                "headers": [],
+            })), "peer attestation cannot be replayed on another ASGI request")
             return read_and_sign_test_only_page(
                 connection_factory=script.connect,
-                principal=ConnectedSitePrincipal(
-                    authority.workspace_id, authority.site_id, device,
-                    True, "synthetic-gateway",
-                ),
+                principal=principal,
                 authority=authority, lease=lease, request=request, now=NOW,
                 issuer_key_id="test_feed", issuer_seed=23,
             )
