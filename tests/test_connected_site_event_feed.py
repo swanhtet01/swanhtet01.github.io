@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import timedelta
+import json
 import unittest
 
-from supermega_runtime.connected_site_event_feed import read_event_headers
+from supermega_runtime.connected_site_event_feed import (
+    read_event_headers, read_retail_reservation_page,
+)
 from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
 from supermega_runtime.connected_site_v15 import ConnectedSiteV15Error, digest
 from tests.test_connected_site_event_read import _fixture, _resign
+from tests.test_connected_site_event_projection import _inputs
 from tests.test_connected_site_v15 import NOW
 
 
@@ -103,6 +107,107 @@ def _read(script, authority, lease, request, *, now=NOW, principal=None):
 
 
 class EventFeedTests(unittest.TestCase):
+    def test_manager_page_binds_stored_row_and_returns_only_typed_stock_fields(self):
+        authority, lease, request, principal, event = _inputs()
+        script = _Script(authority, lease, events=[
+            (1, digest(event), None, json.dumps(event)),
+        ])
+        page = read_retail_reservation_page(
+            connection_factory=script.connect, principal=principal,
+            authority=authority, lease=lease, request=request, now=NOW,
+        )
+        self.assertEqual(page.headers.next_sequence, 1)
+        self.assertEqual(len(page.projections), 1)
+        self.assertEqual(page.projections[0]["state"], "held")
+        self.assertEqual(page.projections[0]["lines"],
+                         [{"productId": "product-1", "quantity": 1}])
+        self.assertNotIn("actorId", str(page))
+        self.assertNotIn("deviceId", str(page))
+        self.assertNotIn("payload", str(page))
+        self.assertTrue(any("event_json::text" in sql for sql, _ in script.queries))
+        self.assertEqual(script.clock_reads, 2)
+
+    def test_manager_page_rejects_changed_row_and_never_returns_raw_payload(self):
+        authority, lease, request, principal, event = _inputs()
+        for row in (
+            (1, "f" * 64, None, json.dumps(event)),
+            (1, digest(event), None, "{broken"),
+            (1, digest(event), None, ""),
+            (1, digest(event), None),
+        ):
+            script = _Script(authority, lease, events=[row])
+            with self.subTest(row=row), self.assertRaises(ConnectedSiteV15Error):
+                read_retail_reservation_page(
+                    connection_factory=script.connect, principal=principal,
+                    authority=authority, lease=lease, request=request, now=NOW,
+                )
+        hostile = json.loads(json.dumps(event))
+        hostile["payload"]["customerPhone"] = "private-value"
+        script = _Script(authority, lease, events=[
+            (1, digest(hostile), None, json.dumps(hostile)),
+        ])
+        with self.assertRaises(ConnectedSiteV15Error):
+            read_retail_reservation_page(
+                connection_factory=script.connect, principal=principal,
+                authority=authority, lease=lease, request=request, now=NOW,
+            )
+
+    def test_manager_page_advances_over_other_events_without_exposing_them(self):
+        authority, lease, request, principal, event = _inputs()
+        other = json.loads(json.dumps(event))
+        other["eventType"] = "shop.cafe_order.put.v1"
+        other["payload"] = {"privateNote": "not-a-projection"}
+        script = _Script(authority, lease, events=[
+            (1, digest(other), None, json.dumps(other)),
+            (2, digest(event), digest(other), json.dumps(event)),
+        ])
+        page = read_retail_reservation_page(
+            connection_factory=script.connect, principal=principal,
+            authority=authority, lease=lease, request=request, now=NOW,
+        )
+        self.assertEqual(page.headers.next_sequence, 2)
+        self.assertEqual(len(page.projections), 1)
+        self.assertNotIn("privateNote", str(page))
+
+        # The lookahead row proves has_more but cannot leak its projection.
+        lookahead = read_retail_reservation_page(
+            connection_factory=script.connect, principal=principal,
+            authority=authority, lease=lease,
+            request=_resign(request, limit=1), now=NOW,
+        )
+        self.assertEqual(lookahead.headers.next_sequence, 1)
+        self.assertTrue(lookahead.headers.has_more)
+        self.assertEqual(lookahead.projections, ())
+
+    def test_manager_page_denies_wrong_role_and_expiry_during_db_read(self):
+        cashier, cashier_lease, cashier_request = _fixture(
+            role="cashierCounter", capabilities=("counterSale",),
+        )
+        cashier_script = _Script(cashier, cashier_lease)
+        cashier_principal = ConnectedSitePrincipal(
+            cashier.workspace_id, cashier.site_id, "device-a", True,
+            "synthetic-gateway",
+        )
+        with self.assertRaises(ConnectedSiteV15Error):
+            read_retail_reservation_page(
+                connection_factory=cashier_script.connect,
+                principal=cashier_principal, authority=cashier,
+                lease=cashier_lease, request=cashier_request, now=NOW,
+            )
+        self.assertEqual(cashier_script.queries, [])
+
+        authority, lease, request, principal, event = _inputs()
+        script = _Script(authority, lease, events=[
+            (1, digest(event), None, json.dumps(event)),
+        ])
+        script.late_now = NOW + timedelta(days=2)
+        with self.assertRaises(ConnectedSiteV15Error):
+            read_retail_reservation_page(
+                connection_factory=script.connect, principal=principal,
+                authority=authority, lease=lease, request=request, now=NOW,
+            )
+        self.assertEqual(script.clock_reads, 2)
+
     def test_ordered_metadata_page_reconnect_and_no_payload_query(self):
         authority, lease, request = _fixture()
         script = _Script(authority, lease)

@@ -1,14 +1,16 @@
-"""Unmounted, metadata-only PostgreSQL site-event page.
+"""Unmounted PostgreSQL site-event page and bounded retail projection.
 
-The event JSON is deliberately not selected: the v15 schema has no reviewed
-actor-level payload visibility classification. This is a cursor/chain proof,
-not a replication feed or a production route.
+The default reader never selects event JSON. A separate manager-only reader
+selects rows inside the same checked transaction, emits only the reviewed
+retail held-reservation projection, and keeps other payloads private. Neither
+reader is a mounted replication feed or production route.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import json
 from typing import Any, Mapping
 
 from .connected_site_event_read import authorize_event_read
@@ -35,15 +37,21 @@ class EventHeaderPage:
     has_more: bool
 
 
+@dataclass(frozen=True, slots=True)
+class RetailReservationPage:
+    headers: EventHeaderPage
+    projections: tuple[dict[str, Any], ...]
+
+
 def _fail(reason: str) -> None:
     raise ConnectedSiteV15Error(f"connected_site_event_page_{reason}")
 
 
-def read_event_headers(
+def _read_page(
     *, connection_factory: Any, principal: ConnectedSitePrincipal,
     authority: SiteAuthority, lease: Mapping[str, Any],
-    request: Mapping[str, Any], now: datetime,
-) -> EventHeaderPage:
+    request: Mapping[str, Any], now: datetime, include_retail_held: bool,
+) -> tuple[EventHeaderPage, tuple[dict[str, Any], ...]]:
     """Read one consistent tenant page after rechecking current DB authority.
 
     Callers must supply a trusted ingress principal, current signed authority,
@@ -137,9 +145,11 @@ def read_event_headers(
                 prior = cursor.fetchone()
                 if prior != (grant.prior_event_digest,):
                     _fail("cursor_changed")
+            columns = "event_sequence,event_digest,previous_event_digest"
+            if include_retail_held:
+                columns += ",event_json::text"
             cursor.execute(
-                "select event_sequence,event_digest,previous_event_digest "
-                "from app_private.connected_site_events "
+                f"select {columns} from app_private.connected_site_events "
                 "where workspace_id=%s and site_id=%s and event_sequence>%s "
                 "order by event_sequence limit %s",
                 (grant.workspace_id, grant.site_id, grant.after_sequence, grant.limit + 1),
@@ -150,7 +160,11 @@ def read_event_headers(
             expected_sequence = grant.after_sequence + 1
             previous = grant.prior_event_digest
             headers: list[EventHeader] = []
-            for sequence, event_digest, previous_digest in rows:
+            projections: list[dict[str, Any]] = []
+            for index, row in enumerate(rows):
+                if not isinstance(row, tuple) or len(row) != (4 if include_retail_held else 3):
+                    _fail("page_shape")
+                sequence, event_digest, previous_digest = row[:3]
                 if (
                     type(sequence) is not int or sequence != expected_sequence
                     or not isinstance(event_digest, str) or len(event_digest) != 64
@@ -159,15 +173,68 @@ def read_event_headers(
                 ):
                     _fail("chain_gap")
                 headers.append(EventHeader(sequence, event_digest, previous_digest))
+                if include_retail_held:
+                    raw_json = row[3]
+                    if not isinstance(raw_json, str) or len(raw_json) > 1048576:
+                        _fail("event_json_invalid")
+                    try:
+                        event = json.loads(raw_json)
+                    except (ValueError, TypeError):
+                        _fail("event_json_invalid")
+                    # PostgreSQL jsonb text is not in our canonical key order;
+                    # digest() canonicalizes the parsed object independently.
+                    if not isinstance(event, dict) or digest(event) != event_digest:
+                        _fail("event_json_invalid")
+                    if index < grant.limit and event.get("eventType") == "shop.connected_stock.reserved.v1":
+                        # Import locally: the projection itself rechecks the
+                        # signed actor/lease and rejects unknown payload keys.
+                        from .connected_site_event_projection import project_retail_reservation_held
+                        projections.append(project_retail_reservation_held(
+                            principal=principal, authority=authority, lease=lease,
+                            request=request, now=now, event=event,
+                            candidate_event_digest=event_digest,
+                        ))
                 previous = event_digest
                 expected_sequence += 1
             has_more = len(headers) > grant.limit
             headers = headers[:grant.limit]
             last = headers[-1] if headers else None
             check_live_time()
-            return EventHeaderPage(
+            page = EventHeaderPage(
                 grant.workspace_id, grant.site_id, grant.after_sequence,
                 grant.prior_event_digest, tuple(headers),
                 last.sequence if last else grant.after_sequence,
                 last.event_digest if last else grant.prior_event_digest, has_more,
             )
+            return page, tuple(projections)
+
+
+def read_event_headers(
+    *, connection_factory: Any, principal: ConnectedSitePrincipal,
+    authority: SiteAuthority, lease: Mapping[str, Any],
+    request: Mapping[str, Any], now: datetime,
+) -> EventHeaderPage:
+    """Read only chain metadata; never select the event JSON column."""
+    return _read_page(
+        connection_factory=connection_factory, principal=principal,
+        authority=authority, lease=lease, request=request, now=now,
+        include_retail_held=False,
+    )[0]
+
+
+def read_retail_reservation_page(
+    *, connection_factory: Any, principal: ConnectedSitePrincipal,
+    authority: SiteAuthority, lease: Mapping[str, Any],
+    request: Mapping[str, Any], now: datetime,
+) -> RetailReservationPage:
+    """Return a manager-only sanitized held-reservation view in one DB snapshot.
+
+    No route or native client calls this source-only seam. Other event types
+    advance the checked cursor but never return their raw payloads.
+    """
+    headers, projections = _read_page(
+        connection_factory=connection_factory, principal=principal,
+        authority=authority, lease=lease, request=request, now=now,
+        include_retail_held=True,
+    )
+    return RetailReservationPage(headers, projections)

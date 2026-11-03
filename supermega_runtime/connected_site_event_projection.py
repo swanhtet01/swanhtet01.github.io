@@ -2,9 +2,9 @@
 
 This does not authorize a sale or alter stock. The full hold/release/commit
 lifecycle and a cloud client cursor are not yet implemented, so no transport
-or native replica consumes this projection. The caller-supplied digest checks
-only internal consistency; it does not authenticate a database row. Future
-delivery must bind that row to an authorized header sequence and durable cursor.
+or native replica consumes this projection. This pure function's caller-supplied
+digest checks only internal consistency; the unmounted event-feed reader binds
+an actual database row to an authorized header sequence in one transaction.
 """
 
 from __future__ import annotations
