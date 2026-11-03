@@ -98,6 +98,8 @@ const shopConnectedCloudFeedPageEvidenceV41Sql = '''
     page_digest TEXT PRIMARY KEY NOT NULL REFERENCES shop_connected_cloud_feed_pages(page_digest),
     request_json TEXT NOT NULL CHECK (json_valid(request_json) AND length(request_json) <= 8192),
     request_digest TEXT NOT NULL UNIQUE CHECK (length(request_digest) = 64),
+    cloud_key_approval_json TEXT NOT NULL CHECK (json_valid(cloud_key_approval_json) AND length(cloud_key_approval_json) <= 4096),
+    cloud_key_approval_digest TEXT NOT NULL CHECK (length(cloud_key_approval_digest) = 64),
     lease_digest TEXT NOT NULL REFERENCES shop_site_offline_lease_payloads(payload_digest),
     authority_payload_digest TEXT NOT NULL CHECK (length(authority_payload_digest) = 64),
     enrollment_evidence_digest TEXT NOT NULL REFERENCES shop_site_enrollment_evidence(evidence_digest),

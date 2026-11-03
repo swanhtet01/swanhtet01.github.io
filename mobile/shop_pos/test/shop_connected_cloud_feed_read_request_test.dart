@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_read_request.dart';
+import 'package:supermega_shop/shop_connected_cloud_device_key_approval.dart';
 import 'package:supermega_shop/shop_connected_site_cloud_feed_contract.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
@@ -10,6 +12,119 @@ import 'package:supermega_shop/shop_offline_staff_lease.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
 
 void main() {
+  test(
+    'cloud-only device approval rejects LAN, expiry and wrong scope',
+    () async {
+      final issuer = await Ed25519().newKeyPairFromSeed(
+        List<int>.filled(32, 7),
+      );
+      final device = await Ed25519().newKeyPairFromSeed(
+        List<int>.filled(32, 8),
+      );
+      final issuerPublic = (await issuer.extractPublicKey()).bytes;
+      final devicePublic = (await device.extractPublicKey()).bytes;
+      final fingerprint = crypto.sha256.convert(devicePublic).toString();
+      const enrollmentDigest =
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      const now = 1800000000000;
+      final unsigned = <String, Object?>{
+        'contract': connectedCloudDeviceKeyApprovalContract,
+        'purpose': connectedCloudDeviceKeyApprovalPurpose,
+        'workspaceId': 'workspace-1',
+        'siteId': 'site-1',
+        'deviceId': 'device-1',
+        'signingKeyId': fingerprint,
+        'publicKey': base64Url.encode(devicePublic).replaceAll('=', ''),
+        'clientFingerprint': fingerprint,
+        'enrollmentEvidenceDigest': enrollmentDigest,
+        'sessionGeneration': 1,
+        'revocationGeneration': 3,
+        'approvalSequence': 1,
+        'previousApprovalDigest': null,
+        'issuerKeyId': 'cloud-issuer-1',
+        'issuerKeyGeneration': 1,
+        'issuedAtMillis': now - 1000,
+        'expiresAtMillis': now + 60000,
+      };
+      Future<String> signed(Map<String, Object?> fields) async =>
+          canonicalConnectedSiteJson({
+            ...fields,
+            'signature': await _sign(fields, issuer),
+          });
+      ConnectedCloudDeviceKeyApprovalV1 verify(
+        String bytes, {
+        int time = now,
+      }) => ConnectedCloudDeviceKeyApprovalV1.parseAndVerifyAt(
+        canonicalBytes: bytes,
+        pinnedCloudIssuerKeys: {'cloud-issuer-1': issuerPublic},
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        deviceId: 'device-1',
+        clientFingerprint: fingerprint,
+        enrollmentEvidenceDigest: enrollmentDigest,
+        signingKeyId: fingerprint,
+        pinnedIssuerKeyGeneration: 1,
+        expectedApprovalSequence: 1,
+        expectedPreviousApprovalDigest: null,
+        sessionGeneration: 1,
+        revocationGeneration: 3,
+        trustedAtMillis: time,
+      );
+      final approvedBytes = await signed(unsigned);
+      final approved = verify(approvedBytes);
+      expect(approved.publicKey, devicePublic);
+      expect(approved.approvalDigest, isNotEmpty);
+      for (final invalid in [
+        await signed({...unsigned, 'purpose': 'lan-pairing.v1'}),
+        await signed({...unsigned, 'workspaceId': 'other'}),
+        await signed({...unsigned, 'siteId': 'other'}),
+        await signed({...unsigned, 'revocationGeneration': 4}),
+        await signed({...unsigned, 'issuerKeyGeneration': 2}),
+        await signed({
+          ...unsigned,
+          'approvalSequence': 2,
+          'previousApprovalDigest': enrollmentDigest,
+        }),
+        await signed({
+          ...unsigned,
+          'publicKey': base64Url.encode(issuerPublic).replaceAll('=', ''),
+        }),
+      ]) {
+        expect(() => verify(invalid), throwsFormatException);
+      }
+      final altered = jsonDecode(approvedBytes) as Map<String, dynamic>;
+      altered['signature'] =
+          'A${(altered['signature'] as String).substring(1)}';
+      expect(
+        () => verify(canonicalConnectedSiteJson(altered)),
+        throwsFormatException,
+      );
+      expect(
+        () => verify(approvedBytes, time: now + 60000),
+        throwsFormatException,
+      );
+      expect(
+        () => ConnectedCloudDeviceKeyApprovalV1.parseAndVerifyAt(
+          canonicalBytes: approved.canonicalBytes,
+          pinnedCloudIssuerKeys: const {},
+          workspaceId: 'workspace-1',
+          siteId: 'site-1',
+          deviceId: 'device-1',
+          clientFingerprint: fingerprint,
+          enrollmentEvidenceDigest: enrollmentDigest,
+          signingKeyId: fingerprint,
+          pinnedIssuerKeyGeneration: 1,
+          expectedApprovalSequence: 1,
+          expectedPreviousApprovalDigest: null,
+          sessionGeneration: 1,
+          revocationGeneration: 3,
+          trustedAtMillis: now,
+        ),
+        throwsFormatException,
+      );
+    },
+  );
+
   test(
     'signed feed request binds exact manager lease, device and time',
     () async {
