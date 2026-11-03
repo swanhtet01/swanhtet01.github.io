@@ -595,6 +595,36 @@ test('production identity is generated only after every default-profile test sha
     missingWorkerInventory.failures.includes('native_test_inventory_does_not_match_filesystem'),
   )
 
+  const swappedInventory = verifyShopNativeCiContract(
+    workflow.replace(
+      '          test/widget_checkout_second_test.dart\n          test/widget_checkout_test.dart\n',
+      '          test/widget_checkout_test.dart\n          test/widget_checkout_second_test.dart\n',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(swappedInventory.failures.includes('native_test_inventory_does_not_match_filesystem'))
+
+  const duplicateInventory = verifyShopNativeCiContract(
+    workflow.replace(
+      '          test/widget_checkout_second_test.dart\n',
+      '          test/widget_checkout_second_test.dart\n          test/widget_checkout_second_test.dart\n',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(duplicateInventory.failures.includes('native_test_inventory_does_not_match_filesystem'))
+
+  const extraInventory = verifyShopNativeCiContract(
+    workflow.replace(
+      '          test/widget_checkout_second_test.dart\n',
+      '          test/unreviewed_extra_test.dart\n          test/widget_checkout_second_test.dart\n',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(extraInventory.failures.includes('native_test_inventory_does_not_match_filesystem'))
+
   const missingSuccessorShard = verifyShopNativeCiContract(
     workflow.replace(
       '              test/shop_connected_trusted_time_client_store_test.dart \\\n',

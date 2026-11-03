@@ -194,7 +194,6 @@ function declaredTestInventory(source) {
     .split(/\r?\n/)
     .map(line => line.trim())
     .filter(line => /^test\/.+_test\.dart$/.test(line))
-    .sort()
 }
 
 function isolatedShardTestCounts(source) {

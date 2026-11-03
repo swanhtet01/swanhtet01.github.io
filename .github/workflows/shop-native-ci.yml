@@ -190,8 +190,8 @@ jobs:
           test/shop_startup_cleanup_test.dart
           test/shop_stock_activity_test.dart
           test/visual_capture_test.dart
-          test/widget_checkout_test.dart
           test/widget_checkout_second_test.dart
+          test/widget_checkout_test.dart
           test/widget_shell_test.dart
           EOF
           diff -u /tmp/shop-test-files.expected /tmp/shop-test-files.actual
