@@ -16,10 +16,12 @@
   `b006863cb0c7fada6dce00fcb39ea9ba078fab0ca8cb4ceed3e21f7da60fe516`.
   Independent cumulative review **ACCEPT** for draft CI only.
 - **CI IN PROGRESS / FAIL:** on that exact public head, Native run
-  `41625395653` and primary App run `41625385229` were in progress at this
-  readback; Kernel run `41625395875` passed, dependency run `41625395929`
-  failed, and redundant App run `41625395626` skipped. No Android/build or
-  database rehearsal PASS is inferred from pending checks.
+  `41625395653` remained in progress at the later readback. Primary App run
+  `41625385229` failed at canonical `hq:verify`,
+  `database_rehearsal_evidence_stale` (`secretValuesExposed:false`); Kernel
+  run `41625395875` passed, dependency run `41625395929` failed, and
+  redundant App run `41625395626` skipped. No Android/build or database
+  rehearsal PASS is inferred from pending or failed checks.
 - **PASS (private unmounted source prerequisite):** implementation commit
   `e8468afe7834b03426057328b2224c62ff8978f0`, tree
   `055de843e44fadebca5d08201dd7a699d3fef4c9`, parent `b760f4c0`,
@@ -34,8 +36,10 @@
   QA isolation **24/24**, and diff check passed on the final private source.
 - **BLOCKED / NOT RUN:** the parser accepts injected authority, device and
   time inputs; it does not establish their latest durable state or run inside
-  v40 atomic apply. Request-authentication evidence is not retained for
-  reconstruction after restart/restore. A separately migrated ledger shape,
+  v40 atomic apply. Public v40 pages retain the response proof and request
+  nonce, but not the canonical signed request or its current authority/time
+  acceptance evidence. A pre-transaction check alone would leave exact
+  replay and restore unauthenticated. A separately migrated ledger shape,
   transaction-bound recheck, production key custody, real PostgreSQL and
   installed two-device evidence remain required. Connected mode stays off;
   this private commit is not in hosted CI and must not be claimed ready.
