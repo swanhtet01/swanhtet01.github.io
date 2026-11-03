@@ -137,6 +137,7 @@ bool shopConnectedCloudFeedEvidenceCoverageV41({
 }) {
   try {
     final requestDigestsByPage = <String, String>{};
+    final seenRequestDigests = <String>{};
     for (final page in pages) {
       final digest = page['page_digest'];
       final pageJson = page['page_json'];
@@ -148,6 +149,7 @@ bool shopConnectedCloudFeedEvidenceCoverageV41({
         return false;
       }
       if (requestDigestsByPage.containsKey(digest) ||
+          !seenRequestDigests.add(decoded['requestDigest'] as String) ||
           requestDigestsByPage.length >= 2048) {
         return false;
       }

@@ -1546,6 +1546,20 @@ void main() {
     expect(covers([page, otherPage], [evidence, otherEvidence]), isTrue);
     expect(
       covers(
+        [
+          page,
+          {...otherPage, 'page_json': page['page_json']},
+        ],
+        [
+          evidence,
+          {...evidence, 'page_digest': otherPage['page_digest']},
+        ],
+      ),
+      isFalse,
+      reason: 'distinct retained pages must not reuse one signed request',
+    );
+    expect(
+      covers(
         [page, otherPage],
         [
           {...evidence, 'page_digest': 'b' * 64},
