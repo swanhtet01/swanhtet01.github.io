@@ -24,6 +24,7 @@ const shopConnectedCloudFeedPagesV40Sql = '''
     next_sequence INTEGER NOT NULL CHECK (next_sequence > after_sequence),
     next_event_digest TEXT NOT NULL CHECK (length(next_event_digest) = 64),
     page_json TEXT NOT NULL CHECK (json_valid(page_json)),
+    authenticated_proof_json TEXT NOT NULL CHECK (json_valid(authenticated_proof_json)),
     authenticated_proof_digest TEXT NOT NULL CHECK (length(authenticated_proof_digest) = 64),
     UNIQUE (stream_digest, after_sequence),
     UNIQUE (stream_digest, next_sequence),

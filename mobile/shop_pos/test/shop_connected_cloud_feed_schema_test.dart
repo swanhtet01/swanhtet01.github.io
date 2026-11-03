@@ -20,6 +20,17 @@ void main() {
       final database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
       expect(database.schemaVersion, 40);
+      final pageColumns = await database
+          .customSelect('PRAGMA table_info(shop_connected_cloud_feed_pages)')
+          .get();
+      expect(
+        pageColumns.map((row) => row.read<String>('name')),
+        containsAll(<String>{
+          'page_json',
+          'authenticated_proof_json',
+          'authenticated_proof_digest',
+        }),
+      );
       await database.close();
       ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40);
     },
