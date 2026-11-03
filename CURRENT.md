@@ -1,9 +1,42 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 00:35 UTC
+- Last verified: 2026-11-03 01:16 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 01:16 UTC private actor-bound event-read prerequisite
+
+- Public draft PR #752 remains fixed at
+  `289ec76de4b80cd2de437afc3b28cfe76192ec1e`. Exact-head Native run
+  `41549050338` is terminal **PASS** across all six jobs, including full
+  Android and Windows. This is hosted source/build evidence, not signed or
+  installed-device acceptance. App CI `41549042445` remains **FAIL** at the
+  stale PostgreSQL rehearsal gate; Dependency Security `41549050479` remains
+  **FAIL**; Kernel `41549050241` **PASS**. No new PR head was published.
+- Private implementation `f1ccba555dc12b50cb60b7ed33b75809c9b304ea`
+  (tree `db8d229e3787695b59420a71cfc51c2f8c177fd5`) defines an unmounted,
+  default-off event-read authorization contract. All-site read is limited to
+  a current manager/owner with `managementRead` in current membership and an
+  issuer-signed lease; a device-signed, 30-second request binds the ingress
+  principal, tenant/site/device/enrollment, current authority and revocation,
+  lease digest and bounded continuation cursor. Disabled authority, stale or
+  substituted identities, invalid generations and expired leases fail closed.
+  The existing upload lease verifier was extracted without relaxing its rules.
+  Identical authenticated reads may repeat within the 30-second window; this
+  is freshness-bounded idempotent read, not one-shot replay protection.
+- Final-source connected-site suite **49/49 PASS** for the five focused modules;
+  broader `test_connected_site*.py` discovery **49 PASS / 3 SKIPPED** (52
+  discovered; the opt-in live PostgreSQL tests did not run). Claims guard
+  **179/179 PASS**, staged diff/whitespace **PASS**, and independent adversarial
+  review **ACCEPT** after fixing disabled-authority and float-generation cases.
+  No HTTP event endpoint, database event-page reader, durable cloud-download
+  cursor, gateway/clock custody, deployed RLS test or two-device delivery was
+  implemented or run. The prior rejected synthetic endpoint remains absent.
+  Next Cloud-owned slice is an atomic tenant-scoped PostgreSQL page with a
+  complete event/visibility contract and durable client cursor/recovery;
+  connected mode stays disabled until authenticated ingress, revocation and
+  installed two-device proof pass.
 
 ## 2026-11-03 00:35 UTC remote-event delivery review hold
 
