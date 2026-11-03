@@ -1,9 +1,30 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 17:52 UTC
+- Last verified: 2026-11-03 18:13 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 18:13 UTC private two-handle cloud-feed contention proof
+
+- **PASS (private, test-only):** `dcad917fd3d975f00baa3c6710b1f5d461c411b8`,
+  repository tree `23c9eeaa227fb332666e69bb38bb486859eee323`,
+  adds a same-process, independent-SQLite-handle second-page overlap test.
+  One writer is held inside its transaction after page/evidence/head writes;
+  the other must fail at the write lock, then a byte-identical retry after
+  commit must leave exactly two pages and a reconstructable backup. Guaranteed
+  test cleanup releases the held writer and closes both handles on assertion
+  failure. Final-source cloud-feed schema suite **13/13 PASS in 1m53s**;
+  focused case **1/1 PASS**, changed-test Flutter analysis, format and diff
+  checks **PASS**; independent adversarial test review **ACCEPT**. This
+  private commit is not in hosted CI and does not establish a separate-process
+  race, external revocation fence or installed two-device operation.
+- **Published draft PR #752:** exact remote head `deb543c4e1aa4dad09fb092d2f9ad902de2daf83`.
+  Kernel run `41688646382` **PASS**; App run `41688635682` **FAIL** at the stale
+  database rehearsal gate; Dependency run `41688646171` **FAIL**; Native run
+  `41688646163` was **IN PROGRESS** at this checkpoint. Duplicate App run
+  `41688646681` was skipped, not a pass. Keep the public head fixed during
+  useful Native CI. Connected mode remains disabled.
 
 ## 2026-11-03 17:52 UTC exact-head Android fixture repair
 
