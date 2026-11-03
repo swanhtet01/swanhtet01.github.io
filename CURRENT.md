@@ -1,9 +1,36 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 04:30 UTC
+- Last verified: 2026-11-03 04:42 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 04:42 UTC exact-public-head CI and security correction
+
+- On PR #752 head `5a9e89bbeeb53f8b4bef601e4f71b280cf4c4008`, App
+  run `41578171660` is terminal **FAIL** at canonical `hq:verify` check
+  638/668: `node tools/record_postgres17_rehearsal.mjs --verify` returned
+  `database_rehearsal_evidence_stale`, `secretValuesExposed:false`. Prior
+  checks 1–637, including disposable PostgreSQL event-reader/replay proof,
+  passed; later journeys are **NOT RUN**. This is not a fresh Windows
+  PostgreSQL 17 rehearsal receipt. Kernel run `41578175580` **PASS**;
+  Dependency run `41578175726` **FAIL** only app/kernel minimatch `<11.0.1`
+  (`GHSA-g3hv-75wg-m249`), while platform, pip and credential-shape jobs
+  passed. Native run `41578175514` is **IN PROGRESS**: four isolated/iOS
+  jobs passed, main Windows passed backup/restore/no-replace and is building
+  unsigned output, and main Android remains in isolated test shards.
+- The external GitGuardian check `125726448756` completed **NEUTRAL**, not
+  PASS: its provider summary says the PR exceeded the configured size limit
+  and was skipped to preserve the organization's GitHub API rate budget.
+  This is a security evidence **BLOCKER**, not a finding dismissal. A local
+  exact cumulative-diff run of `tools/verify_repository_secret_diff.mjs`
+  scanned 3,073 added lines from `289ec76d` to `5a9e89bb` with zero matches
+  and no values exposed. That narrower pattern scanner is **not equivalent**
+  to a completed GitGuardian secret scan. The GitGuardian organization owner
+  must arrange a supported complete scan of this exact candidate and review
+  the historical findings without suppressing or exposing their contents.
+- The public head remains fixed while Native runs. Private successor
+  `4739ab73` and its status ledger are not in these hosted runs.
 
 ## 2026-11-03 04:30 UTC guarded draft CI and private PG test successor
 
