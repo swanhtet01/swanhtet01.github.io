@@ -1,9 +1,33 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 17:32 UTC
+- Last verified: 2026-11-03 17:52 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 17:52 UTC exact-head Android fixture repair
+
+- **PASS (private test-only):** `0d76872042d5387d8239c49c58b15b775a9bff45`,
+  repository tree `efa18cdea6e2a1cc8776e4c97e4ebfd27fcdeb6f`, repairs
+  the two substantive Android `persistence_a` fixture failures from public
+  Native run `41680077347`: the cafe migration assertion now expects schema
+  v41 and the synthetic v17 cash-movement fixture removes v41 objects before
+  claiming an older schema. Both focused cases **PASS** with the hosted 2m
+  per-test timeout; the complete seven-file shard **68/68 PASS in 5m53s**.
+  Changed-test Flutter analysis, formatting and diff checks **PASS**.
+  Final-source combined encrypted-backup/cloud-feed schema regression
+  **115/115 PASS in 8m42s** (offline, serial, 2m per-test timeout).
+  Independent test-scope/security review **ACCEPT**. Production migration and
+  backup verification are unchanged; this successor is **not published**.
+- **Hosted exact-head status:** Native `41680077347` is terminal **FAIL** at
+  those two Android assertions; its other five jobs **PASS**. App remains
+  **FAIL** at stale PostgreSQL evidence; Dependency remains **FAIL** and
+  GitGuardian **NEUTRAL/incomplete**, not a security pass. No hosted run has
+  yet tested this private fixture repair or the later private v41 source.
+- **NOT RUN / BLOCKED:** full hosted exact-head Native CI on this successor,
+  production authority/key custody, mounted transport, installed two-device
+  sync, signed artifacts, PostgreSQL Windows rehearsal, full-scope secret
+  scan and merchant acceptance. Connected mode remains disabled.
 
 ## 2026-11-03 17:29 UTC signed two-page fixture checkpoint
 
