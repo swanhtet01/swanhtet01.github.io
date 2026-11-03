@@ -1,9 +1,14 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 13:04 UTC
+- Last verified: 2026-11-03 13:13 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 13:13 UTC private retained approval-to-request binding
+
+- **PASS (bounded, unmounted source only):** native checkpoint `8d605e1f9bfb47c6b0b410624f5631ee7e79f9de`, repository tree `33db994b00b2b45cac1ec5e53a31f90e16b4b1c0`, native tree `bd8053c217f85c9736bcbfbdaea2da5e2a87a1e7`, runtime `lib/` tree `1822b05ec60c1ef893ea49422c896398b7e8244c`. The retained historical verifier now recomputes the cloud-purpose approval digest under an independently supplied issuer pin/generation/history and uses that approval's key to verify the exact signed read request. Synthetic tests reject substituted approval digest or signing key and a self-consistent request/approval pair that disagrees with an independently expected request digest. Focused request tests **2/2 PASS**, targeted Flutter analysis and formatting **PASS**, independent changed-diff review **ACCEPT for this unmounted primitive only**.
+- **BLOCKED / NOT RUN:** nonempty-v41 open, encrypted backup and atomic apply were not implemented or run. The runtime verifier still requires an empty v41 feed, and the synchronous backup verifier still rejects nonempty rows. The remaining source task is a shared, fully authenticated synchronous reconstruction of v30 authority, v34 lease, v25 enrollment, v39 time entry/ACK/head and approval history using independently pinned test authority, followed by a transactional page/evidence/cursor writer and rollback/replay tests. Existing lease/authority runtime verifiers are asynchronous and cannot simply be treated as a passed synchronous backup proof. Production issuer pins remain empty, connected mode default-off, and public PR #752 unchanged by this private checkpoint.
 
 ## 2026-11-03 13:04 UTC private v41 cloud-key approval prerequisite
 
