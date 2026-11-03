@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 01:16 UTC
+- Last verified: 2026-11-03 01:32 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 01:32 UTC private metadata-only event page
+
+- Public draft PR #752 remains fixed at
+  `289ec76de4b80cd2de437afc3b28cfe76192ec1e`; the private source has
+  **not** been published, merged, mounted, deployed or production-enabled.
+- Private implementation `5fb84a8d2e259ea82f89d8ae82d625bd04e4754f`
+  (tree `3b77439c221c5f3256113d80e36fd5a36f61ffeb`) adds an unmounted
+  PostgreSQL metadata-only event-header reader after the reviewed current
+  manager/owner lease policy. It requires a transaction, sets tenant RLS
+  context, uses one repeatable-read snapshot, locks the current site/device/
+  lease rows, rechecks signed authority and retained lease identity/expiry,
+  verifies the prior cursor and contiguous digest chain, and returns at most
+  64 headers plus a continuation cursor. It checks live `clock_timestamp()`
+  before and after the page fetch; no `event_json` or other payload is read.
+  This does **not** implement cross-device replication or a durable client
+  cursor. The production connected-site site gate remains false-only.
+- Final-source connected-site discovery: **55 PASS / 3 SKIPPED** (58 total);
+  the three opt-in disposable PostgreSQL 17 tests were **NOT RUN**. Python
+  compilation and whitespace **PASS**. Independent security review initially
+  **HOLD** for expiry races and retained-lease mismatch; both were fixed and
+  the revised source was **ACCEPTED**. Scripted SQL-boundary tests do not prove
+  actual PostgreSQL transaction/RLS/concurrent-write behavior. Tenant isolation,
+  lease revocation under concurrent writes, reconnect and cursor replay are
+  source-tested only; live PostgreSQL and installed two-device evidence remain
+  **NOT RUN**. Next: opt-in disposable PostgreSQL 17 reader/concurrency proof,
+  explicit event-payload visibility contract, then durable client cursor and
+  recovery before any authenticated route or connected-mode enablement.
 
 ## 2026-11-03 01:16 UTC private actor-bound event-read prerequisite
 
