@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 07:08 UTC
+- Last verified: 2026-11-03 07:10 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
@@ -20,7 +20,10 @@
   signing, manual dispatch or connected-mode enablement occurred.
 - **PASS / FAIL / IN PROGRESS (hosted exact head):** Kernel run `41593896393`
   **PASS**; Dependency Security run `41593896401` **FAIL** (existing advisory
-  gate); App run `41593891230` and Native run `41593896415` are **IN PROGRESS**.
+  gate); App run `41593891230` **FAIL** at canonical step 638/668 `hq:verify`
+  with `database_rehearsal_evidence_stale` after all preceding steps passed;
+  the 30 downstream canonical steps are **NOT RUN**. Native run `41593896415`
+  is **IN PROGRESS**.
   A redundant App run `41593896435` was **SKIPPED**, not a pass. Hold the PR
   head fixed until useful runs finish; source-only tests do not substitute for
   those hosted results.
