@@ -11,6 +11,7 @@ import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_proof.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_read_request.dart';
+import 'package:supermega_shop/shop_connected_cloud_feed_v41_verifier.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_connected_site_cloud_feed_contract.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
@@ -801,6 +802,159 @@ void main() {
         .getSingle();
     expect(currentDevice.read<String>('state'), 'revoked');
     expect(currentDevice.read<int>('revoked_at_millis'), greaterThan(now));
+    const historyTables = <String>[
+      'shop_connected_cloud_feed_streams',
+      'shop_connected_cloud_feed_pages',
+      'shop_connected_cloud_feed_heads',
+      'shop_connected_cloud_feed_restore_barriers',
+      'shop_connected_cloud_feed_page_evidence',
+      'shop_site_pairing_nonces',
+      'shop_site_pending_enrollments',
+      'shop_site_enrollment_evidence',
+      'shop_site_devices',
+      'shop_site_request_nonces',
+      'shop_site_authority_payloads',
+      'shop_site_authority_members',
+      'shop_site_configuration_snapshots',
+      'shop_site_authority_deltas',
+      'shop_site_authority_checkpoints',
+      'shop_site_authority_bootstrap_provenance',
+      'shop_site_offline_lease_payloads',
+      'shop_site_offline_leases',
+      'shop_site_commands',
+      'shop_site_cloud_proof_requirements',
+      'shop_site_cloud_proofs',
+      'shop_connected_time_client_entries',
+      'shop_connected_time_client_acks',
+      'shop_connected_time_client_heads',
+      'shop_connected_time_client_restore_barriers',
+      'shop_connected_time_client_restore_clearances',
+    ];
+    final history = <String, List<Map<String, Object?>>>{
+      for (final table in historyTables) table: await rows(table),
+    };
+    final trust = ShopCloudFeedV41FirstPageTrust(
+      workspaceId: workspace,
+      siteId: site,
+      actorId: 'actor_fixture',
+      deviceId: device,
+      coordinatorDeviceId: coordinator,
+      clientFingerprint: fingerprint,
+      clientSigningKeyId: fingerprint,
+      sessionGeneration: 1,
+      authoritySequence: 1,
+      revocationGeneration: 1,
+      cloudIssuerGeneration: 1,
+      coordinatorBindingDigest: 'c' * 64,
+      coordinatorBindingGeneration: 1,
+      timeAuthorityKeyId: 'time_fixture',
+      timeAuthorityKeyGeneration: 1,
+      timeAuthorityEpoch: 1,
+      feedIssuerKeys: {'feed_fixture': feedPublic},
+      cloudApprovalIssuerKeys: {
+        'cloud_fixture': (await cloudPair.extractPublicKey()).bytes,
+      },
+      leaseIssuerKeys: {
+        'lease_fixture': (await leasePair.extractPublicKey()).bytes,
+      },
+      authorityIssuerKeys: {'authority_fixture': authorityPublic},
+      ownerIssuerKeys: {'owner_fixture': ownerKey},
+      timeAuthorityKeys: {'time_fixture': timeKey},
+      clientKeys: {fingerprint: clientKey},
+    );
+    bool valid(Map<String, List<Map<String, Object?>>> tables) =>
+        shopCloudFeedFirstPageHistoricalRowsValidV41(
+          trust: trust,
+          completeTables: tables,
+        );
+    expect(valid(history), isTrue);
+    expect(
+      valid({
+        ...history,
+        'shop_site_offline_leases': [
+          {
+            ...history['shop_site_offline_leases']!.single,
+            'actor_role': 'cashier',
+          },
+        ],
+      }),
+      isFalse,
+      reason: 'retained signed lease must match every base lease binding',
+    );
+    expect(
+      valid({
+        ...history,
+        'shop_site_enrollment_evidence': [
+          history['shop_site_enrollment_evidence']!.first,
+        ],
+      }),
+      isFalse,
+      reason: 'hidden later revocation cannot be omitted from full history',
+    );
+    expect(
+      valid({...history, 'shop_site_authority_payloads': const []}),
+      isFalse,
+      reason: 'authority predecessor cannot be hidden',
+    );
+    final earlyRevocation = await signedEvidence(
+      action: ShopOwnerEnrollmentAction.revoke,
+      generation: 2,
+      observedAt: now - 1,
+    );
+    expect(
+      valid({
+        ...history,
+        'shop_site_enrollment_evidence':
+            history['shop_site_enrollment_evidence']!
+                .map(
+                  (row) => row['action'] == 'revoke'
+                      ? {
+                          ...row,
+                          'observed_at_millis':
+                              earlyRevocation.observedAtMillis,
+                          'evidence_json': canonicalConnectedSiteJson(
+                            earlyRevocation.toJson(),
+                          ),
+                          'evidence_digest': earlyRevocation.evidenceDigest,
+                        }
+                      : row,
+                )
+                .toList(growable: false),
+        'shop_site_devices': [
+          {
+            ...history['shop_site_devices']!.single,
+            'revoked_at_millis': earlyRevocation.observedAtMillis,
+          },
+        ],
+      }),
+      isFalse,
+      reason: 'a genuine signed pre-sample revocation blocks the page',
+    );
+    final expiredProofUnsigned = {
+      ...proofUnsigned,
+      'issuedAtMillis': now - 60000,
+      'expiresAtMillis': now - 30000,
+    };
+    final expiredProofJson = canonicalConnectedSiteJson({
+      ...expiredProofUnsigned,
+      'signature': await signFields(expiredProofUnsigned, feedPair),
+    });
+    expect(
+      valid({
+        ...history,
+        'shop_connected_cloud_feed_pages': [
+          {
+            ...history['shop_connected_cloud_feed_pages']!.single,
+            'authenticated_proof_json': expiredProofJson,
+            'authenticated_proof_digest': connectedSiteSha256(
+              jsonDecode(expiredProofJson),
+            ),
+          },
+        ],
+      }),
+      isFalse,
+      reason: 'signed feed proof must cover the retained trusted sample',
+    );
     await database.close();
     database = ShopDatabase.withCorrectionReceiptVerifier(
       executor: NativeDatabase(file),
