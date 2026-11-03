@@ -190,11 +190,13 @@ jobs:
           persistence_backup_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-backup.XXXXXX")"
           persistence_a_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-a.XXXXXX")"
           persistence_b_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-b.XXXXXX")"
+          persistence_c_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-c.XXXXXX")"
+          visual_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-visual.XXXXXX")"
           connected_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected.XXXXXX")"
           connected_successor_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected-successor.XXXXXX")"
           trusted_time_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-trusted-time.XXXXXX")"
           cleanup() {
-            rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp" "$connected_successor_tmp" "$trusted_time_tmp"
+            rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp" "$connected_successor_tmp" "$trusted_time_tmp"
           }
           trap cleanup EXIT
           calculate_shard_budget() {
@@ -359,12 +361,7 @@ jobs:
               test/shop_member_identity_test.dart \
               test/shop_mmk_input_test.dart \
               test/shop_operational_export_database_test.dart \
-              test/shop_pending_cash_checkout_test.dart \
-              test/shop_qa_evidence_store_test.dart \
-              test/shop_qa_metrics_evidence_test.dart \
-              test/shop_sqlite_full_recovery_test.dart \
-              test/shop_staff_authorization_test.dart \
-              test/visual_capture_test.dart
+              test/shop_pending_cash_checkout_test.dart
           )
           persistence_b_status="$?"
           set -e
@@ -382,6 +379,57 @@ jobs:
             exit 124
           fi
           test "$persistence_b_status" -eq 0
+
+          persistence_c_budget="$(calculate_shard_budget)" || exit "$?"
+          persistence_c_started_at="$(date +%s)"
+          set +e
+          (
+            TMPDIR="$persistence_c_tmp" timeout --signal=TERM --kill-after=10s "${persistence_c_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_qa_evidence_store_test.dart \
+              test/shop_qa_metrics_evidence_test.dart \
+              test/shop_sqlite_full_recovery_test.dart \
+              test/shop_staff_authorization_test.dart
+          )
+          persistence_c_status="$?"
+          set -e
+          if [ "$persistence_c_status" -eq 124 ]; then
+            echo "shop_flutter_test_persistence_c_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$persistence_c_status" -ne 0 ]; then
+            echo "shop_flutter_test_persistence_c_failed_status:$persistence_c_status" >&2
+            exit "$persistence_c_status"
+          fi
+          persistence_c_elapsed="$(( $(date +%s) - persistence_c_started_at ))"
+          if [ "$persistence_c_elapsed" -ge "$persistence_c_budget" ]; then
+            echo "shop_flutter_test_persistence_c_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$persistence_c_status" -eq 0
+
+          visual_budget="$(calculate_shard_budget)" || exit "$?"
+          visual_started_at="$(date +%s)"
+          set +e
+          (
+            TMPDIR="$visual_tmp" timeout --signal=TERM --kill-after=10s "${visual_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/visual_capture_test.dart
+          )
+          visual_status="$?"
+          set -e
+          if [ "$visual_status" -eq 124 ]; then
+            echo "shop_flutter_test_visual_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$visual_status" -ne 0 ]; then
+            echo "shop_flutter_test_visual_failed_status:$visual_status" >&2
+            exit "$visual_status"
+          fi
+          visual_elapsed="$(( $(date +%s) - visual_started_at ))"
+          if [ "$visual_elapsed" -ge "$visual_budget" ]; then
+            echo "shop_flutter_test_visual_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$visual_status" -eq 0
 
           connected_budget="$(calculate_shard_budget)" || exit "$?"
           connected_started_at="$(date +%s)"

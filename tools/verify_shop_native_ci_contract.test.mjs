@@ -543,7 +543,7 @@ test('production identity is generated only after every default-profile test sha
   assert.ok(omittedMmkShard.failures.includes('native_test_shard_missing:test/shop_mmk_input_test.dart'))
 
   const omittedPendingCashShard = verifyShopNativeCiContract(
-    workflow.replace('              test/shop_pending_cash_checkout_test.dart \\\n', ''),
+    workflow.replace('              test/shop_pending_cash_checkout_test.dart\n', ''),
     gradleWrapper,
   )
   assert.ok(
@@ -795,6 +795,8 @@ test('default-profile test shards run serially with fail-closed shard and total 
     ['persistence_backup', 'native_persistence_backup_shard_not_bounded_or_sequential'],
     ['persistence_a', 'native_persistence_a_shard_not_bounded_or_sequential'],
     ['persistence_b', 'native_persistence_b_shard_not_bounded_or_sequential'],
+    ['persistence_c', 'native_persistence_c_shard_not_bounded_or_sequential'],
+    ['visual', 'native_visual_shard_not_bounded_or_sequential'],
     ['connected', 'native_connected_shard_not_bounded_or_sequential'],
   ]) {
     const missingNoPub = verifyShopNativeCiContract(
@@ -927,6 +929,8 @@ test('default-profile test shards run serially with fail-closed shard and total 
     ['shop_flutter_test_persistence_backup_budget_exhausted', 'native_persistence_backup_shard_budget_exhaustion_not_fail_closed'],
     ['shop_flutter_test_persistence_a_budget_exhausted', 'native_persistence_a_shard_budget_exhaustion_not_fail_closed'],
     ['shop_flutter_test_persistence_b_budget_exhausted', 'native_persistence_b_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_persistence_c_budget_exhausted', 'native_persistence_c_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_visual_budget_exhausted', 'native_visual_shard_budget_exhaustion_not_fail_closed'],
     ['shop_flutter_test_connected_budget_exhausted', 'native_connected_shard_budget_exhaustion_not_fail_closed'],
     ['shop_flutter_test_total_budget_exhausted', 'native_test_total_budget_exhaustion_not_fail_closed'],
   ]) {
@@ -970,12 +974,28 @@ test('default-profile test shards run serially with fail-closed shard and total 
 
   const incompleteCleanup = verifyShopNativeCiContract(
     workflow.replace(
-      'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"',
+      'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp"',
       'rm -rf -- "$behavior_core_tmp"',
     ),
     gradleWrapper,
   )
   assert.ok(incompleteCleanup.failures.includes('native_test_shard_cleanup_incomplete'))
+
+  const missingPersistenceC = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_qa_metrics_evidence_test.dart \\\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingPersistenceC.failures.includes('native_persistence_c_shard_inventory_or_order_wrong'),
+  )
+
+  const missingVisualTest = verifyShopNativeCiContract(
+    workflow.replace('              test/visual_capture_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingVisualTest.failures.includes('native_visual_shard_inventory_or_order_wrong'),
+  )
 
   const backgroundBehaviorCore = verifyShopNativeCiContract(
     workflow.replace(

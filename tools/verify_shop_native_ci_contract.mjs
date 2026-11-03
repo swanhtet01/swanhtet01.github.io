@@ -407,6 +407,18 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
+    'persistence_c_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-c.XXXXXX")"',
+    'native_persistence_c_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'visual_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-visual.XXXXXX")"',
+    'native_visual_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
     'connected_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected.XXXXXX")"',
     'native_connected_shard_temp_isolation_missing',
     failures,
@@ -455,13 +467,25 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
+    'TMPDIR="$persistence_c_tmp" timeout --signal=TERM --kill-after=10s "${persistence_c_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
+    'native_persistence_c_shard_not_bounded_or_sequential',
+    failures,
+  )
+  requireToken(
+    source,
+    'TMPDIR="$visual_tmp" timeout --signal=TERM --kill-after=10s "${visual_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
+    'native_visual_shard_not_bounded_or_sequential',
+    failures,
+  )
+  requireToken(
+    source,
     'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${connected_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
     'native_connected_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
     source,
-    'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp" "$connected_successor_tmp" "$trusted_time_tmp"',
+    'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp" "$connected_successor_tmp" "$trusted_time_tmp"',
     'native_test_shard_cleanup_incomplete',
     failures,
   )
@@ -473,7 +497,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   if (/[ \t]&[ \t]*$/m.test(isolatedShardBlock) || /_pid="\$!"/.test(isolatedShardBlock)) {
     failures.push('native_test_shards_not_strictly_serial')
   }
-  const shards = ['behavior_core', 'behavior_shell', 'behavior_checkout', 'persistence_backup', 'persistence_a', 'persistence_b', 'connected', 'connected_successor', 'trusted_time']
+  const shards = ['behavior_core', 'behavior_shell', 'behavior_checkout', 'persistence_backup', 'persistence_a', 'persistence_b', 'persistence_c', 'visual', 'connected', 'connected_successor', 'trusted_time']
   const shardPaths = (start, end) => {
     const startIndex = isolatedShardBlock.indexOf(start)
     const endIndex = isolatedShardBlock.indexOf(end)
@@ -503,6 +527,20 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   const expectedBehaviorShellPaths = ['test/widget_shell_test.dart']
   const expectedBehaviorCheckoutPaths = ['test/widget_checkout_test.dart']
   const expectedPersistenceBackupPaths = ['test/shop_backup_test.dart']
+  const expectedPersistenceBPaths = [
+    'test/shop_correction_consumption_test.dart',
+    'test/shop_member_identity_test.dart',
+    'test/shop_mmk_input_test.dart',
+    'test/shop_operational_export_database_test.dart',
+    'test/shop_pending_cash_checkout_test.dart',
+  ]
+  const expectedPersistenceCPaths = [
+    'test/shop_qa_evidence_store_test.dart',
+    'test/shop_qa_metrics_evidence_test.dart',
+    'test/shop_sqlite_full_recovery_test.dart',
+    'test/shop_staff_authorization_test.dart',
+  ]
+  const expectedVisualPaths = ['test/visual_capture_test.dart']
   const expectedConnectedSuccessorPaths = [
     'test/shop_connected_composition_test.dart',
     'test/shop_connected_coordinator_health_test.dart',
@@ -545,6 +583,24 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     'persistence_a_started_at="$(date +%s)"',
   )) !== JSON.stringify(expectedPersistenceBackupPaths)) {
     failures.push('native_persistence_backup_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'persistence_b_started_at="$(date +%s)"',
+    'persistence_c_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedPersistenceBPaths)) {
+    failures.push('native_persistence_b_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'persistence_c_started_at="$(date +%s)"',
+    'visual_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedPersistenceCPaths)) {
+    failures.push('native_persistence_c_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'visual_started_at="$(date +%s)"',
+    'connected_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedVisualPaths)) {
+    failures.push('native_visual_shard_inventory_or_order_wrong')
   }
   if (JSON.stringify(shardPaths(
     'connected_successor_started_at="$(date +%s)"',
