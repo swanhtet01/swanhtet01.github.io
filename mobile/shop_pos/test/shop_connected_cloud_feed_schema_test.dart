@@ -987,7 +987,7 @@ void main() {
     final twoPageFile = await preRevocationFile.copy(
       '${root.path}/two-page.sqlite',
     );
-    final twoPageDatabase = ShopDatabase(NativeDatabase(twoPageFile));
+    var twoPageDatabase = ShopDatabase(NativeDatabase(twoPageFile));
     final firstEvidenceForTwoPage = ShopCloudFeedV41FirstPageEvidence(
       requestJson: requestJson,
       cloudKeyApprovalJson: cloudApprovalJson,
@@ -1048,6 +1048,93 @@ void main() {
       proofJson: secondProofJson,
       evidence: secondEvidence,
       testOnlyBeforeCommit: beforeCommit,
+    );
+    await twoPageDatabase.close();
+    final contendedFile = await twoPageFile.copy(
+      '${root.path}/two-page-contended.sqlite',
+    );
+    twoPageDatabase = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(twoPageFile),
+      trust: trust,
+    );
+    final contendedWriter = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(contendedFile),
+      trust: trust,
+    );
+    final contendedRetry = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(
+        contendedFile,
+        setup: (raw) => raw.execute('PRAGMA busy_timeout = 100'),
+      ),
+      trust: trust,
+    );
+    await contendedWriter.verifyReadyForUse();
+    await contendedRetry.verifyReadyForUse();
+    final writerAtCommit = Completer<void>();
+    final releaseWriter = Completer<void>();
+    final firstAppend = applySecondPage(
+      contendedWriter,
+      _V41FixtureTime(workspace, site, [now + 1, now + 2], secondEvidence),
+      beforeCommit: () async {
+        writerAtCommit.complete();
+        await releaseWriter.future;
+      },
+    );
+    try {
+      await writerAtCommit.future.timeout(const Duration(seconds: 5));
+      try {
+        await expectLater(
+          applySecondPage(
+            contendedRetry,
+            _V41FixtureTime(workspace, site, [now + 1], secondEvidence),
+          ).timeout(const Duration(seconds: 5)),
+          throwsA(
+            predicate<Object>(
+              (error) => error.toString().contains('database is locked'),
+              'a SQLite write-lock rejection',
+            ),
+          ),
+          reason:
+              'a concurrent handle cannot commit the same cursor while locked',
+        );
+      } finally {
+        releaseWriter.complete();
+      }
+      await firstAppend.timeout(const Duration(seconds: 5));
+      await applySecondPage(
+        contendedRetry,
+        _V41FixtureTime(
+          workspace,
+          site,
+          [now + 3],
+          secondEvidence,
+          initialMonotonicAdvance: 2,
+        ),
+      );
+      expect(
+        await contendedRetry
+            .customSelect('SELECT * FROM shop_connected_cloud_feed_pages')
+            .get(),
+        hasLength(2),
+        reason: 'the lost-response retry must not append a third page',
+      );
+    } finally {
+      if (!releaseWriter.isCompleted) releaseWriter.complete();
+      try {
+        await firstAppend.timeout(const Duration(seconds: 5));
+      } on Object {
+        // Keep the original assertion failure; both handles still close.
+      }
+      await contendedRetry.close();
+      await contendedWriter.close();
+    }
+    expect(
+      () => ShopBackup.verifySnapshot(
+        contendedFile,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      returnsNormally,
     );
     var secondPageRevocationApplied = false;
     await expectLater(
