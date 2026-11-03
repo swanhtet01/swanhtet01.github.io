@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 01:32 UTC
+- Last verified: 2026-11-03 02:00 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 02:00 UTC private event visibility and PG17 test preparation
+
+- Public draft PR #752 remains unchanged at
+  `289ec76de4b80cd2de437afc3b28cfe76192ec1e`; no private source was
+  published, mounted, deployed or production-enabled.
+- Private source `ef9c66ebb6883aa60764dc650b82b800140bbb6f`
+  (tree `a756d1ea71049abda4f24230d134ae5d311649d8`) records the
+  source-grounded connected-site payload inventory and fail-closed role
+  visibility boundary in `docs/CONNECTED-SITE-EVENT-VISIBILITY.md`. The v15
+  SQL accepts arbitrary JSON object event payloads; café events may contain
+  prices, table labels and free-text remarks. No raw event JSON is approved
+  for any staff role. Current manager/owner access remains metadata-only;
+  cashier, waiter, kitchen and stock payload projections are **NOT RUN** and
+  default-denied. Owner decisions on remarks, ticket ownership and price/
+  member visibility remain required before role projections are designed.
+- An opt-in disposable PostgreSQL 17 test now prepares actual reader proof:
+  snapshot ordering under a paused concurrent test-only writer, cursor
+  continuation/mismatch, retained-lease revocation and a second-tenant event
+  checked through forced RLS. The concurrent writer is a synthetic admin
+  insert, not the normal upload adapter; another-tenant event uses the normal
+  adapter. This workspace has no available PostgreSQL executable, and the
+  opt-in environment flag was not set: **real PostgreSQL execution NOT RUN**.
+  The local connected-site discovery was **55 PASS / 4 SKIPPED** (59 total),
+  Python compilation and whitespace **PASS**, claims guard **179/179 PASS**.
+  Independent source/SQL-fixture review **ACCEPT**, including the additional
+  tenant-RLS case. Do not promote source tests to live PostgreSQL, mounted
+  gateway, durable client cursor, installed two-device or pilot evidence.
 
 ## 2026-11-03 01:32 UTC private metadata-only event page
 
