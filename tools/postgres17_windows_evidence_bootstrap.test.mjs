@@ -786,18 +786,27 @@ test('retained evidence verifier requires exact stage schemas and cross-file dig
   const exactSha = 'b'.repeat(40)
   const directory = await mkdtemp(join(tmpdir(), 'postgres17-evidence-contract-'))
   try {
+    const bootstrapPolicy = JSON.parse(await readFile(new URL(
+      '../hq/research/postgres17-windows-bootstrap-policy.json', import.meta.url)))
+    const publisherPolicy = JSON.parse(await readFile(new URL(
+      '../hq/research/postgres17-publisher-policy.json', import.meta.url)))
+    const signer = publisherPolicy.approvedSigners[0]
     const candidate = {
       contract: 'supermega.postgres17-stage1-candidate.v1', authoritative: false,
       exactSha,
       installer: {
         contract: 'supermega.windows-authenticode-observation.v1',
-        artifactFileName: 'postgresql.exe', artifactBytes: 10, artifactSha256: 'a'.repeat(64),
+        artifactFileName: bootstrapPolicy.installer.fileName,
+        artifactBytes: bootstrapPolicy.installer.bytes,
+        artifactSha256: bootstrapPolicy.installer.sha256,
         signatureStatus: 'Valid', signatureType: 'Authenticode',
-        signerCertificateSha256: 'c'.repeat(64), signerSubject: 'publisher',
-        signerIssuer: 'issuer', timestampCertificateSha256: 'd'.repeat(64),
+        signerCertificateSha256: signer.certificateSha256,
+        signerSubject: signer.subject, signerIssuer: signer.issuer,
+        timestampCertificateSha256: publisherPolicy.approvedTimestampCertificateSha256[0],
         timestampSubject: 'timestamp', ekuOids: ['1.3.6.1.5.5.7.3.3'],
       },
-      documentation: { url: 'https://example.invalid/docs', sha256: 'e'.repeat(64) },
+      documentation: { url: bootstrapPolicy.execution.authoritativeDocumentationUrl,
+        sha256: bootstrapPolicy.execution.authoritativeDocumentationSha256 },
       executionPerformed: false, databaseRehearsalReceiptCreated: false,
       cleanup: { serviceInventoryUnchanged: true, temporaryDataRemoved: true,
         processOrPortCheckApplicable: false },
@@ -807,10 +816,25 @@ test('retained evidence verifier requires exact stage schemas and cross-file dig
     await writeFile(candidatePath, JSON.stringify(candidate))
     assert.deepEqual(await verifyEvidenceDirectory(directory, 'capture', exactSha),
       { stage: 'capture', exactSha })
-    candidate.unexpected = true
-    await writeFile(candidatePath, JSON.stringify(candidate))
-    await assert.rejects(verifyEvidenceDirectory(directory, 'capture', exactSha),
-      /stage1_candidate_invalid/)
+    for (const mutate of [
+      (value) => { value.unexpected = true },
+      (value) => { value.installer.artifactFileName = 'another-postgresql.exe' },
+      (value) => { value.installer.artifactBytes++ },
+      (value) => { value.installer.artifactSha256 = 'a'.repeat(64) },
+      (value) => { value.installer.signerCertificateSha256 = 'c'.repeat(64) },
+      (value) => { value.installer.signerSubject = 'other publisher' },
+      (value) => { value.installer.signerIssuer = 'other issuer' },
+      (value) => { value.installer.timestampCertificateSha256 = 'd'.repeat(64) },
+      (value) => { value.installer.ekuOids = ['1.2.3'] },
+      (value) => { value.documentation.url = 'https://example.invalid/docs' },
+      (value) => { value.documentation.sha256 = 'e'.repeat(64) },
+    ]) {
+      const changed = structuredClone(candidate)
+      mutate(changed)
+      await writeFile(candidatePath, JSON.stringify(changed))
+      await assert.rejects(verifyEvidenceDirectory(directory, 'capture', exactSha),
+        /stage1_candidate_invalid/)
+    }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

@@ -217,6 +217,15 @@ export async function verifyEvidenceDirectory(directory, stage, expectedSha) {
   }
   if (stage === 'capture') {
     const candidate = values[expected[0]]
+    // Capture is deliberately non-authoritative, but even its sanitized record
+    // must describe the exact source-controlled artifact and publisher, not an
+    // arbitrary validly signed installer supplied by a caller.
+    const bootstrapPolicy = JSON.parse(await readFile(new URL(
+      '../hq/research/postgres17-windows-bootstrap-policy.json', import.meta.url)))
+    const publisherPolicy = JSON.parse(await readFile(new URL(
+      '../hq/research/postgres17-publisher-policy.json', import.meta.url)))
+    const installer = bootstrapPolicy.installer
+    const signer = publisherPolicy.approvedSigners?.[0]
     const observationKeys = ['contract', 'artifactFileName', 'artifactBytes', 'artifactSha256',
       'signatureStatus', 'signatureType', 'signerCertificateSha256', 'signerSubject',
       'signerIssuer', 'timestampCertificateSha256', 'timestampSubject', 'ekuOids']
@@ -251,7 +260,22 @@ export async function verifyEvidenceDirectory(directory, stage, expectedSha) {
       || !SHA256.test(candidate.documentation.sha256 || '')
       || candidate.cleanup.serviceInventoryUnchanged !== true
       || candidate.cleanup.temporaryDataRemoved !== true
-      || candidate.cleanup.processOrPortCheckApplicable !== false) {
+      || candidate.cleanup.processOrPortCheckApplicable !== false
+      || bootstrapPolicy.contract !== 'supermega.postgres17-windows-bootstrap-policy.v1'
+      || publisherPolicy.contract !== 'supermega.postgres17-publisher-policy.v1'
+      || installer?.publisherPolicyPath !== 'hq/research/postgres17-publisher-policy.json'
+      || candidate.installer.artifactFileName !== installer.fileName
+      || candidate.installer.artifactBytes !== installer.bytes
+      || candidate.installer.artifactSha256 !== installer.sha256
+      || publisherPolicy.requiredSignatureType !== 'Authenticode'
+      || candidate.installer.signerCertificateSha256 !== signer?.certificateSha256
+      || candidate.installer.signerSubject !== signer?.subject
+      || candidate.installer.signerIssuer !== signer?.issuer
+      || !publisherPolicy.approvedTimestampCertificateSha256?.includes(
+        candidate.installer.timestampCertificateSha256)
+      || !publisherPolicy.requiredEkuOids?.every((oid) => candidate.installer.ekuOids.includes(oid))
+      || candidate.documentation.url !== bootstrapPolicy.execution?.authoritativeDocumentationUrl
+      || candidate.documentation.sha256 !== bootstrapPolicy.execution?.authoritativeDocumentationSha256) {
       fail('bootstrap_stage1_candidate_invalid')
     }
     return { stage, exactSha: expectedSha }
