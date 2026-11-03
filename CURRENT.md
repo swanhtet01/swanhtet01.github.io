@@ -1,9 +1,43 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 07:26 UTC
+- Last verified: 2026-11-03 08:33 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 08:33 UTC private v40 cloud-feed schema boundary
+
+- **PASS (private source only):** commit
+  `82451479194e4208fcdff5b44b17b4ece445580e`, tree
+  `46ab2735efe75b5f8e23adb598a7a27c20dc00bf`, parent
+  `cdd514b3978ae8c18e1ea7f55017ac20f96fcaa9`, changes 24 paths;
+  staged binary patch SHA-256
+  `119e883f9dec0536e13308781d0cb29f8b19f6ba755d549e5a1bd775ad3e4b23`.
+  A separate v40 cloud-feed schema is integrated into every supported Shop
+  migration tail, exact open-time and backup definitions, and historical
+  fixture teardown. The v39 branch-hop guard rejects any pre-existing v40
+  schema before DDL. New heads default paused. Independent security review
+  **ACCEPT** for this narrow schema-only checkpoint; it did not run tests.
+- **PASS (exact private source):** official retained Flutter 3.47.8 tests:
+  cloud schema and trusted-time client **11/11**, schema and issuer **12/12**,
+  full encrypted-backup suite **102/102** on final source, cash movement
+  **6/6**, foundation **81/81** on logged rerun, member/export **24/24**,
+  and the default-off persistence case **1/1**. Flutter analysis **PASS**
+  with no issues; native CI verifier **PASS**, native/QA contracts **46/46**,
+  claims guard **PASS** (179 checks), formatter and diff checks **PASS**.
+  An earlier combined migration matrix was interrupted after ten minutes
+  without a live test child, and the first isolated foundation run had one
+  non-reproduced failure; these are not relabelled as passes. The final
+  per-file runs above are the attributable terminal results.
+- **BLOCKED / NOT RUN:** v40 intentionally rejects every nonempty cloud-feed
+  table at open and backup verification. Authenticated transactional page,
+  header/projection/cursor apply, accepted-data restore suspension and
+  rebootstrap, crash/lost-response tests, real PostgreSQL page delivery and
+  installed two-device sync are not implemented or run. This is not sync
+  readiness. Connected mode remains default-off. Public PR #752 remains at
+  `065a90d21c8424c4eb2ab685a36104817ee55a1c`; its Native run
+  `41593896415` is terminal **SUCCESS** on that older head only. This private
+  v40 commit has no hosted CI or install evidence and has not been pushed.
 
 ## 2026-11-03 07:26 UTC private native cloud-feed page checkpoint
 
