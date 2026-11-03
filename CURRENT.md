@@ -1,9 +1,25 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 04:07 UTC
+- Last verified: 2026-11-03 04:19 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 04:19 UTC final-source affected regression closes
+
+- **PASS:** on the unchanged source commit
+  `3fd27315cf9b7b8e84133f6d2d0f62d2d7256e61` (tree
+  `65feb423c5165e3bb1523781a1094a56831d1ccd`), official Flutter
+  3.47.8 with the existing LLVM 21.1.8 toolchain and offline locked package
+  cache ran the full five-file affected matrix in 10m37s: **161/161 PASS**.
+  The files were the connected-site database adapter, persistence,
+  reconciliation store, reservation session, and Shop backup tests, with
+  `flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m`.
+  This supersedes the 04:07 row's final-source matrix **NOT RUN** status.
+  The production migration verifier remains fail-closed and unchanged.
+- **NOT RUN:** hosted Android/Windows exact-source CI, installed two-device
+  LAN operation, production issuer/key custody and merchant acceptance.
+  Connected mode stays default-off and the public PR head is unchanged.
 
 ## 2026-11-03 04:07 UTC private atomic-snapshot test repair
 
