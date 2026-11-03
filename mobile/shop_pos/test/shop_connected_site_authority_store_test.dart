@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +22,69 @@ const _now = 2000000000000;
 const _password = 'authority backup password';
 
 void main() {
+  test(
+    'authority payload requires a pinned Ed25519 issuer and exact bytes',
+    () async {
+      final algorithm = Ed25519();
+      final keyPair = await algorithm.newKeyPairFromSeed(
+        List<int>.filled(32, 7),
+      );
+      final publicKey = await keyPair.extractPublicKey();
+      final bytes = _authorityPayload();
+      final signature = base64Url
+          .encode(
+            (await algorithm.sign(utf8.encode(bytes), keyPair: keyPair)).bytes,
+          )
+          .replaceAll('=', '');
+      final keyBytes = List<int>.of(publicKey.bytes);
+      final pins = <String, List<int>>{'issuer-test-key': keyBytes};
+      final verifier = PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(
+        publicKeys: pins,
+      );
+      keyBytes[0] ^= 1;
+      pins.clear();
+      await verifier.verify(
+        canonicalPayloadBytes: bytes,
+        signature: signature,
+        issuerKeyId: 'issuer-test-key',
+      );
+      for (final attempt in [
+        (bytes: '$bytes ', signature: signature, issuer: 'issuer-test-key'),
+        (bytes: bytes, signature: signature, issuer: 'other-key'),
+        (
+          bytes: bytes,
+          signature: '${signature.substring(0, 85)}A',
+          issuer: 'issuer-test-key',
+        ),
+        (bytes: bytes, signature: '$signature=', issuer: 'issuer-test-key'),
+      ]) {
+        await expectLater(
+          verifier.verify(
+            canonicalPayloadBytes: attempt.bytes,
+            signature: attempt.signature,
+            issuerKeyId: attempt.issuer,
+          ),
+          _throwsCode('connected_site_authority_payload_signature_invalid'),
+        );
+      }
+      expect(
+        () => PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(
+          publicKeys: {'issuer-test-key': List<int>.filled(31, 0)},
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(publicKeys: const {})
+            .verify(
+              canonicalPayloadBytes: bytes,
+              signature: signature,
+              issuerKeyId: 'issuer-test-key',
+            ),
+        _throwsCode('connected_site_authority_payload_signature_invalid'),
+      );
+    },
+  );
+
   test('authority observation store is default-off and device-bound', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {

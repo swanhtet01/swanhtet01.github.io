@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart';
 
 import 'shop_connected_site_contracts.dart';
@@ -192,6 +193,64 @@ class ConnectedSiteAuthorityPayloadVerificationUnavailable
       'connected_site_authority_payload_verifier_unavailable',
     ),
   );
+}
+
+/// Explicit pinned issuer for the canonical authority bytes. No key is
+/// discovered from a payload, response, database row, or ambient provider.
+/// A production composition must supply a separately reviewed key ring.
+final class PinnedEd25519ConnectedSiteAuthorityPayloadVerifier
+    implements ConnectedSiteAuthorityPayloadVerifier {
+  PinnedEd25519ConnectedSiteAuthorityPayloadVerifier({
+    required Map<String, List<int>> publicKeys,
+  }) : _keys = Map.unmodifiable({
+         for (final entry in publicKeys.entries)
+           if (RegExp(r'^[a-z0-9][a-z0-9._-]{0,63}$').hasMatch(entry.key) &&
+               entry.value.length == 32)
+             entry.key: List<int>.unmodifiable(entry.value),
+       }) {
+    if (_keys.length != publicKeys.length) {
+      throw const FormatException(
+        'connected_site_authority_issuer_pin_invalid',
+      );
+    }
+  }
+
+  final Map<String, List<int>> _keys;
+
+  @override
+  Future<void> verify({
+    required String canonicalPayloadBytes,
+    required String signature,
+    required String issuerKeyId,
+  }) async {
+    final key = _keys[issuerKeyId];
+    if (key == null || !RegExp(r'^[A-Za-z0-9_-]{86}$').hasMatch(signature)) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_payload_signature_invalid',
+      );
+    }
+    final List<int> signatureBytes;
+    try {
+      signatureBytes = base64Url.decode('$signature==');
+    } on FormatException {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_payload_signature_invalid',
+      );
+    }
+    if (signatureBytes.length != 64 ||
+        base64Url.encode(signatureBytes).replaceAll('=', '') != signature ||
+        !await Ed25519().verify(
+          utf8.encode(canonicalPayloadBytes),
+          signature: Signature(
+            signatureBytes,
+            publicKey: SimplePublicKey(key, type: KeyPairType.ed25519),
+          ),
+        )) {
+      throw const ConnectedSiteReconciliationException(
+        'connected_site_authority_payload_signature_invalid',
+      );
+    }
+  }
 }
 
 class ConnectedSiteAuthorityMemberV1 {
