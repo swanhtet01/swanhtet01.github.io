@@ -1,9 +1,33 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 14:09 UTC
+- Last verified: 2026-11-03 14:36 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 14:36 UTC private signed v41 historical fixture
+
+- **PASS (unmounted synthetic first-page proof only):** source
+  `e1af9b006ceb6e5c3e28cd2e082cdb65e3de9fe3`, tree
+  `0f959f373f74c4fe977a7e3e2be88b99ea6b5baa`. A genuine full-database
+  v25/v30/v34/v36/v39/v40/v41 fixture retains signed owner enrollment and
+  later revocation, lease, authority, trusted time, cloud-device approval,
+  request, page and proof. A pure, single-page historical verifier checks the
+  exact full-table inventory, retained signatures and bindings at the signed
+  time sample. Signed pre-sample revocation, hidden enrollment/authority rows,
+  mismatched base lease role, extra table and expired signed proof fail. The
+  complete schema suite **12/12 PASS** in 1m25s on parent `29adb71e` before
+  the inventory-only successor; final-source focused test **1/1 PASS** and
+  two-path Flutter analysis **PASS**. Independent security review **ACCEPT**
+  only for this unmounted historical helper and fixture.
+- **BLOCKED / NOT RUN:** nonempty-v41 open/backup integration is not accepted:
+  it still needs unfiltered capped tables from one SQLite snapshot, immutable
+  independent test-only pins and a general multi-page verifier. Current
+  authority and revocation must be rechecked inside any future atomic apply,
+  including replay; historical authenticity cannot grant present permission.
+  The existing empty-only open/backup gates remain; no v41 writer, production
+  pins, connected activation, installed two-device proof or public PR update
+  was performed.
 
 ## 2026-11-03 14:09 UTC private shared v41 evidence coverage
 
