@@ -89,8 +89,12 @@ class _Script:
         self.autocommit = False
         self.clock_reads = 0
         self.late_now = None
+        self.on_connect = None
 
     def connect(self):
+        if self.on_connect is not None:
+            callback, self.on_connect = self.on_connect, None
+            callback()
         return _Connection(self)
 
 
@@ -107,6 +111,30 @@ def _read(script, authority, lease, request, *, now=NOW, principal=None):
 
 
 class EventFeedTests(unittest.TestCase):
+    def test_caller_mutation_after_signed_check_cannot_relabel_page(self):
+        authority, lease, request, principal, event = _inputs()
+        original_nonce = request["requestNonce"]
+        original_digest = digest(request)
+        original_lease = lease["payloadDigest"]
+        script = _Script(authority, lease, events=[
+            (1, digest(event), None, json.dumps(event)),
+        ])
+
+        def mutate_caller():
+            request["requestNonce"] = "f" * 64
+            request["issuedAt"] = "2099-01-01T00:00:00.000Z"
+            lease["payloadDigest"] = "e" * 64
+
+        script.on_connect = mutate_caller
+        page = read_retail_reservation_page(
+            connection_factory=script.connect, principal=principal,
+            authority=authority, lease=lease, request=request, now=NOW,
+        )
+        self.assertEqual(page.request_nonce, original_nonce)
+        self.assertEqual(page.to_wire()["requestDigest"], original_digest)
+        self.assertEqual(page.to_wire()["leaseDigest"], original_lease)
+        self.assertEqual(page.projections[0].projection["state"], "held")
+
     def test_manager_page_binds_stored_row_and_returns_only_typed_stock_fields(self):
         authority, lease, request, principal, event = _inputs()
         script = _Script(authority, lease, events=[
@@ -130,6 +158,7 @@ class EventFeedTests(unittest.TestCase):
         self.assertEqual(wire["deviceId"], request["deviceId"])
         self.assertEqual(wire["leaseDigest"], request["leaseDigest"])
         self.assertEqual(wire["requestDigest"], digest(request))
+        self.assertEqual(page.request_nonce, request["requestNonce"])
         self.assertEqual(wire["pageDigest"], digest({k: v for k, v in wire.items()
                                                       if k != "pageDigest"}))
         self.assertEqual(wire["projections"][0]["sequence"], wire["headers"][0]["sequence"])

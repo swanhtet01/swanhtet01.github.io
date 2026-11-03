@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from typing import Any, Mapping
 
-from .connected_site_event_read import authorize_event_read
+from .connected_site_event_read import AuthorizedEventRead, authorize_event_read
 from .connected_site_runtime import ConnectedSitePrincipal
 from .connected_site_v15 import ConnectedSiteV15Error, SiteAuthority, canonical_json, digest
 
@@ -48,6 +48,7 @@ class RetailReservationPage:
     authority_payload_digest: str
     lease_digest: str
     request_digest: str
+    request_nonce: str
 
     def to_wire(self) -> dict[str, Any]:
         """Versioned, internally bound bytes; not a signed transport receipt."""
@@ -135,13 +136,22 @@ def _read_page(
     *, connection_factory: Any, principal: ConnectedSitePrincipal,
     authority: SiteAuthority, lease: Mapping[str, Any],
     request: Mapping[str, Any], now: datetime, include_retail_held: bool,
-) -> tuple[EventHeaderPage, tuple[RetailProjectionEntry, ...]]:
+) -> tuple[EventHeaderPage, tuple[RetailProjectionEntry, ...], AuthorizedEventRead]:
     """Read one consistent tenant page after rechecking current DB authority.
 
     Callers must supply a trusted ingress principal, current signed authority,
     and trusted UTC clock. The backend connection must be transaction-capable
     and subject to the existing forced tenant RLS. No route calls this yet.
     """
+    # The caller may retain mutable dictionaries. Freeze the exact signed
+    # inputs before verifying or opening SQL, including projector rechecks.
+    try:
+        request = json.loads(canonical_json(request))
+        lease = json.loads(canonical_json(lease))
+    except (TypeError, ValueError):
+        _fail("input_snapshot")
+    if not isinstance(request, dict) or not isinstance(lease, dict):
+        _fail("input_snapshot")
     grant = authorize_event_read(
         principal=principal, authority=authority, lease=lease,
         request=request, now=now,
@@ -212,7 +222,7 @@ def _read_page(
                 ):
                     _fail("clock_invalid")
                 current = observed[0].astimezone(timezone.utc)
-                issued = datetime.fromisoformat(request["issuedAt"].replace("Z", "+00:00"))
+                issued = grant.issued_at
                 if (
                     current >= retained[9].astimezone(timezone.utc)
                     or current < issued or current - issued > timedelta(seconds=30)
@@ -296,7 +306,7 @@ def _read_page(
                 last.sequence if last else grant.after_sequence,
                 last.event_digest if last else grant.prior_event_digest, has_more,
             )
-            return page, tuple(projections)
+            return page, tuple(projections), grant
 
 
 def read_event_headers(
@@ -322,16 +332,17 @@ def read_retail_reservation_page(
     No route or native client calls this source-only seam. Other event types
     advance the checked cursor but never return their raw payloads.
     """
-    headers, projections = _read_page(
+    headers, projections, grant = _read_page(
         connection_factory=connection_factory, principal=principal,
         authority=authority, lease=lease, request=request, now=now,
         include_retail_held=True,
     )
     return RetailReservationPage(
         headers=headers, projections=projections,
-        actor_id=lease["actorId"], device_id=principal.device_id,
-        authority_generation=authority.authority_generation,
-        revocation_generation=authority.revocation_generation,
-        authority_payload_digest=authority.authority_payload_digest,
-        lease_digest=lease["payloadDigest"], request_digest=digest(request),
+        actor_id=grant.actor_id, device_id=grant.device_id,
+        authority_generation=grant.authority_generation,
+        revocation_generation=grant.revocation_generation,
+        authority_payload_digest=grant.authority_payload_digest,
+        lease_digest=grant.lease_digest, request_digest=grant.request_digest,
+        request_nonce=grant.request_nonce,
     )

@@ -15,7 +15,7 @@ from typing import Any, Mapping
 
 from .connected_site_runtime import ConnectedSitePrincipal
 from .connected_site_v15 import (
-    ConnectedSiteV15Error, SiteAuthority, _verify, canonical_json,
+    ConnectedSiteV15Error, SiteAuthority, _verify, canonical_json, digest,
     verify_connected_site_lease,
 )
 
@@ -28,6 +28,7 @@ _REQUEST_KEYS = {
     "clientFingerprint", "enrollmentEvidenceDigest", "authorityGeneration",
     "authorityPayloadDigest", "revocationGeneration", "afterSequence",
     "priorEventDigest", "limit", "leaseDigest", "issuedAt",
+    "requestNonce",
     "signingKeyId", "signatureAlgorithm", "signature",
 }
 
@@ -47,6 +48,11 @@ class AuthorizedEventRead:
     limit: int
     authority_generation: int
     revocation_generation: int
+    authority_payload_digest: str
+    lease_digest: str
+    request_digest: str
+    request_nonce: str
+    issued_at: datetime
 
 
 def authorize_event_read(
@@ -105,6 +111,10 @@ def authorize_event_read(
             not isinstance(prior, str) or not _DIGEST.fullmatch(prior))
     ):
         _deny("cursor_invalid")
+    if not isinstance(request["requestNonce"], str) or not _DIGEST.fullmatch(
+        request["requestNonce"]
+    ):
+        _deny("request_nonce_invalid")
     issued_text = request["issuedAt"]
     if not isinstance(issued_text, str) or not re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z", issued_text
@@ -138,4 +148,9 @@ def authorize_event_read(
         after_sequence=after, prior_event_digest=prior, limit=limit,
         authority_generation=authority.authority_generation,
         revocation_generation=authority.revocation_generation,
+        authority_payload_digest=authority.authority_payload_digest,
+        lease_digest=validated_lease["payloadDigest"],
+        request_digest=digest(request),
+        request_nonce=request["requestNonce"],
+        issued_at=issued,
     )
