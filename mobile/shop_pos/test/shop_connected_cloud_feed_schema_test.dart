@@ -543,6 +543,11 @@ void main() {
       'signature': await signFields(requestUnsigned, clientPair),
     });
     final requestDigest = connectedSiteSha256(jsonDecode(requestJson));
+    final realPgAnchor =
+        Platform.environment['SUPERMEGA_CLOUD_FEED_V41_REAL_PG_ANCHOR'] == '1';
+    final firstEventDigest = realPgAnchor
+        ? connectedSiteSha256({'synthetic': 'v41-bridge-first'})
+        : 'e' * 64;
     final streamDigest = connectedSiteSha256({
       'contract': 'supermega.connected-cloud-feed-stream.v1',
       'workspaceId': workspace,
@@ -570,11 +575,15 @@ void main() {
       'afterSequence': 0,
       'priorEventDigest': null,
       'headers': [
-        {'sequence': 1, 'eventDigest': 'e' * 64, 'previousEventDigest': null},
+        {
+          'sequence': 1,
+          'eventDigest': firstEventDigest,
+          'previousEventDigest': null,
+        },
       ],
       'projections': <Object>[],
       'nextSequence': 1,
-      'nextEventDigest': 'e' * 64,
+      'nextEventDigest': firstEventDigest,
       'hasMore': false,
     };
     final pageDigest = connectedSiteSha256(pageUnsigned);
@@ -602,7 +611,7 @@ void main() {
       'afterSequence': 0,
       'priorEventDigest': null,
       'nextSequence': 1,
-      'nextEventDigest': 'e' * 64,
+      'nextEventDigest': firstEventDigest,
       'pageDigest': pageDigest,
     };
     final proofJson = canonicalConnectedSiteJson({
@@ -636,7 +645,7 @@ void main() {
         variables: [
           Variable<String>(pageDigest),
           Variable<String>(streamDigest),
-          Variable<String>('e' * 64),
+          Variable<String>(firstEventDigest),
           Variable<String>(pageJson),
           Variable<String>(requestNonce),
           Variable<String>(proofJson),
@@ -649,7 +658,7 @@ void main() {
         'VALUES (?, 1, ?, ?, 0)',
         variables: [
           Variable<String>(streamDigest),
-          Variable<String>('e' * 64),
+          Variable<String>(firstEventDigest),
           Variable<String>(pageDigest),
         ],
       );
@@ -844,7 +853,7 @@ void main() {
     final secondRequestUnsigned = <String, Object?>{
       ...requestUnsigned,
       'afterSequence': 1,
-      'priorEventDigest': 'e' * 64,
+      'priorEventDigest': firstEventDigest,
       'requestNonce': secondNonce,
     };
     final secondRequestJson = canonicalConnectedSiteJson({
@@ -866,12 +875,12 @@ void main() {
       ...pageUnsigned,
       'requestDigest': secondRequestDigest,
       'afterSequence': 1,
-      'priorEventDigest': 'e' * 64,
+      'priorEventDigest': firstEventDigest,
       'headers': [
         {
           'sequence': 2,
           'eventDigest': secondEventDigest,
-          'previousEventDigest': 'e' * 64,
+          'previousEventDigest': firstEventDigest,
         },
       ],
       'nextSequence': 2,
@@ -887,7 +896,7 @@ void main() {
       'requestDigest': secondRequestDigest,
       'requestNonce': secondNonce,
       'afterSequence': 1,
-      'priorEventDigest': 'e' * 64,
+      'priorEventDigest': firstEventDigest,
       'nextSequence': 2,
       'nextEventDigest': secondEventDigest,
       'pageDigest': secondPageDigest,
@@ -899,7 +908,7 @@ void main() {
     final signedPageBytes = externalResponsePath != null
         ? jsonDecode(await File(externalResponsePath).readAsString())
               as Map<String, dynamic>
-        : secondary
+        : secondary || realPgAnchor
         ? <String, dynamic>{
             'requestJson': secondRequestJson,
             'pageJson': secondPageJson,
@@ -919,7 +928,7 @@ void main() {
       ...history['shop_connected_cloud_feed_pages']!.single,
       'page_digest': secondPageDigest,
       'after_sequence': 1,
-      'prior_event_digest': 'e' * 64,
+      'prior_event_digest': firstEventDigest,
       'next_sequence': 2,
       'next_event_digest': secondEventDigest,
       'page_json': secondPageJson,
@@ -1049,7 +1058,7 @@ void main() {
       leaseDigest: lease.payloadDigest,
       requestDigest: secondRequestDigest,
       afterSequence: 1,
-      priorEventDigest: 'e' * 64,
+      priorEventDigest: firstEventDigest,
       limit: 64,
     );
     final secondEvidence = ShopCloudFeedV41FirstPageEvidence(
@@ -2314,6 +2323,9 @@ void main() {
         deviceId: 'device_v41_fixture',
         clientSeed: 18,
         secondary: false,
+        stopAfterRecovery:
+            Platform.environment['SUPERMEGA_CLOUD_FEED_V41_REAL_PG_ANCHOR'] ==
+            '1',
       );
     },
   );

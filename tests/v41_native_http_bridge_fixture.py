@@ -47,7 +47,8 @@ def _one(db: sqlite3.Connection, sql: str) -> sqlite3.Row:
 
 
 class _NativeScript:
-    def __init__(self, authority: SiteAuthority, lease: dict, now: datetime) -> None:
+    def __init__(self, authority: SiteAuthority, lease: dict,
+                 now: datetime, prior_digest: str) -> None:
         device = next(iter(authority.devices.values()))
         event = {"synthetic": "v41-bridge-second"}
         self.site = (True, authority.authority_generation,
@@ -62,8 +63,8 @@ class _NativeScript:
                       datetime.fromisoformat(lease["expiresAt"].replace("Z", "+00:00")))
         self.now = now
         self.late_now = None
-        self.prior = ("e" * 64,)
-        self.events = [(2, digest(event), "e" * 64, canonical_json(event))]
+        self.prior = (prior_digest,)
+        self.events = [(2, digest(event), prior_digest, canonical_json(event))]
         self.queries = []
         self.autocommit = False
         self.clock_reads = 0
@@ -77,6 +78,7 @@ def build_response(native_database: Path) -> dict[str, str]:
         db.row_factory = sqlite3.Row
         retained = _one(db, "SELECT request_json FROM shop_connected_cloud_feed_page_evidence")
         first_request = json.loads(retained["request_json"])
+        first_digest = _one(db, "SELECT next_event_digest FROM shop_connected_cloud_feed_heads")["next_event_digest"]
         lease = json.loads(_one(db, "SELECT lease_json FROM shop_site_offline_lease_payloads")["lease_json"])
         payload_row = _one(db, "SELECT payload_bytes, signature FROM shop_site_authority_payloads")
         payload = json.loads(payload_row["payload_bytes"])
@@ -118,12 +120,12 @@ def build_response(native_database: Path) -> dict[str, str]:
             enabled=True,
         )
     unsigned = {key: value for key, value in first_request.items() if key != "signature"}
-    unsigned.update(afterSequence=1, priorEventDigest="e" * 64, requestNonce="9" * 64)
+    unsigned.update(afterSequence=1, priorEventDigest=first_digest, requestNonce="9" * 64)
     signature = client_key.sign(canonical_json(unsigned).encode())
     request = {**unsigned, "signature": base64.urlsafe_b64encode(signature).decode().rstrip("=")}
     # Source-pinned test clock, never derived from the caller's HTTP body.
     now = datetime.fromtimestamp(1800000000.9, tz=timezone.utc)
-    script = _NativeScript(authority, lease, now)
+    script = _NativeScript(authority, lease, now, first_digest)
     provider = _Authorities(authority)
     active = True
 
