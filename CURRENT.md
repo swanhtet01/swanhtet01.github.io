@@ -1,9 +1,33 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 05:07 UTC
+- Last verified: 2026-11-03 05:22 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 05:22 UTC exact-public-head Native CI terminal
+
+- **PASS:** automatic Native run `41578175514` completed successfully on
+  draft PR #752 head `5a9e89bbeeb53f8b4bef601e4f71b280cf4c4008`.
+  All six jobs passed. Full Android job `125726460240` passed its isolated
+  Flutter shards, real process-interruption scenarios, analyzer, synthetic
+  gallery capture/retention, unsigned-release rejection, debug APK build,
+  checksum and upload. Full Windows PC job `125726460287` passed its
+  backup/restore/no-replace proof and unsigned build; four other platform
+  QA jobs passed. These are exact-head hosted QA results, **not** signed
+  installed-device, physical-hardware or merchant acceptance evidence.
+- Separate exact-head gates remain **FAIL/BLOCKED**: App run `41578171660`
+  stale PostgreSQL rehearsal; Dependency run `41578175726` app/kernel
+  minimatch advisory; GitGuardian check `125726448756` neutral because the
+  cumulative PR was too large to scan. The narrower repository pattern
+  scanner also checked all 91,192 added lines in the full PR diff from
+  integration base `4977d4ca` to the public head with zero findings and no
+  values exposed, but this is not a substitute for the skipped full scan.
+  A supported organization-level full scan of exact head and reviewed
+  disposition of historical findings remain required. No release, merge,
+  signing or connected-mode activation was performed.
+- Private test-only successor `4739ab73` and newer status commits have not
+  been pushed; the passing hosted run validates public head `5a9e89bb` only.
 
 ## 2026-11-03 05:07 UTC offline dependency and rehearsal unblock audit
 
