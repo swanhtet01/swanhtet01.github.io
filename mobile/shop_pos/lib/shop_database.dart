@@ -11420,10 +11420,17 @@ class ShopDatabase extends _$ShopDatabase {
       }
 
       requireBoundLiveTime(liveTime);
-      if (liveTime.monotonicMillis != evidence.sampleMonotonicMillis) {
-        throw StateError('Cloud-feed initial live-time sample changed.');
-      }
       final now = liveTime.effectiveTimeMillis;
+      final retainedSample = currentPages.isEmpty
+          ? liveTime.monotonicMillis
+          : current['shop_connected_cloud_feed_page_evidence']!
+                    .single['sample_monotonic_millis']
+                as int;
+      final retainedNow = currentPages.isEmpty
+          ? now
+          : current['shop_connected_cloud_feed_page_evidence']!
+                    .single['trusted_now_millis']
+                as int;
       final page = ConnectedSiteRetailFeedPageV1.parse(
         canonicalBytes: pageJson,
         expected: expected,
@@ -11499,8 +11506,8 @@ class ShopDatabase extends _$ShopDatabase {
         'time_ack_digest': evidence.timeAckDigest,
         'time_head_digest': evidence.timeHeadDigest,
         'boot_session_id': evidence.bootSessionId,
-        'sample_monotonic_millis': evidence.sampleMonotonicMillis,
-        'trusted_now_millis': now,
+        'sample_monotonic_millis': retainedSample,
+        'trusted_now_millis': retainedNow,
       };
       final prospective = <String, List<Map<String, Object?>>>{
         ...current,
@@ -11633,8 +11640,8 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<String>(evidence.timeAckDigest),
           Variable<String>(evidence.timeHeadDigest),
           Variable<String>(evidence.bootSessionId),
-          Variable<int>(evidence.sampleMonotonicMillis),
-          Variable<int>(now),
+          Variable<int>(retainedSample),
+          Variable<int>(retainedNow),
         ],
       );
       await customInsert(

@@ -1096,6 +1096,74 @@ void main() {
       returnsNormally,
       reason: 'same-boot monotonic advancement inside validity is accepted',
     );
+    final delayedFile = await preRevocationFile.copy(
+      '${root.path}/delayed-clock.sqlite',
+    );
+    var delayed = ShopDatabase(NativeDatabase(delayedFile));
+    await applyFirstPage(
+      delayed,
+      _V41FixtureTime(
+        workspace,
+        site,
+        [now + 1, now + 2],
+        pageEvidence,
+        initialMonotonicAdvance: 1,
+      ),
+    );
+    final retainedDelayedSample = await delayed
+        .customSelect(
+          'SELECT sample_monotonic_millis, trusted_now_millis '
+          'FROM shop_connected_cloud_feed_page_evidence',
+        )
+        .getSingle();
+    expect(retainedDelayedSample.read<int>('sample_monotonic_millis'), 8001);
+    expect(retainedDelayedSample.read<int>('trusted_now_millis'), now + 1);
+    await delayed.close();
+    delayed = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(delayedFile),
+      trust: trust,
+    );
+    await delayed.verifyReadyForUse();
+    await applyFirstPage(
+      delayed,
+      _V41FixtureTime(
+        workspace,
+        site,
+        [now + 3],
+        pageEvidence,
+        initialMonotonicAdvance: 3,
+      ),
+    );
+    expect(
+      await delayed
+          .customSelect('SELECT * FROM shop_connected_cloud_feed_pages')
+          .get(),
+      hasLength(1),
+      reason: 'advancing-clock lost-response replay stays exactly once',
+    );
+    await expectLater(
+      applyFirstPage(
+        delayed,
+        _V41FixtureTime(
+          workspace,
+          site,
+          [now + 30001],
+          pageEvidence,
+          initialMonotonicAdvance: 30001,
+        ),
+      ),
+      throwsFormatException,
+      reason: 'a byte-identical retry cannot renew an expired signed proof',
+    );
+    await delayed.close();
+    expect(
+      () => ShopBackup.verifySnapshot(
+        delayedFile,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      returnsNormally,
+    );
     var firstPageDatabase = ShopDatabase(NativeDatabase(preRevocationFile));
     await applyFirstPage(
       firstPageDatabase,
@@ -2713,12 +2781,19 @@ final class _PinnedV41OwnerVerifier
 }
 
 final class _V41FixtureTime implements ShopConnectedCloudFeedLiveTimeSource {
-  _V41FixtureTime(this.workspaceId, this.siteId, this.values, this.evidence);
+  _V41FixtureTime(
+    this.workspaceId,
+    this.siteId,
+    this.values,
+    this.evidence, {
+    this.initialMonotonicAdvance = 0,
+  });
 
   final String workspaceId;
   final String siteId;
   final List<int> values;
   final ShopCloudFeedV41FirstPageEvidence evidence;
+  final int initialMonotonicAdvance;
   var _reads = 0;
 
   @override
@@ -2736,7 +2811,10 @@ final class _V41FixtureTime implements ShopConnectedCloudFeedLiveTimeSource {
       ackDigest: evidence.timeAckDigest,
       bootSessionId: evidence.bootSessionId,
       monotonicMillis:
-          evidence.sampleMonotonicMillis + values[index] - values.first,
+          evidence.sampleMonotonicMillis +
+          initialMonotonicAdvance +
+          values[index] -
+          values.first,
       effectiveTimeMillis: values[index],
     );
   }
