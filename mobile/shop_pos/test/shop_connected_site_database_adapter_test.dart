@@ -815,6 +815,7 @@ void main() {
       final gapTampered = File('${root.path}/gap.sqlite');
       await database.exportVerifiedLocalSnapshot(scopeTampered);
       await scopeTampered.copy(gapTampered.path);
+      ShopBackup.verifySnapshot(scopeTampered, expectedSchemaVersion: 41);
       var raw = sqlite.sqlite3.open(scopeTampered.path);
       try {
         raw.execute('DROP TRIGGER shop_site_replica_event_envelopes_no_update');
@@ -827,7 +828,7 @@ void main() {
       }
       expect(
         () =>
-            ShopBackup.verifySnapshot(scopeTampered, expectedSchemaVersion: 40),
+            ShopBackup.verifySnapshot(scopeTampered, expectedSchemaVersion: 41),
         throwsFormatException,
       );
       raw = sqlite.sqlite3.open(gapTampered.path);
@@ -840,7 +841,7 @@ void main() {
         raw.close();
       }
       expect(
-        () => ShopBackup.verifySnapshot(gapTampered, expectedSchemaVersion: 40),
+        () => ShopBackup.verifySnapshot(gapTampered, expectedSchemaVersion: 41),
         throwsFormatException,
       );
     } finally {
