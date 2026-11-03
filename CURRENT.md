@@ -1,9 +1,39 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 09:46 UTC
+- Last verified: 2026-11-03 10:00 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 10:00 UTC public v40 checkpoint and private event-read binding
+
+- **PASS (published draft source, CI still running):** PR #752 was guardedly
+  fast-forwarded from `065a90d21c8424c4eb2ab685a36104817ee55a1c` to
+  `578e51e24c3ef778e6d708b385598170b8fd445a`, tree
+  `ffc1e4bce5f3978c11ac70f63acf3650543ffc3c`, after an independent
+  cumulative 15-commit/33-path review. The PR remains draft and unmerged.
+  Kernel passed; App run `41614849945` and Native run `41614858830` were
+  still in progress at this checkpoint. Dependency run `41614858946`
+  failed the app and kernel locked audits; platform, Python and added-line
+  credential-scan jobs passed. No exact-head hosted success is claimed yet.
+- **PASS (private source only):** implementation commit
+  `8caea3979415af8d1d0af00d9569e13605b32446`, tree
+  `493535af8c720a2afcaaef547ef6d24d07e27b29`, parent `578e51e2`,
+  four paths and staged patch SHA-256
+  `fed78a0060be9e5905ef2002b92528a06ab4def330d4e0e8ffb44993df372ea8`.
+  The unmounted manager event reader now requires a signed request nonce,
+  freezes request and lease bytes before authorization/SQL, and binds the
+  response to the immutable verified grant. Focused Python authorization,
+  projection and feed tests passed **18/18**; diff check passed. Independent
+  security review **ACCEPT** for the default-off source seam, including the
+  caller-mutation regression. This commit has not been published or tested
+  in hosted CI.
+- **BLOCKED / NOT RUN:** the signed nonce is not durably consumed; real
+  ingress/issuer authority, current lease/revocation/time, production key
+  custody, nonempty encrypted restore, concurrency/crash and two-device
+  evidence remain absent. The feed is unmounted and connected mode stays
+  default-off. The earlier unexplained first backup failure remains
+  unattributed despite a later passing full rerun.
 
 ## 2026-11-03 09:46 UTC private test-only signed cloud-feed ledger
 
