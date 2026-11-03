@@ -34,6 +34,8 @@ void main() {
     required String deviceId,
     required int clientSeed,
     required bool secondary,
+    String? httpResponsePath,
+    bool stopAfterRecovery = false,
   }) async {
     const now = 1800000001000;
     const workspace = 'workspace_v41_fixture';
@@ -852,6 +854,14 @@ void main() {
     final secondRequestDigest = connectedSiteSha256(
       jsonDecode(secondRequestJson),
     );
+    final externalResponsePath =
+        httpResponsePath ??
+        (secondary
+            ? Platform.environment['SUPERMEGA_CLOUD_FEED_V41_HTTP_RESPONSE']
+            : null);
+    final secondEventDigest = externalResponsePath == null
+        ? 'd' * 64
+        : connectedSiteSha256({'synthetic': 'v41-bridge-second'});
     final secondPageUnsigned = <String, Object?>{
       ...pageUnsigned,
       'requestDigest': secondRequestDigest,
@@ -860,12 +870,12 @@ void main() {
       'headers': [
         {
           'sequence': 2,
-          'eventDigest': 'd' * 64,
+          'eventDigest': secondEventDigest,
           'previousEventDigest': 'e' * 64,
         },
       ],
       'nextSequence': 2,
-      'nextEventDigest': 'd' * 64,
+      'nextEventDigest': secondEventDigest,
     };
     final secondPageDigest = connectedSiteSha256(secondPageUnsigned);
     final secondPageJson = canonicalConnectedSiteJson({
@@ -879,18 +889,21 @@ void main() {
       'afterSequence': 1,
       'priorEventDigest': 'e' * 64,
       'nextSequence': 2,
-      'nextEventDigest': 'd' * 64,
+      'nextEventDigest': secondEventDigest,
       'pageDigest': secondPageDigest,
     };
-    final secondProofJson = canonicalConnectedSiteJson({
+    final localSecondProofJson = canonicalConnectedSiteJson({
       ...secondProofUnsigned,
       'signature': await signFields(secondProofUnsigned, feedPair),
     });
-    final signedPageBytes = secondary
+    final signedPageBytes = externalResponsePath != null
+        ? jsonDecode(await File(externalResponsePath).readAsString())
+              as Map<String, dynamic>
+        : secondary
         ? <String, dynamic>{
             'requestJson': secondRequestJson,
             'pageJson': secondPageJson,
-            'proofJson': secondProofJson,
+            'proofJson': localSecondProofJson,
           }
         : jsonDecode(
             await File('test/fixtures/v41_python_signed_page.json')
@@ -898,14 +911,17 @@ void main() {
           ) as Map<String, dynamic>;
     expect(signedPageBytes['requestJson'], secondRequestJson);
     expect(signedPageBytes['pageJson'], secondPageJson);
-    expect(signedPageBytes['proofJson'], secondProofJson);
+    if (externalResponsePath == null) {
+      expect(signedPageBytes['proofJson'], localSecondProofJson);
+    }
+    final secondProofJson = signedPageBytes['proofJson'] as String;
     final secondPageRow = <String, Object?>{
       ...history['shop_connected_cloud_feed_pages']!.single,
       'page_digest': secondPageDigest,
       'after_sequence': 1,
       'prior_event_digest': 'e' * 64,
       'next_sequence': 2,
-      'next_event_digest': 'd' * 64,
+      'next_event_digest': secondEventDigest,
       'page_json': secondPageJson,
       'request_nonce': secondNonce,
       'authenticated_proof_json': secondProofJson,
@@ -935,7 +951,7 @@ void main() {
         {
           ...history['shop_connected_cloud_feed_heads']!.single,
           'next_sequence': 2,
-          'next_event_digest': 'd' * 64,
+          'next_event_digest': secondEventDigest,
           'last_page_digest': secondPageDigest,
         },
       ],
@@ -1075,9 +1091,14 @@ void main() {
       trust: trust,
     );
     await onlineClient.verifyReadyForUse();
-    if (secondary) {
+    if (secondary || stopAfterRecovery) {
+      final swappedPath =
+          Platform.environment[secondary
+              ? 'SUPERMEGA_CLOUD_FEED_V41_HTTP_RESPONSE_A'
+              : 'SUPERMEGA_CLOUD_FEED_V41_HTTP_RESPONSE'];
       final firstDeviceWire = jsonDecode(
-        await File('test/fixtures/v41_python_signed_page.json').readAsString(),
+        await File(swappedPath ?? 'test/fixtures/v41_python_signed_page.json')
+            .readAsString(),
       ) as Map<String, dynamic>;
       expect(
         (jsonDecode(firstDeviceWire['proofJson'] as String)
@@ -1111,7 +1132,7 @@ void main() {
         actorRole: 'manager',
         requestNonce: secondNonce,
         pageJson: (signedPageBytes['pageJson'] as String).replaceFirst(
-          'd' * 64,
+          secondEventDigest,
           'c' * 64,
         ),
         proofJson: signedPageBytes['proofJson'] as String,
@@ -1205,7 +1226,7 @@ void main() {
         testOnlyCloudFeedV41Trust: trust,
       );
     }
-    if (secondary) {
+    if (secondary || stopAfterRecovery) {
       await database.close();
       return;
     }
@@ -2306,6 +2327,22 @@ void main() {
       );
     },
   );
+  final firstHttpResponse =
+      Platform.environment['SUPERMEGA_CLOUD_FEED_V41_HTTP_RESPONSE_A'];
+  if (firstHttpResponse != null) {
+    test(
+      'v41 first device consumes authenticated HTTP feed after outage',
+      () async {
+        await runSignedPageFixture(
+          deviceId: 'device_v41_fixture',
+          clientSeed: 18,
+          secondary: false,
+          httpResponsePath: firstHttpResponse,
+          stopAfterRecovery: true,
+        );
+      },
+    );
+  }
   test(
     'SQLite read transaction keeps one snapshot across a WAL writer',
     () async {
