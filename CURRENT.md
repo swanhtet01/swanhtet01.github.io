@@ -1,9 +1,51 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 22:15 UTC
+- Last verified: 2026-11-03 23:06 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 23:06 UTC private disposable PG17-to-native CI candidate
+
+- **PASS (source and synthetic verification only):** implementation
+  `af46bc3ea0f78bb62ac214393f991d4aa894e71e`, repository tree
+  `816f2765ba3c3c656214e74d6347d0ff143f61c9`, native tree
+  `5863619d461f3686b8981bf23bb88d5c33b9de7a`, runtime tree
+  `3dbcc6962bdf501ec49a95e89a4b9170f15037ca`, four-path patch SHA-256
+  `0f1271fff88c0533eb9429b5d92ca8c93df4da6df7f3e90bce68925756d76fb9`.
+  A new opt-in PR job co-locates pinned Flutter 3.47.8 with a fresh loopback
+  PostgreSQL 17 cluster, using the existing source migrations and runtime RLS
+  login. The test-only bridge is configured to export A, insert the canonical
+  first and second events, sign a checked page under PostgreSQL row locks, then
+  immediately consume it in A's native store before doing the same for an
+  independently signed/enrolled B fixture. Each device has its own lease and
+  request clock; the site's synthetic authority is shared. The native
+  trusted-time sample is supplied independently by the harness, not copied
+  from the response; both proof-window and post-consume wall-clock checks
+  fail closed. Production ingress, issuer pins, keys and connected-mode flags
+  are unchanged. Independent cumulative security review **ACCEPTED for CI
+  testing only**, not pilot readiness.
+- **PASS (local, exact implementation source):** default v41 native file
+  **14/14** in 2m10s; synthetic 15-second-late signed-page A and B consume
+  tests **1/1 each** in 13s and 13s, including B's swapped-device rejection;
+  mock HTTP-to-native bridge exports A in 14.220s, B in 12.901s and completes
+  its two-store native regression in 134.898s; focused Flutter analysis,
+  Dart formatting, Python compilation, workflow YAML parse, diff check and
+  eight source-only Python reader/signer tests **PASS**. These are not real
+  PostgreSQL-to-native or installed-device observations.
+- **NOT RUN:** the new co-located PostgreSQL 17-to-native job has not run and
+  the six opt-in PG17 cases remain **SKIPPED locally** because no PG17 binary
+  exists here. The prior public App run proved only five predecessor PG17
+  cases and still failed the stale HQ rehearsal gate; it cannot validate this
+  candidate. The new job has a 25-minute Ubuntu runner cap, no uploaded
+  artifacts and read-only token permission; actual package version, runtime
+  and any CI usage remain to be observed. Public draft PR #752 is still at
+  `78e81ddbff268d49eee824c770cd8e990ae3aced`; Native run `41724753880`
+  still has useful Android work in progress (Windows and isolated Android
+  succeeded; both iOS jobs were cancelled). Keep that head fixed until the
+  run ends, then recheck the remote and perform only a reviewed guarded
+  non-force update for exact-head hosted verification. Connected production
+  mode and installed two-device sync remain **OFF / NOT RUN**.
 
 ## 2026-11-03 22:15 UTC private real-event-anchor prerequisite
 
