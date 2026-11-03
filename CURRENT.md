@@ -1,13 +1,19 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 10:12 UTC
+- Last verified: 2026-11-03 10:13 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
 ## 2026-11-03 10:00 UTC public v40 checkpoint and private event-read binding
 
-- **PASS (published draft source, CI still running):** PR #752 was guardedly
+- **FAIL (exact published head):** App run `41614849945` reached canonical
+  step 638/668 `hq:verify` after the preceding steps passed. Its PostgreSQL
+  receipt verifier returned `database_rehearsal_evidence_stale` with
+  `secretValuesExposed:false`; downstream journeys did not run. Native run
+  `41614858830` remained in progress at this readback. Neither failure is
+  attributed to the later private source/test commits.
+- **PASS (published draft source; initial CI readback):** PR #752 was guardedly
   fast-forwarded from `065a90d21c8424c4eb2ab685a36104817ee55a1c` to
   `578e51e24c3ef778e6d708b385598170b8fd445a`, tree
   `ffc1e4bce5f3978c11ac70f63acf3650543ffc3c`, after an independent
