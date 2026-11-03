@@ -146,6 +146,28 @@ void main() {
         () => verifyPair(requestBytes, retainedApprovalDigest: leaseDigest),
         throwsFormatException,
       );
+      // A self-consistent request and approval cannot replace the digest
+      // independently retained by the signed page/proof envelope.
+      expect(
+        () => verifyPair(
+          requestBytes,
+          boundExpected: ConnectedSiteRetailFeedExpectation(
+            workspaceId: expected.workspaceId,
+            siteId: expected.siteId,
+            actorId: expected.actorId,
+            deviceId: expected.deviceId,
+            authorityGeneration: expected.authorityGeneration,
+            revocationGeneration: expected.revocationGeneration,
+            authorityPayloadDigest: expected.authorityPayloadDigest,
+            leaseDigest: expected.leaseDigest,
+            requestDigest: authorityDigest,
+            afterSequence: expected.afterSequence,
+            priorEventDigest: expected.priorEventDigest,
+            limit: expected.limit,
+          ),
+        ),
+        throwsFormatException,
+      );
       final wrongKeyRequest = canonicalConnectedSiteJson({
         ...requestUnsigned,
         'signature': await _sign(requestUnsigned, issuer),
