@@ -1,9 +1,21 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-02 23:57 UTC
+- Last verified: 2026-11-03 00:01 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 00:01 UTC exact-head App CI terminal
+
+- On draft PR #752 head `289ec76de4b80cd2de437afc3b28cfe76192ec1e`,
+  App CI `41549042445` is terminal **FAIL** at canonical step 638/668,
+  `hq:verify`: `database_rehearsal_evidence_stale`, with
+  `secretValuesExposed:false`. Its earlier disposable PostgreSQL 17 replay
+  test, release/RLS checks, dependency install, lint and deployment-contract
+  steps passed. Desktop and 390px browser journeys were **NOT RUN** after the
+  fail-closed gate. The synthetic PostgreSQL test does not replace the fresh
+  authoritative Windows receipt. Native run `41549050338` remains **IN
+  PROGRESS** at this timestamp; no full-Android or APK result is claimed.
 
 ## 2026-11-02 23:57 UTC guarded PR update and private Windows preflight
 
