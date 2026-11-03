@@ -1,9 +1,45 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 03:19 UTC
+- Last verified: 2026-11-03 03:41 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 03:41 UTC private legacy-replica and sale-visibility successor
+
+- Local source commit `12a32b5fe62c5e29ec15d8a7ef8feb7babf22b26`
+  (tree `ac9be43da324aae3ce576dfb8f9c8f44da56275b`, parent
+  `0843dba2642d8f113302d3715e64558946acf11a`) changes seven source,
+  test and design-document paths. Pre-commit binary patch SHA-256:
+  `5d9b582d30254569609f1c65f49c3a9e5ae0bd45f8edfa4db5ba7be6d1efb68a`.
+  This is a **private, default-off candidate**, not a PR or deployed update.
+- **PASS (source/static only):** an incomplete historical terminal projection
+  now pauses shared writes and cannot be replaced by an ordinary snapshot or
+  delta. Rebootstrap requires the old binding's latest action to be a retained
+  revocation, a distinct enrolled device/signing key, a fresh scoped v2
+  snapshot at or beyond the old cursor, and an approved successor binding.
+  The old event and projection bytes remain in their original namespace; a
+  failed successor keeps the old namespace paused. The runtime fetches the
+  successor snapshot through its pinned LAN client. The general local read
+  API exposes metadata only and the client runtime no longer offers raw
+  projections. Full LAN snapshot/delta reads require a current signed
+  owner/manager `managementRead` lease; a station-policy fallback is denied.
+  No role-specific payload UI or cloud event feed is enabled.
+- Offline Dart 3.13.5 format verification **PASS** (six changed Dart files,
+  zero changes); `git diff --check` **PASS**; native CI contract verifier
+  **PASS**, its 22 tests **PASS**; claims guard **PASS** with 179 checks.
+  Independent final source/security review **ACCEPT** with no concrete defect.
+- **NOT RUN / BLOCKED:** Flutter 3.47.8 is not installed in this workspace;
+  `flutter analyze` and focused native tests have not run. The exact focused
+  builder command is `cd mobile/shop_pos && flutter test --no-pub
+  test/shop_connected_site_replica_store_test.dart
+  test/shop_connected_site_client_composition_test.dart
+  test/shop_site_coordinator_test.dart --reporter expanded --timeout 2m`,
+  followed by `flutter analyze` and the existing native CI matrix on the
+  exact candidate. The hosted workflow is the known Flutter-capable route;
+  no manual dispatch or public-head update occurred. Same-device SQLite/key
+  custody, installed two-device sync and merchant acceptance are **NOT RUN**.
+  Connected mode remains disabled and this is not release readiness.
 
 ## 2026-11-03 03:19 UTC private native terminal-proof candidate
 
