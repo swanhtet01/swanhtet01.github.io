@@ -1,9 +1,41 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 09:22 UTC
+- Last verified: 2026-11-03 09:46 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 09:46 UTC private test-only signed cloud-feed ledger
+
+- **PASS (private source only):** implementation commit
+  `eb2712852d0cd8c743f3d238805268a566b2c016`, tree
+  `4532bfad0879b8e889b22b4fff8c01763e497e44`, parent
+  `c5d84e7a5617878ed3ecce471f92c5cd400c4622`; five paths,
+  staged binary patch SHA-256
+  `83d04ffe02488f261d7378dc0d49380bd35acf3ce6c36dddc05bfe898c3586ad`.
+  An explicitly test-only pinned issuer verifies canonical signed pages and
+  archived chain state, retains unique request nonces, applies page/head in
+  one SQLite transaction with cursor compare-and-swap, and distinguishes
+  exact-byte replay from changed replay. A staged-file restore helper pauses
+  the feed and records a canonical barrier before publication. Production
+  has no issuer pin: normal open, backup and encrypted restore still reject
+  all nonempty cloud-feed rows. Independent security review **ACCEPT** only
+  as a private/default-off test checkpoint, not live synchronization.
+- **PASS (exact private source):** focused Flutter cloud proof/schema tests
+  **10/10**, Flutter analysis with no issues, native CI verifier **PASS**,
+  native/QA isolation contracts **46/46**, diff whitespace check **PASS**.
+  The complete backup suite ended `DONE success=true` on this source under
+  structured failure capture. The earlier one-failure run before this source
+  remains unattributed and is not claimed resolved merely by the passing run.
+- **BLOCKED / NOT RUN:** the fixture's signed request scope and trusted time
+  are supplied by its test caller; no current authority/lease/revocation
+  recheck is inside the transaction. The actual encrypted nonempty restore
+  still fails closed without production pins; only copied-file staging was
+  exercised. Two-connection concurrency, process-crash injection, source-
+  controlled production issuer/key rotation, bounded signature-performance,
+  real PostgreSQL and installed two-device sync are not verified. Restore
+  rebootstrap is a deliberate block pending fresh authority, not a clearance.
+  Connected mode stays default-off; no PR update or hosted CI applies here.
 
 ## 2026-11-03 09:22 UTC private synchronous cloud-proof verification
 
