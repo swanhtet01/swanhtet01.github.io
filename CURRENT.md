@@ -1,9 +1,40 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 04:50 UTC
+- Last verified: 2026-11-03 05:07 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 05:07 UTC offline dependency and rehearsal unblock audit
+
+- **BLOCKED (dependency security, independently reviewed):** the checked-in
+  showroom lock has minimatch 10.2.5 plus jsx-a11y nested 3.1.5; the kernel
+  lock has minimatch 10.2.6. Cached official minimatch 11.0.1 matches offline
+  registry integrity
+  `sha512-t+Vn6DX4wPCxS23y03C0uhF7S1jpi1GfqPrnlEipCJaA2ykiNbMkVlDutZtmvLfRcUN6R8AYVlzTsQrT4RZoLQ==`,
+  but its `@isaacs/nonrecursive-glob-match@^1.0.1` dependency is not cached.
+  Offline metadata still has ESLint 10.14.0 requiring minimatch `^10.2.6`,
+  config-array 0.23.5 `^10.2.4`, and typescript-estree 8.65.0 `^10.2.2`.
+  jsx-a11y 6.10.2 requires `^3.1.2`, peers only through ESLint 9 and calls
+  minimatch as a default function, whereas v11 exports a named function.
+  No project install, network audit, override, downgrade or suppression was
+  performed. A supported fix needs compatible upstream consumer releases or
+  a separately reviewed, provenance-bound fork/backport plus clean install,
+  lint/accessibility, POSIX/Windows glob behavior and full audit proof.
+- **BLOCKED (PostgreSQL 17 rehearsal):** exact local receipt verification
+  returned `database_rehearsal_evidence_stale`, `secretValuesExposed:false`.
+  The publisher, official-source, bootstrap and toolchain policies remain
+  pending approval; the profile has `loadClosureComplete:false` and the
+  observer remains pending. The bootstrap rejects an unapproved rehearsal
+  before workspace creation or download. Draft PR #753 registers the manual
+  Windows workflow but remains unmerged; the default branch does not expose
+  that workflow. A controlled isolated Windows capture, independent review
+  and explicit stage-2 approval are still required before a genuine fresh
+  receipt can be produced. No installer, database, credential or workflow was
+  executed in this audit.
+- Public PR #752 remains fixed at `5a9e89bb` while its main Android job is
+  still in the hosted Flutter shards; full Windows is PASS. No new source or
+  lockfile remediation candidate is claimed.
 
 ## 2026-11-03 04:42 UTC exact-public-head CI and security correction
 
