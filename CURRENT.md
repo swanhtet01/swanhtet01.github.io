@@ -1,9 +1,42 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 07:10 UTC
+- Last verified: 2026-11-03 07:26 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 07:26 UTC private native cloud-feed page checkpoint
+
+- **PASS (private source and review):** commit
+  `1b9454d953235a36701ba66ef88ed5dcbbf399cc`, tree
+  `1176bfa896440acc1f76b7c62985a03a6fadfa4f`, parent
+  `d4bab35c3388ce2082d79923f835ade051452917`, has four changed paths:
+  a default-off canonical retail-feed page parser and adversarial tests, plus
+  the native CI test inventory and verifier. Staged binary patch SHA-256 was
+  `429a51b0cdc3152e486a64fcd70f7bf8a6aebf051049ad0d0441fcc5fa933eb0`.
+  The parser checks exact tenant/site/actor/device/authority/lease/request
+  bindings, 1..64 request limits, contiguous source headers, ordered sanitized
+  projections and signed-64-bit cursor bounds. It explicitly does not
+  authenticate a response or apply data. Independent security review **ACCEPT**
+  for this limited slice after correction of its two findings; it did not
+  rerun tests.
+- **PASS (exact private source):** retained official Flutter 3.47.8/Dart
+  3.13.7 formatted the two new files with zero changes on final source;
+  focused parser plus adjacent client-composition and device-signer Flutter
+  tests **26/26 PASS** in about 48 seconds; `flutter analyze --no-pub`
+  **PASS** with no issues; native CI verifier **PASS**, native/QA isolation
+  contracts **46/46 PASS**, claims guard **PASS** (179 checks), and staged
+  whitespace check **PASS**. The first focused test attempt failed in two
+  newly written fixtures; both fixtures were corrected before the final pass.
+- **NOT RUN / BLOCKED:** a transactional v40 native header/projection/cursor
+  ledger, authenticated ingress/revocation/trusted-time enforcement inside its
+  transaction, backup/restore and crash/lost-response tests, real PostgreSQL
+  page delivery and installed two-device sync are not supplied by this slice.
+  Connected mode remains default-off. Public PR #752 remains at
+  `065a90d21c8424c4eb2ab685a36104817ee55a1c`; its Native run
+  `41593896415` still had Android IN PROGRESS at this readback, while five
+  other jobs passed. This private source has not received hosted CI and must
+  not inherit that public head's results.
 
 ## 2026-11-03 07:08 UTC guarded PR update and private cloud-feed page contract
 
