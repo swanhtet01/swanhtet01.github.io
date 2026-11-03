@@ -1,9 +1,32 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 10:52 UTC
+- Last verified: 2026-11-03 11:00 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 11:00 UTC private connected CI shard repair
+
+- **PASS (private source/contract):** commit
+  `d606b5e5e9f009de81cc0b0d73e57a0b6d99dd9f`, tree
+  `0bd7f8d21a35e219e12efddccdfb1dee8342f343`, parent `2e51247f`,
+  three paths, staged patch SHA-256
+  `d58d777b195af486ea35a0f9a06b0ec5b5124f1c3c0033acc0bb2191f820dc36`.
+  The 19-file connected shard now has a measured 11-file first part ending
+  with `shop_connected_site_database_adapter_test.dart` and a separate
+  eight-file second part. All files remain once, in order. Both parts keep
+  isolated temporary roots, serial execution, the 600-second per-shard cap,
+  nonzero/timeout failure checks and the unchanged 5,400-second total cap.
+  Independent read-only review **ACCEPT** for this coverage-preserving split.
+- **PASS (local exact source):** Native CI verifier, contract tests **22/22**,
+  QA isolation tests **24/24**, and diff whitespace check. The wrong-path
+  QA-isolation invocation was corrected to its actual filename before the
+  24/24 run; it was not a product failure.
+- **NOT RUN / BLOCKED:** hosted execution and timing for this private split
+  are not yet available. The extra Flutter startup may still consume the
+  existing total budget. The transactional cloud-feed request, current
+  lease/revocation, role/tenant and trusted-time recheck remains missing;
+  connected mode is off. Public draft PR #752 was not moved by this repair.
 
 ## 2026-11-03 10:52 UTC private pinned authority-payload verification
 
