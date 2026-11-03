@@ -103,6 +103,11 @@ class ConnectedSiteRuntimeTests(unittest.TestCase):
         self.assertEqual({route.path for route in app.routes}.intersection({
             "/api/connected-site/v1/reconcile",
         }), set())
+        # Device enrollment alone is not staff read authority. Keep the remote
+        # event feed absent until actor/lease policy and a complete reader exist.
+        self.assertEqual(self.client().get(
+            "/api/connected-site/v1/workspaces/workspace-a/sites/site-a/events",
+        ).status_code, 404)
         response = self.client(enabled=False).post(
             "/api/connected-site/v1/reconcile",
             json=_request(self.authority_a, _upload(self.authority_a, key=DEVICE_A)),
