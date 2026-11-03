@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 20:33 UTC
+- Last verified: 2026-11-03 20:45 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 20:45 UTC private synthetic HTTP feed composition
+
+- **PASS (private, test-only, default-off):** implementation
+  `5b2fbe35d97918e6fec784fc4dcc5af0276c352f`, tree
+  `89f020335162e608918abcee9bf02d4eb08ef5af`, one-file patch SHA-256
+  `90ed05e96bd92927de95ff85165c7892d8f524634697a25a0bec4b6e2305728e`.
+  A FastAPI `/test-only/feed` route exists **only inside a Python test**. Two
+  distinct synthetic same-site device keys each receive request-bound signed
+  pages through the injected gateway resolver and checked SQL reader. Wrong
+  device body substitution, missing peer with forged headers and locally
+  revoked peer fail; private event remarks stay out of the response. Local
+  combined reader/gateway tests **26/26 PASS**; five real-PG17 cases
+  **SKIPPED**. Python compilation and diff checks **PASS**. Independent
+  read-only review **ACCEPT** for test-only HTTP composition. No production
+  route, listener, certificate, key custody or feature flag changed.
+- **NOT RUN / BLOCKED:** the injected test peer is not a verified TLS/mTLS
+  gateway. It fabricates a fresh attestation per request; this route does not
+  consume signed nonces or reject identical request replay. Revocation is
+  in-memory, not cloud-propagated. Installed two-device operation, real WAN
+  loss/reconnect and merchant acceptance remain unverified. Connected mode
+  remains disabled.
+- **Published draft PR #752:** remains at `07b12e5b796dee325fcfac9c853cbf59415c5644`.
+  Native `41713099835` still has useful Android and Windows jobs running;
+  isolated iOS QA was cancelled. App `41713092081` failed at the known
+  PostgreSQL test-fixture transition. Reviewed private correction `7003288b`
+  and this slice have no hosted exact-head evidence. Preserve the public
+  head until useful jobs finish; do not claim the corrected PG17 case passed.
 
 ## 2026-11-03 20:33 UTC exact-head PG17 lock-test correction
 
