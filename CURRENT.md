@@ -1,9 +1,36 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 08:33 UTC
+- Last verified: 2026-11-03 08:44 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 08:44 UTC private signed cloud-feed proof prerequisite
+
+- **PASS (private source only):** implementation commit
+  `7e3356a3922be5461454d71059b62305bf2add65`, tree
+  `eff8b98a8ef0cacdf15d36e19f8467af4fdd36a7`, parent
+  `f3680327c939e6d66dc9373b4415b146a776a858`; four paths,
+  staged binary patch SHA-256
+  `9a537c337ef70f067dfcaab645e56a4ee2c7f7ed23280e13aa58de3a7b386b79`.
+  A canonical Ed25519 page-proof parser and pinned-issuer verifier bind the
+  exact request nonce, actor/role/device/site, authority/revocation/lease,
+  cursor, page digest and short trusted-time interval. Unknown issuer pins,
+  malformed expiry and substituted values fail closed. Independent security
+  reviewer **ACCEPT** for this default-off prerequisite, not for ledger or
+  end-to-end delivery.
+- **PASS (exact private source):** official Flutter 3.47.8 focused proof tests
+  **3/3**, `flutter analyze --no-pub` with no issues, Dart formatting with
+  zero changes, native CI verifier **PASS**, native/QA contracts **46/46**,
+  staged whitespace check **PASS**.
+- **BLOCKED / NOT RUN:** no production issuer pin, authenticated request
+  construction, trusted-clock binding, durable nonce/replay record, atomic
+  header/projection/cursor apply, nonempty-row reconstruction, accepted-data
+  restore suspension/rebootstrap, real PostgreSQL page delivery or installed
+  two-device run. The v40 verifier still rejects every nonempty cloud-feed
+  table at open and backup verification; no writes were added beneath it.
+  Connected mode remains default-off and this private commit is unpublished.
+  Public draft PR #752 is still `065a90d21c8424c4eb2ab685a36104817ee55a1c`.
 
 ## 2026-11-03 08:33 UTC private v40 cloud-feed schema boundary
 
