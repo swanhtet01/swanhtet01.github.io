@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 17:29 UTC
+- Last verified: 2026-11-03 17:32 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
@@ -22,8 +22,8 @@
   signed in-transaction revocation, changed-but-valid alternate batch,
   expired and exact lost-response retries after reopen, and restore pause.
   Final-source focused case **1/1 PASS**; the complete cloud-feed schema suite
-  **13/13 PASS** on the immediately preceding draft (the final change only
-  tightens revocation-test attribution), and changed-path analysis **PASS**.
+  **13/13 PASS** on the same native tree in 1m55s, and changed-path analysis
+  **PASS**.
   Backup suite **89/89 PASS** on restore predecessor `ec180122`; it is not a
   full backup rerun of `89edd319`. Independent security reviews **ACCEPT**
   these bounded fixture-only slices. Worktree clean; these three successors
