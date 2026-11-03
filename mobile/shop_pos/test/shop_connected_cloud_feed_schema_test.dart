@@ -1072,15 +1072,54 @@ void main() {
     await contendedRetry.verifyReadyForUse();
     final writerAtCommit = Completer<void>();
     final releaseWriter = Completer<void>();
-    final firstAppend = applySecondPage(
-      contendedWriter,
-      _V41FixtureTime(workspace, site, [now + 1, now + 2], secondEvidence),
-      beforeCommit: () async {
-        writerAtCommit.complete();
-        await releaseWriter.future;
-      },
-    );
+    final competingRevocationPort = ReceivePort();
+    final competingExitPort = ReceivePort();
+    final competingExited = competingExitPort.first;
+    final competingRevocationReady = Completer<SendPort>();
+    final competingRevocationEntered = Completer<void>();
+    final competingRevocationResult = Completer<String>();
+    final competingRevocationMessages = competingRevocationPort.listen((value) {
+      if (value is SendPort) competingRevocationReady.complete(value);
+      if (value == 'started') competingRevocationEntered.complete();
+      if (value == 'done') competingRevocationResult.complete('done');
+      if (value is String && value.startsWith('error:')) {
+        competingRevocationResult.complete(value);
+      }
+    });
+    Isolate? competingRevocationIsolate;
+    Future<void>? firstAppend;
     try {
+      competingRevocationIsolate = await Isolate.spawn(_runV41RevocationRace, {
+        'port': competingRevocationPort.sendPort,
+        'path': contendedFile.path,
+        'evidence': revocation.toJson(),
+        'ownerKey': ownerKey,
+        'workspace': workspace,
+        'site': site,
+        'coordinator': coordinator,
+        'device': device,
+        'fingerprint': fingerprint,
+        'now': now + 500,
+        'trust': trust,
+      }, onExit: competingExitPort.sendPort);
+      final competingReadyOrError = await Future.any<Object>([
+        competingRevocationReady.future,
+        competingRevocationResult.future,
+      ]).timeout(const Duration(seconds: 20));
+      if (competingReadyOrError is! SendPort) {
+        throw StateError(
+          'Revocation contender could not open: $competingReadyOrError',
+        );
+      }
+      final competingStartRevocation = competingReadyOrError;
+      firstAppend = applySecondPage(
+        contendedWriter,
+        _V41FixtureTime(workspace, site, [now + 1, now + 2], secondEvidence),
+        beforeCommit: () async {
+          writerAtCommit.complete();
+          await releaseWriter.future;
+        },
+      );
       await writerAtCommit.future.timeout(const Duration(seconds: 5));
       try {
         await expectLater(
@@ -1096,6 +1135,21 @@ void main() {
           ),
           reason:
               'a concurrent handle cannot commit the same cursor while locked',
+        );
+        competingStartRevocation.send(true);
+        await competingRevocationEntered.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () =>
+              throw StateError('revocation contender did not start'),
+        );
+        expect(
+          await competingRevocationResult.future.timeout(
+            const Duration(seconds: 10),
+            onTimeout: () =>
+                throw StateError('revocation contender did not finish'),
+          ),
+          contains('database is locked'),
+          reason: 'signed revocation cannot race past the page-two write lock',
         );
       } finally {
         releaseWriter.complete();
@@ -1120,14 +1174,49 @@ void main() {
       );
     } finally {
       if (!releaseWriter.isCompleted) releaseWriter.complete();
-      try {
-        await firstAppend.timeout(const Duration(seconds: 5));
-      } on Object {
-        // Keep the original assertion failure; both handles still close.
+      if (firstAppend != null) {
+        try {
+          await firstAppend.timeout(const Duration(seconds: 5));
+        } on Object {
+          // Keep the original assertion failure; both handles still close.
+        }
+      }
+      if (competingRevocationIsolate != null) {
+        try {
+          await competingExited.timeout(const Duration(seconds: 5));
+        } on Object {
+          competingRevocationIsolate.kill(priority: Isolate.immediate);
+        }
       }
       await contendedRetry.close();
       await contendedWriter.close();
+      await competingRevocationMessages.cancel();
+      competingRevocationPort.close();
+      competingExitPort.close();
     }
+    final revokingAfterSecondPage = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(contendedFile),
+      trust: trust,
+    );
+    await ShopConnectedSiteEnrollmentStore(
+      database: revokingAfterSecondPage,
+      nowMillis: () => now + 500,
+    ).importOwnerEvidence(revocation, verifier: verifier);
+    await expectLater(
+      applySecondPage(
+        revokingAfterSecondPage,
+        _V41FixtureTime(
+          workspace,
+          site,
+          [now + 3],
+          secondEvidence,
+          initialMonotonicAdvance: 2,
+        ),
+      ),
+      throwsStateError,
+      reason: 'a later signed revocation blocks even exact page-two replay',
+    );
+    await revokingAfterSecondPage.close();
     expect(
       () => ShopBackup.verifySnapshot(
         contendedFile,
@@ -3278,12 +3367,17 @@ void main() {
 Future<void> _runV41RevocationRace(Map<String, Object> message) async {
   final port = message['port'] as SendPort;
   final fields = message['evidence'] as Map<String, Object>;
-  final database = ShopDatabase(
-    NativeDatabase(
-      File(message['path'] as String),
-      setup: (raw) => raw.execute('PRAGMA busy_timeout = 100'),
-    ),
+  final executor = NativeDatabase(
+    File(message['path'] as String),
+    setup: (raw) => raw.execute('PRAGMA busy_timeout = 100'),
   );
+  final trust = message['trust'] as ShopCloudFeedV41FirstPageTrust?;
+  final database = trust == null
+      ? ShopDatabase(executor)
+      : ShopDatabase.testOnlyWithCloudFeedV41Trust(
+          executor: executor,
+          trust: trust,
+        );
   try {
     await database.verifyReadyForUse();
     final startSignal = ReceivePort();
