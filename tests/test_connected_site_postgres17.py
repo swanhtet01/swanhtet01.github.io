@@ -239,7 +239,7 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
             ).fetchall()
         self.assertEqual(rows, [(self.authority.workspace_id,)])
 
-    def test_signed_read_holds_revocation_row_lock_until_proof_is_sealed(self) -> None:
+    def test_signed_read_holds_device_revocation_lock_until_proof_is_sealed(self) -> None:
         read_now = datetime.now(timezone.utc)
         authority, lease, request = _fixture(
             workspace=f"workspace-{uuid4().hex}", site=f"site-{uuid4().hex}",
@@ -291,9 +291,9 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
                         with self.psycopg.connect(self.admin_url) as connection:
                             connection.execute("set local lock_timeout = '300ms'")
                             connection.execute(
-                                "update app_private.connected_sites set revocation_generation="
-                                "revocation_generation+1 where workspace_id=%s and site_id=%s",
-                                (authority.workspace_id, authority.site_id),
+                                "update app_private.connected_site_devices set status='revoked' "
+                                "where workspace_id=%s and site_id=%s and device_id=%s",
+                                (authority.workspace_id, authority.site_id, "device-a"),
                             )
                     proceed.set()
                     signed = signed_future.result(timeout=5)
@@ -309,15 +309,15 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
                     request=request, now=read_now,
                     issuer_key_id="test_feed", issuer_seed=23,
                 )
-        # A failed seal returns no proof and must release its row locks.
+        # A failed seal returns no proof and must release its device row lock.
         with self.psycopg.connect(self.admin_url) as connection:
             connection.execute("set local lock_timeout = '300ms'")
             connection.execute(
-                "update app_private.connected_sites set revocation_generation="
-                "revocation_generation+1 where workspace_id=%s and site_id=%s",
-                (authority.workspace_id, authority.site_id),
+                "update app_private.connected_site_devices set status='revoked' "
+                "where workspace_id=%s and site_id=%s and device_id=%s",
+                (authority.workspace_id, authority.site_id, "device-a"),
             )
-        with self.assertRaisesRegex(ConnectedSiteV15Error, "authority_changed"):
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "device_changed"):
             read_and_sign_test_only_page(
                 connection_factory=lambda: self.psycopg.connect(self.runtime_url),
                 principal=principal, authority=authority, lease=lease,
