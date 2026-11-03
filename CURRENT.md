@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 19:50 UTC
+- Last verified: 2026-11-03 20:10 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 20:10 UTC transaction-bound synthetic feed sealing
+
+- **PASS (private, default-off source/test):** implementation
+  `f47180fa8cb615dcb4f910ae0d74f498da20602f`, repository tree
+  `b2e53ff91af2485ab3957c35d267d6156564a661`, four-path patch SHA-256
+  `af73a310a7e8ca870f1da70f4164cf629c7e0469cce7ce8b6afd874ed267b503`.
+  The checked retail page reader can invoke a trusted synchronous sealer while
+  its repeatable-read transaction and site/device/lease `FOR SHARE` locks are
+  still held; it checks live time again after sealing and rejects deferred or
+  async results. The only current sealer uses a fixed test key in `tests/`.
+  Local reader/fixture tests **19/19 PASS**; five opt-in disposable PG17 tests
+  **SKIPPED** because PostgreSQL 17 is unavailable here. Python compilation
+  and diff checks **PASS**. Independent security review **ACCEPT** for this
+  unmounted source/test boundary. The opt-in PG17 test includes a concurrent
+  revocation UPDATE lock race and post-revocation denial, but its outcome is
+  **NOT RUN**, not a pass.
+- **Important boundary:** the arbitrary sealer callback must be trusted,
+  synchronous, bounded and side-effect-free until the reader returns. It is
+  not mounted and has no production key custody or authenticated ingress.
+  The source tests do not prove real PostgreSQL locks, every revocation path,
+  installed multi-device delivery, network loss/reconnect, or production sync.
+  Connected mode remains disabled.
+- **Published draft PR #752:** stays at `611bdfc00181860422089274d6aa0a265b61712b`;
+  exact-head Native run `41699288011` was **IN PROGRESS** at this checkpoint.
+  Private implementation `f47180fa` has no hosted CI. PostgreSQL Windows
+  rehearsal, dependency/security gates, signing and merchant acceptance
+  remain open.
 
 ## 2026-11-03 19:50 UTC checked-reader synthetic signed-response checkpoint
 
