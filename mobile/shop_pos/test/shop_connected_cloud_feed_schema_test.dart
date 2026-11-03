@@ -30,18 +30,24 @@ import 'historical_shop_fixture_support.dart';
 import 'v41_cloud_feed_process_fixture.dart';
 
 void main() {
-  test('v41 signed historical page stays closed after later revocation', () async {
+  Future<void> runSignedPageFixture({
+    required String deviceId,
+    required int clientSeed,
+    required bool secondary,
+  }) async {
     const now = 1800000001000;
     const workspace = 'workspace_v41_fixture';
     const site = 'site_v41_fixture';
     const coordinator = 'counter_v41_fixture';
-    const device = 'device_v41_fixture';
+    final device = deviceId;
     const nonce = 'pairing_nonce_v41_fixture_0001';
     final root = await Directory.systemTemp.createTemp('shop-v41-signed-v25-');
     addTearDown(() => root.delete(recursive: true));
     final file = File('${root.path}/shop.sqlite');
     final ownerPair = await Ed25519().newKeyPairFromSeed(List.filled(32, 17));
-    final clientPair = await Ed25519().newKeyPairFromSeed(List.filled(32, 18));
+    final clientPair = await Ed25519().newKeyPairFromSeed(
+      List.filled(32, clientSeed),
+    );
     final ownerKey = (await ownerPair.extractPublicKey()).bytes;
     final clientKey = (await clientPair.extractPublicKey()).bytes;
     final fingerprint = crypto.sha256.convert(clientKey).toString();
@@ -613,7 +619,7 @@ void main() {
           const Variable<String>(workspace),
           const Variable<String>(site),
           const Variable<String>('actor_fixture'),
-          const Variable<String>(device),
+          Variable<String>(device),
           const Variable<String>('manager'),
           Variable<String>(lease.payloadDigest),
           Variable<String>(authorityPayload.payloadDigest),
@@ -802,7 +808,7 @@ void main() {
     final currentDevice = await database
         .customSelect(
           'SELECT state, revoked_at_millis FROM shop_site_devices WHERE device_id = ?',
-          variables: [const Variable<String>(device)],
+          variables: [Variable<String>(device)],
         )
         .getSingle();
     expect(currentDevice.read<String>('state'), 'revoked');
@@ -811,7 +817,10 @@ void main() {
       for (final table in shopCloudFeedV41HistoricalTables)
         table: await rows(table),
     };
-    final trust = await v41ProcessFixtureTrust();
+    final trust = await v41ProcessFixtureTrust(
+      clientDeviceId: device,
+      clientSeed: clientSeed,
+    );
     expect(trust.feedIssuerKeys['feed_fixture'], feedPublic);
     expect(trust.clientKeys[fingerprint], clientKey);
     expect(
@@ -877,12 +886,19 @@ void main() {
       ...secondProofUnsigned,
       'signature': await signFields(secondProofUnsigned, feedPair),
     });
-    final pythonSignedPage = jsonDecode(
-      await File('test/fixtures/v41_python_signed_page.json').readAsString(),
-    ) as Map<String, dynamic>;
-    expect(pythonSignedPage['requestJson'], secondRequestJson);
-    expect(pythonSignedPage['pageJson'], secondPageJson);
-    expect(pythonSignedPage['proofJson'], secondProofJson);
+    final signedPageBytes = secondary
+        ? <String, dynamic>{
+            'requestJson': secondRequestJson,
+            'pageJson': secondPageJson,
+            'proofJson': secondProofJson,
+          }
+        : jsonDecode(
+            await File('test/fixtures/v41_python_signed_page.json')
+                .readAsString(),
+          ) as Map<String, dynamic>;
+    expect(signedPageBytes['requestJson'], secondRequestJson);
+    expect(signedPageBytes['pageJson'], secondPageJson);
+    expect(signedPageBytes['proofJson'], secondProofJson);
     final secondPageRow = <String, Object?>{
       ...history['shop_connected_cloud_feed_pages']!.single,
       'page_digest': secondPageDigest,
@@ -1021,7 +1037,7 @@ void main() {
       limit: 64,
     );
     final secondEvidence = ShopCloudFeedV41FirstPageEvidence(
-      requestJson: pythonSignedPage['requestJson'] as String,
+      requestJson: signedPageBytes['requestJson'] as String,
       cloudKeyApprovalJson: cloudApprovalJson,
       enrollmentEvidenceDigest: approval.evidenceDigest,
       timeEntryDigest: signedTime.entryDigest,
@@ -1040,8 +1056,8 @@ void main() {
       expected: secondExpected,
       actorRole: 'manager',
       requestNonce: secondNonce,
-      pageJson: pythonSignedPage['pageJson'] as String,
-      proofJson: pythonSignedPage['proofJson'] as String,
+      pageJson: signedPageBytes['pageJson'] as String,
+      proofJson: signedPageBytes['proofJson'] as String,
       evidence: secondEvidence,
       testOnlyBeforeCommit: beforeCommit,
     );
@@ -1049,8 +1065,8 @@ void main() {
     final onlineFile = await twoPageFile.copy(
       '${root.path}/online-client.sqlite',
     );
-    // Synthetic outage/reconnect of two stores for one fixture device, not
-    // enrollment or delivery between two physical devices.
+    // Synthetic outage/reconnect of two stores for this fixture identity;
+    // neither this nor the second identity proves physical device delivery.
     final offlineFile = await twoPageFile.copy(
       '${root.path}/offline-client.sqlite',
     );
@@ -1059,6 +1075,32 @@ void main() {
       trust: trust,
     );
     await onlineClient.verifyReadyForUse();
+    if (secondary) {
+      final firstDeviceWire = jsonDecode(
+        await File('test/fixtures/v41_python_signed_page.json').readAsString(),
+      ) as Map<String, dynamic>;
+      expect(
+        (jsonDecode(firstDeviceWire['proofJson'] as String)
+            as Map<String, dynamic>)['deviceId'],
+        isNot(device),
+      );
+      await expectLater(
+        onlineClient.testOnlyApplyConnectedCloudFeedSecondPageV41(
+          trust: trust,
+          timeAuthority: _V41FixtureTime(workspace, site, [
+            now + 1,
+          ], secondEvidence),
+          expected: secondExpected,
+          actorRole: 'manager',
+          requestNonce: secondNonce,
+          pageJson: firstDeviceWire['pageJson'] as String,
+          proofJson: firstDeviceWire['proofJson'] as String,
+          evidence: secondEvidence,
+        ),
+        throwsFormatException,
+        reason: 'a distinct device cannot import the first device proof',
+      );
+    }
     await expectLater(
       onlineClient.testOnlyApplyConnectedCloudFeedSecondPageV41(
         trust: trust,
@@ -1068,15 +1110,15 @@ void main() {
         expected: secondExpected,
         actorRole: 'manager',
         requestNonce: secondNonce,
-        pageJson: (pythonSignedPage['pageJson'] as String).replaceFirst(
+        pageJson: (signedPageBytes['pageJson'] as String).replaceFirst(
           'd' * 64,
           'c' * 64,
         ),
-        proofJson: pythonSignedPage['proofJson'] as String,
+        proofJson: signedPageBytes['proofJson'] as String,
         evidence: secondEvidence,
       ),
       throwsFormatException,
-      reason: 'altered Python page bytes cannot be paired with retained proof',
+      reason: 'altered signed page bytes cannot be paired with retained proof',
     );
     await applySecondPage(
       onlineClient,
@@ -1162,6 +1204,10 @@ void main() {
         expectedSchemaVersion: 41,
         testOnlyCloudFeedV41Trust: trust,
       );
+    }
+    if (secondary) {
+      await database.close();
+      return;
     }
     final contendedFile = await twoPageFile.copy(
       '${root.path}/two-page-contended.sqlite',
@@ -2238,7 +2284,28 @@ void main() {
       throwsFormatException,
       reason: 'an independently pinned owner key cannot be substituted',
     );
-  });
+  }
+
+  test(
+    'v41 signed historical page stays closed after later revocation',
+    () async {
+      await runSignedPageFixture(
+        deviceId: 'device_v41_fixture',
+        clientSeed: 18,
+        secondary: false,
+      );
+    },
+  );
+  test(
+    'v41 second device persists independent signed feed after outage',
+    () async {
+      await runSignedPageFixture(
+        deviceId: 'device_v41_second',
+        clientSeed: 24,
+        secondary: true,
+      );
+    },
+  );
   test(
     'SQLite read transaction keeps one snapshot across a WAL writer',
     () async {
