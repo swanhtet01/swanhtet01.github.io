@@ -1,9 +1,38 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 10:27 UTC
+- Last verified: 2026-11-03 10:44 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 10:44 UTC private encrypted nonempty-feed restore
+
+- **PASS (private test-only source):** implementation commit
+  `2e55e6f8983b3896485f76de59b2e3190f18e14f`, tree
+  `fab623a99b48a460ee830cd643dac61ee05fdfcc`, parent `f94d2b0a`,
+  three paths, staged patch SHA-256
+  `9861669730190c63ad3ec8284d73847168b45db7b267ff951b29c5ba50838678`.
+  Encrypted export and empty-target restore accept explicitly supplied
+  test-only pinned cloud-feed issuer keys; product builds reject nonempty
+  test pins, and the default empty-pin verifier still rejects nonempty feed
+  rows. A pinned signed-page archive restores with a paused head and barrier,
+  and cannot apply another page until fresh rebootstrap. Missing or wrong
+  pins reject before publication and leave no target or restore marker.
+  No existing no-replace/cleanup contract was relaxed. Independent security
+  review **ACCEPT** only for this synthetic path.
+- **PASS (exact private source):** focused cloud schema/proof tests **10/10**,
+  full backup suite **102/102** (about 6m35s), targeted Flutter analysis,
+  formatting and diff check. TMPDIR was task-owned tmpfs; durable overlay
+  still had about 544 MiB free after the run. The old first backup failure
+  remains unattributed despite this clean terminal run.
+- **BLOCKED / NOT RUN:** the active sync transaction still accepts a
+  test-caller-supplied request expectation and trusted time; no production
+  current-authority/lease/revocation/time recheck or server-side nonce
+  consumption is mounted. A restored nonempty feed remains paused: no real
+  rebootstrap or production issuer/key custody exists. No hosted CI or
+  installed two-device verification applies to this private successor.
+  Public draft PR #752 remains at `578e51e24c3ef778e6d708b385598170b8fd445a`;
+  its Native run `41614858830` is still in progress.
 
 ## 2026-11-03 10:27 UTC private authenticated cloud-feed interruption proof
 
