@@ -89,10 +89,10 @@ Map<String, String> shopConnectedCloudFeedSchemaDefinitionsV40() => {
   ),
 };
 
-/// Additive v41 evidence definition. Deliberately not installed by the v40
-/// migration: opening a v41 file must wait for the matching request, authority,
-/// time, backup and restore verifiers. An old nonempty v40 page cannot be
-/// backfilled with a request that was never retained.
+/// Additive v41 evidence definition. Empty v40 files may install this table,
+/// but nonempty v41 feed rows remain rejected at open and backup until the
+/// matching request, authority and time proofs can be reconstructed. An old
+/// nonempty v40 page cannot be backfilled with an unretained request.
 const shopConnectedCloudFeedPageEvidenceV41Sql = '''
   CREATE TABLE shop_connected_cloud_feed_page_evidence (
     page_digest TEXT PRIMARY KEY NOT NULL REFERENCES shop_connected_cloud_feed_pages(page_digest),

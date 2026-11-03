@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_read_request.dart';
+import 'package:supermega_shop/shop_connected_site_cloud_feed_contract.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_offline_staff_lease.dart';
@@ -26,6 +27,7 @@ void main() {
       );
       final leasePublic = (await leaseKey.extractPublicKey()).bytes;
       final devicePublic = (await deviceKey.extractPublicKey()).bytes;
+      final otherPublic = (await otherKey.extractPublicKey()).bytes;
       final now = DateTime.utc(2026, 11, 3, 11).millisecondsSinceEpoch;
       final issuedAt = DateTime.fromMillisecondsSinceEpoch(
         now - 1000,
@@ -187,6 +189,100 @@ void main() {
       expect(accepted.expected.leaseDigest, lease.payloadDigest);
       expect(accepted.actorRole, 'manager');
       expect(accepted.requestNonce, digestD);
+      void verifyRetained(
+        String bytes, {
+        List<int>? publicKey,
+        String nonce = digestD,
+        int? time,
+      }) => verifyRetainedCloudFeedReadRequestSync(
+        canonicalBytes: bytes,
+        expected: accepted.expected,
+        requestNonce: nonce,
+        clientFingerprint: digestA,
+        enrollmentEvidenceDigest: digestB,
+        signingKeyId: 'device-key',
+        approvedCloudSigningPublicKey: publicKey ?? devicePublic,
+        trustedAtIssueMillis: time ?? now,
+      );
+      expect(() => verifyRetained(request), returnsNormally);
+      expect(
+        () => verifyRetained(request, publicKey: otherPublic),
+        throwsFormatException,
+      );
+      expect(
+        () => verifyRetained(request, nonce: digestA),
+        throwsFormatException,
+      );
+      expect(
+        () => verifyRetained(request, time: now + 30000),
+        throwsFormatException,
+      );
+      expect(
+        () => verifyRetained(
+          canonicalConnectedSiteJson({
+            ...jsonDecode(request),
+            'actorId': 'actor-2',
+          }),
+        ),
+        throwsFormatException,
+      );
+      ConnectedSiteRetailFeedExpectation malformedExpected(
+        String bytes, {
+        String workspace = 'workspace-1',
+        int authorityGeneration = 2,
+        int after = 0,
+        String? prior,
+      }) => ConnectedSiteRetailFeedExpectation(
+        workspaceId: workspace,
+        siteId: accepted.expected.siteId,
+        actorId: accepted.expected.actorId,
+        deviceId: accepted.expected.deviceId,
+        authorityGeneration: authorityGeneration,
+        revocationGeneration: accepted.expected.revocationGeneration,
+        authorityPayloadDigest: accepted.expected.authorityPayloadDigest,
+        leaseDigest: accepted.expected.leaseDigest,
+        requestDigest: connectedSiteSha256(jsonDecode(bytes)),
+        afterSequence: after,
+        priorEventDigest: prior,
+        limit: accepted.expected.limit,
+      );
+      final badWorkspace = await signed({
+        ...unsigned,
+        'workspaceId': 'bad workspace',
+      }, deviceKey);
+      expect(
+        () => verifyRetainedCloudFeedReadRequestSync(
+          canonicalBytes: badWorkspace,
+          expected: malformedExpected(badWorkspace, workspace: 'bad workspace'),
+          requestNonce: digestD,
+          clientFingerprint: digestA,
+          enrollmentEvidenceDigest: digestB,
+          signingKeyId: 'device-key',
+          approvedCloudSigningPublicKey: devicePublic,
+          trustedAtIssueMillis: now,
+        ),
+        throwsFormatException,
+      );
+      final negativeGeneration = await signed({
+        ...unsigned,
+        'authorityGeneration': -1,
+      }, deviceKey);
+      expect(
+        () => verifyRetainedCloudFeedReadRequestSync(
+          canonicalBytes: negativeGeneration,
+          expected: malformedExpected(
+            negativeGeneration,
+            authorityGeneration: -1,
+          ),
+          requestNonce: digestD,
+          clientFingerprint: digestA,
+          enrollmentEvidenceDigest: digestB,
+          signingKeyId: 'device-key',
+          approvedCloudSigningPublicKey: devicePublic,
+          trustedAtIssueMillis: now,
+        ),
+        throwsFormatException,
+      );
 
       for (final rejected in [
         canonicalConnectedSiteJson({
@@ -211,6 +307,7 @@ void main() {
         await signed(unsigned, otherKey),
       ]) {
         await expectLater(verify(rejected), throwsFormatException);
+        expect(() => verifyRetained(rejected), throwsFormatException);
       }
       await expectLater(
         verify(
