@@ -1,9 +1,43 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 06:26 UTC
+- Last verified: 2026-11-03 06:38 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 06:38 UTC private authenticated event-row projection
+
+- **PASS (source only):** private implementation
+  `88def352b9d46a1a83b3c707d0e1c87640e7ce70`, tree
+  `6f7d31683b352f9e657b276b661a9a0a03decb73`, parent `91522789`,
+  changes only the Python connected-site event feed, the pure projection's
+  docstring and focused tests. Binary patch SHA-256 is
+  `46682e8bce3ef33dad765b2f6f63b02cf16cad4642018d40d28c7129af1b9946`.
+  An unmounted manager-only reader now selects `event_json::text` in the
+  same repeatable-read, tenant-scoped transaction as its event headers, with
+  site/device/lease authority rows locked. It checks the stored digest/sequence
+  chain and exposes
+  only the reviewed retail held-reservation projection; unrelated events
+  advance the cursor without returning raw payloads, and the lookahead row
+  cannot leak a projection. The original metadata-only reader still never
+  selects event JSON. Changed/invalid JSON, sensitive extra fields, cashier
+  role, late lease expiry and pagination are covered.
+- **PASS / NOT RUN:** affected Python matrix
+  `python -m unittest tests.test_connected_site_v15
+  tests.test_connected_site_gateway tests.test_connected_site_event_read
+  tests.test_connected_site_event_feed tests.test_connected_site_event_projection
+  tests.test_connected_site_postgres17` completed 41 tests: **37 PASS,
+  4 opt-in real-PostgreSQL SKIPPED**. Claims guard **179/179 PASS**,
+  `git diff --check` **PASS**, independent read-only security/product review
+  **ACCEPT**. No live PostgreSQL JSONB/locking proof, deployed ingress,
+  native consumer, two-device delivery or production sync was run. The
+  full terminal reservation lifecycle, role-specific café payload policy and
+  durable cloud client cursor remain separate work; connected mode stays off.
+- **Published head unchanged:** draft PR #752 is still `d10cccb0` while Native
+  run `41587213794` remains in the full Android test shard; five other jobs
+  have passed. App remains **FAIL** at the stale PostgreSQL rehearsal and
+  dependency security remains **FAIL** at app/kernel minimatch. This private
+  source has no hosted CI result and must not inherit older artifact proof.
 
 ## 2026-11-03 06:26 UTC private process/import event-order contract
 
