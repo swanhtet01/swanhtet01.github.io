@@ -74,6 +74,102 @@ void main() {
       final approved = verify(approvedBytes);
       expect(approved.publicKey, devicePublic);
       expect(approved.approvalDigest, isNotEmpty);
+      const nonce =
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+      const leaseDigest =
+          'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+      const authorityDigest =
+          'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
+      final requestUnsigned = <String, Object?>{
+        'contract': connectedCloudFeedReadRequestContract,
+        'workspaceId': 'workspace-1',
+        'siteId': 'site-1',
+        'actorId': 'actor-1',
+        'deviceId': 'device-1',
+        'clientFingerprint': fingerprint,
+        'enrollmentEvidenceDigest': enrollmentDigest,
+        'authorityGeneration': 2,
+        'authorityPayloadDigest': authorityDigest,
+        'revocationGeneration': 3,
+        'afterSequence': 0,
+        'priorEventDigest': null,
+        'limit': 64,
+        'leaseDigest': leaseDigest,
+        'issuedAt': DateTime.fromMillisecondsSinceEpoch(
+          now - 1000,
+          isUtc: true,
+        ).toIso8601String(),
+        'requestNonce': nonce,
+        'signingKeyId': fingerprint,
+        'signatureAlgorithm': 'ed25519',
+      };
+      final requestBytes = canonicalConnectedSiteJson({
+        ...requestUnsigned,
+        'signature': await _sign(requestUnsigned, device),
+      });
+      final expected = ConnectedSiteRetailFeedExpectation(
+        workspaceId: 'workspace-1',
+        siteId: 'site-1',
+        actorId: 'actor-1',
+        deviceId: 'device-1',
+        authorityGeneration: 2,
+        revocationGeneration: 3,
+        authorityPayloadDigest: authorityDigest,
+        leaseDigest: leaseDigest,
+        requestDigest: connectedSiteSha256(jsonDecode(requestBytes)),
+        afterSequence: 0,
+        priorEventDigest: null,
+        limit: 64,
+      );
+      void verifyPair(
+        String request, {
+        String? retainedApprovalDigest,
+        ConnectedSiteRetailFeedExpectation? boundExpected,
+      }) => verifyRetainedCloudFeedReadWithApprovalSync(
+        requestBytes: request,
+        approvalBytes: approvedBytes,
+        approvalDigest: retainedApprovalDigest ?? approved.approvalDigest,
+        pinnedCloudIssuerKeys: {'cloud-issuer-1': issuerPublic},
+        pinnedIssuerKeyGeneration: 1,
+        expectedApprovalSequence: 1,
+        expectedPreviousApprovalDigest: null,
+        expected: boundExpected ?? expected,
+        requestNonce: nonce,
+        clientFingerprint: fingerprint,
+        enrollmentEvidenceDigest: enrollmentDigest,
+        signingKeyId: fingerprint,
+        sessionGeneration: 1,
+        trustedAtIssueMillis: now,
+      );
+      expect(() => verifyPair(requestBytes), returnsNormally);
+      expect(
+        () => verifyPair(requestBytes, retainedApprovalDigest: leaseDigest),
+        throwsFormatException,
+      );
+      final wrongKeyRequest = canonicalConnectedSiteJson({
+        ...requestUnsigned,
+        'signature': await _sign(requestUnsigned, issuer),
+      });
+      expect(
+        () => verifyPair(
+          wrongKeyRequest,
+          boundExpected: ConnectedSiteRetailFeedExpectation(
+            workspaceId: expected.workspaceId,
+            siteId: expected.siteId,
+            actorId: expected.actorId,
+            deviceId: expected.deviceId,
+            authorityGeneration: expected.authorityGeneration,
+            revocationGeneration: expected.revocationGeneration,
+            authorityPayloadDigest: expected.authorityPayloadDigest,
+            leaseDigest: expected.leaseDigest,
+            requestDigest: connectedSiteSha256(jsonDecode(wrongKeyRequest)),
+            afterSequence: expected.afterSequence,
+            priorEventDigest: expected.priorEventDigest,
+            limit: expected.limit,
+          ),
+        ),
+        throwsFormatException,
+      );
       for (final invalid in [
         await signed({...unsigned, 'purpose': 'lan-pairing.v1'}),
         await signed({...unsigned, 'workspaceId': 'other'}),

@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 
 import 'shop_connected_site_cloud_feed_contract.dart';
+import 'shop_connected_cloud_device_key_approval.dart';
 import 'shop_connected_site_authority_store.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_offline_staff_lease.dart';
@@ -12,6 +13,58 @@ import 'shop_staff_authorization.dart';
 
 const connectedCloudFeedReadRequestContract =
     'supermega.connected-site-event-read-request.v1';
+
+/// Historical request proof for one retained v41 page. All expected approval
+/// chain and issuer values must be supplied from independently authenticated
+/// state, never copied from the retained approval or request JSON.
+void verifyRetainedCloudFeedReadWithApprovalSync({
+  required String requestBytes,
+  required String approvalBytes,
+  required String approvalDigest,
+  required Map<String, List<int>> pinnedCloudIssuerKeys,
+  required int pinnedIssuerKeyGeneration,
+  required int expectedApprovalSequence,
+  required String? expectedPreviousApprovalDigest,
+  required ConnectedSiteRetailFeedExpectation expected,
+  required String requestNonce,
+  required String clientFingerprint,
+  required String enrollmentEvidenceDigest,
+  required String signingKeyId,
+  required int sessionGeneration,
+  required int trustedAtIssueMillis,
+}) {
+  final approval = ConnectedCloudDeviceKeyApprovalV1.parseAndVerifyAt(
+    canonicalBytes: approvalBytes,
+    pinnedCloudIssuerKeys: pinnedCloudIssuerKeys,
+    workspaceId: expected.workspaceId,
+    siteId: expected.siteId,
+    deviceId: expected.deviceId,
+    clientFingerprint: clientFingerprint,
+    enrollmentEvidenceDigest: enrollmentEvidenceDigest,
+    signingKeyId: signingKeyId,
+    pinnedIssuerKeyGeneration: pinnedIssuerKeyGeneration,
+    expectedApprovalSequence: expectedApprovalSequence,
+    expectedPreviousApprovalDigest: expectedPreviousApprovalDigest,
+    sessionGeneration: sessionGeneration,
+    revocationGeneration: expected.revocationGeneration,
+    trustedAtMillis: trustedAtIssueMillis,
+  );
+  if (approval.approvalDigest != approvalDigest) {
+    throw const FormatException(
+      'connected_cloud_device_approval_digest_mismatch',
+    );
+  }
+  verifyRetainedCloudFeedReadRequestSync(
+    canonicalBytes: requestBytes,
+    expected: expected,
+    requestNonce: requestNonce,
+    clientFingerprint: approval.clientFingerprint,
+    enrollmentEvidenceDigest: approval.enrollmentEvidenceDigest,
+    signingKeyId: approval.signingKeyId,
+    approvedCloudSigningPublicKey: approval.publicKey,
+    trustedAtIssueMillis: trustedAtIssueMillis,
+  );
+}
 
 /// Historical signature check for the synchronous backup reader. The caller
 /// must supply a separately approved cloud-request public key; a pairing key
