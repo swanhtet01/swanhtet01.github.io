@@ -1,9 +1,32 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 00:01 UTC
+- Last verified: 2026-11-03 00:17 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 00:17 UTC private gateway peer-binding foundation
+
+- Public draft PR #752 remains fixed at
+  `289ec76de4b80cd2de437afc3b28cfe76192ec1e`; no newer source was
+  published or deployed. Native run `41549050338` is **IN PROGRESS**:
+  Windows PC, isolated Android/Windows/iOS QA and iPad/iOS jobs **PASS**;
+  full Android remains in progress, so gallery/APK and installed acceptance
+  are not claimed. App CI is **FAIL** on the stale PostgreSQL rehearsal,
+  Dependency Security **FAIL**, Kernel **PASS** on that public head.
+- Private implementation `dae723620227954b493612e3a9083d740811a3f7`
+  (tree `307f90fe26f9837a5d52afd3e596264f866de61c`) adds an unmounted
+  gateway principal-attestation adapter and adversarial synthetic tests. It
+  accepts only a transient peer attestation bound to the same ASGI request,
+  named gateway, current enabled tenant/site authority and active enrolled
+  device fingerprint/session generation, observed within 30 seconds. Missing,
+  stale, replayed, substituted, revoked or HTTP-self-asserted identity fails
+  closed. Connected-site Python regression **45/45 PASS**, Python compilation,
+  claims guard **179/179 PASS**, whitespace and independent final-diff review
+  **PASS**. This is source-only: no real mTLS ingress, platform key custody,
+  issuer, mounted route, deployed connected tables or two-device delivery is
+  proven; connected mode remains disabled. Remote event download/replication
+  is still **NOT RUN** and is a distinct next implementation dependency.
 
 ## 2026-11-03 00:01 UTC exact-head App CI terminal
 
