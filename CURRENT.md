@@ -1,9 +1,45 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 05:41 UTC
+- Last verified: 2026-11-03 05:56 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 05:56 UTC private Windows rehearsal closure hardening
+
+- **PASS (source only):** private implementation
+  `c766dd1b7cca3b5df11a62914e7714150f37f05b`, tree
+  `2db0725087aedb820b2e1cc364c8b4da43e66fea`, parent `2f1d0447`,
+  changes only five PostgreSQL Windows closure/profile/bootstrap source and
+  test paths. Binary patch SHA-256 is
+  `8b68a37edb5dc398e45d14a5aaf14247708538d33c0b2331db6be2133e379eb0`.
+  The sanitized closure verifier now rejects duplicate/disconnected/future
+  process ancestry, processes without an executed-image binding, and claimed
+  executed files with no process. Closure/profile/PowerShell binding paths
+  reject ordinary Win32 trailing-dot/space and reserved-device aliases,
+  controls, rooted paths and traversal. Focused Node suites: **54/54 PASS**;
+  `git diff --check` PASS. Independent read-only source review accepted the
+  fail-closed design after a Windows-alias finding was corrected.
+- **FAIL / BLOCKED (unchanged rehearsal gate):**
+  `node tools/record_postgres17_rehearsal.mjs --verify` returned exit 1,
+  `database_rehearsal_evidence_stale`, `secretValuesExposed:false`. No Windows
+  PowerShell, ETW, PostgreSQL, installer, runtime-module or Python/Node import
+  execution was performed. This source check cannot prove file IDs, 8.3 or
+  hardlink aliases, complete observed load closure, or a genuine receipt;
+  pending policy/observer/profile approvals and `loadClosureComplete:false`
+  remain unchanged. Stage 2 is still disabled/non-authoritative.
+- **BLOCKED (workflow route):** read-only GitHub inspection found draft PR
+  #753 at `6e3d1511a9711e752a8b5529164d8ecb54a4bf3f`, base `main`,
+  `mergeStateStatus:BLOCKED`. Its App and Kernel checks passed, but app,
+  kernel and runtime-pip dependency audit jobs failed on the older main-based
+  lane. The workflow is not registered on default branch. A reviewed merge
+  under the existing rules and a separately authorized exact-SHA,
+  non-authoritative Windows observer probe are needed before a controlled
+  runtime-candidate capture; neither occurred here. Owner must not treat the
+  probe as installer/rehearsal authorization. Full stage 2 additionally needs
+  reviewed official component authentication, complete binding/load evidence,
+  and explicit isolated Windows execution approval. Public PR #752 remains
+  draft at `5a9e89bb`; this private successor has **NOT RUN** hosted CI.
 
 ## 2026-11-03 05:41 UTC private connected-client recovery checkpoint
 
