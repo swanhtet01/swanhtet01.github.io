@@ -16,9 +16,9 @@
   exact full-table inventory, retained signatures and bindings at the signed
   time sample. Signed pre-sample revocation, hidden enrollment/authority rows,
   mismatched base lease role, extra table and expired signed proof fail. The
-  complete schema suite **12/12 PASS** in 1m25s on parent `29adb71e` before
-  the inventory-only successor; final-source focused test **1/1 PASS** and
-  two-path Flutter analysis **PASS**. Independent security review **ACCEPT**
+  complete schema suite **12/12 PASS** in 1m19s on the final native tree;
+  final-source focused test **1/1 PASS** and two-path Flutter analysis
+  **PASS**. Independent security review **ACCEPT**
   only for this unmounted historical helper and fixture.
 - **BLOCKED / NOT RUN:** nonempty-v41 open/backup integration is not accepted:
   it still needs unfiltered capped tables from one SQLite snapshot, immutable
