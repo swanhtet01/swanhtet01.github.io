@@ -43,6 +43,15 @@
   transaction-bound recheck, production key custody, real PostgreSQL and
   installed two-device evidence remain required. Connected mode stays off;
   this private commit is not in hosted CI and must not be claimed ready.
+  Read-only v41 preflight found the client v39 signed time stream has no live
+  time-grant accessor (`timeGranted:false` even after persistence/restore),
+  while the current v37 runtime uses volatile same-boot acceptance. These
+  are different evidence domains. A v41 page must not label a retained v39
+  head or restored v37 acceptance as current time. The safe next code slice
+  is a reviewed same-boot client time reading with its exact signed entry,
+  acknowledgement, head, boot and monotonic proof; then migrate v40→v41 with
+  an empty-v40-only path and one-to-one request evidence. No v41 DDL has
+  been applied or claimed as verified.
 
 ## 2026-11-03 11:00 UTC private connected CI shard repair
 
