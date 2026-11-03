@@ -24,6 +24,7 @@ from supermega_runtime.connected_site_v15 import (
 )
 from supermega_runtime.connected_site_event_feed import read_event_headers
 from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
+from tests.connected_site_signed_page_fixture import read_and_sign_test_only_page
 from tests.test_connected_site_event_read import _fixture, _resign
 from tests.test_connected_site_v15 import DEVICE_A, DEVICE_B, NOW, _authority, _upload
 
@@ -296,6 +297,26 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
             return event_digest
 
         first_digest = append_event(1, None)
+        signed_now = datetime.now(timezone.utc)
+        signed_request = _resign(
+            request,
+            issuedAt=signed_now.isoformat(
+                timespec="milliseconds"
+            ).replace("+00:00", "Z"),
+        )
+        signed = read_and_sign_test_only_page(
+            connection_factory=lambda: self.psycopg.connect(self.runtime_url),
+            principal=principal, authority=authority, lease=lease,
+            request=signed_request, now=signed_now,
+            issuer_key_id="test_feed", issuer_seed=23,
+        )
+        signed_page = json.loads(signed["pageJson"])
+        signed_proof = json.loads(signed["proofJson"])
+        self.assertEqual(signed_page["headers"][0]["eventDigest"], first_digest)
+        self.assertEqual(signed_proof["pageDigest"], signed_page["pageDigest"])
+        self.assertEqual(signed_proof["requestDigest"], digest(signed_request))
+        self.assertEqual(signed_proof["deviceId"], "device-a")
+        self.assertNotIn("privateRemark", signed["pageJson"])
 
         def page(read_request, *, factory=None):
             return read_event_headers(

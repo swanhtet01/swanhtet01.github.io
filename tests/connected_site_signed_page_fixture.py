@@ -8,13 +8,19 @@ keys never constitute production authority or a deployable signing path.
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
+import re
+from typing import Any, Mapping
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from supermega_runtime.connected_site_event_feed import (
     EventHeader, EventHeaderPage, RetailReservationPage,
+    read_retail_reservation_page,
 )
-from supermega_runtime.connected_site_v15 import canonical_json, digest
+from supermega_runtime.connected_site_v15 import (
+    ConnectedSiteV15Error, canonical_json, digest,
+)
 
 
 def _signature(seed: int, fields: dict) -> str:
@@ -22,6 +28,71 @@ def _signature(seed: int, fields: dict) -> str:
         canonical_json(fields).encode("utf-8")
     )
     return base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+
+
+def read_and_sign_test_only_page(
+    *, connection_factory: Any, principal: Any, authority: Any,
+    lease: Mapping[str, Any], request: Mapping[str, Any], now: datetime,
+    issuer_key_id: str, issuer_seed: int,
+) -> dict[str, str]:
+    """Exercise the checked SQL reader and seal its exact result with a test key.
+
+    This is not a mounted route or production signer. A separate device/issuer
+    custody and post-read revocation protocol remain release gates.
+    """
+    request_snapshot = dict(request)
+    lease_snapshot = dict(lease)
+    checked_page = read_retail_reservation_page(
+        connection_factory=connection_factory, principal=principal,
+        authority=authority, lease=lease_snapshot, request=request_snapshot,
+        now=now,
+    )
+    page = checked_page.to_wire()
+    if (
+        not isinstance(now, datetime) or now.tzinfo is None
+        or not isinstance(issuer_key_id, str)
+        or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", issuer_key_id)
+        or page["requestDigest"] != digest(request_snapshot)
+        or page["leaseDigest"] != lease_snapshot.get("payloadDigest")
+        or page["workspaceId"] != principal.workspace_id
+        or page["siteId"] != principal.site_id
+        or page["deviceId"] != principal.device_id
+        or checked_page.request_nonce != request_snapshot.get("requestNonce")
+    ):
+        raise ConnectedSiteV15Error("connected_site_test_page_binding_invalid")
+    issued = int(now.astimezone(timezone.utc).timestamp() * 1000)
+    lease_expiry = datetime.fromisoformat(lease_snapshot["expiresAt"].replace("Z", "+00:00"))
+    expires = min(issued + 30000, int(lease_expiry.timestamp() * 1000))
+    if issued <= 0 or expires <= issued:
+        raise ConnectedSiteV15Error("connected_site_test_page_expired")
+    proof = {
+        "contract": "supermega.connected-cloud-feed-proof.v1",
+        "protocolVersion": 1,
+        "issuerKeyId": issuer_key_id,
+        "issuedAtMillis": issued,
+        "expiresAtMillis": expires,
+        "workspaceId": page["workspaceId"],
+        "siteId": page["siteId"],
+        "actorId": page["actorId"],
+        "actorRole": lease_snapshot["role"],
+        "deviceId": page["deviceId"],
+        "authorityGeneration": page["authorityGeneration"],
+        "revocationGeneration": page["revocationGeneration"],
+        "authorityPayloadDigest": page["authorityPayloadDigest"],
+        "leaseDigest": page["leaseDigest"],
+        "requestDigest": page["requestDigest"],
+        "requestNonce": checked_page.request_nonce,
+        "afterSequence": page["afterSequence"],
+        "priorEventDigest": page["priorEventDigest"],
+        "nextSequence": page["nextSequence"],
+        "nextEventDigest": page["nextEventDigest"],
+        "pageDigest": page["pageDigest"],
+    }
+    return {
+        "requestJson": canonical_json(request_snapshot),
+        "pageJson": canonical_json(page),
+        "proofJson": canonical_json({**proof, "signature": _signature(issuer_seed, proof)}),
+    }
 
 
 def build_signed_v41_fixture() -> dict[str, str]:
