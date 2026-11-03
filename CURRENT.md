@@ -1,9 +1,38 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 02:00 UTC
+- Last verified: 2026-11-03 02:21 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 02:21 UTC private typed retail projection boundary
+
+- Public draft PR #752 remains
+  `289ec76de4b80cd2de437afc3b28cfe76192ec1e`; no new publication or
+  connected-mode activation occurred. Private source
+  `cade088a450adeeae22e661bd3e434bbd58fab9c` (tree
+  `f6c97de152b362bebb4ae279234d60927c8729bd`) adds an unmounted,
+  manager/owner-only typed retail reservation-held candidate projection.
+  It requires current signed `managementRead` authority, exact event/payload/
+  line shape, tenant binding, state/version/time and digest consistency, then
+  emits only product IDs, quantities, reservation ID/state and candidate
+  digests. Actor/device IDs, free text and financial fields are omitted.
+  Independent security review **ACCEPT** after correcting a provenance
+  overclaim: the supplied candidate digest is not a PostgreSQL row or signed
+  upload proof. Documentation successors `c82f596ea1e9e7878456b24812e1c2600fd33dca`
+  and `037f82d4be3ad1fe7d1aab923651be7a67d62323` record this limit and
+  clarify that no payload projection is approved for delivery.
+- Connected-site source tests **58 PASS / 4 SKIPPED** (62 total), Python
+  compilation and whitespace **PASS**. The four skipped cases are the opt-in
+  disposable PostgreSQL 17 tests; real reader transaction/RLS/concurrency,
+  installed device and two-device delivery are **NOT RUN**. Native LAN replica
+  state has a durable cursor, but its full-state event contract cannot safely
+  consume this cloud candidate: there is no authenticated PostgreSQL event/
+  header binding, release/commit/expiry lifecycle, role-specific payload feed
+  or cloud client apply contract. No stock availability decision or transport
+  uses the new projection; connected mode remains default-off. Next Cloud
+  work is to prove real PG17 reader behavior, then complete typed reservation
+  lifecycle and authenticated durable apply before mounting any route.
 
 ## 2026-11-03 02:00 UTC private event visibility and PG17 test preparation
 
