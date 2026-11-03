@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 22:01 UTC
+- Last verified: 2026-11-03 22:15 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 22:15 UTC private real-event-anchor prerequisite
+
+- **PASS (private synthetic fixture only):** implementation
+  `10a0713166a60c9ba60035d6fc54eb7bbe543b71`, tree
+  `4a40df59a6888f2930cb641002883bfab57395a5`, native tree
+  `e02f88b5d679536e014e7b28a8f8a54cae2f8443`, two-file patch SHA-256
+  `1607c59526ec711b84e4bb5a4564fb1171362758627566a187fd09789ff95189`.
+  Opt-in native v41 fixture mode now binds its first signed page and next
+  cursor to the SHA-256 of a canonical synthetic first event, rather than the
+  prior placeholder `e*64`. The Python test-only bridge reads that retained
+  head and uses it as its checked mock-SQL predecessor; no signed bytes are
+  relabeled after issuance. Unset mode keeps the old checked-in Python bytes
+  and process fixture intact. Exact-source opt-in A/B HTTP-to-native harness
+  **PASS** (A export 14.093s, B export 12.334s, combined native 109.998s);
+  default native file **14/14 PASS** in 2m04s; Flutter analysis, Dart format,
+  Python compilation and diff check **PASS**. Independent read-only review
+  **ACCEPT** as a bounded prerequisite.
+- **NOT RUN / BLOCKED:** no actual PostgreSQL-backed A/B-to-native handoff has
+  run. The current Python bridge still mocks SQL, and no authorized test host
+  with both verified Flutter and disposable PG17 is identified. A future real
+  PG seeder must insert and verify the exact first canonical event before
+  issuing the cursor-1 page; merely copying its digest as an unverified anchor
+  would not prove source history. The separate sixth real-PG case remains
+  **SKIPPED locally** and is not on public head `78e81ddb`. Native
+  `41724753880` still has a useful Android job running; keep that head fixed.
+  Connected production mode, real gateway identity and installed two-device
+  operation remain off/unverified.
 
 ## 2026-11-03 22:01 UTC private two-device disposable-PG17 test candidate
 
