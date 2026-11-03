@@ -27,6 +27,7 @@ import 'package:supermega_shop/shop_staff_authorization.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
 
 import 'historical_shop_fixture_support.dart';
+import 'v41_cloud_feed_process_fixture.dart';
 
 void main() {
   test('v41 signed historical page stays closed after later revocation', () async {
@@ -810,35 +811,9 @@ void main() {
       for (final table in shopCloudFeedV41HistoricalTables)
         table: await rows(table),
     };
-    final trust = ShopCloudFeedV41FirstPageTrust(
-      workspaceId: workspace,
-      siteId: site,
-      actorId: 'actor_fixture',
-      deviceId: device,
-      coordinatorDeviceId: coordinator,
-      clientFingerprint: fingerprint,
-      clientSigningKeyId: fingerprint,
-      sessionGeneration: 1,
-      authoritySequence: 1,
-      revocationGeneration: 1,
-      cloudIssuerGeneration: 1,
-      coordinatorBindingDigest: 'c' * 64,
-      coordinatorBindingGeneration: 1,
-      timeAuthorityKeyId: 'time_fixture',
-      timeAuthorityKeyGeneration: 1,
-      timeAuthorityEpoch: 1,
-      feedIssuerKeys: {'feed_fixture': feedPublic},
-      cloudApprovalIssuerKeys: {
-        'cloud_fixture': (await cloudPair.extractPublicKey()).bytes,
-      },
-      leaseIssuerKeys: {
-        'lease_fixture': (await leasePair.extractPublicKey()).bytes,
-      },
-      authorityIssuerKeys: {'authority_fixture': authorityPublic},
-      ownerIssuerKeys: {'owner_fixture': ownerKey},
-      timeAuthorityKeys: {'time_fixture': timeKey},
-      clientKeys: {fingerprint: clientKey},
-    );
+    final trust = await v41ProcessFixtureTrust();
+    expect(trust.feedIssuerKeys['feed_fixture'], feedPublic);
+    expect(trust.clientKeys[fingerprint], clientKey);
     expect(
       () => ShopDatabase.withCorrectionReceiptVerifier(
         correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
@@ -1010,6 +985,21 @@ void main() {
       proofJson: proofJson,
       evidence: firstEvidenceForTwoPage,
     );
+    final processFixturePath =
+        Platform.environment['SUPERMEGA_CLOUD_FEED_V41_FIXTURE_DATABASE'];
+    if (processFixturePath != null) {
+      final destination = File(processFixturePath);
+      expect(destination.isAbsolute, isTrue);
+      expect(await destination.exists(), isFalse);
+      await twoPageDatabase.close();
+      await twoPageFile.copy(destination.path);
+      ShopBackup.verifySnapshot(
+        destination,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      );
+      return;
+    }
     final secondExpected = ConnectedSiteRetailFeedExpectation(
       workspaceId: workspace,
       siteId: site,

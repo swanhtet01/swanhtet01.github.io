@@ -15,6 +15,39 @@ from test_shop_process_interruption import _kill_tree
 
 WORKER = "test/shop_connected_cloud_feed_interrupt_worker_test.dart"
 TEST_NAME = "synthetic authenticated cloud page process interruption"
+V41_FIXTURE_TEST = "test/shop_connected_cloud_feed_schema_test.dart"
+V41_FIXTURE_NAME = "v41 signed historical page stays closed after later revocation"
+
+
+def _prepare_v41(flutter: str, database: Path) -> None:
+    environment = os.environ.copy()
+    environment.update({
+        "SUPERMEGA_CLOUD_FEED_V41_FIXTURE_DATABASE": str(database),
+        "TMPDIR": str(database.parent),
+    })
+    command = [flutter, "test", "--no-pub", V41_FIXTURE_TEST,
+               "--plain-name", V41_FIXTURE_NAME, "--concurrency=1",
+               "--reporter=expanded"]
+    with tempfile.TemporaryFile(mode="w+") as output:
+        process = subprocess.Popen(
+            command, env=environment, stdout=output,
+            stderr=subprocess.STDOUT, start_new_session=True, text=True,
+        )
+        try:
+            try:
+                process.wait(timeout=120)
+            except subprocess.TimeoutExpired as exc:
+                _kill_tree(process)
+                raise RuntimeError("v41 signed fixture preparation timed out") from exc
+            if process.returncode != 0 or not database.is_file():
+                output.seek(0)
+                raise RuntimeError(
+                    "v41 signed fixture preparation failed:\n"
+                    + output.read()[-4000:]
+                )
+        finally:
+            if process.poll() is None:
+                _kill_tree(process)
 
 
 def _run(flutter: str, phase: str, database: Path, marker: Path, *, kill: bool) -> None:
@@ -67,6 +100,8 @@ def main() -> None:
     for kill_phase, verify_phase in (
         ("kill_after_insert", "verify_rollback"),
         ("kill_after_commit", "verify_commit"),
+        ("v41_kill_before_commit", "v41_verify_rollback"),
+        ("v41_kill_after_commit", "v41_verify_commit"),
     ):
         started = time.monotonic()
         print(f"cloud_feed_process_interruption_started:{kill_phase}:{verify_phase}", flush=True)
@@ -74,6 +109,8 @@ def main() -> None:
             directory = Path(root)
             database = directory / "shop.sqlite"
             marker = directory / "checkpoint"
+            if kill_phase.startswith("v41_"):
+                _prepare_v41(flutter, database)
             _run(flutter, kill_phase, database, marker, kill=True)
             _run(flutter, verify_phase, database, marker, kill=False)
         print(
