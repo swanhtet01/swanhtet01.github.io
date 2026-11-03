@@ -1,9 +1,27 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 02:21 UTC
+- Last verified: 2026-11-03 02:25 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 02:25 UTC cumulative private candidate review
+
+- Against unchanged public draft PR #752 head
+  `289ec76de4b80cd2de437afc3b28cfe76192ec1e`, the clean private source
+  `f4efca30406b040e55cf4fbe08cf8a01767b5d9c` (tree
+  `cbd88269738be3e09f716d58d3f5f01ac41eb1ad`) is a strict descendant:
+  **17 commits / 16 paths**, binary patch SHA-256
+  `d16b7852ca2b204e5ffd3b58c430df1de240ab598597ecb873f7a30a68f02e5d`.
+  Independent exact-range manual security review **ACCEPT** with no concrete
+  bypass found; this was not a generated scan report because that review
+  helper was unavailable. Final-source connected-site discovery **58 PASS /
+  4 SKIPPED**, Windows bootstrap contract **14/14 PASS**, cumulative whitespace
+  **PASS**, and claims guard **179/179 PASS**. The opt-in PostgreSQL tests and
+  actual Windows observer remain **NOT RUN**. The new projection is not bound
+  to a PostgreSQL event header or durable cloud-client apply and must not be
+  mounted or used for stock decisions. No PR update, CI run, deployment or
+  connected-mode enablement is authorized by this review.
 
 ## 2026-11-03 02:21 UTC private typed retail projection boundary
 
