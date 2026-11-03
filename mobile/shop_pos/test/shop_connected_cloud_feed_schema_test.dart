@@ -1010,62 +1010,112 @@ void main() {
       proofJson: proofJson,
       evidence: firstEvidenceForTwoPage,
     );
-    await twoPageDatabase.transaction(() async {
-      await twoPageDatabase.customInsert(
-        'INSERT INTO shop_connected_cloud_feed_pages '
-        '(page_digest, stream_digest, after_sequence, prior_event_digest, '
-        'next_sequence, next_event_digest, page_json, request_nonce, '
-        'authenticated_proof_json, authenticated_proof_digest) '
-        'VALUES (?, ?, 1, ?, 2, ?, ?, ?, ?, ?)',
-        variables: [
-          Variable<String>(secondPageDigest),
-          Variable<String>(streamDigest),
-          Variable<String>('e' * 64),
-          Variable<String>('d' * 64),
-          Variable<String>(secondPageJson),
-          Variable<String>(secondNonce),
-          Variable<String>(secondProofJson),
-          Variable<String>(
-            secondPageRow['authenticated_proof_digest'] as String,
-          ),
-        ],
-      );
-      await twoPageDatabase.customInsert(
-        'INSERT INTO shop_connected_cloud_feed_page_evidence '
-        '(page_digest, request_json, request_digest, cloud_key_approval_json, '
-        'cloud_key_approval_digest, lease_digest, authority_payload_digest, '
-        'enrollment_evidence_digest, time_entry_digest, time_ack_digest, '
-        'time_head_digest, boot_session_id, sample_monotonic_millis, '
-        'trusted_now_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        variables: [
-          Variable<String>(secondPageDigest),
-          Variable<String>(secondRequestJson),
-          Variable<String>(secondRequestDigest),
-          Variable<String>(cloudApprovalJson),
-          Variable<String>(
-            secondEvidenceRow['cloud_key_approval_digest'] as String,
-          ),
-          Variable<String>(lease.payloadDigest),
-          Variable<String>(authorityPayload.payloadDigest),
-          Variable<String>(approval.evidenceDigest),
-          Variable<String>(signedTime.entryDigest),
-          Variable<String>(signedAck.ackDigest),
-          Variable<String>(timeHead.headDigest),
-          Variable<String>('b' * 64),
-          const Variable<int>(8001),
-          const Variable<int>(now + 1),
-        ],
-      );
-      await twoPageDatabase.customUpdate(
-        'UPDATE shop_connected_cloud_feed_heads SET next_sequence = 2, '
-        'next_event_digest = ?, last_page_digest = ? WHERE stream_digest = ?',
-        variables: [
-          Variable<String>('d' * 64),
-          Variable<String>(secondPageDigest),
-          Variable<String>(streamDigest),
-        ],
-      );
-    });
+    final secondExpected = ConnectedSiteRetailFeedExpectation(
+      workspaceId: workspace,
+      siteId: site,
+      actorId: 'actor_fixture',
+      deviceId: device,
+      authorityGeneration: 1,
+      revocationGeneration: 1,
+      authorityPayloadDigest: authorityPayload.payloadDigest,
+      leaseDigest: lease.payloadDigest,
+      requestDigest: secondRequestDigest,
+      afterSequence: 1,
+      priorEventDigest: 'e' * 64,
+      limit: 64,
+    );
+    final secondEvidence = ShopCloudFeedV41FirstPageEvidence(
+      requestJson: secondRequestJson,
+      cloudKeyApprovalJson: cloudApprovalJson,
+      enrollmentEvidenceDigest: approval.evidenceDigest,
+      timeEntryDigest: signedTime.entryDigest,
+      timeAckDigest: signedAck.ackDigest,
+      timeHeadDigest: timeHead.headDigest,
+      bootSessionId: 'b' * 64,
+      sampleMonotonicMillis: 8001,
+    );
+    Future<void> applySecondPage(
+      ShopDatabase target,
+      _V41FixtureTime time, {
+      Future<void> Function()? beforeCommit,
+    }) => target.testOnlyApplyConnectedCloudFeedSecondPageV41(
+      trust: trust,
+      timeAuthority: time,
+      expected: secondExpected,
+      actorRole: 'manager',
+      requestNonce: secondNonce,
+      pageJson: secondPageJson,
+      proofJson: secondProofJson,
+      evidence: secondEvidence,
+      testOnlyBeforeCommit: beforeCommit,
+    );
+    var secondPageRevocationApplied = false;
+    await expectLater(
+      applySecondPage(
+        twoPageDatabase,
+        _V41FixtureTime(workspace, site, [now + 1], secondEvidence),
+        beforeCommit: () async =>
+            throw StateError('injected_page_two_rollback'),
+      ),
+      throwsStateError,
+    );
+    expect(
+      await twoPageDatabase
+          .customSelect('SELECT * FROM shop_connected_cloud_feed_pages')
+          .get(),
+      hasLength(1),
+      reason: 'page, evidence and cursor must roll back together',
+    );
+    expect(
+      await twoPageDatabase
+          .customSelect('SELECT * FROM shop_connected_cloud_feed_page_evidence')
+          .get(),
+      hasLength(1),
+    );
+    expect(
+      (await twoPageDatabase
+              .customSelect(
+                'SELECT next_sequence FROM shop_connected_cloud_feed_heads',
+              )
+              .getSingle())
+          .read<int>('next_sequence'),
+      1,
+    );
+    await expectLater(
+      applySecondPage(
+        twoPageDatabase,
+        _V41FixtureTime(workspace, site, [now + 1], secondEvidence),
+        beforeCommit: () async {
+          await ShopConnectedSiteEnrollmentStore(
+            database: twoPageDatabase,
+            nowMillis: () => now + 500,
+          ).importOwnerEvidence(revocation, verifier: verifier);
+          secondPageRevocationApplied = true;
+        },
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('device is no longer active'),
+        ),
+      ),
+      reason: 'current signed revocation before page-two commit must abort',
+    );
+    expect(secondPageRevocationApplied, isTrue);
+    expect(
+      await twoPageDatabase
+          .customSelect(
+            "SELECT * FROM shop_site_enrollment_evidence WHERE action = 'revoke'",
+          )
+          .get(),
+      isEmpty,
+      reason: 'aborted page-two transaction cannot retain half a revocation',
+    );
+    await applySecondPage(
+      twoPageDatabase,
+      _V41FixtureTime(workspace, site, [now + 1, now + 2], secondEvidence),
+    );
     await twoPageDatabase.close();
     expect(
       () => ShopBackup.verifySnapshot(
@@ -1081,6 +1131,139 @@ void main() {
       trust: trust,
     );
     await twoPageReopened.verifyReadyForUse();
+    await applySecondPage(
+      twoPageReopened,
+      _V41FixtureTime(
+        workspace,
+        site,
+        [now + 3],
+        secondEvidence,
+        initialMonotonicAdvance: 2,
+      ),
+    );
+    expect(
+      await twoPageReopened
+          .customSelect('SELECT * FROM shop_connected_cloud_feed_pages')
+          .get(),
+      hasLength(2),
+      reason: 'same signed second page after restart must not duplicate',
+    );
+    await expectLater(
+      twoPageReopened.testOnlyApplyConnectedCloudFeedSecondPageV41(
+        trust: trust,
+        timeAuthority: _V41FixtureTime(
+          workspace,
+          site,
+          [now + 3],
+          secondEvidence,
+          initialMonotonicAdvance: 2,
+        ),
+        expected: secondExpected,
+        actorRole: 'manager',
+        requestNonce: secondNonce,
+        pageJson: secondPageJson,
+        proofJson: secondProofJson,
+        evidence: ShopCloudFeedV41FirstPageEvidence(
+          requestJson: requestJson,
+          cloudKeyApprovalJson: secondEvidence.cloudKeyApprovalJson,
+          enrollmentEvidenceDigest: secondEvidence.enrollmentEvidenceDigest,
+          timeEntryDigest: secondEvidence.timeEntryDigest,
+          timeAckDigest: secondEvidence.timeAckDigest,
+          timeHeadDigest: secondEvidence.timeHeadDigest,
+          bootSessionId: secondEvidence.bootSessionId,
+          sampleMonotonicMillis: secondEvidence.sampleMonotonicMillis,
+        ),
+      ),
+      throwsStateError,
+      reason: 'changed retained request bytes cannot replay page two',
+    );
+    final alternateNonce = '8' * 64;
+    final alternateRequestUnsigned = <String, Object?>{
+      ...secondRequestUnsigned,
+      'requestNonce': alternateNonce,
+    };
+    final alternateRequestJson = canonicalConnectedSiteJson({
+      ...alternateRequestUnsigned,
+      'signature': await signFields(alternateRequestUnsigned, clientPair),
+    });
+    final alternateRequestDigest = connectedSiteSha256(
+      jsonDecode(alternateRequestJson),
+    );
+    final alternatePageUnsigned = <String, Object?>{
+      ...secondPageUnsigned,
+      'requestDigest': alternateRequestDigest,
+    };
+    final alternatePageDigest = connectedSiteSha256(alternatePageUnsigned);
+    final alternatePageJson = canonicalConnectedSiteJson({
+      ...alternatePageUnsigned,
+      'pageDigest': alternatePageDigest,
+    });
+    final alternateProofUnsigned = <String, Object?>{
+      ...secondProofUnsigned,
+      'requestNonce': alternateNonce,
+      'requestDigest': alternateRequestDigest,
+      'pageDigest': alternatePageDigest,
+    };
+    final alternateProofJson = canonicalConnectedSiteJson({
+      ...alternateProofUnsigned,
+      'signature': await signFields(alternateProofUnsigned, feedPair),
+    });
+    await expectLater(
+      twoPageReopened.testOnlyApplyConnectedCloudFeedSecondPageV41(
+        trust: trust,
+        timeAuthority: _V41FixtureTime(
+          workspace,
+          site,
+          [now + 3],
+          secondEvidence,
+          initialMonotonicAdvance: 2,
+        ),
+        expected: ConnectedSiteRetailFeedExpectation(
+          workspaceId: workspace,
+          siteId: site,
+          actorId: 'actor_fixture',
+          deviceId: device,
+          authorityGeneration: 1,
+          revocationGeneration: 1,
+          authorityPayloadDigest: authorityPayload.payloadDigest,
+          leaseDigest: lease.payloadDigest,
+          requestDigest: alternateRequestDigest,
+          afterSequence: 1,
+          priorEventDigest: 'e' * 64,
+          limit: 64,
+        ),
+        actorRole: 'manager',
+        requestNonce: alternateNonce,
+        pageJson: alternatePageJson,
+        proofJson: alternateProofJson,
+        evidence: ShopCloudFeedV41FirstPageEvidence(
+          requestJson: alternateRequestJson,
+          cloudKeyApprovalJson: secondEvidence.cloudKeyApprovalJson,
+          enrollmentEvidenceDigest: secondEvidence.enrollmentEvidenceDigest,
+          timeEntryDigest: secondEvidence.timeEntryDigest,
+          timeAckDigest: secondEvidence.timeAckDigest,
+          timeHeadDigest: secondEvidence.timeHeadDigest,
+          bootSessionId: secondEvidence.bootSessionId,
+          sampleMonotonicMillis: secondEvidence.sampleMonotonicMillis,
+        ),
+      ),
+      throwsStateError,
+      reason: 'an independently signed alternate second page cannot replace it',
+    );
+    await expectLater(
+      applySecondPage(
+        twoPageReopened,
+        _V41FixtureTime(
+          workspace,
+          site,
+          [now + 30001],
+          secondEvidence,
+          initialMonotonicAdvance: 30000,
+        ),
+      ),
+      throwsFormatException,
+      reason: 'second-page replay cannot renew an expired proof',
+    );
     final twoPageArchive = File('${root.path}/two-page.shopbackup');
     const twoPagePassword = 'synthetic-v41-two-page-only';
     await ShopBackup.exportEncrypted(
@@ -1137,6 +1320,20 @@ void main() {
           )
           .get(),
       hasLength(1),
+    );
+    await expectLater(
+      applySecondPage(
+        twoPageRestored,
+        _V41FixtureTime(
+          workspace,
+          site,
+          [now + 3],
+          secondEvidence,
+          initialMonotonicAdvance: 2,
+        ),
+      ),
+      throwsStateError,
+      reason: 'restore suspension blocks even byte-identical page replay',
     );
     await twoPageRestored.close();
     final pageEvidence = ShopCloudFeedV41FirstPageEvidence(
