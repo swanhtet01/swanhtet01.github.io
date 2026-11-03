@@ -215,7 +215,14 @@ abstract final class ShopBackup {
     required File archive,
     required String password,
     required Directory scratchRoot,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
   }) async {
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw UnsupportedError(
+        'Test cloud-feed pins are unavailable in product builds.',
+      );
+    }
     _checkPassword(password);
     if (database.schemaVersion != supportedSchemaVersion) {
       throw StateError('This Shop schema is not supported for backup.');
@@ -232,7 +239,11 @@ abstract final class ShopBackup {
           '${scratch.path}${Platform.pathSeparator}shop.sqlite',
         );
         await database.exportVerifiedLocalSnapshot(snapshot);
-        verifySnapshot(snapshot, expectedSchemaVersion: database.schemaVersion);
+        verifySnapshot(
+          snapshot,
+          expectedSchemaVersion: database.schemaVersion,
+          testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+        );
         if (await snapshot.length() > maxSnapshotBytes) {
           throw StateError(
             'The local Shop database exceeds the backup size limit.',
@@ -301,7 +312,14 @@ abstract final class ShopBackup {
     ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
     Future<void> Function()? beforePublishForTest,
     Future<void> Function()? afterPublishForTest,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
   }) async {
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw UnsupportedError(
+        'Test cloud-feed pins are unavailable in product builds.',
+      );
+    }
     _checkPassword(password);
     await _requireEmptyRestoreDestination(target);
     if (await archive.length() >
@@ -333,10 +351,15 @@ abstract final class ShopBackup {
           '${staging.path}${Platform.pathSeparator}shop.sqlite',
         );
         await stagedFile.writeAsBytes(cleartext, flush: true);
-        verifySnapshot(stagedFile, expectedSchemaVersion: archiveBytes[5]);
+        verifySnapshot(
+          stagedFile,
+          expectedSchemaVersion: archiveBytes[5],
+          testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+        );
         await ShopDatabase.migrateAndVerifyRestoreFile(
           stagedFile,
           correctionReceiptVerifier: correctionReceiptVerifier,
+          testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
         );
         await _requireNoSidecars(stagedFile);
         if (await stagedFile.length() > maxSnapshotBytes) {

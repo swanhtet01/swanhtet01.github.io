@@ -13233,6 +13233,7 @@ class ShopDatabase extends _$ShopDatabase {
       final snapshot = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase(target),
         correctionReceiptVerifier: correctionReceiptVerifier,
+        testOnlyCloudFeedPinnedKeys: _testOnlyCloudFeedPinnedKeys,
       );
       try {
         await snapshot.verifyReadyForUse();

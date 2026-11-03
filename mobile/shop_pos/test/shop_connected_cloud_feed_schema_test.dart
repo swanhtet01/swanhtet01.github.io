@@ -370,7 +370,79 @@ void main() {
         ),
         throwsFormatException,
       );
+      final encryptedArchive = File(
+        '${appliedDirectory.path}/signed-feed.backup',
+      );
+      const syntheticPassword = 'synthetic-v40-restore-only';
+      await ShopBackup.exportEncrypted(
+        database: applied,
+        archive: encryptedArchive,
+        password: syntheticPassword,
+        scratchRoot: appliedDirectory,
+        testOnlyCloudFeedPinnedKeys: pins,
+      );
       await applied.close();
+      final unpinnedTarget = File(
+        '${appliedDirectory.path}/unpinned-restored.sqlite',
+      );
+      await expectLater(
+        ShopBackup.restoreIntoEmptyDatabase(
+          archive: encryptedArchive,
+          target: unpinnedTarget,
+          password: syntheticPassword,
+        ),
+        throwsFormatException,
+      );
+      expect(await unpinnedTarget.exists(), isFalse);
+      expect(
+        await ShopBackup.restoreMarkerFor(unpinnedTarget).exists(),
+        isFalse,
+      );
+      final wrongPinTarget = File(
+        '${appliedDirectory.path}/wrong-pin-restored.sqlite',
+      );
+      await expectLater(
+        ShopBackup.restoreIntoEmptyDatabase(
+          archive: encryptedArchive,
+          target: wrongPinTarget,
+          password: syntheticPassword,
+          testOnlyCloudFeedPinnedKeys: {'issuer-1': List<int>.filled(32, 0)},
+        ),
+        throwsFormatException,
+      );
+      expect(await wrongPinTarget.exists(), isFalse);
+      expect(
+        await ShopBackup.restoreMarkerFor(wrongPinTarget).exists(),
+        isFalse,
+      );
+      final encryptedTarget = File(
+        '${appliedDirectory.path}/encrypted-restored.sqlite',
+      );
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: encryptedArchive,
+        target: encryptedTarget,
+        password: syntheticPassword,
+        testOnlyCloudFeedPinnedKeys: pins,
+      );
+      ShopBackup.verifySnapshot(
+        encryptedTarget,
+        expectedSchemaVersion: 40,
+        testOnlyCloudFeedPinnedKeys: pins,
+      );
+      final encryptedRestored = ShopDatabase.testOnlyWithCloudFeedPins(
+        executor: NativeDatabase(encryptedTarget),
+        trustedIssuerKeys: pins,
+      );
+      await encryptedRestored.verifyReadyForUse();
+      final encryptedHead = await encryptedRestored
+          .customSelect(
+            'SELECT next_sequence, restore_paused FROM shop_connected_cloud_feed_heads',
+          )
+          .getSingle();
+      expect(encryptedHead.read<int>('next_sequence'), 1);
+      expect(encryptedHead.read<int>('restore_paused'), 1);
+      await expectLater(apply(encryptedRestored), throwsStateError);
+      await encryptedRestored.close();
       ShopBackup.verifySnapshot(
         appliedFile,
         expectedSchemaVersion: 40,
