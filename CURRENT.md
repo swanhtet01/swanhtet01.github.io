@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 19:15 UTC
+- Last verified: 2026-11-03 19:45 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 19:45 UTC synthetic Python/native signed-page bridge
+
+- **PASS (private, synthetic, default-off):** implementation
+  `1829b244a114ed30ca7d0cf09b354d8c422dc5f5`, repository tree
+  `3071e76499c5cd30b2e742859801a7a125bedcf1`, four-path patch SHA-256
+  `5cbcae6c3ba508957067969947c5e4aaa2eac5bc4905b2b71755877973b2982d`.
+  A deterministic Python fixture uses the server's retail page wire types and
+  fixed test-only signing keys; the native v41 consumer applies those exact
+  request/page/proof bytes. Two copied SQLite stores for **one fixture device**
+  prove synthetic outage, reconnect, exact replay and local revocation denial.
+  Altered page bytes fail before the valid apply. The final-source focused
+  Dart case **1/1 PASS in 43s**; the affected Dart file **13/13 PASS in 1m52s**
+  before the final tamper assertion, which was covered by the focused rerun.
+  Python fixture/feed tests **13/13 PASS**; changed-test Flutter analysis,
+  Dart formatting and diff checks **PASS**. Independent read-only review
+  **ACCEPT** for the narrowed cross-language/synthetic-store claim. No
+  production code, listener, issuer custody or default-off gate changed.
+- **Published draft PR #752:** remains at `611bdfc00181860422089274d6aa0a265b61712b`;
+  exact-head Native run `41699288011` was **IN PROGRESS** at 19:45 UTC. This
+  private implementation has no hosted CI evidence; do not move the public
+  head while useful checks run.
+- **NOT RUN / BLOCKED:** the Python fixture does not call the PostgreSQL reader;
+  the server feed is unmounted and unsigned. Distinct enrolled-device sync,
+  propagated revocation, real outage/network recovery, installed Android and
+  Windows proof, production issuer/key custody, PostgreSQL Windows rehearsal,
+  dependency remediation, full-scope secret scan, signing and merchant
+  acceptance remain open. Two copied stores are not two-device pilot evidence.
 
 ## 2026-11-03 19:15 UTC signed v41 process interruption checkpoint
 
