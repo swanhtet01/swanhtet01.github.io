@@ -40,7 +40,16 @@ class EventHeaderPage:
 @dataclass(frozen=True, slots=True)
 class RetailReservationPage:
     headers: EventHeaderPage
-    projections: tuple[dict[str, Any], ...]
+    projections: tuple["RetailProjectionEntry", ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RetailProjectionEntry:
+    """A sanitized view bound to exactly one checked source row."""
+
+    sequence: int
+    event_digest: str
+    projection: dict[str, Any]
 
 
 def _fail(reason: str) -> None:
@@ -51,7 +60,7 @@ def _read_page(
     *, connection_factory: Any, principal: ConnectedSitePrincipal,
     authority: SiteAuthority, lease: Mapping[str, Any],
     request: Mapping[str, Any], now: datetime, include_retail_held: bool,
-) -> tuple[EventHeaderPage, tuple[dict[str, Any], ...]]:
+) -> tuple[EventHeaderPage, tuple[RetailProjectionEntry, ...]]:
     """Read one consistent tenant page after rechecking current DB authority.
 
     Callers must supply a trusted ingress principal, current signed authority,
@@ -160,7 +169,7 @@ def _read_page(
             expected_sequence = grant.after_sequence + 1
             previous = grant.prior_event_digest
             headers: list[EventHeader] = []
-            projections: list[dict[str, Any]] = []
+            projections: list[RetailProjectionEntry] = []
             for index, row in enumerate(rows):
                 if not isinstance(row, tuple) or len(row) != (4 if include_retail_held else 3):
                     _fail("page_shape")
@@ -189,10 +198,14 @@ def _read_page(
                         # Import locally: the projection itself rechecks the
                         # signed actor/lease and rejects unknown payload keys.
                         from .connected_site_event_projection import project_retail_reservation_held
-                        projections.append(project_retail_reservation_held(
-                            principal=principal, authority=authority, lease=lease,
-                            request=request, now=now, event=event,
-                            candidate_event_digest=event_digest,
+                        projections.append(RetailProjectionEntry(
+                            sequence=sequence,
+                            event_digest=event_digest,
+                            projection=project_retail_reservation_held(
+                                principal=principal, authority=authority, lease=lease,
+                                request=request, now=now, event=event,
+                                candidate_event_digest=event_digest,
+                            ),
                         ))
                 previous = event_digest
                 expected_sequence += 1

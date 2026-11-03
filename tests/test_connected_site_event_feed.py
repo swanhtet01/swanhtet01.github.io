@@ -118,8 +118,11 @@ class EventFeedTests(unittest.TestCase):
         )
         self.assertEqual(page.headers.next_sequence, 1)
         self.assertEqual(len(page.projections), 1)
-        self.assertEqual(page.projections[0]["state"], "held")
-        self.assertEqual(page.projections[0]["lines"],
+        self.assertEqual(page.projections[0].sequence, 1)
+        self.assertEqual(page.projections[0].event_digest, digest(event))
+        self.assertEqual(page.projections[0].projection["candidateEventDigest"], digest(event))
+        self.assertEqual(page.projections[0].projection["state"], "held")
+        self.assertEqual(page.projections[0].projection["lines"],
                          [{"productId": "product-1", "quantity": 1}])
         self.assertNotIn("actorId", str(page))
         self.assertNotIn("deviceId", str(page))
@@ -167,6 +170,8 @@ class EventFeedTests(unittest.TestCase):
         )
         self.assertEqual(page.headers.next_sequence, 2)
         self.assertEqual(len(page.projections), 1)
+        self.assertEqual(page.projections[0].sequence, 2)
+        self.assertEqual(page.projections[0].event_digest, digest(event))
         self.assertNotIn("privateNote", str(page))
 
         # The lookahead row proves has_more but cannot leak its projection.
