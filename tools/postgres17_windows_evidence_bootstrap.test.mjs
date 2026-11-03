@@ -26,15 +26,17 @@ const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 function closureFixture() {
   const digest = 'a'.repeat(64)
   return {
-    contract: 'supermega.windows-process-image-observer.v1', exactSha: 'b'.repeat(40),
+    contract: 'supermega.windows-process-image-observer.v2', exactSha: 'b'.repeat(40),
     captureStartedBeforeSpawn: true, rehearsalObserved: true, droppedEvents: 0,
     droppedBuffers: 0,
     descendantCorrelationComplete: true, runtimeModulesComplete: true,
+    importCaptureStartedBeforeSpawn: true, importCaptureDrainedAfterExit: true,
+    droppedImportEvents: 0, lateImportEvents: 0, importCount: 1,
     processTreeComplete: true, allProcessesExited: true, serviceInventoryUnchanged: true,
     allSelectedPortsClosed: true, selectedPorts: [54321], temporaryDataRemoved: true,
     profileId: 'fixture-profile', runtimeClosureEvidenceSha256: digest,
     sourceDigest: digest, bindingDigest: digest, receiptSha256: digest,
-    rawReceiptSha256: digest, processCount: 2, runtimeFileCount: 2,
+    rawReceiptSha256: digest, processCount: 2, runtimeFileCount: 3,
     systemModuleCount: 1,
     sourceIdentity: { gitBindingId: 'git-binding', gitSourceId: 'git-source',
       head: 'b'.repeat(40), tree: 'c'.repeat(40), clean: true,
@@ -47,7 +49,12 @@ function closureFixture() {
     runtimeFiles: [{ bindingId: 'node-binding', sourceId: 'node-source',
       relativePath: 'node/node.exe', bytes: 10, sha256: digest, uses: ['executed'] },
     { bindingId: 'git-binding', sourceId: 'git-source',
-      relativePath: 'git/cmd/git.exe', bytes: 10, sha256: digest, uses: ['executed'] }],
+      relativePath: 'git/cmd/git.exe', bytes: 10, sha256: digest, uses: ['executed'] },
+    { bindingId: 'node-module-binding', sourceId: 'node-source',
+      relativePath: 'node/npm/node_modules/semver/index.js', bytes: 10, sha256: digest,
+      uses: ['imported'] }],
+    imports: [{ processSequence: 0, bindingId: 'node-module-binding', sourceId: 'node-source',
+      relativePath: 'node/npm/node_modules/semver/index.js', sha256: digest }],
     systemModules: [{ fileName: 'kernel32.dll', bytes: 10, sha256: digest }],
   }
 }
@@ -152,6 +159,8 @@ test('bootstrap policy pins exact installer and documented service-free flags bu
   ])
   assert.equal(policy.execution.serviceInstallationAllowed, false)
   assert.equal(policy.closureObserver.status, 'pending')
+  assert.equal(policy.closureObserver.contract, 'supermega.windows-process-image-observer.v2')
+  assert.equal(policy.closureObserver.launcherKind, 'native-executable-v1')
   assert.equal(policy.closureObserver.requiresDroppedEvents, 0)
   assert.equal(policy.closureObserver.requiresDroppedBuffers, 0)
   assert.equal(policy.approval.status, 'pending')
@@ -164,6 +173,10 @@ test('PowerShell bootstrap separates non-executing capture from reviewed full-re
   const gate = source.indexOf("Fail 'bootstrap_closure_observer_unapproved'")
   const execute = source.indexOf('$process.StartInfo.FileName = $observer')
   assert.ok(download > 0 && download < stage2 && stage2 < gate && gate < execute)
+  assert.match(source, /bootstrap_closure_observer_launcher_invalid/)
+  assert.match(source, /Assert-NoReparsePath \$root \$observer/)
+  assert.match(source, /\$process\.StartInfo\.WorkingDirectory = \$root/)
+  assert.match(source, /bootstrap_import_inventory_invalid/)
   const workspaceCreation = source.indexOf('[System.IO.Directory]::CreateDirectory($workRoot)')
   const installerDownload = source.indexOf('Download-Exact ([Uri]$policy.installer.url)')
   assert.ok(workspaceCreation > 0 && workspaceCreation < installerDownload)
@@ -719,7 +732,7 @@ test('combined policy digest is domain-separated and length-framed', () => {
 test('sanitized closure schema rejects omissions, wrong types, surplus fields, and rooted paths', () => {
   const valid = closureFixture()
   assert.deepEqual(validateSanitizedClosure(valid, valid.exactSha),
-    { processCount: 2, runtimeFileCount: 2, systemModuleCount: 1 })
+    { processCount: 2, runtimeFileCount: 3, systemModuleCount: 1 })
   const mutations = [
     (value) => { delete value.processes[0].exitCode },
     (value) => { value.processes[0].sequence = '0' },
@@ -731,6 +744,11 @@ test('sanitized closure schema rejects omissions, wrong types, surplus fields, a
     (value) => { value.processCount = '1' },
     (value) => { value.selectedPorts = [54321, 54321] },
     (value) => { value.droppedBuffers = 1 },
+    (value) => { value.droppedImportEvents = 1 },
+    (value) => { value.lateImportEvents = 1 },
+    (value) => { value.importCaptureStartedBeforeSpawn = false },
+    (value) => { value.importCaptureDrainedAfterExit = false },
+    (value) => { value.temporaryDataRemoved = false },
     (value) => { value.runtimeFiles[0].relativePath = '/absolute/node.exe' },
     (value) => { value.runtimeFiles[0].relativePath = '\\server\\share\\node.exe' },
     (value) => { value.runtimeFiles[0].relativePath = '\\?\\C:\\node.exe' },
@@ -752,6 +770,30 @@ test('sanitized closure schema rejects omissions, wrong types, surplus fields, a
   for (const mutate of mutations) {
     const changed = structuredClone(valid); mutate(changed)
     assert.throws(() => validateSanitizedClosure(changed, valid.exactSha), /bootstrap_closure_/)
+  }
+})
+
+test('import closure binds each observed import to a process and exact runtime file', () => {
+  const valid = closureFixture()
+  const cases = [
+    [(value) => { value.imports = []; value.importCount = 0 }, 'inventory_invalid'],
+    [(value) => { value.imports[0].processSequence = 4 }, 'import_invalid'],
+    [(value) => { value.imports[0].bindingId = 'other' }, 'import_unbound'],
+    [(value) => { value.imports[0].sourceId = 'other' }, 'import_unbound'],
+    [(value) => { value.imports[0].relativePath = 'node/other.exe' }, 'import_unbound'],
+    [(value) => { value.imports[0].relativePath = '../node.exe' }, 'import_invalid'],
+    [(value) => { value.imports[0].sha256 = 'd'.repeat(64) }, 'import_unbound'],
+    [(value) => { value.imports[0].sha256 = 'short' }, 'import_invalid'],
+    [(value) => { value.runtimeFiles[2].uses = ['loaded'] }, 'import_unbound'],
+    [(value) => { value.imports.push(structuredClone(value.imports[0])); value.importCount++ },
+      'import_duplicate'],
+    [(value) => { value.imports[0].extra = true }, 'import_invalid'],
+  ]
+  for (const [mutate, reason] of cases) {
+    const changed = structuredClone(valid)
+    mutate(changed)
+    assert.throws(() => validateSanitizedClosure(changed, valid.exactSha),
+      new RegExp(`bootstrap_closure_${reason}`), reason)
   }
 })
 

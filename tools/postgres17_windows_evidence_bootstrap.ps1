@@ -199,7 +199,9 @@ if ($Stage -eq 'Rehearsal') {
     Fail 'bootstrap_stage2_authority_unapproved'
   }
   if ($policy.closureObserver.status -ne 'reviewed'
+    -or $policy.closureObserver.contract -ne 'supermega.windows-process-image-observer.v2'
     -or $policy.closureObserver.captureMethod -ne 'windows-kernel-process-image-events-v1'
+    -or $policy.closureObserver.launcherKind -ne 'native-executable-v1'
     -or $policy.closureObserver.requiresCaptureBeforeSpawn -ne $true
     -or $policy.closureObserver.requiresDroppedEvents -ne 0
     -or $policy.closureObserver.requiresDroppedBuffers -ne 0
@@ -285,6 +287,10 @@ try {
     $observer = [System.IO.Path]::GetFullPath((Join-Path $root $policy.closureObserver.command))
     if (-not $observer.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar,
         [StringComparison]::OrdinalIgnoreCase)) { Fail 'bootstrap_closure_observer_path_escape' }
+    if ([System.IO.Path]::GetExtension($observer) -ne '.exe') {
+      Fail 'bootstrap_closure_observer_launcher_invalid'
+    }
+    Assert-NoReparsePath $root $observer
     $observerItem = Get-Item -LiteralPath $observer -Force
     if ($observerItem.LinkType -or $observerItem.PSIsContainer
       -or (Get-Sha256 $observer) -ne $policy.closureObserver.sha256) {
@@ -292,6 +298,7 @@ try {
     }
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo.FileName = $observer
+    $process.StartInfo.WorkingDirectory = $root
     $process.StartInfo.UseShellExecute = $false; $process.StartInfo.CreateNoWindow = $true
     foreach ($argument in @('--capture-before-spawn', '--output', $observerEvidencePath,
       '--stage', 'rehearsal', '--exact-sha', $ExactSha, '--installer', $downloadPath,
@@ -319,10 +326,13 @@ try {
     $closure = Read-Json $observerEvidencePath
     $receipt = Read-Json $receiptPath
     $closureEvidenceSha256 = Get-Sha256 $observerEvidencePath
-    if ($closure.contract -ne 'supermega.windows-process-image-observer.v1'
+    if ($closure.contract -ne 'supermega.windows-process-image-observer.v2'
       -or $closure.exactSha -ne $ExactSha
       -or $closure.captureStartedBeforeSpawn -ne $true -or $closure.rehearsalObserved -ne $true
       -or $closure.droppedEvents -ne 0 -or $closure.droppedBuffers -ne 0
+      -or $closure.importCaptureStartedBeforeSpawn -ne $true
+      -or $closure.importCaptureDrainedAfterExit -ne $true
+      -or $closure.droppedImportEvents -ne 0 -or $closure.lateImportEvents -ne 0
       -or $closure.descendantCorrelationComplete -ne $true
       -or $closure.runtimeModulesComplete -ne $true -or $closure.processTreeComplete -ne $true
       -or $closure.allProcessesExited -ne $true -or $closure.serviceInventoryUnchanged -ne $true
@@ -352,7 +362,8 @@ try {
       -or @($closure.systemModules).Count -lt 1
       -or @($closure.processes).Count -ne [int]$closure.processCount
       -or @($closure.runtimeFiles).Count -ne [int]$closure.runtimeFileCount
-      -or @($closure.systemModules).Count -ne [int]$closure.systemModuleCount) {
+      -or @($closure.systemModules).Count -ne [int]$closure.systemModuleCount
+      -or @($closure.imports).Count -ne [int]$closure.importCount) {
       Fail 'bootstrap_closure_inventory_incomplete'
     }
     $ports = @($closure.selectedPorts)
@@ -366,8 +377,10 @@ try {
       'serviceInventoryUnchanged', 'allSelectedPortsClosed', 'selectedPorts',
       'temporaryDataRemoved', 'profileId', 'runtimeClosureEvidenceSha256',
       'sourceDigest', 'bindingDigest', 'receiptSha256', 'rawReceiptSha256',
-      'processCount', 'runtimeFileCount', 'systemModuleCount',
-      'sourceIdentity', 'processes', 'runtimeFiles', 'systemModules')
+      'processCount', 'runtimeFileCount', 'systemModuleCount', 'importCount',
+      'importCaptureStartedBeforeSpawn', 'importCaptureDrainedAfterExit',
+      'droppedImportEvents', 'lateImportEvents',
+      'sourceIdentity', 'processes', 'runtimeFiles', 'systemModules', 'imports')
     Assert-ExactProperties $closure $allowedClosureKeys
     Assert-ExactProperties $closure.sourceIdentity @('gitBindingId', 'gitSourceId',
       'head', 'tree', 'clean', 'headEvidenceSha256', 'treeEvidenceSha256',
@@ -375,6 +388,18 @@ try {
     Assert-Integer $closure.processCount 1 10000
     Assert-Integer $closure.runtimeFileCount 1 10000
     Assert-Integer $closure.systemModuleCount 1 10000
+    Assert-Integer $closure.importCount 1 10000
+    foreach ($import in @($closure.imports)) {
+      Assert-ExactProperties $import @('processSequence', 'bindingId', 'sourceId',
+        'relativePath', 'sha256')
+      Assert-Integer $import.processSequence 0 1000000
+      Assert-BoundedId $import.bindingId
+      Assert-BoundedId $import.sourceId
+      Assert-SafeRelativePath $import.relativePath 'bootstrap_import_inventory_invalid'
+      if ($import.sha256 -notmatch '^[0-9a-f]{64}$') {
+        Fail 'bootstrap_import_inventory_invalid'
+      }
+    }
     foreach ($processRecord in @($closure.processes)) {
       $allowedProcessKeys = @('sequence', 'parentSequence', 'imageBindingId', 'sourceId', 'exitCode')
       Assert-ExactProperties $processRecord $allowedProcessKeys

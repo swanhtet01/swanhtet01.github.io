@@ -29,8 +29,9 @@
   },
   "closureObserver": {
     "status": "pending",
-    "contract": "supermega.windows-process-image-observer.v1",
+    "contract": "supermega.windows-process-image-observer.v2",
     "captureMethod": "windows-kernel-process-image-events-v1",
+    "launcherKind": "native-executable-v1",
     "requiresCaptureBeforeSpawn": true,
     "requiresDroppedEvents": 0,
     "requiresDroppedBuffers": 0,

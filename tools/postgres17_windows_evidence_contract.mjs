@@ -80,15 +80,20 @@ export function validateObserverProbe(probe, expectedSha) {
 export function validateSanitizedClosure(closure, expectedSha) {
   const keys = ['contract', 'exactSha', 'captureStartedBeforeSpawn', 'rehearsalObserved',
     'droppedEvents', 'droppedBuffers', 'descendantCorrelationComplete', 'runtimeModulesComplete',
+    'importCaptureStartedBeforeSpawn', 'importCaptureDrainedAfterExit',
+    'droppedImportEvents', 'lateImportEvents', 'importCount', 'imports',
     'processTreeComplete', 'allProcessesExited', 'serviceInventoryUnchanged',
     'allSelectedPortsClosed', 'selectedPorts', 'temporaryDataRemoved', 'profileId',
     'runtimeClosureEvidenceSha256', 'sourceDigest', 'bindingDigest', 'receiptSha256',
     'rawReceiptSha256', 'processCount', 'runtimeFileCount', 'systemModuleCount', 'sourceIdentity',
     'processes', 'runtimeFiles', 'systemModules']
-  if (!exact(closure, keys) || closure.contract !== 'supermega.windows-process-image-observer.v1'
+  if (!exact(closure, keys) || closure.contract !== 'supermega.windows-process-image-observer.v2'
     || closure.exactSha !== expectedSha || !EXACT_SHA.test(expectedSha)
     || closure.captureStartedBeforeSpawn !== true || closure.rehearsalObserved !== true
     || closure.droppedEvents !== 0 || closure.droppedBuffers !== 0
+    || closure.importCaptureStartedBeforeSpawn !== true
+    || closure.importCaptureDrainedAfterExit !== true
+    || closure.droppedImportEvents !== 0 || closure.lateImportEvents !== 0
     || closure.descendantCorrelationComplete !== true
     || closure.runtimeModulesComplete !== true || closure.processTreeComplete !== true
     || closure.allProcessesExited !== true || closure.serviceInventoryUnchanged !== true
@@ -99,12 +104,14 @@ export function validateSanitizedClosure(closure, expectedSha) {
     || !integer(closure.processCount, 1, 10000)
     || !integer(closure.runtimeFileCount, 1, 10000)
     || !integer(closure.systemModuleCount, 1, 10000)
+    || !integer(closure.importCount, 1, 10000)
     || !Array.isArray(closure.selectedPorts) || closure.selectedPorts.length < 1
     || closure.selectedPorts.some((value) => !integer(value, 1, 65535))
     || new Set(closure.selectedPorts).size !== closure.selectedPorts.length
     || !Array.isArray(closure.processes) || closure.processes.length !== closure.processCount
     || !Array.isArray(closure.runtimeFiles) || closure.runtimeFiles.length !== closure.runtimeFileCount
     || !Array.isArray(closure.systemModules) || closure.systemModules.length !== closure.systemModuleCount
+    || !Array.isArray(closure.imports) || closure.imports.length !== closure.importCount
     || !exact(closure.sourceIdentity, ['gitBindingId', 'gitSourceId', 'head', 'tree', 'clean',
       'headEvidenceSha256', 'treeEvidenceSha256', 'statusEvidenceSha256'])
     || !ID.test(closure.sourceIdentity.gitBindingId || '')
@@ -170,6 +177,34 @@ export function validateSanitizedClosure(closure, expectedSha) {
   for (const [binding, file] of filesByBinding) {
     if (file.uses.includes('executed') && !executedBindings.has(binding)) {
       fail('bootstrap_closure_process_image_unobserved')
+    }
+  }
+  const observedImports = new Set()
+  const importedBindings = new Set()
+  for (const entry of closure.imports) {
+    if (!exact(entry, ['processSequence', 'bindingId', 'sourceId', 'relativePath', 'sha256'])
+      || !integer(entry.processSequence, 0, 1000000)
+      || !ID.test(entry.bindingId || '') || !ID.test(entry.sourceId || '')
+      || !safeRelative(entry.relativePath) || !SHA256.test(entry.sha256 || '')
+      || !processesBySequence.has(entry.processSequence)) {
+      fail('bootstrap_closure_import_invalid')
+    }
+    const binding = `${entry.bindingId}\0${entry.sourceId}`
+    const file = filesByBinding.get(binding)
+    if (!file || !file.uses.includes('imported')
+      || file.relativePath.replaceAll('\\', '/').toLowerCase()
+        !== entry.relativePath.replaceAll('\\', '/').toLowerCase()
+      || file.sha256 !== entry.sha256) {
+      fail('bootstrap_closure_import_unbound')
+    }
+    const key = `${entry.processSequence}\0${binding}`
+    if (observedImports.has(key)) fail('bootstrap_closure_import_duplicate')
+    observedImports.add(key)
+    importedBindings.add(binding)
+  }
+  for (const [binding, file] of filesByBinding) {
+    if (file.uses.includes('imported') && !importedBindings.has(binding)) {
+      fail('bootstrap_closure_import_unobserved')
     }
   }
   for (const module of closure.systemModules) {
