@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 02:25 UTC
+- Last verified: 2026-11-03 03:19 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 03:19 UTC private native terminal-proof candidate
+
+- Local source-only commit `e28722abdcf4b22cdcf59639746ec31dac1adfee`
+  (tree `1b0aac057b5bed164e38217b1c0a06c202648d36`, parent
+  `fe760a5f1beaf88fede259d9f9bf8c1d9da19ac2`) changes seven native
+  source/test files. The pre-commit binary patch SHA-256 was
+  `2792d566ed1e01ddf2d7897a8835213ab29322bba950ebdfd665ab135afc3a40`.
+  The last recorded public draft PR #752 head is `289ec76de4b80cd2de437afc3b28cfe76192ec1e`;
+  it was not re-queried in this private turn, and no publication occurred.
+- **PASS (source/format only):** terminal reservation projections now carry
+  their retained transition and committed-sale binding; the replica validates
+  the typed proof for snapshots and deltas without creating local sales or
+  stock effects. Snapshot projections and continuation cursor are read in one
+  transaction. Nonlegacy expiry before its exact timestamp returns a conflict.
+  Seven changed Dart files passed offline Dart 3.13.5 formatting and
+  `git diff --check`. Tests were added for release/commit/expiry digests,
+  missing and tampered terminal proof, exact delta replay, WAL-backed
+  competing-write snapshot epochs, and encrypted backup/restore retention.
+- **BLOCKED / NOT RUN:** Flutter analysis, focused tests and full native CI
+  have not run: this workspace has a cached Dart image but no Flutter SDK or
+  installed Flutter-capable builder. Independent source review found no clear
+  static defect but **holds publication** pending exact-source execution and
+  final review. Historical minimal terminal projections fail closed; an
+  explicitly reviewed rebootstrap procedure is not implemented. Role-level
+  visibility of sale identifiers remains unapproved. Connected mode remains
+  default-off; deployed, installed two-device and merchant evidence are
+  **NOT RUN**. This source checkpoint is not a sync or release PASS.
 
 ## 2026-11-03 02:25 UTC cumulative private candidate review
 
