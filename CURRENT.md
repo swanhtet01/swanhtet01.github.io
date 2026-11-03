@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 23:32 UTC
+- Last verified: 2026-11-03 23:37 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
@@ -42,8 +42,14 @@
   signature and rejection above 90 seconds. The after-consume wall-clock
   expiry check remains. Both distinct native devices also passed a delayed
   36-second synthetic proof-and-consume exercise (1/1 each), including B's
-  swapped-device rejection. Independent read-only security review **ACCEPT**
+  swapped-device rejection. The complete final-source native cloud-feed file
+  passed **14/14** in 2m06s. Independent read-only security review **ACCEPT**
   for CI-only testing; no production issuer TTL or request TTL changed.
+- **Other exact-head checks:** Kernel `41737356970` **SUCCESS**; App
+  `41737349998` **FAIL** at the unchanged stale HQ database rehearsal gate;
+  redundant App `41737356977` **SKIPPED**. Dependency Security
+  `41737357003` **FAIL** on the unresolved minimatch advisory in app and
+  kernel. These checks do not turn the repaired bridge into a pass.
 - **NOT RUN / held:** the repaired real PostgreSQL-to-native bridge has not
   run; it needs a reviewed successor and exact-head hosted CI after the useful
   Native jobs finish. No production ingress, connected-mode enablement,
