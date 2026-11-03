@@ -442,6 +442,8 @@ void main() {
       () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
       returnsNormally,
     );
+    final preRevocationFile = File('${root.path}/pre-revocation.sqlite');
+    await database.exportVerifiedLocalSnapshot(preRevocationFile);
     clock = now + 500;
     store = ShopConnectedSiteEnrollmentStore(
       database: database,
@@ -850,6 +852,202 @@ void main() {
           completeTables: tables,
         );
     expect(valid(history), isTrue);
+    final pageEvidence = ShopCloudFeedV41FirstPageEvidence(
+      requestJson: requestJson,
+      cloudKeyApprovalJson: cloudApprovalJson,
+      enrollmentEvidenceDigest: approval.evidenceDigest,
+      timeEntryDigest: signedTime.entryDigest,
+      timeAckDigest: signedAck.ackDigest,
+      timeHeadDigest: timeHead.headDigest,
+      bootSessionId: 'b' * 64,
+      sampleMonotonicMillis: 8000,
+    );
+    Future<void> applyFirstPage(
+      ShopDatabase target,
+      _V41FixtureTime time, {
+      Future<void> Function()? beforeCommit,
+    }) => target.testOnlyApplyConnectedCloudFeedFirstPageV41(
+      trust: trust,
+      timeAuthority: time,
+      expected: expected,
+      actorRole: 'manager',
+      requestNonce: requestNonce,
+      pageJson: pageJson,
+      proofJson: proofJson,
+      evidence: pageEvidence,
+      testOnlyBeforeCommit: beforeCommit,
+    );
+    final rollbackFile = await preRevocationFile.copy(
+      '${root.path}/rollback.sqlite',
+    );
+    final rollbackDatabase = ShopDatabase(NativeDatabase(rollbackFile));
+    await expectLater(
+      applyFirstPage(
+        rollbackDatabase,
+        _V41FixtureTime(workspace, site, [now]),
+        beforeCommit: () async => throw StateError('injected_rollback'),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      applyFirstPage(
+        rollbackDatabase,
+        _V41FixtureTime(workspace, site, [now + 30001]),
+      ),
+      throwsFormatException,
+      reason: 'an already-expired signed page cannot be retained',
+    );
+    await expectLater(
+      applyFirstPage(
+        rollbackDatabase,
+        _V41FixtureTime(workspace, site, [now, now + 30001]),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('trusted time changed before commit'),
+        ),
+      ),
+      reason: 'validated trusted-time movement must roll back all rows',
+    );
+    var revocationAppliedInsideTransaction = false;
+    await expectLater(
+      applyFirstPage(
+        rollbackDatabase,
+        _V41FixtureTime(workspace, site, [now]),
+        beforeCommit: () async {
+          await ShopConnectedSiteEnrollmentStore(
+            database: rollbackDatabase,
+            nowMillis: () => now + 500,
+          ).importOwnerEvidence(revocation, verifier: verifier);
+          revocationAppliedInsideTransaction = true;
+        },
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('device is no longer active'),
+        ),
+      ),
+      reason: 'a signed revocation before commit must roll back the page',
+    );
+    expect(revocationAppliedInsideTransaction, isTrue);
+    for (final table in const [
+      'shop_connected_cloud_feed_streams',
+      'shop_connected_cloud_feed_pages',
+      'shop_connected_cloud_feed_page_evidence',
+      'shop_connected_cloud_feed_heads',
+    ]) {
+      expect(
+        await rollbackDatabase.customSelect('SELECT * FROM $table').get(),
+        isEmpty,
+      );
+    }
+    await rollbackDatabase.close();
+    expect(
+      () => ShopBackup.verifySnapshot(rollbackFile, expectedSchemaVersion: 41),
+      returnsNormally,
+    );
+    var firstPageDatabase = ShopDatabase(NativeDatabase(preRevocationFile));
+    await applyFirstPage(
+      firstPageDatabase,
+      _V41FixtureTime(workspace, site, [now]),
+    );
+    await firstPageDatabase.close();
+    firstPageDatabase = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(preRevocationFile),
+      trust: trust,
+    );
+    await firstPageDatabase.verifyReadyForUse();
+    await applyFirstPage(
+      firstPageDatabase,
+      _V41FixtureTime(workspace, site, [now]),
+    );
+    final changedNonce = 'f' * 64;
+    final changedRequestUnsigned = {
+      ...requestUnsigned,
+      'requestNonce': changedNonce,
+    };
+    final changedRequestJson = canonicalConnectedSiteJson({
+      ...changedRequestUnsigned,
+      'signature': await signFields(changedRequestUnsigned, clientPair),
+    });
+    final changedRequestDigest = connectedSiteSha256(
+      jsonDecode(changedRequestJson),
+    );
+    final changedPageUnsigned = {
+      ...pageUnsigned,
+      'requestDigest': changedRequestDigest,
+    };
+    final changedPageDigest = connectedSiteSha256(changedPageUnsigned);
+    final changedPageJson = canonicalConnectedSiteJson({
+      ...changedPageUnsigned,
+      'pageDigest': changedPageDigest,
+    });
+    final changedProofUnsigned = {
+      ...proofUnsigned,
+      'requestNonce': changedNonce,
+      'requestDigest': changedRequestDigest,
+      'pageDigest': changedPageDigest,
+    };
+    final changedProofJson = canonicalConnectedSiteJson({
+      ...changedProofUnsigned,
+      'signature': await signFields(changedProofUnsigned, feedPair),
+    });
+    await expectLater(
+      firstPageDatabase.testOnlyApplyConnectedCloudFeedFirstPageV41(
+        trust: trust,
+        timeAuthority: _V41FixtureTime(workspace, site, [now]),
+        expected: ConnectedSiteRetailFeedExpectation(
+          workspaceId: workspace,
+          siteId: site,
+          actorId: 'actor_fixture',
+          deviceId: device,
+          authorityGeneration: 1,
+          revocationGeneration: 1,
+          authorityPayloadDigest: authorityPayload.payloadDigest,
+          leaseDigest: lease.payloadDigest,
+          requestDigest: changedRequestDigest,
+          afterSequence: 0,
+          priorEventDigest: null,
+          limit: 64,
+        ),
+        actorRole: 'manager',
+        requestNonce: changedNonce,
+        pageJson: changedPageJson,
+        proofJson: changedProofJson,
+        evidence: ShopCloudFeedV41FirstPageEvidence(
+          requestJson: changedRequestJson,
+          cloudKeyApprovalJson: cloudApprovalJson,
+          enrollmentEvidenceDigest: approval.evidenceDigest,
+          timeEntryDigest: signedTime.entryDigest,
+          timeAckDigest: signedAck.ackDigest,
+          timeHeadDigest: timeHead.headDigest,
+          bootSessionId: 'b' * 64,
+          sampleMonotonicMillis: 8000,
+        ),
+      ),
+      throwsStateError,
+      reason: 'a distinct valid signed request cannot replace cursor zero',
+    );
+    expect(
+      await firstPageDatabase
+          .customSelect('SELECT * FROM shop_connected_cloud_feed_pages')
+          .get(),
+      hasLength(1),
+      reason: 'exact replay must not create a second page',
+    );
+    await firstPageDatabase.close();
+    expect(
+      () => ShopBackup.verifySnapshot(
+        preRevocationFile,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      returnsNormally,
+    );
     expect(
       valid({
         ...history,
@@ -983,6 +1181,11 @@ void main() {
       trust: trust,
     );
     await database.verifyReadyForUse();
+    await expectLater(
+      applyFirstPage(database, _V41FixtureTime(workspace, site, [now])),
+      throwsStateError,
+      reason: 'current revocation must block an otherwise exact replay',
+    );
     expect(
       () => ShopBackup.verifySnapshot(
         file,
@@ -2307,5 +2510,28 @@ final class _PinnedV41OwnerVerifier
         publicKey: SimplePublicKey(ownerKey, type: KeyPairType.ed25519),
       ),
     );
+  }
+}
+
+final class _V41FixtureTime
+    implements ShopConnectedSiteCoordinatorTimeAuthority {
+  _V41FixtureTime(this.workspaceId, this.siteId, this.values);
+
+  final String workspaceId;
+  final String siteId;
+  final List<int> values;
+  var _reads = 0;
+
+  @override
+  Future<int> readValidatedNowMillis({
+    required String tenantId,
+    required String siteId,
+  }) async {
+    if (tenantId != workspaceId || siteId != this.siteId) {
+      throw StateError('fixture_time_scope_mismatch');
+    }
+    final index = _reads < values.length ? _reads : values.length - 1;
+    _reads++;
+    return values[index];
   }
 }

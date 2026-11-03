@@ -42,6 +42,30 @@ const shopCloudFeedV41HistoricalTables = <String>[
   'shop_connected_time_client_restore_clearances',
 ];
 
+/// Exact retained bytes supplied to the test-only first-page transaction.
+/// The writer derives digests and trusted time; none is a permission flag.
+final class ShopCloudFeedV41FirstPageEvidence {
+  const ShopCloudFeedV41FirstPageEvidence({
+    required this.requestJson,
+    required this.cloudKeyApprovalJson,
+    required this.enrollmentEvidenceDigest,
+    required this.timeEntryDigest,
+    required this.timeAckDigest,
+    required this.timeHeadDigest,
+    required this.bootSessionId,
+    required this.sampleMonotonicMillis,
+  });
+
+  final String requestJson;
+  final String cloudKeyApprovalJson;
+  final String enrollmentEvidenceDigest;
+  final String timeEntryDigest;
+  final String timeAckDigest;
+  final String timeHeadDigest;
+  final String bootSessionId;
+  final int sampleMonotonicMillis;
+}
+
 /// Independently reviewed exact fixture identity and issuer pins. Product
 /// builds have no such pins. A database row must never populate these fields.
 final class ShopCloudFeedV41FirstPageTrust {
