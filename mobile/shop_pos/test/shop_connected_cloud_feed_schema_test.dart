@@ -802,36 +802,9 @@ void main() {
         .getSingle();
     expect(currentDevice.read<String>('state'), 'revoked');
     expect(currentDevice.read<int>('revoked_at_millis'), greaterThan(now));
-    const historyTables = <String>[
-      'shop_connected_cloud_feed_streams',
-      'shop_connected_cloud_feed_pages',
-      'shop_connected_cloud_feed_heads',
-      'shop_connected_cloud_feed_restore_barriers',
-      'shop_connected_cloud_feed_page_evidence',
-      'shop_site_pairing_nonces',
-      'shop_site_pending_enrollments',
-      'shop_site_enrollment_evidence',
-      'shop_site_devices',
-      'shop_site_request_nonces',
-      'shop_site_authority_payloads',
-      'shop_site_authority_members',
-      'shop_site_configuration_snapshots',
-      'shop_site_authority_deltas',
-      'shop_site_authority_checkpoints',
-      'shop_site_authority_bootstrap_provenance',
-      'shop_site_offline_lease_payloads',
-      'shop_site_offline_leases',
-      'shop_site_commands',
-      'shop_site_cloud_proof_requirements',
-      'shop_site_cloud_proofs',
-      'shop_connected_time_client_entries',
-      'shop_connected_time_client_acks',
-      'shop_connected_time_client_heads',
-      'shop_connected_time_client_restore_barriers',
-      'shop_connected_time_client_restore_clearances',
-    ];
     final history = <String, List<Map<String, Object?>>>{
-      for (final table in historyTables) table: await rows(table),
+      for (final table in shopCloudFeedV41HistoricalTables)
+        table: await rows(table),
     };
     final trust = ShopCloudFeedV41FirstPageTrust(
       workspaceId: workspace,
@@ -868,6 +841,11 @@ void main() {
           completeTables: tables,
         );
     expect(valid(history), isTrue);
+    expect(
+      valid({...history, 'unreviewed_extra_table': const []}),
+      isFalse,
+      reason: 'snapshot table inventory must be exact',
+    );
     expect(
       valid({
         ...history,

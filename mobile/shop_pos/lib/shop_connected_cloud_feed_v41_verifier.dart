@@ -11,6 +11,37 @@ import 'shop_database.dart';
 import 'shop_offline_staff_lease.dart';
 import 'shop_staff_authorization.dart';
 
+/// Unfiltered tables required by the single-page historical fixture. Readers
+/// must collect every row from every table under one database snapshot.
+const shopCloudFeedV41HistoricalTables = <String>[
+  'shop_connected_cloud_feed_streams',
+  'shop_connected_cloud_feed_pages',
+  'shop_connected_cloud_feed_heads',
+  'shop_connected_cloud_feed_restore_barriers',
+  'shop_connected_cloud_feed_page_evidence',
+  'shop_site_pairing_nonces',
+  'shop_site_pending_enrollments',
+  'shop_site_enrollment_evidence',
+  'shop_site_devices',
+  'shop_site_request_nonces',
+  'shop_site_authority_payloads',
+  'shop_site_authority_members',
+  'shop_site_configuration_snapshots',
+  'shop_site_authority_deltas',
+  'shop_site_authority_checkpoints',
+  'shop_site_authority_bootstrap_provenance',
+  'shop_site_offline_lease_payloads',
+  'shop_site_offline_leases',
+  'shop_site_commands',
+  'shop_site_cloud_proof_requirements',
+  'shop_site_cloud_proofs',
+  'shop_connected_time_client_entries',
+  'shop_connected_time_client_acks',
+  'shop_connected_time_client_heads',
+  'shop_connected_time_client_restore_barriers',
+  'shop_connected_time_client_restore_clearances',
+];
+
 /// Independently reviewed exact fixture identity and issuer pins. Product
 /// builds have no such pins. A database row must never populate these fields.
 final class ShopCloudFeedV41FirstPageTrust {
@@ -73,6 +104,13 @@ bool shopCloudFeedFirstPageHistoricalRowsValidV41({
   required Map<String, List<Map<String, Object?>>> completeTables,
 }) {
   try {
+    if (completeTables.keys.toSet().length !=
+            shopCloudFeedV41HistoricalTables.length ||
+        !completeTables.keys.toSet().containsAll(
+          shopCloudFeedV41HistoricalTables,
+        )) {
+      return false;
+    }
     List<Map<String, Object?>> rows(String name) =>
         completeTables[name] ??
         (throw const FormatException('v41_history_table_missing'));
