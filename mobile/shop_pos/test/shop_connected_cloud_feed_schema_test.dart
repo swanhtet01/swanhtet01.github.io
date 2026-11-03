@@ -662,6 +662,41 @@ void main() {
         testOnlyCloudFeedPinnedKeys: pins,
       );
 
+      // These two signed pages form valid retained v40 history. The v41
+      // upgrader must reject them at its no-backfill guard, even when the
+      // test issuer pin makes the historical v40 verifier succeed.
+      final upgraded = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(appliedFile),
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+        testOnlyCloudFeedPinnedKeys: pins,
+      );
+      await expectLater(
+        upgraded.verifyReadyForUse(),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Nonempty v40 cloud feed lacks signed request evidence.',
+          ),
+        ),
+      );
+      await upgraded.close();
+      final unchangedV40 = sqlite.sqlite3.open(appliedFile.path);
+      try {
+        expect(
+          unchangedV40.select('PRAGMA user_version').single.columnAt(0),
+          40,
+        );
+        expect(
+          unchangedV40.select(
+            "SELECT name FROM sqlite_master WHERE name = 'shop_connected_cloud_feed_page_evidence'",
+          ),
+          isEmpty,
+        );
+      } finally {
+        unchangedV40.close();
+      }
+
       final directory = await Directory.systemTemp.createTemp(
         'shop-v40-signed-reopen-',
       );
@@ -895,6 +930,41 @@ void main() {
       expect(
         unchanged.select(
           "SELECT name FROM sqlite_master WHERE name = 'shop_connected_cloud_feed_page_evidence'",
+        ),
+        isEmpty,
+      );
+    } finally {
+      unchanged.close();
+    }
+  });
+
+  test('partial v41 object in genuine v40 blocks upgrade before DDL', () async {
+    final directory = await Directory.systemTemp.createTemp('shop-v41-hop-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/shop.sqlite');
+    final legacy = ShopDatabase.testOnlyWithCloudFeedPins(
+      executor: NativeDatabase(file),
+      trustedIssuerKeys: {'fixture-issuer': List<int>.filled(32, 1)},
+    );
+    await legacy.verifyReadyForUse();
+    await legacy.close();
+    final raw = sqlite.sqlite3.open(file.path);
+    try {
+      raw.execute(
+        shopConnectedCloudFeedSchemaDefinitionsV41()['shop_connected_cloud_feed_page_evidence']!,
+      );
+    } finally {
+      raw.close();
+    }
+    final upgrade = ShopDatabase(NativeDatabase(file));
+    await expectLater(upgrade.verifyReadyForUse(), throwsStateError);
+    await upgrade.close();
+    final unchanged = sqlite.sqlite3.open(file.path);
+    try {
+      expect(unchanged.select('PRAGMA user_version').single.columnAt(0), 40);
+      expect(
+        unchanged.select(
+          "SELECT name FROM sqlite_master WHERE name = 'shop_connected_cloud_feed_page_evidence_no_update'",
         ),
         isEmpty,
       );
