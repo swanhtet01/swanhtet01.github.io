@@ -10,7 +10,8 @@ from base64 import urlsafe_b64decode
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from fastapi import Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
 
 from supermega_runtime.connected_site_gateway import (
     ConnectedSiteGatewayPrincipalResolver, GatewayPeerAttestation,
@@ -34,6 +35,61 @@ _FIXTURE = (
     Path(__file__).resolve().parents[1]
     / "mobile/shop_pos/test/fixtures/v41_python_signed_page.json"
 )
+
+
+def _two_device_fixture():
+    authority_a, lease_a, request_a = _fixture()
+    device_b = DeviceAuthority(
+        device_id="device-b", signing_key_id="key-device-b",
+        public_key=DEVICE_B.public,
+        client_fingerprint=digest({"device": "device-b"}),
+        enrollment_evidence_digest=digest({"enrollment": "device-b"}),
+        coordinator_binding_digest=digest({"coordinator": authority_a.site_id}),
+        session_generation=2,
+    )
+    authority = replace(
+        authority_a,
+        devices={**authority_a.devices, device_b.device_id: device_b},
+    )
+    lease_b_unsigned = {
+        key: value for key, value in lease_a.items()
+        if key not in {"payloadDigest", "signature"}
+    }
+    lease_b_unsigned.update(leaseId="lease-read-b", deviceId="device-b")
+    lease_b_payload = {
+        **lease_b_unsigned, "payloadDigest": digest(lease_b_unsigned),
+    }
+    lease_b = {**lease_b_payload, "signature": ISSUER.sign(lease_b_unsigned)}
+    request_b_unsigned = {
+        key: value for key, value in request_a.items() if key != "signature"
+    }
+    request_b_unsigned.update(
+        deviceId="device-b", signingKeyId=device_b.signing_key_id,
+        clientFingerprint=device_b.client_fingerprint,
+        enrollmentEvidenceDigest=device_b.enrollment_evidence_digest,
+        leaseDigest=lease_b["payloadDigest"], requestNonce="b" * 64,
+    )
+    request_b = {
+        **request_b_unsigned, "signature": DEVICE_B.sign(request_b_unsigned),
+    }
+    return authority, lease_a, request_a, lease_b, request_b
+
+
+def _script_for_device(authority, lease, device_id, events):
+    script = _Script(authority, lease, events=events)
+    device = authority.devices[device_id]
+    script.device = (
+        "active", device.signing_key_id, device.public_key,
+        device.client_fingerprint, device.enrollment_evidence_digest,
+        device.session_generation,
+    )
+    script.lease = (
+        "active", digest(lease), lease["actorId"], device_id, lease["role"],
+        lease["sessionGeneration"], lease["revocationGeneration"],
+        lease["issuerKeyId"], authority.issuer_keys[lease["issuerKeyId"]],
+        script.lease[9],
+    )
+    return script
 
 
 class SignedPageFixtureTest(unittest.TestCase):
@@ -165,56 +221,12 @@ class SignedPageFixtureTest(unittest.TestCase):
             )
 
     def test_checked_page_is_bound_to_two_distinct_synthetic_device_keys(self):
-        authority_a, lease_a, request_a = _fixture()
-        device_b = DeviceAuthority(
-            device_id="device-b", signing_key_id="key-device-b",
-            public_key=DEVICE_B.public,
-            client_fingerprint=digest({"device": "device-b"}),
-            enrollment_evidence_digest=digest({"enrollment": "device-b"}),
-            coordinator_binding_digest=digest({"coordinator": authority_a.site_id}),
-            session_generation=2,
-        )
-        authority = replace(
-            authority_a,
-            devices={**authority_a.devices, device_b.device_id: device_b},
-        )
-        lease_b_unsigned = {
-            key: value for key, value in lease_a.items()
-            if key not in {"payloadDigest", "signature"}
-        }
-        lease_b_unsigned.update(leaseId="lease-read-b", deviceId="device-b")
-        lease_b_payload = {
-            **lease_b_unsigned, "payloadDigest": digest(lease_b_unsigned),
-        }
-        lease_b = {**lease_b_payload, "signature": ISSUER.sign(lease_b_unsigned)}
-        request_b_unsigned = {
-            key: value for key, value in request_a.items() if key != "signature"
-        }
-        request_b_unsigned.update(
-            deviceId="device-b", signingKeyId=device_b.signing_key_id,
-            clientFingerprint=device_b.client_fingerprint,
-            enrollmentEvidenceDigest=device_b.enrollment_evidence_digest,
-            leaseDigest=lease_b["payloadDigest"], requestNonce="b" * 64,
-        )
-        request_b = {
-            **request_b_unsigned, "signature": DEVICE_B.sign(request_b_unsigned),
-        }
+        authority, lease_a, request_a, lease_b, request_b = _two_device_fixture()
         event = {"synthetic": "same-site-event"}
         rows = [(1, digest(event), None, canonical_json(event))]
         def checked(lease, request, device):
-            script = _Script(authority, lease, events=rows)
+            script = _script_for_device(authority, lease, device, rows)
             record = authority.devices[device]
-            script.device = (
-                "active", record.signing_key_id, record.public_key,
-                record.client_fingerprint, record.enrollment_evidence_digest,
-                record.session_generation,
-            )
-            script.lease = (
-                "active", digest(lease), lease["actorId"], device, lease["role"],
-                lease["sessionGeneration"], lease["revocationGeneration"],
-                lease["issuerKeyId"], authority.issuer_keys[lease["issuerKeyId"]],
-                script.lease[9],
-            )
             http_request = Request({
                 "type": "http", "method": "GET", "path": "/test/feed",
                 "headers": [],
@@ -254,6 +266,83 @@ class SignedPageFixtureTest(unittest.TestCase):
         self.assertEqual(proof_a["siteId"], proof_b["siteId"])
         with self.assertRaises(ConnectedSiteV15Error):
             checked(lease_a, request_b, "device-b")
+
+    def test_test_only_http_feed_binds_two_request_attested_peers(self):
+        authority, lease_a, request_a, lease_b, request_b = _two_device_fixture()
+        event = {"synthetic": "same-site-event", "privateRemark": "never-return-this"}
+        rows = [(1, digest(event), None, canonical_json(event))]
+
+        def app_for(device_id, lease, *, attested=True):
+            provider = _Authorities(authority)
+            script = _script_for_device(authority, lease, device_id, rows)
+
+            def load_peer(http_request):
+                if not attested:
+                    return None
+                device = authority.devices[device_id]
+                return GatewayPeerAttestation(
+                    request=http_request, gateway_id="test-ingress",
+                    workspace_id=authority.workspace_id, site_id=authority.site_id,
+                    device_id=device_id,
+                    client_fingerprint=device.client_fingerprint,
+                    session_generation=device.session_generation, observed_at=NOW,
+                )
+
+            resolver = ConnectedSiteGatewayPrincipalResolver(
+                gateway_id="test-ingress", load_attested_peer=load_peer,
+                authority_provider=provider, now=lambda: NOW,
+            )
+            app = FastAPI()
+
+            @app.post("/test-only/feed")
+            async def feed(http_request: Request):
+                principal = resolver(http_request)
+                if principal is None:
+                    raise HTTPException(status_code=401)
+                body = await http_request.json()
+                try:
+                    return read_and_sign_test_only_page(
+                        connection_factory=script.connect, principal=principal,
+                        authority=provider.load_authority(
+                            workspace_id=principal.workspace_id,
+                            site_id=principal.site_id,
+                        ),
+                        lease=lease, request=body, now=NOW,
+                        issuer_key_id="test_feed", issuer_seed=23,
+                    )
+                except ConnectedSiteV15Error:
+                    raise HTTPException(status_code=403) from None
+
+            return app, provider
+
+        app_a, _ = app_for("device-a", lease_a)
+        app_b, provider_b = app_for("device-b", lease_b)
+        no_peer, _ = app_for("device-a", lease_a, attested=False)
+        with TestClient(app_a) as client_a, TestClient(app_b) as client_b, TestClient(no_peer) as denied:
+            response_a = client_a.post("/test-only/feed", json=request_a)
+            response_b = client_b.post("/test-only/feed", json=request_b)
+            self.assertEqual(response_a.status_code, 200, response_a.text)
+            self.assertEqual(response_b.status_code, 200, response_b.text)
+            proof_a = json.loads(response_a.json()["proofJson"])
+            proof_b = json.loads(response_b.json()["proofJson"])
+            self.assertEqual(proof_a["pageDigest"], json.loads(response_a.json()["pageJson"])["pageDigest"])
+            self.assertEqual(proof_b["pageDigest"], json.loads(response_b.json()["pageJson"])["pageDigest"])
+            self.assertNotEqual(proof_a["deviceId"], proof_b["deviceId"])
+            self.assertNotEqual(proof_a["requestDigest"], proof_b["requestDigest"])
+            self.assertNotIn("privateRemark", response_a.json()["pageJson"])
+            self.assertNotIn("privateRemark", response_b.json()["pageJson"])
+            self.assertEqual(client_a.post("/test-only/feed", json=request_b).status_code, 403)
+            self.assertEqual(client_b.post("/test-only/feed", json=request_a).status_code, 403)
+            self.assertEqual(denied.post(
+                "/test-only/feed", json=request_a,
+                headers={"x-device-id": "device-a", "authorization": "forged"},
+            ).status_code, 401)
+            device_b = authority.devices["device-b"]
+            provider_b.values[(authority.workspace_id, authority.site_id)] = replace(
+                authority,
+                devices={**authority.devices, "device-b": replace(device_b, active=False)},
+            )
+            self.assertEqual(client_b.post("/test-only/feed", json=request_b).status_code, 401)
 
 
 if __name__ == "__main__":
