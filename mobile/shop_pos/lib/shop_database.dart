@@ -10897,11 +10897,18 @@ class ShopDatabase extends _$ShopDatabase {
     // No v41 producer may write until the signed request and current authority
     // can be reconstructed by runtime, encrypted backup and staged restore.
     // Requiring both tables empty makes a partial or forged record unusable.
-    final evidence = await customSelect(
-      'SELECT 1 FROM shop_connected_cloud_feed_page_evidence LIMIT 1',
-    ).getSingleOrNull();
+    final pageRows = (await customSelect(
+      'SELECT page_digest, page_json FROM shop_connected_cloud_feed_pages LIMIT 2049',
+    ).get()).map((row) => Map<String, Object?>.from(row.data));
+    final evidenceRows = (await customSelect(
+      'SELECT * FROM shop_connected_cloud_feed_page_evidence LIMIT 2049',
+    ).get()).map((row) => Map<String, Object?>.from(row.data));
+    final coverageValid = shopConnectedCloudFeedEvidenceCoverageV41(
+      pages: pageRows,
+      evidence: evidenceRows,
+    );
     await _requireEmptyCloudFeedBeforeV41();
-    if (!definitionsValid || evidence != null) {
+    if (!definitionsValid || !coverageValid || evidenceRows.isNotEmpty) {
       final mismatches = definitions.entries
           .where((entry) {
             final object = objects[entry.key];
@@ -10916,7 +10923,8 @@ class ShopDatabase extends _$ShopDatabase {
           .toList(growable: false);
       throw StateError(
         'The unified Shop v41 request evidence failed verification '
-        '(definitions=$definitionsValid, evidencePresent=${evidence != null}, '
+        '(definitions=$definitionsValid, coverage=$coverageValid, '
+        'evidencePresent=${evidenceRows.isNotEmpty}, '
         'mismatches=$mismatches).',
       );
     }

@@ -127,6 +127,62 @@ Map<String, String> shopConnectedCloudFeedSchemaDefinitionsV41() => {
       ),
 };
 
+/// Shared open/backup prerequisite: every retained v41 page has exactly one
+/// canonical request/approval evidence row, and no orphan evidence exists.
+/// This is only a coverage check. Signed authority and time reconstruction
+/// must pass separately before either reader may accept a nonempty feed.
+bool shopConnectedCloudFeedEvidenceCoverageV41({
+  required Iterable<Map<String, Object?>> pages,
+  required Iterable<Map<String, Object?>> evidence,
+}) {
+  try {
+    final requestDigestsByPage = <String, String>{};
+    for (final page in pages) {
+      final digest = page['page_digest'];
+      final pageJson = page['page_json'];
+      if (digest is! String || pageJson is! String) return false;
+      final decoded = jsonDecode(pageJson);
+      if (decoded is! Map ||
+          canonicalConnectedSiteJson(decoded) != pageJson ||
+          decoded['requestDigest'] is! String) {
+        return false;
+      }
+      if (requestDigestsByPage.containsKey(digest) ||
+          requestDigestsByPage.length >= 2048) {
+        return false;
+      }
+      requestDigestsByPage[digest] = decoded['requestDigest'] as String;
+    }
+    final seen = <String>{};
+    for (final row in evidence) {
+      final pageDigest = row['page_digest'];
+      final requestJson = row['request_json'];
+      final approvalJson = row['cloud_key_approval_json'];
+      if (pageDigest is! String ||
+          !requestDigestsByPage.containsKey(pageDigest) ||
+          !seen.add(pageDigest) ||
+          seen.length > 2048 ||
+          requestJson is! String ||
+          approvalJson is! String ||
+          requestJson.length > 8192 ||
+          approvalJson.length > 4096 ||
+          canonicalConnectedSiteJson(jsonDecode(requestJson)) != requestJson ||
+          canonicalConnectedSiteJson(jsonDecode(approvalJson)) !=
+              approvalJson ||
+          connectedSiteSha256(jsonDecode(requestJson)) !=
+              row['request_digest'] ||
+          requestDigestsByPage[pageDigest] != row['request_digest'] ||
+          connectedSiteSha256(jsonDecode(approvalJson)) !=
+              row['cloud_key_approval_digest']) {
+        return false;
+      }
+    }
+    return seen.length == requestDigestsByPage.length;
+  } on Object {
+    return false;
+  }
+}
+
 /// Empty production pins keep nonempty data closed. Test-only pins can verify
 /// retained signatures and ordered source pages; this does not renew a lease,
 /// clear a restore barrier, or grant permission to make a shared write.

@@ -14,6 +14,98 @@ import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'historical_shop_fixture_support.dart';
 
 void main() {
+  test('v41 open and backup share exact page evidence coverage', () {
+    const pageDigest =
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    final request = canonicalConnectedSiteJson({'request': 'synthetic'});
+    final approval = canonicalConnectedSiteJson({'approval': 'synthetic'});
+    final requestDigest = connectedSiteSha256(jsonDecode(request));
+    final page = <String, Object?>{
+      'page_digest': pageDigest,
+      'page_json': canonicalConnectedSiteJson({'requestDigest': requestDigest}),
+    };
+    final evidence = <String, Object?>{
+      'page_digest': pageDigest,
+      'request_json': request,
+      'request_digest': requestDigest,
+      'cloud_key_approval_json': approval,
+      'cloud_key_approval_digest': connectedSiteSha256(jsonDecode(approval)),
+    };
+    bool covers(
+      List<Map<String, Object?>> pages,
+      List<Map<String, Object?>> rows,
+    ) =>
+        shopConnectedCloudFeedEvidenceCoverageV41(pages: pages, evidence: rows);
+    expect(covers([], []), isTrue);
+    expect(covers([page], [evidence]), isTrue);
+    expect(covers([page], []), isFalse);
+    expect(covers([], [evidence]), isFalse);
+    expect(covers([page], [evidence, evidence]), isFalse);
+    expect(covers([page, page], [evidence]), isFalse);
+    final otherRequest = canonicalConnectedSiteJson({'request': 'other'});
+    final otherDigest = connectedSiteSha256(jsonDecode(otherRequest));
+    final otherPage = <String, Object?>{
+      'page_digest': 'b' * 64,
+      'page_json': canonicalConnectedSiteJson({'requestDigest': otherDigest}),
+    };
+    final otherEvidence = <String, Object?>{
+      ...evidence,
+      'page_digest': 'b' * 64,
+      'request_json': otherRequest,
+      'request_digest': otherDigest,
+    };
+    expect(covers([page, otherPage], [evidence, otherEvidence]), isTrue);
+    expect(
+      covers(
+        [page, otherPage],
+        [
+          {...evidence, 'page_digest': 'b' * 64},
+          {...otherEvidence, 'page_digest': pageDigest},
+        ],
+      ),
+      isFalse,
+    );
+    expect(
+      covers(
+        [page],
+        [
+          {...evidence, 'request_digest': 'b' * 64},
+        ],
+      ),
+      isFalse,
+    );
+    expect(
+      covers(
+        [page],
+        [
+          {
+            ...evidence,
+            'cloud_key_approval_json': '{ "approval": "synthetic" }',
+          },
+        ],
+      ),
+      isFalse,
+    );
+    expect(
+      covers(
+        [page],
+        [
+          {...evidence, 'cloud_key_approval_digest': 'b' * 64},
+        ],
+      ),
+      isFalse,
+    );
+    expect(
+      covers(
+        [page],
+        [
+          {...evidence, 'request_json': '{ "request": "synthetic" }'},
+        ],
+      ),
+      isFalse,
+    );
+  });
+
   test('unmounted v41 SQL rejects orphan, duplicate, update and delete', () {
     final definitions = shopConnectedCloudFeedSchemaDefinitionsV41();
     expect(definitions.keys, <String>{

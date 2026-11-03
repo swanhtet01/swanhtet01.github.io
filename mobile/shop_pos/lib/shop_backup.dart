@@ -3909,6 +3909,16 @@ abstract final class ShopBackup {
 
   static bool _v41ConnectedCloudFeedRowsEmpty(Database connection) {
     try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table LIMIT 2049')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      if (!shopConnectedCloudFeedEvidenceCoverageV41(
+        pages: rows('shop_connected_cloud_feed_pages'),
+        evidence: rows('shop_connected_cloud_feed_page_evidence'),
+      )) {
+        return false;
+      }
       for (final table in const [
         'shop_connected_cloud_feed_streams',
         'shop_connected_cloud_feed_pages',
