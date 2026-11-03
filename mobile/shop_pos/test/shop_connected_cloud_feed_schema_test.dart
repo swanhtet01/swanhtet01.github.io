@@ -264,7 +264,28 @@ void main() {
             proofJson: candidateProof ?? proofJson,
             trustedNowMillis: 1500,
           );
-      await apply(applied);
+      // Two independent SQLite handles may race for the first page. A busy
+      // loser is acceptable; a second effect or a damaged head is not. Both
+      // handles must subsequently recognize the retained exact response.
+      final contender = ShopDatabase.testOnlyWithCloudFeedPins(
+        executor: NativeDatabase(appliedFile),
+        trustedIssuerKeys: pins,
+      );
+      await contender.verifyReadyForUse();
+      final firstAttempts = await Future.wait(
+        [applied, contender].map((database) async {
+          try {
+            await apply(database);
+            return true;
+          } on sqlite.SqliteException catch (error) {
+            if (error.resultCode != 5 && error.resultCode != 6) rethrow;
+            return false;
+          }
+        }),
+      );
+      expect(firstAttempts, contains(true));
+      await apply(contender);
+      await contender.close();
       await apply(applied);
       final retained = await applied
           .customSelect(
