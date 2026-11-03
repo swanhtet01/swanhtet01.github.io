@@ -1,9 +1,42 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 21:08 UTC
+- Last verified: 2026-11-03 21:44 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 21:44 UTC private signed HTTP-to-native two-device fixture
+
+- **PASS (private, synthetic, default-off):** implementation
+  `2e48632fa204831a829d0de1704c2ee833e1f87d`, repository tree
+  `26f48133b91d9d34728a5656f2bd4212ee20ca42`, native tree
+  `6607ba02ee9c62e96da26c11ebc3fe4f711c92a5`, three-path patch SHA-256
+  `0df93015d6ec89ec1f0a613c8d85f7551fe0c82fec2aa6e1bb49e3800eff3c87`.
+  The repeatable private harness exports two independently signed native v41
+  SQLite fixture stores, constructs matching current authority/lease and
+  request-bound synthetic peers, and uses a Python FastAPI TestClient route
+  plus the checked mock-SQL reader to sign each device's next event page under
+  the reader transaction. Each native store applies the **unmodified**
+  request/page/proof bytes for its own device. Swapped-device response,
+  altered page, wrong-device HTTP body and locally revoked peer are denied;
+  offline store reopen, cursor replay, signed local revocation and backup are
+  checked. Final-source harness **PASS**: device A export 15.930s, device B
+  export 12.545s, combined native file 135.139s (15/15 tests). Flutter
+  analyzer, Dart formatter, Python compilation and diff check **PASS**.
+  Independent read-only security review **ACCEPT** on the final bridge.
+- **NOT RUN / BLOCKED:** TestClient peer attestation and SQL connection are
+  synthetic; no real TLS/mTLS ingress, PostgreSQL 17 bridge, cloud-propagated
+  revocation, installed two-device network, production key custody or merchant
+  acceptance occurred. The route is local to the test and connected mode
+  remains off. The separate corrected PG17 signer/revocation case is still
+  locally **SKIPPED** and needs exact-head hosted execution.
+- **Published draft #752:** public head remains
+  `07b12e5b796dee325fcfac9c853cbf59415c5644`. Native run `41713099835`
+  is terminal overall **FAILURE** because isolated iOS QA was cancelled;
+  Android, Windows, isolated Android/Windows QA and iPad/iOS jobs each **PASS**.
+  This private implementation is not tested by that hosted run. The next
+  guarded draft successor must receive fresh exact-head App/Native checks;
+  do not call the cancelled job a pass or the corrected PG17 case proven.
 
 ## 2026-11-03 21:08 UTC authenticated HTTP to native feed bridge preflight
 
