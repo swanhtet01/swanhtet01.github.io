@@ -1,9 +1,28 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 06:52 UTC
+- Last verified: 2026-11-03 07:03 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 07:03 UTC reviewed cumulative PR candidate
+
+- **PASS (private source):** `609f1acc834e7a07db5b9aaa7c586d9e5762ed42`,
+  tree `975b9a40cc246f85c7ddf89c38ea17e1bed40479`, parent `5306b253`,
+  adds a pre-workspace safe-relative-path check for the pending Windows
+  observer executable and rejects child-process starts after the observed
+  parent exit. Fix patch SHA-256 is
+  `0a6d8397b1e49f330c39506ec9a6f2376633e3f2c606183422e384003cbc9d5d`.
+  Focused Windows observer/closure tests **16/16 PASS**, diff check **PASS**,
+  independent cumulative changed-file review **ACCEPT** for source-only
+  publication. The formal security-diff skill preflight reference was
+  unavailable, so review was manual and is not a completed formal scan.
+- **NOT RUN / BLOCKED:** no Windows observer, PostgreSQL rehearsal, native
+  cloud-feed cursor, two-device sync or installed Android test is evidenced
+  by this source. The published draft PR #752 remains `d10cccb0` pending a
+  freshly guarded non-force update; its prior Native run `41587213794` is
+  terminal **FAIL** on the measured persistence_b 600-second timeout. The
+  coverage-preserving successor scheduling has only local contract tests.
 
 ## 2026-11-03 06:52 UTC private feed-binding and Android shard successor
 
