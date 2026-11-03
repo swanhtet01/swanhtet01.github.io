@@ -854,6 +854,237 @@ void main() {
           completeTables: tables,
         );
     expect(valid(history), isTrue);
+    final secondNonce = '9' * 64;
+    final secondRequestUnsigned = <String, Object?>{
+      ...requestUnsigned,
+      'afterSequence': 1,
+      'priorEventDigest': 'e' * 64,
+      'requestNonce': secondNonce,
+    };
+    final secondRequestJson = canonicalConnectedSiteJson({
+      ...secondRequestUnsigned,
+      'signature': await signFields(secondRequestUnsigned, clientPair),
+    });
+    final secondRequestDigest = connectedSiteSha256(
+      jsonDecode(secondRequestJson),
+    );
+    final secondPageUnsigned = <String, Object?>{
+      ...pageUnsigned,
+      'requestDigest': secondRequestDigest,
+      'afterSequence': 1,
+      'priorEventDigest': 'e' * 64,
+      'headers': [
+        {
+          'sequence': 2,
+          'eventDigest': 'd' * 64,
+          'previousEventDigest': 'e' * 64,
+        },
+      ],
+      'nextSequence': 2,
+      'nextEventDigest': 'd' * 64,
+    };
+    final secondPageDigest = connectedSiteSha256(secondPageUnsigned);
+    final secondPageJson = canonicalConnectedSiteJson({
+      ...secondPageUnsigned,
+      'pageDigest': secondPageDigest,
+    });
+    final secondProofUnsigned = <String, Object?>{
+      ...proofUnsigned,
+      'requestDigest': secondRequestDigest,
+      'requestNonce': secondNonce,
+      'afterSequence': 1,
+      'priorEventDigest': 'e' * 64,
+      'nextSequence': 2,
+      'nextEventDigest': 'd' * 64,
+      'pageDigest': secondPageDigest,
+    };
+    final secondProofJson = canonicalConnectedSiteJson({
+      ...secondProofUnsigned,
+      'signature': await signFields(secondProofUnsigned, feedPair),
+    });
+    final secondPageRow = <String, Object?>{
+      ...history['shop_connected_cloud_feed_pages']!.single,
+      'page_digest': secondPageDigest,
+      'after_sequence': 1,
+      'prior_event_digest': 'e' * 64,
+      'next_sequence': 2,
+      'next_event_digest': 'd' * 64,
+      'page_json': secondPageJson,
+      'request_nonce': secondNonce,
+      'authenticated_proof_json': secondProofJson,
+      'authenticated_proof_digest': connectedSiteSha256(
+        jsonDecode(secondProofJson),
+      ),
+    };
+    final secondEvidenceRow = <String, Object?>{
+      ...history['shop_connected_cloud_feed_page_evidence']!.single,
+      'page_digest': secondPageDigest,
+      'request_json': secondRequestJson,
+      'request_digest': secondRequestDigest,
+      'sample_monotonic_millis': 8001,
+      'trusted_now_millis': now + 1,
+    };
+    final twoPageHistory = <String, List<Map<String, Object?>>>{
+      ...history,
+      'shop_connected_cloud_feed_pages': [
+        ...history['shop_connected_cloud_feed_pages']!,
+        secondPageRow,
+      ],
+      'shop_connected_cloud_feed_page_evidence': [
+        ...history['shop_connected_cloud_feed_page_evidence']!,
+        secondEvidenceRow,
+      ],
+      'shop_connected_cloud_feed_heads': [
+        {
+          ...history['shop_connected_cloud_feed_heads']!.single,
+          'next_sequence': 2,
+          'next_event_digest': 'd' * 64,
+          'last_page_digest': secondPageDigest,
+        },
+      ],
+    };
+    expect(valid(twoPageHistory), isTrue);
+    expect(
+      valid({
+        ...twoPageHistory,
+        'shop_connected_cloud_feed_page_evidence': [
+          {
+            ...history['shop_connected_cloud_feed_page_evidence']!.single,
+            'sample_monotonic_millis': 8001,
+            'trusted_now_millis': now + 1,
+          },
+          {
+            ...secondEvidenceRow,
+            'sample_monotonic_millis': 8000,
+            'trusted_now_millis': now,
+          },
+        ],
+      }),
+      isFalse,
+      reason: 'a later page cannot move signed site time backward',
+    );
+    expect(
+      valid({
+        ...twoPageHistory,
+        'shop_connected_cloud_feed_page_evidence': [
+          history['shop_connected_cloud_feed_page_evidence']!.single,
+        ],
+      }),
+      isFalse,
+      reason: 'a later page without its own signed request must fail',
+    );
+    expect(
+      valid({
+        ...twoPageHistory,
+        'shop_connected_cloud_feed_pages': [
+          history['shop_connected_cloud_feed_pages']!.single,
+          {...secondPageRow, 'prior_event_digest': '0' * 64},
+        ],
+      }),
+      isFalse,
+      reason: 'a discontinuous second page must fail',
+    );
+    final twoPageFile = await preRevocationFile.copy(
+      '${root.path}/two-page.sqlite',
+    );
+    final twoPageDatabase = ShopDatabase(NativeDatabase(twoPageFile));
+    final firstEvidenceForTwoPage = ShopCloudFeedV41FirstPageEvidence(
+      requestJson: requestJson,
+      cloudKeyApprovalJson: cloudApprovalJson,
+      enrollmentEvidenceDigest: approval.evidenceDigest,
+      timeEntryDigest: signedTime.entryDigest,
+      timeAckDigest: signedAck.ackDigest,
+      timeHeadDigest: timeHead.headDigest,
+      bootSessionId: 'b' * 64,
+      sampleMonotonicMillis: 8000,
+    );
+    await twoPageDatabase.testOnlyApplyConnectedCloudFeedFirstPageV41(
+      trust: trust,
+      timeAuthority: _V41FixtureTime(
+        workspace,
+        site,
+        [now],
+        firstEvidenceForTwoPage,
+      ),
+      expected: expected,
+      actorRole: 'manager',
+      requestNonce: requestNonce,
+      pageJson: pageJson,
+      proofJson: proofJson,
+      evidence: firstEvidenceForTwoPage,
+    );
+    await twoPageDatabase.transaction(() async {
+      await twoPageDatabase.customInsert(
+        'INSERT INTO shop_connected_cloud_feed_pages '
+        '(page_digest, stream_digest, after_sequence, prior_event_digest, '
+        'next_sequence, next_event_digest, page_json, request_nonce, '
+        'authenticated_proof_json, authenticated_proof_digest) '
+        'VALUES (?, ?, 1, ?, 2, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(secondPageDigest),
+          Variable<String>(streamDigest),
+          Variable<String>('e' * 64),
+          Variable<String>('d' * 64),
+          Variable<String>(secondPageJson),
+          Variable<String>(secondNonce),
+          Variable<String>(secondProofJson),
+          Variable<String>(
+            secondPageRow['authenticated_proof_digest'] as String,
+          ),
+        ],
+      );
+      await twoPageDatabase.customInsert(
+        'INSERT INTO shop_connected_cloud_feed_page_evidence '
+        '(page_digest, request_json, request_digest, cloud_key_approval_json, '
+        'cloud_key_approval_digest, lease_digest, authority_payload_digest, '
+        'enrollment_evidence_digest, time_entry_digest, time_ack_digest, '
+        'time_head_digest, boot_session_id, sample_monotonic_millis, '
+        'trusted_now_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(secondPageDigest),
+          Variable<String>(secondRequestJson),
+          Variable<String>(secondRequestDigest),
+          Variable<String>(cloudApprovalJson),
+          Variable<String>(
+            secondEvidenceRow['cloud_key_approval_digest'] as String,
+          ),
+          Variable<String>(lease.payloadDigest),
+          Variable<String>(authorityPayload.payloadDigest),
+          Variable<String>(approval.evidenceDigest),
+          Variable<String>(signedTime.entryDigest),
+          Variable<String>(signedAck.ackDigest),
+          Variable<String>(timeHead.headDigest),
+          Variable<String>('b' * 64),
+          const Variable<int>(8001),
+          const Variable<int>(now + 1),
+        ],
+      );
+      await twoPageDatabase.customUpdate(
+        'UPDATE shop_connected_cloud_feed_heads SET next_sequence = 2, '
+        'next_event_digest = ?, last_page_digest = ? WHERE stream_digest = ?',
+        variables: [
+          Variable<String>('d' * 64),
+          Variable<String>(secondPageDigest),
+          Variable<String>(streamDigest),
+        ],
+      );
+    });
+    await twoPageDatabase.close();
+    expect(
+      () => ShopBackup.verifySnapshot(
+        twoPageFile,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      returnsNormally,
+      reason: 'two signed pages remain reconstructable by backup',
+    );
+    final twoPageReopened = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(twoPageFile),
+      trust: trust,
+    );
+    await twoPageReopened.verifyReadyForUse();
+    await twoPageReopened.close();
     final pageEvidence = ShopCloudFeedV41FirstPageEvidence(
       requestJson: requestJson,
       cloudKeyApprovalJson: cloudApprovalJson,
