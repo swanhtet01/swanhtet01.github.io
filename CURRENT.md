@@ -1,9 +1,14 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 13:44 UTC
+- Last verified: 2026-11-03 14:09 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 14:09 UTC private shared v41 evidence coverage
+
+- **PASS (default-off open/backup prerequisite):** implementation `a7016bfe9eec64061df31a21c3fe29ad02b4e787`, repository tree `9fb44710a73c50e619bdd09b06650ac26d193eaf`, native tree `d449c5c9fafb450030a25906fb92014d510afed8`, runtime `lib/` tree `31eb3057b86ec437facd56862d5f54a5fcf2d29c`. Database open and synchronous backup now share bounded one-to-one v41 page/evidence coverage: canonical signed-page request digest must match retained canonical request JSON, approval JSON digests must match, and missing, orphan, duplicate, swapped and oversized evidence fails. The complete cloud-feed schema suite **11/11 PASS** in 1m12s on the final source, changed-path Flutter analysis **PASS**, independent review **ACCEPT for coverage-only integration**. Existing empty-feed gates remain in both readers.
+- **REVISE / NOT RUN:** an attempted first-page historical verifier was rejected in independent security review before commit or integration: selected row subsets did not prove complete revocation/authority histories, the test fixture did not initially satisfy actual v25 enrollment semantics, and feed-proof issuance was not checked against the retained trusted sample. The draft was removed; the worktree is clean. Nonempty v41 atomic apply, reopen and encrypted backup remain **NOT RUN**. Next source step is a genuine full-row synthetic v25/v30/v34/v36/v39/v40/v41 fixture with complete-history selection and proof-window validation, then the shared historical reader and separate transaction-time current-authority gate. Production pins remain empty and connected mode off; public PR #752 was not changed.
 
 ## 2026-11-03 13:44 UTC private pending-enrollment key join
 
