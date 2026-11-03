@@ -37,7 +37,41 @@ void main() {
     String? httpResponsePath,
     bool stopAfterRecovery = false,
   }) async {
-    const now = 1800000001000;
+    final fixtureNowMillis =
+        Platform.environment[secondary
+            ? 'SUPERMEGA_CLOUD_FEED_V41_FIXTURE_NOW_MILLIS_B'
+            : 'SUPERMEGA_CLOUD_FEED_V41_FIXTURE_NOW_MILLIS_A'] ??
+        Platform.environment['SUPERMEGA_CLOUD_FEED_V41_FIXTURE_NOW_MILLIS'];
+    final now = fixtureNowMillis == null
+        ? 1800000001000
+        : int.parse(fixtureNowMillis);
+    if (fixtureNowMillis != null) {
+      expect(
+        Platform.environment['SUPERMEGA_CLOUD_FEED_V41_REAL_PG_ANCHOR'],
+        '1',
+        reason: 'live-clock fixture time is restricted to the opt-in PG anchor',
+      );
+      expect(
+        now,
+        greaterThan(1700000000000),
+        reason: 'the opt-in fixture needs an explicit UTC millisecond epoch',
+      );
+    }
+    final authorityNowMillis =
+        Platform.environment['SUPERMEGA_CLOUD_FEED_V41_AUTHORITY_NOW_MILLIS'];
+    if (authorityNowMillis != null) {
+      expect(
+        Platform.environment['SUPERMEGA_CLOUD_FEED_V41_REAL_PG_ANCHOR'],
+        '1',
+        reason: 'shared authority time is restricted to the opt-in PG fixture',
+      );
+    }
+    final authorityNow = authorityNowMillis == null
+        ? now
+        : int.parse(authorityNowMillis);
+    expect(authorityNow, lessThanOrEqualTo(now));
+    final realPgAnchor =
+        Platform.environment['SUPERMEGA_CLOUD_FEED_V41_REAL_PG_ANCHOR'] == '1';
     const workspace = 'workspace_v41_fixture';
     const site = 'site_v41_fixture';
     const coordinator = 'counter_v41_fixture';
@@ -160,7 +194,7 @@ void main() {
       variables: [
         const Variable<String>(workspace),
         const Variable<String>(site),
-        const Variable<int>(now - 600),
+        Variable<int>(now - 600),
         Variable<String>(connectedSiteSha256({'fixture': 'revocation-origin'})),
       ],
     );
@@ -183,7 +217,7 @@ void main() {
         },
         'configurationVersion': 1,
       },
-      'issuedAtMillis': now - 500,
+      'issuedAtMillis': authorityNow - 500,
       'issuerKeyId': 'authority_fixture',
       'membershipSnapshot': {
         'members': [
@@ -270,7 +304,12 @@ void main() {
     );
     final leaseUnsigned = <String, Object>{
       'protocolVersion': 1,
-      'leaseId': 'lease_v41_fixture',
+      'leaseId':
+          secondary &&
+              Platform.environment['SUPERMEGA_CLOUD_FEED_V41_REAL_PG_ANCHOR'] ==
+                  '1'
+          ? 'lease_v41_second_fixture'
+          : 'lease_v41_fixture',
       'workspaceId': workspace,
       'siteId': site,
       'actorId': 'actor_fixture',
@@ -455,7 +494,7 @@ void main() {
     );
     final preRevocationFile = File('${root.path}/pre-revocation.sqlite');
     await database.exportVerifiedLocalSnapshot(preRevocationFile);
-    clock = now + 500;
+    clock = now + (realPgAnchor ? 40000 : 500);
     store = ShopConnectedSiteEnrollmentStore(
       database: database,
       nowMillis: () => clock,
@@ -543,8 +582,6 @@ void main() {
       'signature': await signFields(requestUnsigned, clientPair),
     });
     final requestDigest = connectedSiteSha256(jsonDecode(requestJson));
-    final realPgAnchor =
-        Platform.environment['SUPERMEGA_CLOUD_FEED_V41_REAL_PG_ANCHOR'] == '1';
     final firstEventDigest = realPgAnchor
         ? connectedSiteSha256({'synthetic': 'v41-bridge-first'})
         : 'e' * 64;
@@ -682,7 +719,7 @@ void main() {
           Variable<String>(signedAck.ackDigest),
           Variable<String>(timeHead.headDigest),
           Variable<String>('b' * 64),
-          const Variable<int>(now),
+          Variable<int>(now),
         ],
       );
     });
@@ -924,6 +961,24 @@ void main() {
       expect(signedPageBytes['proofJson'], localSecondProofJson);
     }
     final secondProofJson = signedPageBytes['proofJson'] as String;
+    final trustedNowOverride =
+        Platform.environment[secondary
+            ? 'SUPERMEGA_CLOUD_FEED_V41_TRUSTED_NOW_MILLIS_B'
+            : 'SUPERMEGA_CLOUD_FEED_V41_TRUSTED_NOW_MILLIS_A'];
+    if (trustedNowOverride != null) {
+      expect(realPgAnchor, isTrue);
+      expect(externalResponsePath != null, isTrue);
+    }
+    if (realPgAnchor && externalResponsePath != null) {
+      expect(trustedNowOverride != null, isTrue);
+    }
+    final secondTrustedNow = trustedNowOverride == null
+        ? now + 1
+        : int.parse(trustedNowOverride);
+    final secondMonotonicSample = 8000 + secondTrustedNow - now;
+    expect(secondTrustedNow, greaterThan(now));
+    expect(secondTrustedNow, lessThan(now + 30000));
+    expect(secondTrustedNow, lessThan(revocation.observedAtMillis));
     final secondPageRow = <String, Object?>{
       ...history['shop_connected_cloud_feed_pages']!.single,
       'page_digest': secondPageDigest,
@@ -943,8 +998,8 @@ void main() {
       'page_digest': secondPageDigest,
       'request_json': secondRequestJson,
       'request_digest': secondRequestDigest,
-      'sample_monotonic_millis': 8001,
-      'trusted_now_millis': now + 1,
+      'sample_monotonic_millis': secondMonotonicSample,
+      'trusted_now_millis': secondTrustedNow,
     };
     final twoPageHistory = <String, List<Map<String, Object?>>>{
       ...history,
@@ -965,6 +1020,33 @@ void main() {
         },
       ],
     };
+    expect(
+      verifyRetainedTrustedTimeSampleV39Sync(
+        entryJson: signedTime.canonicalJson,
+        ackJson: signedAck.canonicalJson,
+        entryDigest: signedTime.entryDigest,
+        ackDigest: signedAck.ackDigest,
+        headDigest: timeHead.headDigest,
+        workspaceId: workspace,
+        siteId: site,
+        coordinatorDeviceId: coordinator,
+        deviceId: device,
+        clientFingerprint: fingerprint,
+        clientSigningKeyId: fingerprint,
+        sessionGeneration: 1,
+        coordinatorBindingDigest: 'c' * 64,
+        coordinatorBindingGeneration: 1,
+        authorityKeyId: 'time_fixture',
+        authorityKeyGeneration: 1,
+        authorityEpoch: 1,
+        bootSessionId: 'b' * 64,
+        sampleMonotonicMillis: secondMonotonicSample,
+        trustedNowMillis: secondTrustedNow,
+        pinnedAuthorityKeys: {'time_fixture': timeKey},
+        pinnedClientKeys: {fingerprint: clientKey},
+      ),
+      isTrue,
+    );
     expect(valid(twoPageHistory), isTrue);
     expect(
       valid({
@@ -973,7 +1055,7 @@ void main() {
           {
             ...history['shop_connected_cloud_feed_page_evidence']!.single,
             'sample_monotonic_millis': 8001,
-            'trusted_now_millis': now + 1,
+            'trusted_now_millis': secondTrustedNow,
           },
           {
             ...secondEvidenceRow,
@@ -1069,7 +1151,7 @@ void main() {
       timeAckDigest: signedAck.ackDigest,
       timeHeadDigest: timeHead.headDigest,
       bootSessionId: 'b' * 64,
-      sampleMonotonicMillis: 8001,
+      sampleMonotonicMillis: secondMonotonicSample,
     );
     Future<void> applySecondPage(
       ShopDatabase target,
@@ -1100,7 +1182,8 @@ void main() {
       trust: trust,
     );
     await onlineClient.verifyReadyForUse();
-    if (secondary || stopAfterRecovery) {
+    if (secondary ||
+        (stopAfterRecovery && !realPgAnchor && processFixturePath == null)) {
       final swappedPath =
           Platform.environment[secondary
               ? 'SUPERMEGA_CLOUD_FEED_V41_HTTP_RESPONSE_A'
@@ -1118,7 +1201,7 @@ void main() {
         onlineClient.testOnlyApplyConnectedCloudFeedSecondPageV41(
           trust: trust,
           timeAuthority: _V41FixtureTime(workspace, site, [
-            now + 1,
+            secondTrustedNow,
           ], secondEvidence),
           expected: secondExpected,
           actorRole: 'manager',
@@ -1135,7 +1218,7 @@ void main() {
       onlineClient.testOnlyApplyConnectedCloudFeedSecondPageV41(
         trust: trust,
         timeAuthority: _V41FixtureTime(workspace, site, [
-          now + 1,
+          secondTrustedNow,
         ], secondEvidence),
         expected: secondExpected,
         actorRole: 'manager',
@@ -1152,7 +1235,7 @@ void main() {
     );
     await applySecondPage(
       onlineClient,
-      _V41FixtureTime(workspace, site, [now + 1], secondEvidence),
+      _V41FixtureTime(workspace, site, [secondTrustedNow], secondEvidence),
     );
     final offlineBeforeReconnect = ShopDatabase.testOnlyWithCloudFeedV41Trust(
       executor: NativeDatabase(offlineFile),
@@ -1177,14 +1260,14 @@ void main() {
     await reconnectedClient.verifyReadyForUse();
     await applySecondPage(
       reconnectedClient,
-      _V41FixtureTime(workspace, site, [now + 1], secondEvidence),
+      _V41FixtureTime(workspace, site, [secondTrustedNow], secondEvidence),
     );
     await applySecondPage(
       reconnectedClient,
       _V41FixtureTime(
         workspace,
         site,
-        [now + 3],
+        [secondTrustedNow + 2],
         secondEvidence,
         initialMonotonicAdvance: 2,
       ),
@@ -1210,7 +1293,7 @@ void main() {
     }
     await ShopConnectedSiteEnrollmentStore(
       database: reconnectedClient,
-      nowMillis: () => now + 500,
+      nowMillis: () => clock,
     ).importOwnerEvidence(revocation, verifier: verifier);
     await expectLater(
       applySecondPage(
@@ -1218,7 +1301,7 @@ void main() {
         _V41FixtureTime(
           workspace,
           site,
-          [now + 3],
+          [secondTrustedNow + 2],
           secondEvidence,
           initialMonotonicAdvance: 2,
         ),

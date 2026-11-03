@@ -13,11 +13,13 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import sqlite3
+from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
+from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
 
 from supermega_runtime.connected_site_gateway import (
     ConnectedSiteGatewayPrincipalResolver, GatewayPeerAttestation,
@@ -73,7 +75,7 @@ class _NativeScript:
         return _Connection(self)
 
 
-def build_response(native_database: Path) -> dict[str, str]:
+def load_native_context(native_database: Path):
     with sqlite3.connect(native_database) as db:
         db.row_factory = sqlite3.Row
         retained = _one(db, "SELECT request_json FROM shop_connected_cloud_feed_page_evidence")
@@ -123,8 +125,13 @@ def build_response(native_database: Path) -> dict[str, str]:
     unsigned.update(afterSequence=1, priorEventDigest=first_digest, requestNonce="9" * 64)
     signature = client_key.sign(canonical_json(unsigned).encode())
     request = {**unsigned, "signature": base64.urlsafe_b64encode(signature).decode().rstrip("=")}
+    return authority, device, lease, request, first_digest
+
+
+def build_response(native_database: Path, *, now: datetime | None = None) -> dict[str, str]:
+    authority, device, lease, request, first_digest = load_native_context(native_database)
     # Source-pinned test clock, never derived from the caller's HTTP body.
-    now = datetime.fromtimestamp(1800000000.9, tz=timezone.utc)
+    now = now or datetime.fromtimestamp(1800000000.9, tz=timezone.utc)
     script = _NativeScript(authority, lease, now, first_digest)
     provider = _Authorities(authority)
     active = True
@@ -172,6 +179,134 @@ def build_response(native_database: Path) -> dict[str, str]:
         if client.post("/test-only/native-v41-feed", json=request).status_code != 401:
             raise ValueError("native_v41_revoked_peer_accepted")
     return sealed
+
+
+def build_pg_response(native_database: Path, *, admin_url: str,
+                      runtime_url: str, first: bool,
+                      previous: tuple[str, str, str] | None,
+                      ) -> tuple[dict[str, str], tuple[str, str, str]]:
+    """Read actual disposable PG17/RLS rows; never accept a production URL.
+
+    The caller owns the ephemeral loopback cluster and must destroy it even on
+    failure.  This fixture deliberately does not install a route or keys.
+    """
+    import psycopg
+
+    authority, device, lease, request, first_digest = load_native_context(native_database)
+    admin_target = urlsplit(admin_url)
+    runtime_target = urlsplit(runtime_url)
+    if (
+        first_digest != digest({"synthetic": "v41-bridge-first"})
+        or (first and previous is not None)
+        or (not first and previous != (
+            authority.authority_payload_digest, first_digest, "device_v41_fixture"
+        ))
+        or (first and device.device_id != "device_v41_fixture")
+        or (not first and device.device_id != "device_v41_second")
+        or (not first and lease["leaseId"] != "lease_v41_second_fixture")
+        or admin_target.scheme != "postgresql" or admin_target.hostname != "127.0.0.1"
+        or admin_target.username != "postgres" or not admin_target.port
+        or not admin_target.password
+        or runtime_target.scheme != "postgresql" or runtime_target.hostname != "127.0.0.1"
+        or runtime_target.username != "supermega_trial_login"
+        or runtime_target.port != admin_target.port or not runtime_target.password
+        or runtime_target.path != admin_target.path
+    ):
+        raise ValueError("native_v41_pg_fixture_identity")
+    workspace, site = authority.workspace_id, authority.site_id
+    with psycopg.connect(admin_url) as connection:
+        if first:
+            connection.execute(
+                "insert into app_private.connected_sites "
+                "(workspace_id,site_id,protocol_version,connected_enabled,authority_generation,"
+                "configuration_generation,revocation_generation,authority_payload_digest) "
+                "values (%s,%s,1,true,%s,%s,%s,%s)",
+                (workspace, site, authority.authority_generation,
+                 authority.configuration_generation, authority.revocation_generation,
+                 authority.authority_payload_digest),
+            )
+        else:
+            site_row = connection.execute(
+                "select authority_payload_digest from app_private.connected_sites "
+                "where workspace_id=%s and site_id=%s",
+                (workspace, site),
+            ).fetchone()
+            if site_row != (authority.authority_payload_digest,):
+                raise ValueError("native_v41_pg_site_changed")
+        connection.execute(
+            "insert into app_private.connected_site_devices "
+            "(workspace_id,site_id,device_id,signing_key_id,signing_public_key,"
+            "client_fingerprint,enrollment_evidence_digest,coordinator_binding_digest,"
+            "session_generation,status) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,'active')",
+            (workspace, site, device.device_id, device.signing_key_id, device.public_key,
+             device.client_fingerprint, device.enrollment_evidence_digest,
+             device.coordinator_binding_digest, device.session_generation),
+        )
+        connection.execute(
+            "insert into app_private.connected_site_leases "
+            "(workspace_id,site_id,lease_id,actor_id,device_id,role,capabilities,"
+            "session_generation,revocation_generation,configuration_generation,"
+            "issuer_key_id,issuer_public_key,lease_json,lease_digest,issued_at,expires_at,status) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,'active')",
+            (workspace, site, lease["leaseId"], lease["actorId"], device.device_id,
+             lease["role"], lease["capabilities"], lease["sessionGeneration"],
+             lease["revocationGeneration"], authority.configuration_generation,
+             lease["issuerKeyId"], authority.issuer_keys[lease["issuerKeyId"]],
+             canonical_json(lease), digest(lease),
+             datetime.fromisoformat(lease["issuedAt"].replace("Z", "+00:00")),
+             datetime.fromisoformat(lease["expiresAt"].replace("Z", "+00:00"))),
+        )
+        connection.execute(
+            "insert into app_private.connected_site_cursors "
+            "(workspace_id,site_id,device_id) values (%s,%s,%s)",
+            (workspace, site, device.device_id),
+        )
+        if first:
+            previous_digest = None
+            for sequence, event in enumerate((
+                {"synthetic": "v41-bridge-first"},
+                {"synthetic": "v41-bridge-second"},
+            ), start=1):
+                event_digest = digest(event)
+                command_id = f"native-v41-pg-{sequence}"
+                command_digest = digest({"command": command_id})
+                connection.execute(
+                    "insert into app_private.connected_site_commands "
+                    "(workspace_id,site_id,command_id,command_digest,command_json,"
+                    "proof_json,proof_digest,actor_id,device_id,lease_id,aggregate_type,"
+                    "aggregate_id,expected_version,state) "
+                    "values (%s,%s,%s,%s,'{}'::jsonb,'{}'::jsonb,%s,%s,%s,%s,%s,%s,%s,'accepted')",
+                    (workspace, site, command_id, command_digest, digest({}),
+                     lease["actorId"], device.device_id, lease["leaseId"],
+                     "retailCart", command_id, 0),
+                )
+                connection.execute(
+                    "insert into app_private.connected_site_events "
+                    "(workspace_id,site_id,event_sequence,event_id,event_digest,"
+                    "previous_event_digest,event_json,command_id,command_digest,"
+                    "aggregate_type,aggregate_id,aggregate_version) "
+                    "values (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,1)",
+                    (workspace, site, sequence, f"native-v41-pg-event-{sequence}",
+                     event_digest, previous_digest, canonical_json(event),
+                     command_id, command_digest, "retailCart", command_id),
+                )
+                previous_digest = event_digest
+    now = datetime.now(timezone.utc)
+    principal = ConnectedSitePrincipal(workspace, site, device.device_id, True,
+                                       "test-native-v41-pg")
+    result = read_and_sign_test_only_page(
+        connection_factory=lambda: psycopg.connect(runtime_url),
+        principal=principal, authority=authority, lease=lease, request=request,
+        now=now, issuer_key_id="feed_fixture", issuer_seed=23,
+    )
+    page = json.loads(result["pageJson"])
+    if (
+        page["afterSequence"] != 1 or page["priorEventDigest"] != first_digest
+        or len(page["headers"]) != 1
+        or page["headers"][0]["eventDigest"] != digest({"synthetic": "v41-bridge-second"})
+    ):
+        raise ValueError("native_v41_pg_checked_page_mismatch")
+    return result, (authority.authority_payload_digest, first_digest, device.device_id)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,77 @@
+name: Shop disposable PG17 to native bridge
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/shop-connected-pg17-native-bridge.yml'
+      - 'mobile/shop_pos/**'
+      - 'supermega_runtime/connected_site_*.py'
+      - 'tests/connected_site_*.py'
+      - 'tests/test_connected_site_*.py'
+      - 'tests/v41_native_http_bridge_fixture.py'
+      - 'scripts/test_v41_native_http_bridge.py'
+      - 'tools/rehearse_supermega_postgres17.py'
+      - 'supabase/migrations/**'
+      - 'uv.lock'
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-bridge:
+    name: Synthetic PG17 to Flutter (non-production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SUPERMEGA_TEST_DISPOSABLE_PG17: '1'
+      SUPERMEGA_CLOUD_FEED_V41_DISPOSABLE_PG17: '1'
+      SUPERMEGA_CLOUD_FEED_V41_REAL_PG_ANCHOR: '1'
+    steps:
+      - name: Check out exact PR source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify exact source identity
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12.15'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: '0.11.30'
+
+      - name: Set up pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Prepare disposable PostgreSQL 17 tools
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/supermega-pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-17 postgresql-client-17 openssl
+          /usr/lib/postgresql/17/bin/postgres --version
+          echo "SUPERMEGA_POSTGRES17_BIN=/usr/lib/postgresql/17/bin" >> "$GITHUB_ENV"
+
+      - name: Resolve locked test and Flutter dependencies
+        run: |
+          uv lock --check
+          uv sync --frozen --group test
+          cd mobile/shop_pos
+          flutter pub get --enforce-lockfile
+          echo "FLUTTER_BIN=$(command -v flutter)" >> "$GITHUB_ENV"
+
+      - name: Verify checked PG17 response in two native stores
+        run: uv run --frozen --group test python -m scripts.test_v41_native_http_bridge
