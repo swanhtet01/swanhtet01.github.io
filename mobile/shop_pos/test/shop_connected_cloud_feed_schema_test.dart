@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:crypto/crypto.dart' as crypto;
@@ -20,6 +21,7 @@ import 'package:supermega_shop/shop_connected_site_enrollment_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_connected_trusted_time_client_store.dart';
 import 'package:supermega_shop/shop_connected_trusted_time_stream.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_stream_acceptance.dart';
 import 'package:supermega_shop/shop_offline_staff_lease.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
@@ -884,7 +886,29 @@ void main() {
     await expectLater(
       applyFirstPage(
         rollbackDatabase,
-        _V41FixtureTime(workspace, site, [now]),
+        _V41FixtureTime(
+          workspace,
+          site,
+          [now],
+          ShopCloudFeedV41FirstPageEvidence(
+            requestJson: pageEvidence.requestJson,
+            cloudKeyApprovalJson: pageEvidence.cloudKeyApprovalJson,
+            enrollmentEvidenceDigest: pageEvidence.enrollmentEvidenceDigest,
+            timeEntryDigest: '0' * 64,
+            timeAckDigest: pageEvidence.timeAckDigest,
+            timeHeadDigest: pageEvidence.timeHeadDigest,
+            bootSessionId: pageEvidence.bootSessionId,
+            sampleMonotonicMillis: pageEvidence.sampleMonotonicMillis,
+          ),
+        ),
+      ),
+      throwsStateError,
+      reason: 'live time from another signed entry cannot authorize the page',
+    );
+    await expectLater(
+      applyFirstPage(
+        rollbackDatabase,
+        _V41FixtureTime(workspace, site, [now], pageEvidence),
         beforeCommit: () async => throw StateError('injected_rollback'),
       ),
       throwsStateError,
@@ -892,7 +916,7 @@ void main() {
     await expectLater(
       applyFirstPage(
         rollbackDatabase,
-        _V41FixtureTime(workspace, site, [now + 30001]),
+        _V41FixtureTime(workspace, site, [now + 30001], pageEvidence),
       ),
       throwsFormatException,
       reason: 'an already-expired signed page cannot be retained',
@@ -900,7 +924,7 @@ void main() {
     await expectLater(
       applyFirstPage(
         rollbackDatabase,
-        _V41FixtureTime(workspace, site, [now, now + 30001]),
+        _V41FixtureTime(workspace, site, [now, now + 30001], pageEvidence),
       ),
       throwsA(
         isA<StateError>().having(
@@ -915,7 +939,7 @@ void main() {
     await expectLater(
       applyFirstPage(
         rollbackDatabase,
-        _V41FixtureTime(workspace, site, [now]),
+        _V41FixtureTime(workspace, site, [now], pageEvidence),
         beforeCommit: () async {
           await ShopConnectedSiteEnrollmentStore(
             database: rollbackDatabase,
@@ -950,10 +974,132 @@ void main() {
       () => ShopBackup.verifySnapshot(rollbackFile, expectedSchemaVersion: 41),
       returnsNormally,
     );
+    final raceFile = await preRevocationFile.copy('${root.path}/race.sqlite');
+    final applying = ShopDatabase(NativeDatabase(raceFile));
+    final revocationStarted = ReceivePort();
+    final revocationReady = Completer<SendPort>();
+    final revocationEntered = Completer<void>();
+    final revocationResult = Completer<String>();
+    final revocationMessages = revocationStarted.listen((message) {
+      if (message is SendPort) revocationReady.complete(message);
+      if (message == 'started') revocationEntered.complete();
+      if (message == 'done') revocationResult.complete('done');
+      if (message is String && message.startsWith('error:')) {
+        revocationResult.complete(message);
+      }
+    });
+    await Isolate.spawn(_runV41RevocationRace, {
+      'port': revocationStarted.sendPort,
+      'path': raceFile.path,
+      'evidence': revocation.toJson(),
+      'ownerKey': ownerKey,
+      'workspace': workspace,
+      'site': site,
+      'coordinator': coordinator,
+      'device': device,
+      'fingerprint': fingerprint,
+      'now': now + 500,
+    });
+    final readyOrError = await Future.any<Object>([
+      revocationReady.future,
+      revocationResult.future,
+    ]).timeout(const Duration(seconds: 20));
+    if (readyOrError is! SendPort) {
+      throw StateError('Revocation contender could not open: $readyOrError');
+    }
+    final startRevocation = readyOrError;
+    final atCommit = Completer<void>();
+    final releaseCommit = Completer<void>();
+    final applyingFuture = applyFirstPage(
+      applying,
+      _V41FixtureTime(workspace, site, [now], pageEvidence),
+      beforeCommit: () async {
+        atCommit.complete();
+        await releaseCommit.future;
+      },
+    );
+    await atCommit.future.timeout(const Duration(seconds: 5));
+    startRevocation.send(true);
+    await revocationEntered.future.timeout(const Duration(seconds: 5));
+    final contended = await revocationResult.future.timeout(
+      const Duration(seconds: 3),
+    );
+    expect(
+      contended,
+      contains('database is locked'),
+      reason: 'a second connection must fail closed at the write lock',
+    );
+    releaseCommit.complete();
+    await applyingFuture.timeout(const Duration(seconds: 5));
+    await revocationMessages.cancel();
+    revocationStarted.close();
+    expect(
+      await applying
+          .customSelect(
+            "SELECT * FROM shop_site_enrollment_evidence WHERE action = 'revoke'",
+          )
+          .get(),
+      isEmpty,
+      reason: 'the contended revocation must not partially persist',
+    );
+    final revokingAfter = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(raceFile),
+      trust: trust,
+    );
+    await ShopConnectedSiteEnrollmentStore(
+      database: revokingAfter,
+      nowMillis: () => now + 500,
+    ).importOwnerEvidence(revocation, verifier: verifier);
+    await revokingAfter.close();
+    expect(
+      await applying
+          .customSelect(
+            "SELECT * FROM shop_site_enrollment_evidence WHERE action = 'revoke'",
+          )
+          .get(),
+      hasLength(1),
+      reason: 'a fresh transaction may retain the signed later revocation',
+    );
+    await expectLater(
+      applyFirstPage(
+        applying,
+        _V41FixtureTime(workspace, site, [now], pageEvidence),
+      ),
+      throwsStateError,
+      reason: 'later revocation blocks even exact replay on either connection',
+    );
+    await applying.close();
+    expect(
+      () => ShopBackup.verifySnapshot(
+        raceFile,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      returnsNormally,
+      reason: 'historical page remains readable after later revocation',
+    );
+    final advancingFile = await preRevocationFile.copy(
+      '${root.path}/advancing.sqlite',
+    );
+    final advancing = ShopDatabase(NativeDatabase(advancingFile));
+    await applyFirstPage(
+      advancing,
+      _V41FixtureTime(workspace, site, [now, now + 1], pageEvidence),
+    );
+    await advancing.close();
+    expect(
+      () => ShopBackup.verifySnapshot(
+        advancingFile,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      returnsNormally,
+      reason: 'same-boot monotonic advancement inside validity is accepted',
+    );
     var firstPageDatabase = ShopDatabase(NativeDatabase(preRevocationFile));
     await applyFirstPage(
       firstPageDatabase,
-      _V41FixtureTime(workspace, site, [now]),
+      _V41FixtureTime(workspace, site, [now], pageEvidence),
     );
     await firstPageDatabase.close();
     firstPageDatabase = ShopDatabase.testOnlyWithCloudFeedV41Trust(
@@ -963,7 +1109,7 @@ void main() {
     await firstPageDatabase.verifyReadyForUse();
     await applyFirstPage(
       firstPageDatabase,
-      _V41FixtureTime(workspace, site, [now]),
+      _V41FixtureTime(workspace, site, [now], pageEvidence),
     );
     final changedNonce = 'f' * 64;
     final changedRequestUnsigned = {
@@ -999,7 +1145,7 @@ void main() {
     await expectLater(
       firstPageDatabase.testOnlyApplyConnectedCloudFeedFirstPageV41(
         trust: trust,
-        timeAuthority: _V41FixtureTime(workspace, site, [now]),
+        timeAuthority: _V41FixtureTime(workspace, site, [now], pageEvidence),
         expected: ConnectedSiteRetailFeedExpectation(
           workspaceId: workspace,
           siteId: site,
@@ -1182,7 +1328,10 @@ void main() {
     );
     await database.verifyReadyForUse();
     await expectLater(
-      applyFirstPage(database, _V41FixtureTime(workspace, site, [now])),
+      applyFirstPage(
+        database,
+        _V41FixtureTime(workspace, site, [now], pageEvidence),
+      ),
       throwsStateError,
       reason: 'current revocation must block an otherwise exact replay',
     );
@@ -2475,6 +2624,56 @@ void main() {
   });
 }
 
+Future<void> _runV41RevocationRace(Map<String, Object> message) async {
+  final port = message['port'] as SendPort;
+  final fields = message['evidence'] as Map<String, Object>;
+  final database = ShopDatabase(
+    NativeDatabase(
+      File(message['path'] as String),
+      setup: (raw) => raw.execute('PRAGMA busy_timeout = 100'),
+    ),
+  );
+  try {
+    await database.verifyReadyForUse();
+    final startSignal = ReceivePort();
+    port.send(startSignal.sendPort);
+    await startSignal.first;
+    startSignal.close();
+    port.send('started');
+    await ShopConnectedSiteEnrollmentStore(
+      database: database,
+      nowMillis: () => message['now'] as int,
+    ).importOwnerEvidence(
+      ShopOwnerEnrollmentEvidenceV1(
+        action: ShopOwnerEnrollmentAction.revoke,
+        tenantId: fields['tenantId'] as String,
+        siteId: fields['siteId'] as String,
+        coordinatorDeviceId: fields['coordinatorDeviceId'] as String,
+        deviceId: fields['deviceId'] as String,
+        clientFingerprint: fields['clientFingerprint'] as String,
+        sessionGeneration: fields['sessionGeneration'] as int,
+        observedAtMillis: fields['observedAtMillis'] as int,
+        authorityKeyId: fields['authorityKeyId'] as String,
+        signature: fields['signature'] as String,
+        evidenceDigest: fields['evidenceDigest'] as String,
+      ),
+      verifier: _PinnedV41OwnerVerifier(
+        ownerKey: message['ownerKey'] as List<int>,
+        workspace: message['workspace'] as String,
+        site: message['site'] as String,
+        coordinator: message['coordinator'] as String,
+        device: message['device'] as String,
+        fingerprint: message['fingerprint'] as String,
+      ),
+    );
+    port.send('done');
+  } on Object catch (error) {
+    port.send('error:$error');
+  } finally {
+    await database.close();
+  }
+}
+
 final class _PinnedV41OwnerVerifier
     implements ShopOwnerEnrollmentEvidenceVerifier {
   const _PinnedV41OwnerVerifier({
@@ -2513,17 +2712,17 @@ final class _PinnedV41OwnerVerifier
   }
 }
 
-final class _V41FixtureTime
-    implements ShopConnectedSiteCoordinatorTimeAuthority {
-  _V41FixtureTime(this.workspaceId, this.siteId, this.values);
+final class _V41FixtureTime implements ShopConnectedCloudFeedLiveTimeSource {
+  _V41FixtureTime(this.workspaceId, this.siteId, this.values, this.evidence);
 
   final String workspaceId;
   final String siteId;
   final List<int> values;
+  final ShopCloudFeedV41FirstPageEvidence evidence;
   var _reads = 0;
 
   @override
-  Future<int> readValidatedNowMillis({
+  Future<ConnectedTrustedTimeLiveReading> readLiveTime({
     required String tenantId,
     required String siteId,
   }) async {
@@ -2532,6 +2731,13 @@ final class _V41FixtureTime
     }
     final index = _reads < values.length ? _reads : values.length - 1;
     _reads++;
-    return values[index];
+    return ConnectedTrustedTimeLiveReading(
+      entryDigest: evidence.timeEntryDigest,
+      ackDigest: evidence.timeAckDigest,
+      bootSessionId: evidence.bootSessionId,
+      monotonicMillis:
+          evidence.sampleMonotonicMillis + values[index] - values.first,
+      effectiveTimeMillis: values[index],
+    );
   }
 }

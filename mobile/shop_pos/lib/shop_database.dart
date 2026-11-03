@@ -22,6 +22,7 @@ import 'shop_connected_stock_reservation.dart';
 import 'shop_connected_trusted_time_client_schema.dart';
 import 'shop_connected_trusted_time_contract.dart';
 import 'shop_connected_trusted_time_stream.dart';
+import 'shop_connected_trusted_time_stream_acceptance.dart';
 import 'shop_site_coordinator.dart';
 import 'shop_correction_consumption.dart';
 import 'shop_correction_receipt.dart';
@@ -6352,6 +6353,41 @@ abstract interface class ShopConnectedSiteCoordinatorTimeAuthority {
   });
 }
 
+/// A same-boot, evidence-bearing time read for the test-only cloud-feed gate.
+/// A bare millisecond value cannot establish which signed sample authorized it.
+abstract interface class ShopConnectedCloudFeedLiveTimeSource {
+  Future<ConnectedTrustedTimeLiveReading> readLiveTime({
+    required String tenantId,
+    required String siteId,
+  });
+}
+
+/// Binds the volatile stream acceptance to the requested site. Retained rows
+/// alone cannot create this capability after restart or restore.
+final class ShopConnectedCloudFeedAcceptedLiveTime
+    implements ShopConnectedCloudFeedLiveTimeSource {
+  const ShopConnectedCloudFeedAcceptedLiveTime({
+    required this.tenantId,
+    required this.siteId,
+    required this.acceptance,
+  });
+
+  final String tenantId;
+  final String siteId;
+  final ConnectedTrustedTimeStreamClientAcceptance acceptance;
+
+  @override
+  Future<ConnectedTrustedTimeLiveReading> readLiveTime({
+    required String tenantId,
+    required String siteId,
+  }) {
+    if (tenantId != this.tenantId || siteId != this.siteId) {
+      throw StateError('Cloud-feed live-time scope changed.');
+    }
+    return acceptance.readLiveTime();
+  }
+}
+
 class ShopConnectedSiteTimeUnavailable
     implements ShopConnectedSiteCoordinatorTimeAuthority {
   const ShopConnectedSiteTimeUnavailable();
@@ -11325,7 +11361,7 @@ class ShopDatabase extends _$ShopDatabase {
   /// This method does not mount connected sync or clear restore suspension.
   Future<void> testOnlyApplyConnectedCloudFeedFirstPageV41({
     required ShopCloudFeedV41FirstPageTrust trust,
-    required ShopConnectedSiteCoordinatorTimeAuthority timeAuthority,
+    required ShopConnectedCloudFeedLiveTimeSource timeAuthority,
     required ConnectedSiteRetailFeedExpectation expected,
     required String actorRole,
     required String requestNonce,
@@ -11369,10 +11405,25 @@ class ShopDatabase extends _$ShopDatabase {
         pinned,
         expected.authorityPayloadDigest,
       );
-      final now = await timeAuthority.readValidatedNowMillis(
+      final liveTime = await timeAuthority.readLiveTime(
         tenantId: expected.workspaceId,
         siteId: expected.siteId,
       );
+      void requireBoundLiveTime(ConnectedTrustedTimeLiveReading reading) {
+        if (reading.entryDigest != evidence.timeEntryDigest ||
+            reading.ackDigest != evidence.timeAckDigest ||
+            reading.bootSessionId != evidence.bootSessionId ||
+            reading.monotonicMillis < evidence.sampleMonotonicMillis ||
+            reading.effectiveTimeMillis <= 0) {
+          throw StateError('Cloud-feed live-time evidence changed.');
+        }
+      }
+
+      requireBoundLiveTime(liveTime);
+      if (liveTime.monotonicMillis != evidence.sampleMonotonicMillis) {
+        throw StateError('Cloud-feed initial live-time sample changed.');
+      }
+      final now = liveTime.effectiveTimeMillis;
       final page = ConnectedSiteRetailFeedPageV1.parse(
         canonicalBytes: pageJson,
         expected: expected,
@@ -11465,6 +11516,37 @@ class ShopDatabase extends _$ShopDatabase {
       )) {
         throw StateError('Current signed cloud-feed authority is invalid.');
       }
+      Future<void> requireCurrentLiveTime(
+        Map<String, List<Map<String, Object?>>> rows,
+      ) async {
+        final latest = await timeAuthority.readLiveTime(
+          tenantId: expected.workspaceId,
+          siteId: expected.siteId,
+        );
+        requireBoundLiveTime(latest);
+        if (latest.monotonicMillis < liveTime.monotonicMillis ||
+            latest.effectiveTimeMillis < now) {
+          throw StateError('Cloud-feed trusted time regressed before commit.');
+        }
+        final retained = rows['shop_connected_cloud_feed_page_evidence']!;
+        if (retained.length != 1 ||
+            !shopCloudFeedFirstPageHistoricalRowsValidV41(
+              trust: pinned,
+              completeTables: {
+                ...rows,
+                'shop_connected_cloud_feed_page_evidence': [
+                  {
+                    ...retained.single,
+                    'sample_monotonic_millis': latest.monotonicMillis,
+                    'trusted_now_millis': latest.effectiveTimeMillis,
+                  },
+                ],
+              },
+            )) {
+          throw StateError('Cloud-feed trusted time changed before commit.');
+        }
+      }
+
       if (currentPages.isNotEmpty) {
         bool same(Map<String, Object?> a, Map<String, Object?> b) =>
             canonicalConnectedSiteJson(a) == canonicalConnectedSiteJson(b);
@@ -11482,18 +11564,12 @@ class ShopDatabase extends _$ShopDatabase {
             )) {
           throw StateError('Cloud-feed first-page replay changed bytes.');
         }
-        if (await timeAuthority.readValidatedNowMillis(
-              tenantId: expected.workspaceId,
-              siteId: expected.siteId,
-            ) !=
-            now) {
-          throw StateError('Cloud-feed trusted time changed during replay.');
-        }
         await _requireCurrentV41Authority(
           await _readV41HistoricalRows(),
           pinned,
           expected.authorityPayloadDigest,
         );
+        await requireCurrentLiveTime(await _readV41HistoricalRows());
         return;
       }
       if (current['shop_connected_cloud_feed_streams']!.isNotEmpty ||
@@ -11579,13 +11655,7 @@ class ShopDatabase extends _$ShopDatabase {
         pinned,
         expected.authorityPayloadDigest,
       );
-      if (await timeAuthority.readValidatedNowMillis(
-            tenantId: expected.workspaceId,
-            siteId: expected.siteId,
-          ) !=
-          now) {
-        throw StateError('Cloud-feed trusted time changed before commit.');
-      }
+      await requireCurrentLiveTime(finalRows);
       if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
         trust: pinned,
         completeTables: finalRows,
