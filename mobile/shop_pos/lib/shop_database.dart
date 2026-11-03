@@ -6561,6 +6561,9 @@ class ShopDatabase extends _$ShopDatabase {
           correctionReceiptVerifier ??
           ShopCorrectionReceiptVerifier.production(),
       testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+      testOnlyLegacyCloudFeedV40:
+          testOnlyCloudFeedPinnedKeys.isNotEmpty &&
+          _testMutationBypassAvailable,
     );
     try {
       await database.verifyReadyForUse();
@@ -6573,7 +6576,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v40.');
+        throw StateError('The staged Shop restore did not reach schema v41.');
       }
     } finally {
       await database.close();
@@ -6615,6 +6618,7 @@ class ShopDatabase extends _$ShopDatabase {
       executor: executor,
       correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
       testOnlyCloudFeedPinnedKeys: trustedIssuerKeys,
+      testOnlyLegacyCloudFeedV40: true,
     );
   }
 
@@ -6640,10 +6644,17 @@ class ShopDatabase extends _$ShopDatabase {
     bool testOnlyAllowUnconsumedAuthorization = false,
     DateTime Function()? testOnlySaleAndCashShiftClock,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    bool testOnlyLegacyCloudFeedV40 = false,
   }) : assert(
          !testOnlyAllowUnconsumedAuthorization || _testMutationBypassAvailable,
          'Unconsumed correction authorization is unavailable in product builds.',
        ),
+       assert(
+         !testOnlyLegacyCloudFeedV40 || _testMutationBypassAvailable,
+         'Legacy v40 cloud-feed fixtures are unavailable in product builds.',
+       ),
+       _testOnlyLegacyCloudFeedV40 =
+           testOnlyLegacyCloudFeedV40 && _testMutationBypassAvailable,
        _saleAndCashShiftClock = _testMutationBypassAvailable
            ? testOnlySaleAndCashShiftClock ?? DateTime.now
            : DateTime.now,
@@ -6659,6 +6670,7 @@ class ShopDatabase extends _$ShopDatabase {
 
   final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
   final Map<String, List<int>> _testOnlyCloudFeedPinnedKeys;
+  final bool _testOnlyLegacyCloudFeedV40;
   final bool testOnlyAllowUnconsumedAuthorization;
   final DateTime Function() _saleAndCashShiftClock;
 
@@ -6666,7 +6678,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 41;
+  int get schemaVersion => _testOnlyLegacyCloudFeedV40 ? 40 : 41;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6726,7 +6738,7 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV39Schema();
       await _createConnectedCloudFeedSchemaV40();
       await _requireUnifiedV40Schema();
-      await _requireUnifiedV41Schema();
+      if (!_testOnlyLegacyCloudFeedV40) await _requireUnifiedV41Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
@@ -7205,11 +7217,17 @@ class ShopDatabase extends _$ShopDatabase {
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV41Schema();
+      if (_testOnlyLegacyCloudFeedV40) {
+        await _requireUnifiedV40Schema();
+      } else {
+        await _requireUnifiedV41Schema();
+      }
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV41Schema();
+  Future<void> verifyReadyForUse() => _testOnlyLegacyCloudFeedV40
+      ? _requireUnifiedV40Schema()
+      : _requireUnifiedV41Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
@@ -7825,7 +7843,9 @@ class ShopDatabase extends _$ShopDatabase {
     }
     // All pre-v40 branches create an empty feed, so install the additive v41
     // evidence objects in the same transaction before the v41 beforeOpen.
-    await _createConnectedCloudFeedSchemaV41();
+    if (!_testOnlyLegacyCloudFeedV40) {
+      await _createConnectedCloudFeedSchemaV41();
+    }
   }
 
   Future<void> _createConnectedCloudFeedSchemaV41() async {
@@ -7855,7 +7875,9 @@ class ShopDatabase extends _$ShopDatabase {
       variables: names.map(Variable<String>.new).toList(),
     ).get();
     if (rows.isNotEmpty) {
-      throw StateError('A pre-v41 Shop database contains request evidence schema.');
+      throw StateError(
+        'A pre-v41 Shop database contains request evidence schema.',
+      );
     }
   }
 
@@ -7869,7 +7891,9 @@ class ShopDatabase extends _$ShopDatabase {
       final row = await customSelect('SELECT 1 FROM $table LIMIT 1')
           .getSingleOrNull();
       if (row != null) {
-        throw StateError('Nonempty v40 cloud feed lacks signed request evidence.');
+        throw StateError(
+          'Nonempty v40 cloud feed lacks signed request evidence.',
+        );
       }
     }
   }
@@ -10857,7 +10881,13 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _requireUnifiedV41Schema() async {
     await _requireUnifiedV40Schema();
-    final objects = await _readSchemaObjects();
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {
+        #shopAllowV40NestedSchemaVerification: false,
+        #shopAllowV41NestedSchemaVerification: false,
+      },
+    );
     final definitions = shopConnectedCloudFeedSchemaDefinitionsV41();
     final definitionsValid = _definitionGroupExact(
       objects,
@@ -10880,7 +10910,9 @@ class ShopDatabase extends _$ShopDatabase {
                 canonicalShopSchemaSql(object.sql) !=
                     canonicalShopSchemaSql(entry.value);
           })
-          .map((entry) => '${entry.key}:${objects[entry.key]?.type ?? 'missing'}')
+          .map(
+            (entry) => '${entry.key}:${objects[entry.key]?.type ?? 'missing'}',
+          )
           .toList(growable: false);
       throw StateError(
         'The unified Shop v41 request evidence failed verification '
@@ -13327,6 +13359,7 @@ class ShopDatabase extends _$ShopDatabase {
         executor: NativeDatabase(target),
         correctionReceiptVerifier: correctionReceiptVerifier,
         testOnlyCloudFeedPinnedKeys: _testOnlyCloudFeedPinnedKeys,
+        testOnlyLegacyCloudFeedV40: _testOnlyLegacyCloudFeedV40,
       );
       try {
         await snapshot.verifyReadyForUse();

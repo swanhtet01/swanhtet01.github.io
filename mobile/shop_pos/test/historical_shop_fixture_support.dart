@@ -1,9 +1,10 @@
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_database.dart';
 
-const historicalShopFixtureSupportedSchemaVersion = 40;
+const historicalShopFixtureSupportedSchemaVersion = 41;
 
 Set<String> historicalShopPostV15SchemaObjectNames() => <String>{
+  ...shopConnectedCloudFeedSchemaDefinitionsV41().keys,
   ...shopConnectedCloudFeedSchemaDefinitionsV40().keys,
   ...shopConnectedTrustedTimeClientSchemaDefinitionsV39().keys,
   ...shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
@@ -28,6 +29,16 @@ void dropHistoricalShopSchemaDefinitionGroup(
   sqlite.Database connection,
   Map<String, String> definitions,
 ) {
+  if (definitions.keys.toSet().containsAll(
+        shopConnectedCloudFeedSchemaDefinitionsV40().keys,
+      ) &&
+      definitions.length ==
+          shopConnectedCloudFeedSchemaDefinitionsV40().length) {
+    dropHistoricalShopSchemaDefinitionGroup(
+      connection,
+      shopConnectedCloudFeedSchemaDefinitionsV41(),
+    );
+  }
   if (definitions.keys.toSet().containsAll(
         shopConnectedTrustedTimeClientSchemaDefinitionsV39().keys,
       ) &&
@@ -68,6 +79,16 @@ Future<void> dropHistoricalShopSchemaDefinitionGroupInDatabase(
   ShopDatabase database,
   Map<String, String> definitions,
 ) async {
+  if (definitions.keys.toSet().containsAll(
+        shopConnectedCloudFeedSchemaDefinitionsV40().keys,
+      ) &&
+      definitions.length ==
+          shopConnectedCloudFeedSchemaDefinitionsV40().length) {
+    await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+      database,
+      shopConnectedCloudFeedSchemaDefinitionsV41(),
+    );
+  }
   if (definitions.keys.toSet().containsAll(
         shopConnectedTrustedTimeClientSchemaDefinitionsV39().keys,
       ) &&

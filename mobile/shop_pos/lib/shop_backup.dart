@@ -65,7 +65,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 40;
+  static const supportedSchemaVersion = 41;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -224,7 +224,12 @@ abstract final class ShopBackup {
       );
     }
     _checkPassword(password);
-    if (database.schemaVersion != supportedSchemaVersion) {
+    final testOnlyHistoricalV40 =
+        !const bool.fromEnvironment('dart.vm.product') &&
+        database.schemaVersion == 40 &&
+        testOnlyCloudFeedPinnedKeys.isNotEmpty;
+    if (database.schemaVersion != supportedSchemaVersion &&
+        !testOnlyHistoricalV40) {
       throw StateError('This Shop schema is not supported for backup.');
     }
     if (await archive.exists()) {
@@ -1978,6 +1983,9 @@ abstract final class ShopBackup {
     final cloudFeedDefinitions = schemaVersion >= 40
         ? shopConnectedCloudFeedSchemaDefinitionsV40()
         : const <String, String>{};
+    final cloudFeedEvidenceDefinitions = schemaVersion >= 41
+        ? shopConnectedCloudFeedSchemaDefinitionsV41()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -2004,7 +2012,8 @@ abstract final class ShopBackup {
             schemaVersion == 37 ||
             schemaVersion == 38 ||
             schemaVersion == 39 ||
-            schemaVersion == 40) &&
+            schemaVersion == 40 ||
+            schemaVersion == 41) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -2090,6 +2099,13 @@ abstract final class ShopBackup {
               cloudFeedDefinitions,
               cloudFeedDefinitions.keys.toSet(),
             )) &&
+        (schemaVersion < 41 ||
+            (_v41ConnectedCloudFeedRowsEmpty(connection) &&
+                _snapshotDefinitionGroupExact(
+                  objects,
+                  cloudFeedEvidenceDefinitions,
+                  cloudFeedEvidenceDefinitions.keys.toSet(),
+                ))) &&
         (schemaVersion < 31 ||
             _snapshotDefinitionGroupExact(
               objects,
@@ -2149,6 +2165,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 38) trustedTimeIssuerDefinitions,
           if (schemaVersion >= 39) trustedTimeClientDefinitions,
           if (schemaVersion >= 40) cloudFeedDefinitions,
+          if (schemaVersion >= 41) cloudFeedEvidenceDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2173,6 +2190,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 38) ...trustedTimeIssuerDefinitions.keys,
           if (schemaVersion >= 39) ...trustedTimeClientDefinitions.keys,
           if (schemaVersion >= 40) ...cloudFeedDefinitions.keys,
+          if (schemaVersion >= 41) ...cloudFeedEvidenceDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3884,6 +3902,25 @@ abstract final class ShopBackup {
         restoreBarriers: rows('shop_connected_cloud_feed_restore_barriers'),
         trustedIssuerKeys: trustedIssuerKeys,
       );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v41ConnectedCloudFeedRowsEmpty(Database connection) {
+    try {
+      for (final table in const [
+        'shop_connected_cloud_feed_streams',
+        'shop_connected_cloud_feed_pages',
+        'shop_connected_cloud_feed_heads',
+        'shop_connected_cloud_feed_restore_barriers',
+        'shop_connected_cloud_feed_page_evidence',
+      ]) {
+        if (connection.select('SELECT 1 FROM $table LIMIT 1').isNotEmpty) {
+          return false;
+        }
+      }
+      return true;
     } on Object {
       return false;
     }

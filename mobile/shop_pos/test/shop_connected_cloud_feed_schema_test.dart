@@ -667,7 +667,10 @@ void main() {
       );
       addTearDown(() => directory.delete(recursive: true));
       final file = File('${directory.path}/shop.sqlite');
-      var database = ShopDatabase(NativeDatabase(file));
+      var database = ShopDatabase.testOnlyWithCloudFeedPins(
+        executor: NativeDatabase(file),
+        trustedIssuerKeys: {'issuer-1': publicKey.bytes},
+      );
       await database.verifyReadyForUse();
       await database.close();
       final raw = sqlite.sqlite3.open(file.path);
@@ -747,7 +750,7 @@ void main() {
   );
 
   test(
-    'fresh v40 has exact empty cloud-feed schema and backup proof',
+    'fresh v41 has exact empty request-evidence schema and backup proof',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'shop-v40-fresh-',
@@ -756,7 +759,13 @@ void main() {
       final file = File('${directory.path}/shop.sqlite');
       final database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 40);
+      expect(database.schemaVersion, 41);
+      final evidenceColumns = await database
+          .customSelect(
+            'PRAGMA table_info(shop_connected_cloud_feed_page_evidence)',
+          )
+          .get();
+      expect(evidenceColumns, isNotEmpty);
       final pageColumns = await database
           .customSelect('PRAGMA table_info(shop_connected_cloud_feed_pages)')
           .get();
@@ -770,12 +779,12 @@ void main() {
         }),
       );
       await database.close();
-      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40);
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
     },
   );
 
   test(
-    'genuine empty v39 upgrades to v40 without inventing feed rows',
+    'genuine empty v39 upgrades to v41 without inventing feed rows',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'shop-v40-upgrade-',
@@ -794,7 +803,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 40);
+      expect(database.schemaVersion, 41);
       final rows = await database
           .customSelect(
             'SELECT COUNT(*) AS total FROM shop_connected_cloud_feed_streams',
@@ -802,9 +811,141 @@ void main() {
           .getSingle();
       expect(rows.read<int>('total'), 0);
       await database.close();
-      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40);
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
     },
   );
+
+  test('genuine empty v40 upgrades to v41 and restores empty', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'shop-v41-upgrade-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/shop.sqlite');
+    final legacy = ShopDatabase.testOnlyWithCloudFeedPins(
+      executor: NativeDatabase(file),
+      trustedIssuerKeys: {'fixture-issuer': List<int>.filled(32, 1)},
+    );
+    await legacy.verifyReadyForUse();
+    expect(legacy.schemaVersion, 40);
+    await legacy.close();
+    ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40);
+
+    final database = ShopDatabase(NativeDatabase(file));
+    await database.verifyReadyForUse();
+    expect(database.schemaVersion, 41);
+    final evidence = await database
+        .customSelect(
+          'SELECT COUNT(*) AS total FROM shop_connected_cloud_feed_page_evidence',
+        )
+        .getSingle();
+    expect(evidence.read<int>('total'), 0);
+    final archive = File('${directory.path}/empty-v41.backup');
+    await ShopBackup.exportEncrypted(
+      database: database,
+      archive: archive,
+      password: 'synthetic-v41-restore-only',
+      scratchRoot: directory,
+    );
+    await database.close();
+    ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
+    final restored = File('${directory.path}/restored.sqlite');
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: restored,
+      password: 'synthetic-v41-restore-only',
+    );
+    ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 41);
+    final reopened = ShopDatabase(NativeDatabase(restored));
+    await reopened.verifyReadyForUse();
+    await reopened.close();
+  });
+
+  test('nonempty v40 cannot gain invented v41 request evidence', () async {
+    final directory = await Directory.systemTemp.createTemp('shop-v41-reject-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/shop.sqlite');
+    final legacy = ShopDatabase.testOnlyWithCloudFeedPins(
+      executor: NativeDatabase(file),
+      trustedIssuerKeys: {'fixture-issuer': List<int>.filled(32, 1)},
+    );
+    await legacy.verifyReadyForUse();
+    await legacy.close();
+    final raw = sqlite.sqlite3.open(file.path);
+    try {
+      raw.execute(
+        '''
+        INSERT INTO shop_connected_cloud_feed_streams
+        (stream_digest, workspace_id, site_id, actor_id, device_id,
+         actor_role, lease_digest, authority_payload_digest,
+         authority_generation, revocation_generation)
+        VALUES (?, 'workspace-a', 'site-a', 'actor-a', 'device-a',
+                'manager', ?, ?, 1, 1)
+      ''',
+        ['a' * 64, 'b' * 64, 'c' * 64],
+      );
+    } finally {
+      raw.close();
+    }
+    final upgrade = ShopDatabase(NativeDatabase(file));
+    await expectLater(upgrade.verifyReadyForUse(), throwsStateError);
+    await upgrade.close();
+    final unchanged = sqlite.sqlite3.open(file.path);
+    try {
+      expect(unchanged.select('PRAGMA user_version').single.columnAt(0), 40);
+      expect(
+        unchanged.select(
+          "SELECT name FROM sqlite_master WHERE name = 'shop_connected_cloud_feed_page_evidence'",
+        ),
+        isEmpty,
+      );
+    } finally {
+      unchanged.close();
+    }
+  });
+
+  test('forged v41 request evidence fails open and backup checks', () async {
+    final directory = await Directory.systemTemp.createTemp('shop-v41-forged-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/shop.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    await database.verifyReadyForUse();
+    await database.close();
+    final raw = sqlite.sqlite3.open(file.path);
+    try {
+      // A hostile file may be edited with foreign keys disabled. Verification
+      // must still reject it rather than trusting declared FKs or JSON shape.
+      raw.execute(
+        '''
+        INSERT INTO shop_connected_cloud_feed_page_evidence
+        (page_digest, request_json, request_digest, lease_digest,
+         authority_payload_digest, enrollment_evidence_digest,
+         time_entry_digest, time_ack_digest, time_head_digest,
+         boot_session_id, sample_monotonic_millis, trusted_now_millis)
+        VALUES (?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, 100, 1800000000000)
+      ''',
+        [
+          'a' * 64,
+          'b' * 64,
+          'a' * 64,
+          'a' * 64,
+          'a' * 64,
+          'a' * 64,
+          'a' * 64,
+          'a' * 64,
+          'a' * 64,
+        ],
+      );
+    } finally {
+      raw.close();
+    }
+    expect(
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+      throwsFormatException,
+    );
+    database = ShopDatabase(NativeDatabase(file));
+    await expectLater(database.verifyReadyForUse(), throwsStateError);
+    await database.close();
+  });
 
   test(
     'unapproved cloud rows cannot open or cross backup verification',
