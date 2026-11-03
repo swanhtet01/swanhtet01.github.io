@@ -1,9 +1,44 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 11:00 UTC
+- Last verified: 2026-11-03 11:18 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 11:18 UTC public CI and private signed event-read request
+
+- **PASS (public draft update, not release):** guarded non-force push advanced
+  PR #752 from `578e51e24c3ef778e6d708b385598170b8fd445a` to reviewed
+  ledger `b760f4c0cbb05dd45e3b1b72fe00e483c6317224`, tree
+  `a56eefa82579d6e9e1337fb5025f74b026c0d207`. Remote and PR readback
+  matched; it remains open/draft. The 13-commit cumulative diff spans 15
+  paths, patch SHA-256
+  `b006863cb0c7fada6dce00fcb39ea9ba078fab0ca8cb4ceed3e21f7da60fe516`.
+  Independent cumulative review **ACCEPT** for draft CI only.
+- **CI IN PROGRESS / FAIL:** on that exact public head, Native run
+  `41625395653` and primary App run `41625385229` were in progress at this
+  readback; Kernel run `41625395875` passed, dependency run `41625395929`
+  failed, and redundant App run `41625395626` skipped. No Android/build or
+  database rehearsal PASS is inferred from pending checks.
+- **PASS (private unmounted source prerequisite):** implementation commit
+  `e8468afe7834b03426057328b2224c62ff8978f0`, tree
+  `055de843e44fadebca5d08201dd7a699d3fef4c9`, parent `b760f4c0`,
+  four paths, staged patch SHA-256
+  `2dc756d4fab241a19d9804d261680bd28e5d3d3f6f4e32fa159dc6cf68fe50aa`.
+  A strict native parser checks the canonical signed event-read request,
+  pinned device signature, 30-second window, signed lease, signed authority
+  snapshot and current-member role/capability/session binding. A hostile
+  reviewer found a downgrade/removal gap in the first draft; the final draft
+  rejects both and was independently **ACCEPTED** as an unmounted parser.
+  Focused Flutter test **1/1**, targeted analysis, native CI contract **22/22**,
+  QA isolation **24/24**, and diff check passed on the final private source.
+- **BLOCKED / NOT RUN:** the parser accepts injected authority, device and
+  time inputs; it does not establish their latest durable state or run inside
+  v40 atomic apply. Request-authentication evidence is not retained for
+  reconstruction after restart/restore. A separately migrated ledger shape,
+  transaction-bound recheck, production key custody, real PostgreSQL and
+  installed two-device evidence remain required. Connected mode stays off;
+  this private commit is not in hosted CI and must not be claimed ready.
 
 ## 2026-11-03 11:00 UTC private connected CI shard repair
 
