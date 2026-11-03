@@ -194,6 +194,7 @@ void main() {
         String request, {
         String? retainedApprovalDigest,
         ConnectedSiteRetailFeedExpectation? boundExpected,
+        List<int>? pendingPublicKey,
       }) => verifyRetainedCloudFeedReadWithApprovalSync(
         requestBytes: request,
         approvalBytes: approvedBytes,
@@ -206,11 +207,20 @@ void main() {
         requestNonce: nonce,
         clientFingerprint: fingerprint,
         enrollmentEvidenceDigest: enrollmentDigest,
+        expectedPendingEnrollmentPublicKey: pendingPublicKey ?? devicePublic,
         signingKeyId: fingerprint,
         sessionGeneration: 1,
         trustedAtIssueMillis: now,
       );
       expect(() => verifyPair(requestBytes), returnsNormally);
+      expect(
+        () => verifyPair(requestBytes, pendingPublicKey: issuerPublic),
+        throwsFormatException,
+      );
+      expect(
+        () => verifyPair(requestBytes, pendingPublicKey: const []),
+        throwsFormatException,
+      );
       expect(
         () => verifyPair(requestBytes, retainedApprovalDigest: leaseDigest),
         throwsFormatException,

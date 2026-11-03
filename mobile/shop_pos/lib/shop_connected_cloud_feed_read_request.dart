@@ -28,6 +28,7 @@ void verifyRetainedCloudFeedReadWithApprovalSync({
   required String requestNonce,
   required String clientFingerprint,
   required String enrollmentEvidenceDigest,
+  required List<int> expectedPendingEnrollmentPublicKey,
   required String signingKeyId,
   required int sessionGeneration,
   required int trustedAtIssueMillis,
@@ -52,6 +53,22 @@ void verifyRetainedCloudFeedReadWithApprovalSync({
     throw const FormatException(
       'connected_cloud_device_approval_digest_mismatch',
     );
+  }
+  // A cloud-purpose approval cannot substitute a different key for the
+  // independently retained pending key linked by validated v25 owner
+  // approval. The caller must validate that row and lifecycle separately.
+  if (expectedPendingEnrollmentPublicKey.length != 32) {
+    throw const FormatException(
+      'connected_cloud_device_pending_enrollment_key_mismatch',
+    );
+  }
+  for (var index = 0; index < 32; index++) {
+    if (approval.publicKey[index] !=
+        expectedPendingEnrollmentPublicKey[index]) {
+      throw const FormatException(
+        'connected_cloud_device_pending_enrollment_key_mismatch',
+      );
+    }
   }
   verifyRetainedCloudFeedReadRequestSync(
     canonicalBytes: requestBytes,
