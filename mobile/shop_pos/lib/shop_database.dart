@@ -15,6 +15,7 @@ import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_cloud_feed_schema.dart';
 import 'shop_connected_cloud_feed_proof.dart';
+import 'shop_connected_cloud_feed_v41_verifier.dart';
 import 'shop_connected_site_cloud_feed_contract.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
@@ -6622,6 +6623,22 @@ class ShopDatabase extends _$ShopDatabase {
     );
   }
 
+  /// Synthetic first-page historical verification only. This fixture trust
+  /// cannot be configured in product builds and does not grant current writes.
+  factory ShopDatabase.testOnlyWithCloudFeedV41Trust({
+    required QueryExecutor executor,
+    required ShopCloudFeedV41FirstPageTrust trust,
+  }) {
+    if (!_testMutationBypassAvailable) {
+      throw UnsupportedError('Test v41 cloud-feed trust is unavailable.');
+    }
+    return ShopDatabase.withCorrectionReceiptVerifier(
+      executor: executor,
+      correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+      testOnlyCloudFeedV41Trust: trust,
+    );
+  }
+
   factory ShopDatabase.testOnlyWithSaleAndCashShiftClock({
     QueryExecutor? executor,
     required DateTime Function() clock,
@@ -6644,6 +6661,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool testOnlyAllowUnconsumedAuthorization = false,
     DateTime Function()? testOnlySaleAndCashShiftClock,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
     bool testOnlyLegacyCloudFeedV40 = false,
   }) : assert(
          !testOnlyAllowUnconsumedAuthorization || _testMutationBypassAvailable,
@@ -6662,14 +6680,35 @@ class ShopDatabase extends _$ShopDatabase {
            testOnlyAllowUnconsumedAuthorization && _testMutationBypassAvailable,
        _testOnlyCloudFeedPinnedKeys = _testMutationBypassAvailable
            ? Map<String, List<int>>.unmodifiable({
-               for (final entry in testOnlyCloudFeedPinnedKeys.entries)
+               for (final entry
+                   in (testOnlyCloudFeedV41Trust?.feedIssuerKeys ??
+                           testOnlyCloudFeedPinnedKeys)
+                       .entries)
                  entry.key: List<int>.unmodifiable(entry.value),
              })
            : const {},
+       _testOnlyCloudFeedV41Trust = _checkedTestCloudFeedV41Trust(
+         testOnlyCloudFeedV41Trust,
+         testOnlyCloudFeedPinnedKeys,
+       ),
        super(executor ?? driftDatabase(name: 'supermega_shop'));
+
+  static ShopCloudFeedV41FirstPageTrust? _checkedTestCloudFeedV41Trust(
+    ShopCloudFeedV41FirstPageTrust? trust,
+    Map<String, List<int>> legacyPins,
+  ) {
+    if (trust != null && legacyPins.isNotEmpty) {
+      throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
+    }
+    if (!_testMutationBypassAvailable && trust != null) {
+      throw UnsupportedError('Test v41 cloud-feed trust is unavailable.');
+    }
+    return trust?.immutableCopy();
+  }
 
   final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
   final Map<String, List<int>> _testOnlyCloudFeedPinnedKeys;
+  final ShopCloudFeedV41FirstPageTrust? _testOnlyCloudFeedV41Trust;
   final bool _testOnlyLegacyCloudFeedV40;
   final bool testOnlyAllowUnconsumedAuthorization;
   final DateTime Function() _saleAndCashShiftClock;
@@ -7219,6 +7258,8 @@ class ShopDatabase extends _$ShopDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
       if (_testOnlyLegacyCloudFeedV40) {
         await _requireUnifiedV40Schema();
+      } else if (_testOnlyCloudFeedV41Trust != null) {
+        await transaction(_requireUnifiedV41Schema);
       } else {
         await _requireUnifiedV41Schema();
       }
@@ -7227,6 +7268,8 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> verifyReadyForUse() => _testOnlyLegacyCloudFeedV40
       ? _requireUnifiedV40Schema()
+      : _testOnlyCloudFeedV41Trust != null
+      ? transaction(_requireUnifiedV41Schema)
       : _requireUnifiedV41Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
@@ -10894,9 +10937,9 @@ class ShopDatabase extends _$ShopDatabase {
       definitions,
       definitions.keys.toSet(),
     );
-    // No v41 producer may write until the signed request and current authority
-    // can be reconstructed by runtime, encrypted backup and staged restore.
-    // Requiring both tables empty makes a partial or forged record unusable.
+    // Product still requires an empty feed. A test-only, independently pinned
+    // first-page history may be reopened, but it grants no current authority
+    // and never enables a v41 producer or restored connected writes.
     final pageRows = (await customSelect(
       'SELECT page_digest, page_json FROM shop_connected_cloud_feed_pages LIMIT 2049',
     ).get()).map((row) => Map<String, Object?>.from(row.data));
@@ -10907,8 +10950,16 @@ class ShopDatabase extends _$ShopDatabase {
       pages: pageRows,
       evidence: evidenceRows,
     );
-    await _requireEmptyCloudFeedBeforeV41();
-    if (!definitionsValid || !coverageValid || evidenceRows.isNotEmpty) {
+    final historicalTrust = _testOnlyCloudFeedV41Trust;
+    final historicalValid = historicalTrust == null
+        ? false
+        : await _testOnlyV41HistoricalRowsValid(historicalTrust);
+    if (historicalTrust == null) await _requireEmptyCloudFeedBeforeV41();
+    if (!definitionsValid ||
+        !coverageValid ||
+        (historicalTrust == null
+            ? evidenceRows.isNotEmpty
+            : !historicalValid)) {
       final mismatches = definitions.entries
           .where((entry) {
             final object = objects[entry.key];
@@ -10927,6 +10978,29 @@ class ShopDatabase extends _$ShopDatabase {
         'evidencePresent=${evidenceRows.isNotEmpty}, '
         'mismatches=$mismatches).',
       );
+    }
+  }
+
+  Future<bool> _testOnlyV41HistoricalRowsValid(
+    ShopCloudFeedV41FirstPageTrust trust,
+  ) async {
+    if (!_testMutationBypassAvailable) return false;
+    try {
+      final complete = <String, List<Map<String, Object?>>>{};
+      for (final table in shopCloudFeedV41HistoricalTables) {
+        final values = await customSelect('SELECT * FROM $table LIMIT 2049')
+            .get();
+        if (values.length > 2048) return false;
+        complete[table] = values
+            .map((row) => Map<String, Object?>.from(row.data))
+            .toList(growable: false);
+      }
+      return shopCloudFeedFirstPageHistoricalRowsValidV41(
+        trust: trust,
+        completeTables: complete,
+      );
+    } on Object {
+      return false;
     }
   }
 
@@ -13366,7 +13440,10 @@ class ShopDatabase extends _$ShopDatabase {
       final snapshot = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase(target),
         correctionReceiptVerifier: correctionReceiptVerifier,
-        testOnlyCloudFeedPinnedKeys: _testOnlyCloudFeedPinnedKeys,
+        testOnlyCloudFeedPinnedKeys: _testOnlyCloudFeedV41Trust == null
+            ? _testOnlyCloudFeedPinnedKeys
+            : const {},
+        testOnlyCloudFeedV41Trust: _testOnlyCloudFeedV41Trust,
         testOnlyLegacyCloudFeedV40: _testOnlyLegacyCloudFeedV40,
       );
       try {

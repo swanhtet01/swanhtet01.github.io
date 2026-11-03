@@ -10,6 +10,7 @@ import 'package:ffi/ffi.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'shop_database.dart';
+import 'shop_connected_cloud_feed_v41_verifier.dart';
 import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_site_reconciliation.dart';
@@ -216,9 +217,15 @@ abstract final class ShopBackup {
     required String password,
     required Directory scratchRoot,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
   }) async {
-    if (const bool.fromEnvironment('dart.vm.product') &&
+    if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
+    }
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        (testOnlyCloudFeedPinnedKeys.isNotEmpty ||
+            testOnlyCloudFeedV41Trust != null)) {
       throw UnsupportedError(
         'Test cloud-feed pins are unavailable in product builds.',
       );
@@ -248,6 +255,7 @@ abstract final class ShopBackup {
           snapshot,
           expectedSchemaVersion: database.schemaVersion,
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+          testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
         );
         if (await snapshot.length() > maxSnapshotBytes) {
           throw StateError(
@@ -901,12 +909,14 @@ abstract final class ShopBackup {
     int? expectedSchemaVersion,
     bool allowRuntimeUnboundCorrectionHistory = false,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
   }) => _verifySnapshot(
     file,
     minimumSchemaVersion: oldestSupportedSchemaVersion,
     expectedSchemaVersion: expectedSchemaVersion,
     allowRuntimeUnboundCorrectionHistory: allowRuntimeUnboundCorrectionHistory,
     testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+    testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
   );
 
   /// Verifies an already-installed Shop store before Drift may migrate it.
@@ -925,15 +935,24 @@ abstract final class ShopBackup {
     int? expectedSchemaVersion,
     required bool allowRuntimeUnboundCorrectionHistory,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
   }) {
-    if (const bool.fromEnvironment('dart.vm.product') &&
+    if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
+    }
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        (testOnlyCloudFeedPinnedKeys.isNotEmpty ||
+            testOnlyCloudFeedV41Trust != null)) {
       throw UnsupportedError(
         'Test cloud-feed pins are unavailable in product builds.',
       );
     }
     final connection = sqlite3.open(file.path, mode: OpenMode.readOnly);
+    var snapshotStarted = false;
     try {
+      connection.execute('BEGIN DEFERRED');
+      snapshotStarted = true;
       final version = connection.select('PRAGMA user_version');
       final integrity = connection.select('PRAGMA integrity_check');
       final brokenReferences = connection.select('PRAGMA foreign_key_check');
@@ -951,6 +970,7 @@ abstract final class ShopBackup {
         allowRuntimeUnboundCorrectionHistory:
             allowRuntimeUnboundCorrectionHistory,
         testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+        testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
       );
       final hasCorrectionSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
@@ -1335,7 +1355,11 @@ abstract final class ShopBackup {
         );
       }
     } finally {
-      connection.close();
+      try {
+        if (snapshotStarted) connection.execute('ROLLBACK');
+      } finally {
+        connection.close();
+      }
     }
   }
 
@@ -1435,6 +1459,7 @@ abstract final class ShopBackup {
     required int minimumSchemaVersion,
     required bool allowRuntimeUnboundCorrectionHistory,
     required Map<String, List<int>> testOnlyCloudFeedPinnedKeys,
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
   }) {
     if (schemaVersion < minimumSchemaVersion ||
         schemaVersion > supportedSchemaVersion) {
@@ -2091,7 +2116,8 @@ abstract final class ShopBackup {
         (schemaVersion < 40 ||
             _v40ConnectedCloudFeedRowsValid(
               connection,
-              testOnlyCloudFeedPinnedKeys,
+              testOnlyCloudFeedV41Trust?.feedIssuerKeys ??
+                  testOnlyCloudFeedPinnedKeys,
             )) &&
         (schemaVersion < 40 ||
             _snapshotDefinitionGroupExact(
@@ -2100,7 +2126,12 @@ abstract final class ShopBackup {
               cloudFeedDefinitions.keys.toSet(),
             )) &&
         (schemaVersion < 41 ||
-            (_v41ConnectedCloudFeedRowsEmpty(connection) &&
+            ((testOnlyCloudFeedV41Trust == null
+                    ? _v41ConnectedCloudFeedRowsEmpty(connection)
+                    : _v41FirstPageHistoryValid(
+                        connection,
+                        testOnlyCloudFeedV41Trust.immutableCopy(),
+                      )) &&
                 _snapshotDefinitionGroupExact(
                   objects,
                   cloudFeedEvidenceDefinitions,
@@ -3931,6 +3962,29 @@ abstract final class ShopBackup {
         }
       }
       return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v41FirstPageHistoryValid(
+    Database connection,
+    ShopCloudFeedV41FirstPageTrust trust,
+  ) {
+    if (const bool.fromEnvironment('dart.vm.product')) return false;
+    try {
+      final complete = <String, List<Map<String, Object?>>>{};
+      for (final table in shopCloudFeedV41HistoricalTables) {
+        final values = connection.select('SELECT * FROM $table LIMIT 2049');
+        if (values.length > 2048) return false;
+        complete[table] = values
+            .map((row) => Map<String, Object?>.from(row))
+            .toList(growable: false);
+      }
+      return shopCloudFeedFirstPageHistoricalRowsValidV41(
+        trust: trust,
+        completeTables: complete,
+      );
     } on Object {
       return false;
     }

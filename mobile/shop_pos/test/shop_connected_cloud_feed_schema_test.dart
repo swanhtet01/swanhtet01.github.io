@@ -835,12 +835,32 @@ void main() {
       timeAuthorityKeys: {'time_fixture': timeKey},
       clientKeys: {fingerprint: clientKey},
     );
+    expect(
+      () => ShopDatabase.withCorrectionReceiptVerifier(
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+        testOnlyCloudFeedPinnedKeys: {'feed_fixture': feedPublic},
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      throwsArgumentError,
+      reason: 'fixture trust and legacy pins cannot be mixed at runtime',
+    );
     bool valid(Map<String, List<Map<String, Object?>>> tables) =>
         shopCloudFeedFirstPageHistoricalRowsValidV41(
           trust: trust,
           completeTables: tables,
         );
     expect(valid(history), isTrue);
+    expect(
+      valid({
+        ...history,
+        'shop_connected_cloud_feed_pages': [
+          ...history['shop_connected_cloud_feed_pages']!,
+          history['shop_connected_cloud_feed_pages']!.single,
+        ],
+      }),
+      isFalse,
+      reason: 'a second page requires a separately reviewed chain verifier',
+    );
     expect(
       valid({...history, 'unreviewed_extra_table': const []}),
       isFalse,
@@ -958,7 +978,111 @@ void main() {
       ),
       throwsFormatException,
     );
+    database = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(file),
+      trust: trust,
+    );
+    await database.verifyReadyForUse();
+    expect(
+      () => ShopBackup.verifySnapshot(
+        file,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      returnsNormally,
+    );
+    await ShopBackup.exportEncrypted(
+      database: database,
+      archive: File('${root.path}/signed-history.shopbackup'),
+      password: 'synthetic-v41-fixture-password',
+      scratchRoot: root,
+      testOnlyCloudFeedV41Trust: trust,
+    );
+    final missingHistory = File('${root.path}/missing-history.sqlite');
+    await database.exportVerifiedLocalSnapshot(missingHistory);
+    final hostile = sqlite.sqlite3.open(missingHistory.path);
+    try {
+      const trigger = 'shop_connected_cloud_feed_page_evidence_no_delete';
+      final definition =
+          hostile.select(
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+                [trigger],
+              ).single['sql']
+              as String;
+      hostile.execute('DROP TRIGGER $trigger');
+      hostile.execute('DELETE FROM shop_connected_cloud_feed_page_evidence');
+      hostile.execute(definition);
+    } finally {
+      hostile.close();
+    }
+    expect(
+      () => ShopBackup.verifySnapshot(
+        missingHistory,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      throwsFormatException,
+      reason: 'a complete snapshot with missing request history must fail',
+    );
+    final missingDatabase = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(missingHistory),
+      trust: trust,
+    );
+    await expectLater(missingDatabase.verifyReadyForUse(), throwsStateError);
+    await missingDatabase.close();
+    await database.close();
+    trust.ownerIssuerKeys['owner_fixture'] = List<int>.filled(32, 0);
+    database = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(file),
+      trust: trust,
+    );
+    await expectLater(database.verifyReadyForUse(), throwsStateError);
+    await database.close();
+    expect(
+      () => ShopBackup.verifySnapshot(
+        file,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      throwsFormatException,
+      reason: 'an independently pinned owner key cannot be substituted',
+    );
   });
+  test(
+    'SQLite read transaction keeps one snapshot across a WAL writer',
+    () async {
+      final root = await Directory.systemTemp.createTemp('shop-v41-wal-read-');
+      addTearDown(() => root.delete(recursive: true));
+      final file = File('${root.path}/snapshot.sqlite');
+      final writer = sqlite.sqlite3.open(file.path);
+      addTearDown(writer.close);
+      writer.execute('PRAGMA journal_mode = WAL');
+      writer.execute(
+        'CREATE TABLE historical_fixture (value INTEGER NOT NULL)',
+      );
+      writer.execute('INSERT INTO historical_fixture VALUES (1)');
+      final reader = sqlite.sqlite3.open(
+        file.path,
+        mode: sqlite.OpenMode.readOnly,
+      );
+      addTearDown(reader.close);
+      reader.execute('BEGIN DEFERRED');
+      expect(
+        reader.select('SELECT value FROM historical_fixture').single['value'],
+        1,
+      );
+      writer.execute('UPDATE historical_fixture SET value = 2');
+      expect(
+        reader.select('SELECT value FROM historical_fixture').single['value'],
+        1,
+      );
+      reader.execute('ROLLBACK');
+      expect(
+        reader.select('SELECT value FROM historical_fixture').single['value'],
+        2,
+      );
+    },
+  );
   test('v41 open and backup share exact page evidence coverage', () {
     const pageDigest =
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';

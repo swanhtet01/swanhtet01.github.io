@@ -94,7 +94,40 @@ final class ShopCloudFeedV41FirstPageTrust {
   final Map<String, List<int>> ownerIssuerKeys;
   final Map<String, List<int>> timeAuthorityKeys;
   final Map<String, List<int>> clientKeys;
+
+  ShopCloudFeedV41FirstPageTrust immutableCopy() =>
+      ShopCloudFeedV41FirstPageTrust(
+        workspaceId: workspaceId,
+        siteId: siteId,
+        actorId: actorId,
+        deviceId: deviceId,
+        coordinatorDeviceId: coordinatorDeviceId,
+        clientFingerprint: clientFingerprint,
+        clientSigningKeyId: clientSigningKeyId,
+        sessionGeneration: sessionGeneration,
+        authoritySequence: authoritySequence,
+        revocationGeneration: revocationGeneration,
+        cloudIssuerGeneration: cloudIssuerGeneration,
+        coordinatorBindingDigest: coordinatorBindingDigest,
+        coordinatorBindingGeneration: coordinatorBindingGeneration,
+        timeAuthorityKeyId: timeAuthorityKeyId,
+        timeAuthorityKeyGeneration: timeAuthorityKeyGeneration,
+        timeAuthorityEpoch: timeAuthorityEpoch,
+        feedIssuerKeys: _immutableKeys(feedIssuerKeys),
+        cloudApprovalIssuerKeys: _immutableKeys(cloudApprovalIssuerKeys),
+        leaseIssuerKeys: _immutableKeys(leaseIssuerKeys),
+        authorityIssuerKeys: _immutableKeys(authorityIssuerKeys),
+        ownerIssuerKeys: _immutableKeys(ownerIssuerKeys),
+        timeAuthorityKeys: _immutableKeys(timeAuthorityKeys),
+        clientKeys: _immutableKeys(clientKeys),
+      );
 }
+
+Map<String, List<int>> _immutableKeys(Map<String, List<int>> keys) =>
+    Map<String, List<int>>.unmodifiable({
+      for (final entry in keys.entries)
+        entry.key: List<int>.unmodifiable(entry.value),
+    });
 
 /// Snapshot tables must be full, unfiltered reads from one transaction or
 /// read-only SQLite snapshot. This first-page historical check never grants
