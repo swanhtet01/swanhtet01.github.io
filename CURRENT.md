@@ -1,9 +1,42 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 05:22 UTC
+- Last verified: 2026-11-03 05:41 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 05:41 UTC private connected-client recovery checkpoint
+
+- **PASS (local source only):** private implementation
+  `22c189bec4fa2a42ca3252cd5b5cb551dfc73bd2`, tree
+  `18c8ef285ef9388f0e14cbdcc3214d5b10ce4c21`, parent `8e8bb397`,
+  changes only the connected client composition, replica store, and their two
+  focused tests. Binary patch SHA-256 is
+  `769c445481e4153b46f0f05d0f5b4aab45668ad9ddded55c7f698a67c2e97f32`.
+  A bounded catch-up now requires an authenticated empty delta at the durable
+  cursor. Snapshot and nonempty delta transactions retain `writes_paused`;
+  only the current-cursor empty delta clears it after retained-evidence
+  verification. Offline failure, page-budget exhaustion, tampered evidence,
+  recompose/reconnect and intermediate pause are covered. The first draft
+  incorrectly cleared the pause between pages; independent adversarial review
+  held it, and the reviewed final diff resolved that finding.
+- **PASS (exact private source):** official Flutter 3.47.8 `flutter test --no-pub`
+  on client composition plus replica store: 26/26 in 1m27s; adjacent client
+  plus database adapter: 42/42 in 1m48s. `flutter analyze --no-pub` reported
+  no issues in 8.5s; `dart format` and `git diff --check` passed. The independent
+  read-only review accepted the final four-file patch. The claims guard passed
+  all 179 checks with no gate promoted. No scanner, printer,
+  installed-device, two-device, cloud payload feed or production sync was run.
+- **NOT RUN / BLOCKED:** this successor is private and absent from draft PR
+  #752 public head `5a9e89bb`; automatic exact-head CI for this successor is
+  NOT RUN. Connected mode stays default-off. Full event-payload policy,
+  authenticated ingress/issuer/key custody, deployed authority, live two-device
+  replay/revocation and installed recovery remain required. Separate release
+  blockers remain the stale Windows PostgreSQL 17 receipt, app/kernel minimatch
+  audit failure and skipped full GitGuardian scan; no gate was waived. Next
+  Cloud-owned slice is a reviewed source-only PostgreSQL observer closure
+  contract or role-specific event projection; Windows execution and security
+  disposition require their separate owners and evidence.
 
 ## 2026-11-03 05:22 UTC exact-public-head Native CI terminal
 
