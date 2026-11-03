@@ -198,7 +198,7 @@ void main() {
       final memberToken = _memberToken(17);
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 39);
+        expect(database.schemaVersion, 40);
         final storeRef = await database.readStoreRef();
         await _seedPseudonymousMember(
           database,
@@ -544,6 +544,7 @@ Future<ShopCorrectionAuthorization> _authorization({
 
 void _removePostV15SchemaObjects(Database connection) {
   for (final definitions in [
+    shopConnectedCloudFeedSchemaDefinitionsV40(),
     shopConnectedTrustedTimeClientSchemaDefinitionsV39(),
     shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
     shopConnectedTrustedTimeSchemaDefinitionsV37(),

@@ -65,6 +65,7 @@ jobs:
       - name: Check connected successor formatting
         run: |
           dart format --output=none --set-exit-if-changed \
+            lib/shop_connected_cloud_feed_schema.dart \
             lib/shop_connected_composition.dart \
             lib/shop_connected_coordinator_health.dart \
             lib/shop_connected_site_client_composition.dart \
@@ -84,6 +85,7 @@ jobs:
             lib/shop_connected_trusted_time_stream_acceptance.dart \
             lib/shop_connected_trusted_time_verifier.dart \
             test/historical_shop_fixture_support.dart \
+            test/shop_connected_cloud_feed_schema_test.dart \
             test/shop_connected_composition_test.dart \
             test/shop_connected_coordinator_health_test.dart \
             test/shop_connected_site_client_composition_test.dart \
@@ -123,6 +125,7 @@ jobs:
           test/shop_cash_movement_test.dart
           test/shop_catalog_search_test.dart
           test/shop_connected_application_boundary_test.dart
+          test/shop_connected_cloud_feed_schema_test.dart
           test/shop_connected_composition_test.dart
           test/shop_connected_coordinator_health_test.dart
           test/shop_connected_coordinator_host_test.dart
@@ -481,6 +484,7 @@ jobs:
           set +e
           (
             TMPDIR="$connected_successor_tmp" timeout --signal=TERM --kill-after=10s "${connected_successor_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_connected_cloud_feed_schema_test.dart \
               test/shop_connected_composition_test.dart \
               test/shop_connected_coordinator_health_test.dart \
               test/shop_connected_site_client_composition_test.dart \

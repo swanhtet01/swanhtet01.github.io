@@ -12,12 +12,18 @@ import 'package:supermega_shop/shop_connected_trusted_time_stream.dart';
 import 'package:supermega_shop/shop_connected_trusted_time_stream_acceptance.dart';
 import 'package:supermega_shop/shop_database.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 void main() {
   test('v38 migrates to empty v39 client evidence', () async {
     final directory = await Directory.systemTemp.createTemp('shop-v39-');
     final file = File('${directory.path}/shop.sqlite');
     var database = ShopDatabase(NativeDatabase(file));
     await database.verifyReadyForUse();
+    await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+      database,
+      shopConnectedCloudFeedSchemaDefinitionsV40(),
+    );
     for (final name
         in shopConnectedTrustedTimeClientSchemaDefinitionsV39().keys.where(
           (name) => name.endsWith('_no_update') || name.endsWith('_no_delete'),
@@ -38,7 +44,7 @@ void main() {
 
     database = ShopDatabase(NativeDatabase(file));
     await database.verifyReadyForUse();
-    expect(database.schemaVersion, 39);
+    expect(database.schemaVersion, 40);
     final rows = await database
         .customSelect(
           'SELECT COUNT(*) AS total FROM shop_connected_time_client_heads',
@@ -156,7 +162,7 @@ void main() {
       );
       await database.close();
 
-      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 39);
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40);
       await ShopDatabase.migrateAndVerifyRestoreFile(file);
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
@@ -213,7 +219,7 @@ void main() {
       raw.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 39),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40),
       throwsFormatException,
     );
     await directory.delete(recursive: true);
@@ -272,7 +278,7 @@ void main() {
         raw.close();
       }
       expect(
-        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 39),
+        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40),
         throwsFormatException,
       );
       await directory.delete(recursive: true);

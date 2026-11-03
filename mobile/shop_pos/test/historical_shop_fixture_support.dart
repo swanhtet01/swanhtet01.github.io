@@ -1,9 +1,10 @@
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_database.dart';
 
-const historicalShopFixtureSupportedSchemaVersion = 39;
+const historicalShopFixtureSupportedSchemaVersion = 40;
 
 Set<String> historicalShopPostV15SchemaObjectNames() => <String>{
+  ...shopConnectedCloudFeedSchemaDefinitionsV40().keys,
   ...shopConnectedTrustedTimeClientSchemaDefinitionsV39().keys,
   ...shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
   ...shopMemberSchemaDefinitionsV16().keys,
@@ -28,10 +29,24 @@ void dropHistoricalShopSchemaDefinitionGroup(
   Map<String, String> definitions,
 ) {
   if (definitions.keys.toSet().containsAll(
+        shopConnectedTrustedTimeClientSchemaDefinitionsV39().keys,
+      ) &&
+      definitions.length ==
+          shopConnectedTrustedTimeClientSchemaDefinitionsV39().length) {
+    dropHistoricalShopSchemaDefinitionGroup(
+      connection,
+      shopConnectedCloudFeedSchemaDefinitionsV40(),
+    );
+  }
+  if (definitions.keys.toSet().containsAll(
         shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
       ) &&
       definitions.length ==
           shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().length) {
+    dropHistoricalShopSchemaDefinitionGroup(
+      connection,
+      shopConnectedCloudFeedSchemaDefinitionsV40(),
+    );
     dropHistoricalShopSchemaDefinitionGroup(
       connection,
       shopConnectedTrustedTimeClientSchemaDefinitionsV39(),
@@ -54,10 +69,24 @@ Future<void> dropHistoricalShopSchemaDefinitionGroupInDatabase(
   Map<String, String> definitions,
 ) async {
   if (definitions.keys.toSet().containsAll(
+        shopConnectedTrustedTimeClientSchemaDefinitionsV39().keys,
+      ) &&
+      definitions.length ==
+          shopConnectedTrustedTimeClientSchemaDefinitionsV39().length) {
+    await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+      database,
+      shopConnectedCloudFeedSchemaDefinitionsV40(),
+    );
+  }
+  if (definitions.keys.toSet().containsAll(
         shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
       ) &&
       definitions.length ==
           shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().length) {
+    await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+      database,
+      shopConnectedCloudFeedSchemaDefinitionsV40(),
+    );
     await dropHistoricalShopSchemaDefinitionGroupInDatabase(
       database,
       shopConnectedTrustedTimeClientSchemaDefinitionsV39(),

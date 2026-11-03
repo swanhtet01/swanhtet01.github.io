@@ -1226,7 +1226,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 39);
+      expect(database.schemaVersion, 40);
       expect(await _count(database, 'shop_site_authority_payloads'), 0);
       expect(await _count(database, 'shop_site_authority_members'), 0);
       expect(await _count(database, 'shop_site_configuration_snapshots'), 0);
@@ -1261,7 +1261,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 39);
+      expect(database.schemaVersion, 40);
       expect(await _count(database, 'shop_site_authority_checkpoints'), 0);
       expect(
         await _count(database, 'shop_site_authority_bootstrap_provenance'),

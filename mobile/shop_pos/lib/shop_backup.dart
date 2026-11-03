@@ -65,7 +65,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 39;
+  static const supportedSchemaVersion = 40;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -1941,6 +1941,9 @@ abstract final class ShopBackup {
     final trustedTimeClientDefinitions = schemaVersion >= 39
         ? shopConnectedTrustedTimeClientSchemaDefinitionsV39()
         : const <String, String>{};
+    final cloudFeedDefinitions = schemaVersion >= 40
+        ? shopConnectedCloudFeedSchemaDefinitionsV40()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -1966,7 +1969,8 @@ abstract final class ShopBackup {
             schemaVersion == 36 ||
             schemaVersion == 37 ||
             schemaVersion == 38 ||
-            schemaVersion == 39) &&
+            schemaVersion == 39 ||
+            schemaVersion == 40) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -2041,6 +2045,13 @@ abstract final class ShopBackup {
               trustedTimeClientDefinitions,
               trustedTimeClientDefinitions.keys.toSet(),
             )) &&
+        (schemaVersion < 40 || _v40ConnectedCloudFeedRowsValid(connection)) &&
+        (schemaVersion < 40 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              cloudFeedDefinitions,
+              cloudFeedDefinitions.keys.toSet(),
+            )) &&
         (schemaVersion < 31 ||
             _snapshotDefinitionGroupExact(
               objects,
@@ -2099,6 +2110,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 37) trustedTimeDefinitions,
           if (schemaVersion >= 38) trustedTimeIssuerDefinitions,
           if (schemaVersion >= 39) trustedTimeClientDefinitions,
+          if (schemaVersion >= 40) cloudFeedDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2122,6 +2134,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 37) ...trustedTimeDefinitions.keys,
           if (schemaVersion >= 38) ...trustedTimeIssuerDefinitions.keys,
           if (schemaVersion >= 39) ...trustedTimeClientDefinitions.keys,
+          if (schemaVersion >= 40) ...cloudFeedDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3811,6 +3824,23 @@ abstract final class ShopBackup {
         heads: rows('shop_connected_time_client_heads'),
         barriers: rows('shop_connected_time_client_restore_barriers'),
         clearances: rows('shop_connected_time_client_restore_clearances'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v40ConnectedCloudFeedRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedCloudFeedRowsValidV40(
+        streams: rows('shop_connected_cloud_feed_streams'),
+        pages: rows('shop_connected_cloud_feed_pages'),
+        heads: rows('shop_connected_cloud_feed_heads'),
+        restoreBarriers: rows('shop_connected_cloud_feed_restore_barriers'),
       );
     } on Object {
       return false;

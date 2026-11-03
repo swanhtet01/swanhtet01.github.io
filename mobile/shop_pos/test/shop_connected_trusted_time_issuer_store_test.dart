@@ -17,6 +17,19 @@ void main() {
     var database = ShopDatabase(NativeDatabase(file));
     await database.verifyReadyForUse();
     for (final definition
+        in shopConnectedCloudFeedSchemaDefinitionsV40().entries
+            .toList()
+            .reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      await database.customStatement(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
+    for (final definition
         in shopConnectedTrustedTimeClientSchemaDefinitionsV39().entries
             .toList()
             .reversed) {
@@ -81,7 +94,7 @@ void main() {
           'SELECT COUNT(*) AS total FROM shop_connected_time_issuer_streams',
         )
         .getSingle();
-    expect(database.schemaVersion, 39);
+    expect(database.schemaVersion, 40);
     expect(streams.read<int>('total'), 0);
     await database.close();
     await directory.delete(recursive: true);
@@ -262,7 +275,7 @@ void main() {
       await store.attachSignature(entry.canonicalBytes);
       await database.close();
 
-      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 39);
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40);
       await ShopDatabase.migrateAndVerifyRestoreFile(file);
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
@@ -361,7 +374,7 @@ void main() {
       raw.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 39),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 40),
       throwsFormatException,
     );
     await directory.delete(recursive: true);

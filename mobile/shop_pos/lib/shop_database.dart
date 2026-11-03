@@ -13,6 +13,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'shop_models.dart';
 import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_cloud_feed_schema.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
 import 'shop_connected_trusted_time_client_schema.dart';
@@ -27,6 +28,7 @@ import 'shop_staff_authorization.dart';
 export 'shop_correction_consumption.dart';
 export 'shop_correction_receipt.dart';
 export 'shop_connected_trusted_time_client_schema.dart';
+export 'shop_connected_cloud_feed_schema.dart';
 
 part 'shop_database.g.dart';
 
@@ -5541,7 +5543,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 39) return const {};
+  if (schemaVersion < 5 || schemaVersion > 40) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -6566,7 +6568,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v31.');
+        throw StateError('The staged Shop restore did not reach schema v40.');
       }
     } finally {
       await database.close();
@@ -6633,7 +6635,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 39;
+  int get schemaVersion => 40;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6691,15 +6693,26 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV38Schema();
       await _createConnectedTrustedTimeClientSchemaV39();
       await _requireUnifiedV39Schema();
+      await _createConnectedCloudFeedSchemaV40();
+      await _requireUnifiedV40Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      await _requireNoCloudFeedSchemaBeforeV40();
+      if (from == 39) {
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
       if (from == 38) {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 37) {
@@ -6708,6 +6721,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 36) {
@@ -6718,6 +6733,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 35) {
@@ -6730,6 +6747,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 34) {
@@ -6746,6 +6765,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 33) {
@@ -6762,6 +6783,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 32) {
@@ -6781,6 +6804,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 31) {
@@ -6801,6 +6826,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 30) {
@@ -6824,6 +6851,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       final origin = await _classifyUpgradeOrigin(from);
@@ -6850,6 +6879,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from == 28) {
@@ -6890,6 +6921,8 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV38Schema();
         await _createConnectedTrustedTimeClientSchemaV39();
         await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
         return;
       }
       if (from < 2) {
@@ -7126,14 +7159,16 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV38Schema();
       await _createConnectedTrustedTimeClientSchemaV39();
       await _requireUnifiedV39Schema();
+      await _createConnectedCloudFeedSchemaV40();
+      await _requireUnifiedV40Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV39Schema();
+      await _requireUnifiedV40Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV39Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV40Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
@@ -7739,6 +7774,25 @@ class ShopDatabase extends _$ShopDatabase {
     for (final definition
         in shopConnectedTrustedTimeClientSchemaDefinitionsV39().values) {
       await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedCloudFeedSchemaV40() async {
+    for (final definition
+        in shopConnectedCloudFeedSchemaDefinitionsV40().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _requireNoCloudFeedSchemaBeforeV40() async {
+    final names = shopConnectedCloudFeedSchemaDefinitionsV40().keys.toList();
+    final placeholders = List.filled(names.length, '?').join(',');
+    final rows = await customSelect(
+      'SELECT name FROM sqlite_master WHERE name IN ($placeholders)',
+      variables: names.map(Variable<String>.new).toList(),
+    ).get();
+    if (rows.isNotEmpty) {
+      throw StateError('A pre-v40 Shop database contains cloud-feed schema.');
     }
   }
 
@@ -10681,6 +10735,61 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
+  Future<void> _requireUnifiedV40Schema() async {
+    await runZoned(
+      _requireUnifiedV39Schema,
+      zoneValues: const {#shopAllowV40NestedSchemaVerification: true},
+    );
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {#shopAllowV40NestedSchemaVerification: false},
+    );
+    final definitions = shopConnectedCloudFeedSchemaDefinitionsV40();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    final rowsValid = await _v40ConnectedCloudFeedRowsValid();
+    if (!definitionsValid || !rowsValid) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map(
+            (entry) => '${entry.key}:${objects[entry.key]?.type ?? 'missing'}',
+          )
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v40 cloud-feed schema failed verification '
+        '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<bool> _v40ConnectedCloudFeedRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedCloudFeedRowsValidV40(
+        streams: await rows('shop_connected_cloud_feed_streams'),
+        pages: await rows('shop_connected_cloud_feed_pages'),
+        heads: await rows('shop_connected_cloud_feed_heads'),
+        restoreBarriers: await rows(
+          'shop_connected_cloud_feed_restore_barriers',
+        ),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
   Future<bool> _v39ConnectedTrustedTimeClientRowsValid() async {
     try {
       Future<List<Map<String, Object?>>> rows(String table) async =>
@@ -12480,6 +12589,10 @@ class ShopDatabase extends _$ShopDatabase {
               shopConnectedTrustedTimeClientSchemaDefinitionsV39().containsKey(
                 name,
               ))) {
+        continue;
+      }
+      if (Zone.current[#shopAllowV40NestedSchemaVerification] == true &&
+          shopConnectedCloudFeedSchemaDefinitionsV40().containsKey(name)) {
         continue;
       }
       if (objects.containsKey(name)) {
