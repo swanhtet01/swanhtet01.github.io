@@ -15,7 +15,7 @@ from typing import Any, Mapping
 
 from .connected_site_event_read import authorize_event_read
 from .connected_site_runtime import ConnectedSitePrincipal
-from .connected_site_v15 import ConnectedSiteV15Error, SiteAuthority, digest
+from .connected_site_v15 import ConnectedSiteV15Error, SiteAuthority, canonical_json, digest
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +41,69 @@ class EventHeaderPage:
 class RetailReservationPage:
     headers: EventHeaderPage
     projections: tuple["RetailProjectionEntry", ...]
+    actor_id: str
+    device_id: str
+    authority_generation: int
+    revocation_generation: int
+    authority_payload_digest: str
+    lease_digest: str
+    request_digest: str
+
+    def to_wire(self) -> dict[str, Any]:
+        """Versioned, internally bound bytes; not a signed transport receipt."""
+        page = self.headers
+        by_sequence = {header.sequence: header for header in page.headers}
+        seen: set[int] = set()
+        projections: list[dict[str, Any]] = []
+        for entry in self.projections:
+            header = by_sequence.get(entry.sequence)
+            projection = entry.projection
+            if (
+                entry.sequence in seen or header is None
+                or header.event_digest != entry.event_digest
+                or set(projection) != {
+                    "contract", "workspaceId", "siteId", "candidateEventDigest",
+                    "reservationId", "reservationDigest", "state", "stateVersion",
+                    "lines",
+                }
+                or projection.get("candidateEventDigest") != entry.event_digest
+                or projection.get("workspaceId") != page.workspace_id
+                or projection.get("siteId") != page.site_id
+                or projection.get("contract") != "supermega.connected-site-retail-reservation-view.v1"
+                or projection.get("state") != "held"
+                or projection.get("stateVersion") != 1
+            ):
+                _fail("projection_binding")
+            seen.add(entry.sequence)
+            projections.append({
+                "sequence": entry.sequence, "eventDigest": entry.event_digest,
+                "projection": projection,
+            })
+        payload = {
+            "contract": "supermega.connected-site-retail-feed.v1",
+            "protocolVersion": 1,
+            "workspaceId": page.workspace_id,
+            "siteId": page.site_id,
+            "actorId": self.actor_id,
+            "deviceId": self.device_id,
+            "authorityGeneration": self.authority_generation,
+            "revocationGeneration": self.revocation_generation,
+            "authorityPayloadDigest": self.authority_payload_digest,
+            "leaseDigest": self.lease_digest,
+            "requestDigest": self.request_digest,
+            "afterSequence": page.after_sequence,
+            "priorEventDigest": page.prior_event_digest,
+            "headers": [
+                {"sequence": header.sequence, "eventDigest": header.event_digest,
+                 "previousEventDigest": header.previous_event_digest}
+                for header in page.headers
+            ],
+            "projections": projections,
+            "nextSequence": page.next_sequence,
+            "nextEventDigest": page.next_event_digest,
+            "hasMore": page.has_more,
+        }
+        return {**payload, "pageDigest": digest(payload)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +112,19 @@ class RetailProjectionEntry:
 
     sequence: int
     event_digest: str
-    projection: dict[str, Any]
+    projection_json: str
+
+    @property
+    def projection(self) -> dict[str, Any]:
+        # Return a fresh copy. The checked source projection is retained as
+        # immutable canonical bytes, not as a caller-mutable dictionary.
+        try:
+            value = json.loads(self.projection_json)
+        except (ValueError, TypeError):
+            _fail("projection_binding")
+        if not isinstance(value, dict) or canonical_json(value) != self.projection_json:
+            _fail("projection_binding")
+        return value
 
 
 def _fail(reason: str) -> None:
@@ -201,10 +276,12 @@ def _read_page(
                         projections.append(RetailProjectionEntry(
                             sequence=sequence,
                             event_digest=event_digest,
-                            projection=project_retail_reservation_held(
-                                principal=principal, authority=authority, lease=lease,
-                                request=request, now=now, event=event,
-                                candidate_event_digest=event_digest,
+                            projection_json=canonical_json(
+                                project_retail_reservation_held(
+                                    principal=principal, authority=authority, lease=lease,
+                                    request=request, now=now, event=event,
+                                    candidate_event_digest=event_digest,
+                                )
                             ),
                         ))
                 previous = event_digest
@@ -250,4 +327,11 @@ def read_retail_reservation_page(
         authority=authority, lease=lease, request=request, now=now,
         include_retail_held=True,
     )
-    return RetailReservationPage(headers, projections)
+    return RetailReservationPage(
+        headers=headers, projections=projections,
+        actor_id=lease["actorId"], device_id=principal.device_id,
+        authority_generation=authority.authority_generation,
+        revocation_generation=authority.revocation_generation,
+        authority_payload_digest=authority.authority_payload_digest,
+        lease_digest=lease["payloadDigest"], request_digest=digest(request),
+    )

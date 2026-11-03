@@ -124,11 +124,66 @@ class EventFeedTests(unittest.TestCase):
         self.assertEqual(page.projections[0].projection["state"], "held")
         self.assertEqual(page.projections[0].projection["lines"],
                          [{"productId": "product-1", "quantity": 1}])
-        self.assertNotIn("actorId", str(page))
-        self.assertNotIn("deviceId", str(page))
-        self.assertNotIn("payload", str(page))
+        wire = page.to_wire()
+        self.assertEqual(wire["contract"], "supermega.connected-site-retail-feed.v1")
+        self.assertEqual(wire["actorId"], request["actorId"])
+        self.assertEqual(wire["deviceId"], request["deviceId"])
+        self.assertEqual(wire["leaseDigest"], request["leaseDigest"])
+        self.assertEqual(wire["requestDigest"], digest(request))
+        self.assertEqual(wire["pageDigest"], digest({k: v for k, v in wire.items()
+                                                      if k != "pageDigest"}))
+        self.assertEqual(wire["projections"][0]["sequence"], wire["headers"][0]["sequence"])
+        self.assertEqual(wire["projections"][0]["eventDigest"], wire["headers"][0]["eventDigest"])
+        self.assertNotIn("actorId", str(wire["projections"]))
+        self.assertNotIn("deviceId", str(wire["projections"]))
+        self.assertNotIn("payload", str(wire))
         self.assertTrue(any("event_json::text" in sql for sql, _ in script.queries))
         self.assertEqual(script.clock_reads, 2)
+
+    def test_wire_projection_retains_checked_bytes_and_rejects_substitution(self):
+        authority, lease, request, principal, event = _inputs()
+        script = _Script(authority, lease, events=[
+            (1, digest(event), None, json.dumps(event)),
+        ])
+        page = read_retail_reservation_page(
+            connection_factory=script.connect, principal=principal,
+            authority=authority, lease=lease, request=request, now=NOW,
+        )
+        # A caller cannot mutate the retained checked projection through its
+        # decoded view or through an earlier wire payload.
+        page.projections[0].projection["lines"][0]["quantity"] = 999
+        first = page.to_wire()
+        first["projections"][0]["projection"]["lines"][0]["quantity"] = 999
+        self.assertEqual(page.to_wire()["projections"][0]["projection"]["lines"],
+                         [{"productId": "product-1", "quantity": 1}])
+
+        from dataclasses import replace
+        entry = page.projections[0]
+        for replacement in (
+            replace(entry, sequence=2),
+            replace(entry, event_digest="f" * 64),
+            replace(entry, projection_json="{bad"),
+            replace(entry, projection_json=json.dumps({"contract": "forged"})),
+        ):
+            with self.subTest(replacement=replacement), self.assertRaises(ConnectedSiteV15Error):
+                replace(page, projections=(replacement,)).to_wire()
+        with self.assertRaises(ConnectedSiteV15Error):
+            replace(page, projections=(entry, entry)).to_wire()
+
+        # An event in the lookahead position has no page header and cannot be
+        # inserted into this page's sanitized projection list.
+        script.events = [
+            (1, digest(event), None, json.dumps(event)),
+            (2, digest(event), digest(event), json.dumps(event)),
+        ]
+        limited = read_retail_reservation_page(
+            connection_factory=script.connect, principal=principal,
+            authority=authority, lease=lease, request=_resign(request, limit=1), now=NOW,
+        )
+        self.assertTrue(limited.headers.has_more)
+        self.assertEqual(limited.projections[0].sequence, 1)
+        with self.assertRaises(ConnectedSiteV15Error):
+            replace(limited, projections=(replace(entry, sequence=2),)).to_wire()
 
     def test_manager_page_rejects_changed_row_and_never_returns_raw_payload(self):
         authority, lease, request, principal, event = _inputs()
