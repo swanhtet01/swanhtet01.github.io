@@ -11,8 +11,8 @@ are required for each read. Replaying the same authenticated read within its
 
 | Source event family | Payload fields or content established in source | Risk / current read decision |
 | --- | --- | --- |
-| Retail/café stock reserve and release | Workspace/site, actor/device, product IDs, quantities, reservation state and times | Inventory and staff activity; **no payload projection approved** |
-| Derived stock committed/expired | Before/after reservation, transition and sale binding including sale ID and command digest | Links stock to financial activity; **no payload projection approved** |
+| Retail/café stock reserve and release | Workspace/site, actor/device, product IDs, quantities, reservation state and times | Inventory and staff activity; **no payload projection approved for delivery** |
+| Derived stock committed/expired | Before/after reservation, transition and sale binding including sale ID and command digest | Links stock to financial activity; **no payload projection approved for delivery** |
 | Café put, state, cancel and kitchen status | Service area/table labels, product names, quantities, modifiers, unit prices and a free-text remark of up to 240 characters | Price disclosure and potential personal information in free text; **no raw delivery approved** |
 | Other future event types | The SQL column accepts any JSON object; Python command validation currently accepts any dictionary payload with a matching digest | Cannot infer privacy from a digest; **deny by default** |
 
