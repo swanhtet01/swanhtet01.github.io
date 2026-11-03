@@ -108,6 +108,7 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
 ])
 const CONNECTED_SUCCESSOR_DART_FORMAT_PATHS = Object.freeze([
   'lib/shop_connected_cloud_feed_proof.dart',
+  'lib/shop_connected_cloud_feed_read_request.dart',
   'lib/shop_connected_cloud_feed_schema.dart',
   'lib/shop_connected_composition.dart',
   'lib/shop_connected_coordinator_health.dart',
@@ -129,6 +130,7 @@ const CONNECTED_SUCCESSOR_DART_FORMAT_PATHS = Object.freeze([
   'lib/shop_connected_trusted_time_verifier.dart',
   'test/historical_shop_fixture_support.dart',
   'test/shop_connected_cloud_feed_proof_test.dart',
+  'test/shop_connected_cloud_feed_read_request_test.dart',
   'test/shop_connected_cloud_feed_schema_test.dart',
   'test/shop_connected_composition_test.dart',
   'test/shop_connected_coordinator_health_test.dart',
@@ -587,6 +589,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   ]
   const expectedConnectedSuccessorPaths = [
     'test/shop_connected_cloud_feed_proof_test.dart',
+    'test/shop_connected_cloud_feed_read_request_test.dart',
     'test/shop_connected_cloud_feed_schema_test.dart',
     'test/shop_connected_composition_test.dart',
     'test/shop_connected_coordinator_health_test.dart',
