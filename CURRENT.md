@@ -1,9 +1,31 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 03:41 UTC
+- Last verified: 2026-11-03 03:50 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 03:50 UTC exact-private-source Flutter verification
+
+- Candidate source remains `12a32b5fe62c5e29ec15d8a7ef8feb7babf22b26`
+  (tree `ac9be43da324aae3ce576dfb8f9c8f44da56275b`); no source or
+  public PR update was made for this verification.
+- **PASS:** official Flutter Linux 3.47.8 archive from
+  `storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.8-stable.tar.xz`
+  matched the official release-manifest SHA-256
+  `baf7dcc5a3dbba60fe863bf493a6cf203195621f7786eaa5a1bba02cd0d87dd2`.
+  It was extracted only to `/tmp/supermega-flutter-3.47.8.O7Xfnph6`.
+  `flutter --version` reported 3.47.8, framework revision `737ba8f885`,
+  Dart 3.13.7. Locked `flutter pub get --offline --enforce-lockfile` passed
+  using the existing `/workspace/.pub-cache`; no package installation or
+  source-lock change was required. The first focused test attempt failed
+  before test execution because Clang was absent from PATH. With the
+  existing `/workspace/.toolchains/llvm-21.1.8-local/usr/lib/llvm-21/bin`
+  added to PATH, the three focused files listed below passed **58/58** in
+  1m43s. `flutter analyze --no-pub` passed with no issues in 21.5s.
+- **NOT RUN:** the full native CI matrix, installed two-device sync, hardware,
+  signing, merchant acceptance and production authority. Connected mode
+  stays default-off; this local source/test proof is not a release receipt.
 
 ## 2026-11-03 03:41 UTC private legacy-replica and sale-visibility successor
 
