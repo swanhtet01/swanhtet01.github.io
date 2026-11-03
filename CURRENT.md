@@ -1,9 +1,28 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 21:44 UTC
+- Last verified: 2026-11-03 21:50 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 21:50 UTC guarded draft publication and live checks
+
+- **PASS (publication identity only):** after independent cumulative review,
+  draft PR #752 was updated by one plain non-force fast-forward from
+  `07b12e5b796dee325fcfac9c853cbf59415c5644` to the exact reviewed ledger
+  `78e81ddbff268d49eee824c770cd8e990ae3aced`, tree
+  `aac7f5941666dfa64b7ee3478dbc2db4fc32f999`. Fresh remote ref and PR
+  readback both match; the PR remains open/draft. The ten-commit cumulative
+  delta changes only seven test, fixture, harness and ledger paths. There was
+  no merge, deployment, production sync enablement or production signing.
+- **IN PROGRESS (exact-head CI, not yet a pass):** App run `41724745058`
+  has passed its disposable PostgreSQL 17 connected-upload step and advanced
+  into App lint; its terminal result and per-case log remain pending. Native
+  run `41724753880` has Android and Windows jobs active. Dependency run
+  `41724753843` and Kernel run `41724753902` also started. The redundant PR
+  App run `41724754050` was skipped; it is not evidence. Keep this public
+  head fixed while useful jobs run, and do not claim the corrected PG17 case
+  or any native artifact passed before terminal exact-head evidence.
 
 ## 2026-11-03 21:44 UTC private signed HTTP-to-native two-device fixture
 
