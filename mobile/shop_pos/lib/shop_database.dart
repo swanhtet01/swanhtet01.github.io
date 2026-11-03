@@ -10883,6 +10883,7 @@ class ShopDatabase extends _$ShopDatabase {
     required String pageJson,
     required String proofJson,
     required int trustedNowMillis,
+    Future<void> Function()? testOnlyAfterPageInsert,
   }) async {
     if (!_testMutationBypassAvailable || _testOnlyCloudFeedPinnedKeys.isEmpty) {
       throw UnsupportedError(
@@ -11007,6 +11008,9 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<String>(proof.proofDigest),
         ],
       );
+      if (testOnlyAfterPageInsert != null) {
+        await testOnlyAfterPageInsert();
+      }
       if (heads.isEmpty) {
         await customInsert(
           'INSERT INTO shop_connected_cloud_feed_heads '

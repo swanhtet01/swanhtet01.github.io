@@ -324,7 +324,10 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
       failures.push('native_test_inventory_does_not_match_filesystem')
     }
     const shardCounts = isolatedShardTestCounts(source)
-    const externallyExercised = new Set(['test/shop_process_interrupt_worker_test.dart'])
+    const externallyExercised = new Set([
+      'test/shop_process_interrupt_worker_test.dart',
+      'test/shop_connected_cloud_feed_interrupt_worker_test.dart',
+    ])
     for (const testPath of actual) {
       const count = shardCounts.get(testPath) ?? 0
       if (externallyExercised.has(testPath)) {
@@ -782,6 +785,26 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     'native_process_interruption_harness_not_bounded_or_missing',
     failures,
   )
+  requireOrder(
+    source,
+    'name: Run real Flutter process-interruption scenarios',
+    'name: Run authenticated cloud-feed process-interruption scenarios',
+    'native_cloud_feed_interruption_not_after_persistence_tests',
+    failures,
+  )
+  requireOrder(
+    source,
+    'name: Run authenticated cloud-feed process-interruption scenarios',
+    'name: Generate Android production identity',
+    'native_cloud_feed_interruption_not_before_build',
+    failures,
+  )
+  requireToken(
+    source,
+    'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 360s python3 scripts/test_cloud_feed_process_interruption.py',
+    'native_cloud_feed_interruption_harness_not_bounded_or_missing',
+    failures,
+  )
   requireToken(
     source,
     'flutter_bin="$(readlink -f "$(command -v flutter)")"',
@@ -801,7 +824,8 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     ? source.slice(shardStart, shardEnd).split(/\r?\n/).map(line => line.trim())
     : []
   for (const testPath of declaredTestInventory(source).filter(
-    path => path !== 'test/shop_process_interrupt_worker_test.dart',
+    path => path !== 'test/shop_process_interrupt_worker_test.dart'
+      && path !== 'test/shop_connected_cloud_feed_interrupt_worker_test.dart',
   )) {
     const count = testShardLines.filter(
       line => line === testPath || line === `${testPath} \\`,

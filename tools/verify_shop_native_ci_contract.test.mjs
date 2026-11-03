@@ -633,6 +633,16 @@ test('production identity is generated only after every default-profile test sha
   assert.ok(
     missingProcessHarness.failures.includes('native_process_interruption_harness_not_bounded_or_missing'),
   )
+  const missingCloudFeedHarness = verifyShopNativeCiContract(
+    workflow.replace(
+      'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 360s python3 scripts/test_cloud_feed_process_interruption.py',
+      'true',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingCloudFeedHarness.failures.includes('native_cloud_feed_interruption_harness_not_bounded_or_missing'),
+  )
 })
 
 test('default-profile test shards run serially with fail-closed shard and total budgets', () => {

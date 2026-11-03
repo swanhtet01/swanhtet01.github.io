@@ -86,6 +86,7 @@ jobs:
             lib/shop_connected_trusted_time_stream_acceptance.dart \
             lib/shop_connected_trusted_time_verifier.dart \
             test/historical_shop_fixture_support.dart \
+            test/shop_connected_cloud_feed_interrupt_worker_test.dart \
             test/shop_connected_cloud_feed_proof_test.dart \
             test/shop_connected_cloud_feed_schema_test.dart \
             test/shop_connected_composition_test.dart \
@@ -127,6 +128,7 @@ jobs:
           test/shop_cash_movement_test.dart
           test/shop_catalog_search_test.dart
           test/shop_connected_application_boundary_test.dart
+          test/shop_connected_cloud_feed_interrupt_worker_test.dart
           test/shop_connected_cloud_feed_proof_test.dart
           test/shop_connected_cloud_feed_schema_test.dart
           test/shop_connected_composition_test.dart
@@ -556,6 +558,12 @@ jobs:
           flutter_bin="$(readlink -f "$(command -v flutter)")"
           test -x "$flutter_bin"
           FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 300s python3 scripts/test_shop_process_interruption.py
+
+      - name: Run authenticated cloud-feed process-interruption scenarios
+        run: |
+          flutter_bin="$(readlink -f "$(command -v flutter)")"
+          test -x "$flutter_bin"
+          FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 360s python3 scripts/test_cloud_feed_process_interruption.py
 
       - name: Generate Android production identity
         working-directory: ${{ github.workspace }}

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -255,35 +256,99 @@ void main() {
         executor: NativeDatabase(appliedFile),
         trustedIssuerKeys: pins,
       );
-      Future<void> apply(ShopDatabase database, {String? candidateProof}) =>
-          database.testOnlyApplyConnectedCloudFeedPageV40(
-            expected: expected,
-            actorRole: 'manager',
-            requestNonce: digestB,
-            pageJson: pageJson,
-            proofJson: candidateProof ?? proofJson,
-            trustedNowMillis: 1500,
-          );
-      // Two independent SQLite handles may race for the first page. A busy
-      // loser is acceptable; a second effect or a damaged head is not. Both
-      // handles must subsequently recognize the retained exact response.
+      Future<void> apply(
+        ShopDatabase database, {
+        String? candidatePage,
+        String? candidateProof,
+        Future<void> Function()? afterPageInsert,
+      }) => database.testOnlyApplyConnectedCloudFeedPageV40(
+        expected: expected,
+        actorRole: 'manager',
+        requestNonce: digestB,
+        pageJson: candidatePage ?? pageJson,
+        proofJson: candidateProof ?? proofJson,
+        trustedNowMillis: 1500,
+        testOnlyAfterPageInsert: afterPageInsert,
+      );
+      // Hold one transaction after its page insert but before its head update
+      // or commit. A second connection must not commit the same cursor.
       final contender = ShopDatabase.testOnlyWithCloudFeedPins(
-        executor: NativeDatabase(appliedFile),
+        executor: NativeDatabase(
+          appliedFile,
+          setup: (raw) => raw.execute('PRAGMA busy_timeout = 0'),
+        ),
         trustedIssuerKeys: pins,
       );
       await contender.verifyReadyForUse();
-      final firstAttempts = await Future.wait(
-        [applied, contender].map((database) async {
+      final changedPagePayload = <String, Object?>{
+        ...unsignedPage,
+        'headers': [
+          {'sequence': 1, 'eventDigest': digestB, 'previousEventDigest': null},
+        ],
+        'nextEventDigest': digestB,
+      };
+      final changedPageDigest = connectedSiteSha256(changedPagePayload);
+      final changedPageJson = canonicalConnectedSiteJson({
+        ...changedPagePayload,
+        'pageDigest': changedPageDigest,
+      });
+      final changedProofPayload = <String, Object?>{
+        ...unsignedProof,
+        'nextEventDigest': digestB,
+        'pageDigest': changedPageDigest,
+      };
+      final changedSignature = await Ed25519().sign(
+        utf8.encode(canonicalConnectedSiteJson(changedProofPayload)),
+        keyPair: pair,
+      );
+      final changedProofJson = canonicalConnectedSiteJson({
+        ...changedProofPayload,
+        'signature': base64Url
+            .encode(changedSignature.bytes)
+            .replaceAll('=', ''),
+      });
+      final inserted = Completer<void>();
+      final release = Completer<void>();
+      final first = apply(
+        applied,
+        afterPageInsert: () async {
+          inserted.complete();
+          await release.future;
+        },
+      );
+      try {
+        await inserted.future.timeout(const Duration(seconds: 10));
+        Future<bool> competingAttempt() async {
           try {
-            await apply(database);
+            await apply(
+              contender,
+              candidatePage: changedPageJson,
+              candidateProof: changedProofJson,
+            );
             return true;
           } on sqlite.SqliteException catch (error) {
             if (error.resultCode != 5 && error.resultCode != 6) rethrow;
             return false;
           }
-        }),
+        }
+
+        expect(
+          await competingAttempt().timeout(const Duration(seconds: 10)),
+          isFalse,
+        );
+      } finally {
+        release.complete();
+        await first;
+      }
+      await expectLater(
+        apply(
+          contender,
+          candidatePage: changedPageJson,
+          candidateProof: changedProofJson,
+        ),
+        throwsStateError,
       );
-      expect(firstAttempts, contains(true));
+      // A lost response is now an exact-byte replay, not another page.
       await apply(contender);
       await contender.close();
       await apply(applied);
