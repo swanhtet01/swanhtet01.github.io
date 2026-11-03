@@ -1,9 +1,38 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 18:13 UTC
+- Last verified: 2026-11-03 18:59 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 18:59 UTC native v41 historical-fixture sweep
+
+- **PASS (private, test-only):** `ab7d64ffba9f925ccc4e345f2cbf8c474737b748`,
+  repository tree `f4ac6c15fcd858944c7d854bc92ea28dc46b1382`, repairs seven
+  substantive Android `persistence_b` failures on published head
+  `deb543c4`: two local v15 fixture teardown helpers now remove v41 objects
+  before older groups, and current-version assertions expect 41. A further
+  sweep updates eight later connected/trusted-time current-version checks,
+  the issuer's manual historical downgrade, and positive/negative snapshot
+  controls to verify current v41 before tampering. Genuine historical-v40
+  fixtures remain unchanged. Exact five-file `persistence_b` **59/59 PASS in
+  5m53s**; eight later connected/trusted-time files **99/99 PASS in 10m02s**;
+  changed-test formatting, Flutter analysis and diff checks **PASS**.
+  Independent read-only review **ACCEPT**. No production migration or backup
+  verifier changed. This source has not received hosted CI.
+- **Published PR #752:** remains draft at `deb543c4e1aa4dad09fb092d2f9ad902de2daf83`.
+  Native run `41688646163` is terminal **FAIL** at the seven substantive
+  `persistence_b` fixture assertions; Android gallery/APK stages were not
+  reached. Windows and isolated Android/Windows QA jobs passed; two macOS
+  jobs were cancelled. App remains **FAIL** at stale PostgreSQL rehearsal,
+  Dependency **FAIL**, GitGuardian full scan **NOT RUN**. No pilot-readiness
+  claim follows from the local test repair.
+- **NOT RUN / BLOCKED:** task-owned OS process-kill before/after second-page
+  commit, production authority/key custody, mounted sync, installed two-device
+  recovery, PostgreSQL Windows rehearsal, dependency remediation and full
+  secret scan. The process-kill worker needs a source-controlled deterministic
+  signed v41 fixture shared with the existing interruption harness; an
+  isolate race is not a substitute. Connected mode remains disabled.
 
 ## 2026-11-03 18:13 UTC private two-handle cloud-feed contention proof
 
