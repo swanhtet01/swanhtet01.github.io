@@ -1,9 +1,31 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 11:18 UTC
+- Last verified: 2026-11-03 12:27 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 12:27 UTC private empty-only v41 migration
+
+- **PASS (private source, not release):** implementation checkpoint
+  `2cce97647b776d6f7807d52aa1c35f78848ae157`, repository tree
+  `66df7a97db99b23ba30e083239ba60f7fbc41b9e`, native tree
+  `cd86b09cd2fa9a2087ad184577aae86cb7c8708e`, runtime `lib/` tree
+  `35e33e91e52f9a807ed490a2efb0e72ea98d6600`. It adds the genuine
+  empty-v40-to-v41 migration and exact empty-v41 open/backup/restore checks.
+  A valid pinned, signed two-page v40 fixture fails the v41 upgrade at the
+  no-backfill guard without changing its version or installing v41 objects;
+  partial-v41 branch-hop and forged evidence also fail closed. The historical
+  v40 transaction suite remains executable only behind the test-only fixture
+  mode; product builds cannot select that mode. Cloud-feed schema regression
+  **10/10 PASS**, targeted Flutter analysis **PASS**, independent security
+  review **ACCEPT** for this bounded empty-only migration.
+- **BLOCKED / NOT RUN:** nonempty v41 signed-request reconstruction and the
+  transaction-bound current-authority/lease/trusted-time gate are not yet
+  implemented. No v41 producer is enabled; connected mode remains off.
+  Broader native, exact-head hosted CI, installed two-device, PostgreSQL 17
+  rehearsal and release acceptance do not follow from these focused tests.
+  Public draft PR #752 was not changed by this private checkpoint.
 
 ## 2026-11-03 11:18 UTC public CI and private signed event-read request
 
