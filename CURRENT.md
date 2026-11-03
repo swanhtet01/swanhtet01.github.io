@@ -1,9 +1,39 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 18:59 UTC
+- Last verified: 2026-11-03 19:15 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 19:15 UTC signed v41 process interruption checkpoint
+
+- **PASS (private, synthetic, default-off):** implementation
+  `4925986dad29a51692208d9c07d4877caf315214`, repository tree
+  `ceba202e013e93c3614d9f2ebf6d1077f7a422a7`, four-path patch SHA-256
+  `2836a21824d6377b0a4be5459ce263d6f955e4ce982088a4b0302d436894592d`.
+  A source-controlled deterministic public-pin builder and verified one-page
+  fixture extend the task-owned OS-kill harness around the actual test-only
+  signed v41 second-page writer: kill after page/evidence/head writes but
+  before transaction commit, and kill after commit but before reply. Fresh
+  processes reopen with pinned trust, verify backup, page/evidence/head
+  cursor before retry, then prove exact replay leaves two pages and valid
+  backup. All four legacy/v41 scenarios **PASS under the unchanged 360s cap**
+  in 15.911s, 16.355s, 24.819s and 26.187s. Changed-Dart analysis, Python
+  compile, native CI verifier and its **22/22** contract tests, formatting and
+  diff checks **PASS**. The v41 schema suite **13/13 PASS** on the preceding
+  source; the final worker-only marker-format change was covered by the final
+  harness, not a new full schema run. Independent security/test review
+  **ACCEPT**. No product authority, listener or production gate changed.
+- **Published draft PR #752:** remains at `611bdfc00181860422089274d6aa0a265b61712b`;
+  exact-head Native run `41699288011` was **IN PROGRESS** at this checkpoint.
+  Kernel **PASS**, App **FAIL** at stale PostgreSQL rehearsal, Dependency
+  **FAIL**; the duplicate App run was skipped. This private successor has not
+  received hosted CI. Keep the PR head fixed while useful Native jobs run.
+- **NOT RUN / BLOCKED:** real production issuer/key custody, mounted sync,
+  installed two-device process/reconnect tests, PostgreSQL Windows rehearsal,
+  compatible dependency remediation, full-scope secret scan, signing and
+  merchant acceptance. The source-only crash proof does not enable connected
+  mode or establish pilot readiness.
 
 ## 2026-11-03 18:59 UTC native v41 historical-fixture sweep
 
