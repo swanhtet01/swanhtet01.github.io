@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 23:26 UTC
+- Last verified: 2026-11-03 23:32 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
@@ -17,7 +17,8 @@
   remain unchanged. Native run `41737357285` still has useful Android and
   Windows jobs active; keep the public head fixed until they finish.
 - **PASS (private source and synthetic verification only):** the three-file
-  successor signs each device's cursor-1 request immediately after its native
+  successor `8fc5bd9a70b6d252f1a308180809474fe3686df7` signs each
+  device's cursor-1 request immediately after its native
   fixture export and before checked SQL, then supplies those exact request
   bytes to its native consume test. Only the opt-in real-PG synthetic fixture
   extends its lease/time/approval/revocation windows enough to allow the slow
@@ -32,6 +33,17 @@
   is not silently counted as a pass. Independent read-only security review
   accepted the final diff for hosted testing, including the analyzer-only
   map-construction adjustment.
+- **PASS (private timing guard):** a separate opt-in test-only signer change
+  permits exactly a 90-second response proof for this slow co-located bridge;
+  the default remains 30 seconds, the signed lease still caps proof expiry,
+  and the signature is produced inside the checked SQL transaction. A
+  24-case Python reader/signer/PG run had 18 passes and six local PG skips;
+  the focused test verifies 30/90-second bounds, the extended Ed25519
+  signature and rejection above 90 seconds. The after-consume wall-clock
+  expiry check remains. Both distinct native devices also passed a delayed
+  36-second synthetic proof-and-consume exercise (1/1 each), including B's
+  swapped-device rejection. Independent read-only security review **ACCEPT**
+  for CI-only testing; no production issuer TTL or request TTL changed.
 - **NOT RUN / held:** the repaired real PostgreSQL-to-native bridge has not
   run; it needs a reviewed successor and exact-head hosted CI after the useful
   Native jobs finish. No production ingress, connected-mode enablement,

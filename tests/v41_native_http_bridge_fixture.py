@@ -304,6 +304,7 @@ def build_pg_response(native_database: Path, *, admin_url: str,
         connection_factory=lambda: psycopg.connect(runtime_url),
         principal=principal, authority=authority, lease=lease, request=request,
         now=now, issuer_key_id="feed_fixture", issuer_seed=23,
+        proof_lifetime_millis=90000,
     )
     page = json.loads(result["pageJson"])
     if (

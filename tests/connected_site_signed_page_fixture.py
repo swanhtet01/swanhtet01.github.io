@@ -33,7 +33,7 @@ def _signature(seed: int, fields: dict) -> str:
 def read_and_sign_test_only_page(
     *, connection_factory: Any, principal: Any, authority: Any,
     lease: Mapping[str, Any], request: Mapping[str, Any], now: datetime,
-    issuer_key_id: str, issuer_seed: int,
+    issuer_key_id: str, issuer_seed: int, proof_lifetime_millis: int = 30000,
 ) -> dict[str, str]:
     """Seal the checked SQL page under its row locks with a fixed test key.
 
@@ -49,6 +49,8 @@ def read_and_sign_test_only_page(
             not isinstance(now, datetime) or now.tzinfo is None
             or not isinstance(issuer_key_id, str)
             or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", issuer_key_id)
+            or type(proof_lifetime_millis) is not int
+            or proof_lifetime_millis not in (30000, 90000)
             or page["requestDigest"] != digest(checked_request)
             or page["leaseDigest"] != checked_lease.get("payloadDigest")
             or page["workspaceId"] != principal.workspace_id
@@ -61,7 +63,8 @@ def read_and_sign_test_only_page(
         lease_expiry = datetime.fromisoformat(
             checked_lease["expiresAt"].replace("Z", "+00:00")
         )
-        expires = min(issued + 30000, int(lease_expiry.timestamp() * 1000))
+        expires = min(issued + proof_lifetime_millis,
+                      int(lease_expiry.timestamp() * 1000))
         if issued <= 0 or expires <= issued:
             raise ConnectedSiteV15Error("connected_site_test_page_expired")
         proof = {

@@ -222,6 +222,36 @@ class SignedPageFixtureTest(unittest.TestCase):
                 issuer_key_id="test_feed", issuer_seed=23,
             )
 
+    def test_disposable_bridge_proof_window_is_explicit_and_bounded(self):
+        authority, lease, request = _fixture()
+        principal = ConnectedSitePrincipal(
+            authority.workspace_id, authority.site_id, request["deviceId"],
+            True, "synthetic-gateway",
+        )
+        event = {"synthetic": "event"}
+
+        def sign(lifetime=None):
+            script = _Script(authority, lease)
+            script.events = [(1, digest(event), None, canonical_json(event))]
+            kwargs = {} if lifetime is None else {"proof_lifetime_millis": lifetime}
+            return read_and_sign_test_only_page(
+                connection_factory=script.connect, principal=principal,
+                authority=authority, lease=lease, request=request, now=NOW,
+                issuer_key_id="test_feed", issuer_seed=23, **kwargs,
+            )
+
+        default = json.loads(sign()["proofJson"])
+        extended = json.loads(sign(90000)["proofJson"])
+        self.assertEqual(default["expiresAtMillis"] - default["issuedAtMillis"], 30000)
+        self.assertEqual(extended["expiresAtMillis"] - extended["issuedAtMillis"], 90000)
+        Ed25519PrivateKey.from_private_bytes(bytes([23]) * 32).public_key().verify(
+            urlsafe_b64decode(extended["signature"] + "=="),
+            canonical_json({key: value for key, value in extended.items()
+                            if key != "signature"}).encode("utf-8"),
+        )
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "test_page_binding_invalid"):
+            sign(90001)
+
     def test_checked_page_is_bound_to_two_distinct_synthetic_device_keys(self):
         authority, lease_a, request_a, lease_b, request_b = _two_device_fixture()
         event = {"synthetic": "same-site-event"}
