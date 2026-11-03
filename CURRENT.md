@@ -1,9 +1,22 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 23:06 UTC
+- Last verified: 2026-11-03 23:11 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 23:11 UTC public predecessor CI terminal
+
+- Native run `41724753880` on public predecessor
+  `78e81ddbff268d49eee824c770cd8e990ae3aced` is **terminal FAILURE**:
+  full Android, Windows PC, isolated Android and isolated Windows jobs
+  **SUCCESS**; both iOS jobs **CANCELLED**. The full Android job passed its
+  shards, interruption checks, gallery capture and debug APK build. The
+  workflow result must not be labelled all-platform PASS, and its artifacts
+  predate the private bridge candidate. The useful same-PR CI work has ended;
+  the reviewed, clean successor remains private until the remote-head guard
+  is freshly checked. The new disposable PG17-to-native job remains **NOT
+  RUN**.
 
 ## 2026-11-03 23:06 UTC private disposable PG17-to-native CI candidate
 
