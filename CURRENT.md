@@ -1,9 +1,39 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 10:13 UTC
+- Last verified: 2026-11-03 10:27 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 10:27 UTC private authenticated cloud-feed interruption proof
+
+- **PASS (private source/test only):** commit
+  `9f258c22db6aaeafa7074edf862fdfcea10b45cc`, tree
+  `f1134c1eb2ae481f888d76840579287737534165`, parent `49106407`,
+  seven paths, staged patch SHA-256
+  `a34c848fef80f63250ae0ec675998a1429585e581f7a7d425e7ea10b4f37127b`.
+  A callback inside the already test-only signed-page apply holds the SQLite
+  transaction after page insert and before head/commit. A second handle's
+  different validly signed page cannot take the same cursor while held;
+  postcommit changed-byte replay is rejected, exact replay is idempotent,
+  and one page/head reconstructs. A separate task-owned process-group harness
+  kills the worker before commit and after commit/before reply, then reopens
+  to prove rollback 0→1 or committed replay 1→1 with a pinned backup check.
+  Production has no issuer pin and connected mode remains default-off.
+- **PASS (exact private source):** focused cloud schema/proof Flutter tests
+  **10/10**, targeted Flutter analysis **PASS**, two local kill/reopen
+  scenarios **PASS** in 21.895s and 16.377s, Native CI contract **22/22**
+  and QA-isolation contract **33/33**, formatting and diff check **PASS**.
+  Independent security review **ACCEPT** for test-only reliability coverage.
+  An initial two-reader barrier timed out because the second transaction did
+  not reach it; that test design was replaced by the post-insert lock test,
+  not relabeled as a product pass.
+- **BLOCKED / NOT RUN:** hosted execution of the new 360s bounded harness,
+  production request/issuer/lease/time authority, encrypted nonempty restore,
+  server-side read nonce consumption, installed two-device synchronization,
+  and real failure recovery remain unverified. Public PR #752 stays at
+  `578e51e24c3ef778e6d708b385598170b8fd445a` while its Native run
+  `41614858830` is still in progress; this private successor is not in CI.
 
 ## 2026-11-03 10:00 UTC public v40 checkpoint and private event-read binding
 
