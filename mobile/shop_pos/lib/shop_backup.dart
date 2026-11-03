@@ -318,6 +318,8 @@ abstract final class ShopBackup {
   /// created by another process after the empty-path check. Startup must call
   /// [cleanupInterruptedStaging] and honor [restoreMarkerFor] before opening
   /// the database. A marker left after publication blocks a mixed DB/sidecar.
+  /// Nonempty v41 fixture history requires independently pinned test trust;
+  /// product builds have no such trust and continue to reject its restore.
   static Future<void> restoreIntoEmptyDatabase({
     required File archive,
     required File target,
@@ -326,9 +328,15 @@ abstract final class ShopBackup {
     Future<void> Function()? beforePublishForTest,
     Future<void> Function()? afterPublishForTest,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
   }) async {
-    if (const bool.fromEnvironment('dart.vm.product') &&
+    if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
+    }
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        (testOnlyCloudFeedPinnedKeys.isNotEmpty ||
+            testOnlyCloudFeedV41Trust != null)) {
       throw UnsupportedError(
         'Test cloud-feed pins are unavailable in product builds.',
       );
@@ -368,11 +376,13 @@ abstract final class ShopBackup {
           stagedFile,
           expectedSchemaVersion: archiveBytes[5],
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+          testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
         );
         await ShopDatabase.migrateAndVerifyRestoreFile(
           stagedFile,
           correctionReceiptVerifier: correctionReceiptVerifier,
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+          testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
         );
         await _requireNoSidecars(stagedFile);
         if (await stagedFile.length() > maxSnapshotBytes) {

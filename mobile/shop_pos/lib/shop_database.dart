@@ -6588,6 +6588,7 @@ class ShopDatabase extends _$ShopDatabase {
     File file, {
     ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
   }) async {
     final database = ShopDatabase.withCorrectionReceiptVerifier(
       executor: NativeDatabase(
@@ -6598,6 +6599,7 @@ class ShopDatabase extends _$ShopDatabase {
           correctionReceiptVerifier ??
           ShopCorrectionReceiptVerifier.production(),
       testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+      testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
       testOnlyLegacyCloudFeedV40:
           testOnlyCloudFeedPinnedKeys.isNotEmpty &&
           _testMutationBypassAvailable,

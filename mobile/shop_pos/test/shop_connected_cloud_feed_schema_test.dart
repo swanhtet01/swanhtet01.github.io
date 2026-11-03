@@ -1000,12 +1000,9 @@ void main() {
     );
     await twoPageDatabase.testOnlyApplyConnectedCloudFeedFirstPageV41(
       trust: trust,
-      timeAuthority: _V41FixtureTime(
-        workspace,
-        site,
-        [now],
-        firstEvidenceForTwoPage,
-      ),
+      timeAuthority: _V41FixtureTime(workspace, site, [
+        now,
+      ], firstEvidenceForTwoPage),
       expected: expected,
       actorRole: 'manager',
       requestNonce: requestNonce,
@@ -1084,7 +1081,64 @@ void main() {
       trust: trust,
     );
     await twoPageReopened.verifyReadyForUse();
+    final twoPageArchive = File('${root.path}/two-page.shopbackup');
+    const twoPagePassword = 'synthetic-v41-two-page-only';
+    await ShopBackup.exportEncrypted(
+      database: twoPageReopened,
+      archive: twoPageArchive,
+      password: twoPagePassword,
+      scratchRoot: root,
+      testOnlyCloudFeedV41Trust: trust,
+    );
     await twoPageReopened.close();
+    final unpinnedTarget = File('${root.path}/two-page-unpinned.sqlite');
+    await expectLater(
+      ShopBackup.restoreIntoEmptyDatabase(
+        archive: twoPageArchive,
+        target: unpinnedTarget,
+        password: twoPagePassword,
+      ),
+      throwsFormatException,
+      reason: 'nonempty history cannot restore without independent pins',
+    );
+    expect(await unpinnedTarget.exists(), isFalse);
+    expect(await ShopBackup.restoreMarkerFor(unpinnedTarget).exists(), isFalse);
+    final twoPageRestoredFile = File('${root.path}/two-page-restored.sqlite');
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: twoPageArchive,
+      target: twoPageRestoredFile,
+      password: twoPagePassword,
+      testOnlyCloudFeedV41Trust: trust,
+    );
+    expect(
+      () => ShopBackup.verifySnapshot(
+        twoPageRestoredFile,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      ),
+      returnsNormally,
+    );
+    final twoPageRestored = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(twoPageRestoredFile),
+      trust: trust,
+    );
+    await twoPageRestored.verifyReadyForUse();
+    final restoredCloudHead = await twoPageRestored
+        .customSelect(
+          'SELECT next_sequence, restore_paused FROM shop_connected_cloud_feed_heads',
+        )
+        .getSingle();
+    expect(restoredCloudHead.read<int>('next_sequence'), 2);
+    expect(restoredCloudHead.read<int>('restore_paused'), 1);
+    expect(
+      await twoPageRestored
+          .customSelect(
+            'SELECT * FROM shop_connected_cloud_feed_restore_barriers',
+          )
+          .get(),
+      hasLength(1),
+    );
+    await twoPageRestored.close();
     final pageEvidence = ShopCloudFeedV41FirstPageEvidence(
       requestJson: requestJson,
       cloudKeyApprovalJson: cloudApprovalJson,
