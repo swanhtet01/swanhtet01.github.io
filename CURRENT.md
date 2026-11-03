@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 10:00 UTC
+- Last verified: 2026-11-03 10:12 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
@@ -28,9 +28,25 @@
   security review **ACCEPT** for the default-off source seam, including the
   caller-mutation regression. This commit has not been published or tested
   in hosted CI.
-- **BLOCKED / NOT RUN:** the signed nonce is not durably consumed; real
+- **PASS (private test-only continuation):** commit
+  `a719dfe6f1b3c3b9c84c4d6a6b580b5004349cdb`, tree
+  `90ceae9ac261e8ce4021605ccefb496b1314b525`, parent `072a0bd1`,
+  one test path, staged patch SHA-256
+  `73cf262bd266d5f9def78131cb2bf4cdb6e32e449c5a964f6fd905340ff023ea`.
+  Two independent SQLite handles race to retain the same signed test page;
+  both subsequently recognize exact replay, one page remains, and the
+  pinned backup reconstructs. Only SQLite BUSY/LOCKED is an acceptable
+  loser error. Final-source focused Flutter schema suite **5/5 PASS**,
+  formatter and targeted analysis **PASS**. Independent review **ACCEPT**
+  as a race smoke test, not forced-overlap or changed-byte concurrency proof.
+  The first test attempt without pinned LLVM stopped at native-asset setup;
+  it is not a product failure. This test commit has not been published.
+- **BLOCKED / NOT RUN:** the signed read-request nonce is not durably
+  consumed server-side (the separate native test ledger retains accepted
+  page nonces); real
   ingress/issuer authority, current lease/revocation/time, production key
-  custody, nonempty encrypted restore, concurrency/crash and two-device
+  custody, nonempty encrypted restore, deterministic concurrent conflict,
+  process-crash and two-device
   evidence remain absent. The feed is unmounted and connected mode stays
   default-off. The earlier unexplained first backup failure remains
   unattributed despite a later passing full rerun.
