@@ -43,9 +43,9 @@ function closureFixture() {
       headEvidenceSha256: digest, treeEvidenceSha256: digest,
       statusEvidenceSha256: digest },
     processes: [{ sequence: 0, parentSequence: null, imageBindingId: 'node-binding',
-      sourceId: 'node-source', exitCode: 0 },
+      sourceId: 'node-source', startEventOrdinal: 0, endEventOrdinal: 5, exitCode: 0 },
     { sequence: 1, parentSequence: 0, imageBindingId: 'git-binding',
-      sourceId: 'git-source', exitCode: 0 }],
+      sourceId: 'git-source', startEventOrdinal: 1, endEventOrdinal: 4, exitCode: 0 }],
     runtimeFiles: [{ bindingId: 'node-binding', sourceId: 'node-source',
       relativePath: 'node/node.exe', bytes: 10, sha256: digest, uses: ['executed'] },
     { bindingId: 'git-binding', sourceId: 'git-source',
@@ -53,7 +53,8 @@ function closureFixture() {
     { bindingId: 'node-module-binding', sourceId: 'node-source',
       relativePath: 'node/npm/node_modules/semver/index.js', bytes: 10, sha256: digest,
       uses: ['imported'] }],
-    imports: [{ processSequence: 0, bindingId: 'node-module-binding', sourceId: 'node-source',
+    imports: [{ processSequence: 0, eventOrdinal: 2,
+      bindingId: 'node-module-binding', sourceId: 'node-source',
       relativePath: 'node/npm/node_modules/semver/index.js', sha256: digest }],
     systemModules: [{ fileName: 'kernel32.dll', bytes: 10, sha256: digest }],
   }
@@ -736,6 +737,8 @@ test('sanitized closure schema rejects omissions, wrong types, surplus fields, a
   const mutations = [
     (value) => { delete value.processes[0].exitCode },
     (value) => { value.processes[0].sequence = '0' },
+    (value) => { delete value.processes[0].startEventOrdinal },
+    (value) => { value.processes[0].endEventOrdinal = 0 },
     (value) => { value.processes[0].sourceId = ' ' },
     (value) => { delete value.runtimeFiles[0].bytes },
     (value) => { value.runtimeFiles[0].uses = [] },
@@ -778,6 +781,10 @@ test('import closure binds each observed import to a process and exact runtime f
   const cases = [
     [(value) => { value.imports = []; value.importCount = 0 }, 'inventory_invalid'],
     [(value) => { value.imports[0].processSequence = 4 }, 'import_invalid'],
+    [(value) => { delete value.imports[0].eventOrdinal }, 'import_invalid'],
+    [(value) => { value.imports[0].eventOrdinal = 0 }, 'import_invalid'],
+    [(value) => { value.imports[0].eventOrdinal = 5 }, 'import_invalid'],
+    [(value) => { value.imports[0].eventOrdinal = 1 }, 'import_invalid'],
     [(value) => { value.imports[0].bindingId = 'other' }, 'import_unbound'],
     [(value) => { value.imports[0].sourceId = 'other' }, 'import_unbound'],
     [(value) => { value.imports[0].relativePath = 'node/other.exe' }, 'import_unbound'],
@@ -785,8 +792,19 @@ test('import closure binds each observed import to a process and exact runtime f
     [(value) => { value.imports[0].sha256 = 'd'.repeat(64) }, 'import_unbound'],
     [(value) => { value.imports[0].sha256 = 'short' }, 'import_invalid'],
     [(value) => { value.runtimeFiles[2].uses = ['loaded'] }, 'import_unbound'],
-    [(value) => { value.imports.push(structuredClone(value.imports[0])); value.importCount++ },
+    [(value) => { const replay = structuredClone(value.imports[0]);
+      replay.eventOrdinal = 3; value.imports.push(replay); value.importCount++ },
       'import_duplicate'],
+    [(value) => {
+      const secondFile = structuredClone(value.runtimeFiles[2])
+      secondFile.bindingId = 'second-module'
+      secondFile.relativePath = 'node/npm/node_modules/other/index.js'
+      value.runtimeFiles.push(secondFile); value.runtimeFileCount++
+      const secondImport = structuredClone(value.imports[0])
+      secondImport.bindingId = secondFile.bindingId
+      secondImport.relativePath = secondFile.relativePath
+      value.imports.push(secondImport); value.importCount++
+    }, 'import_invalid'],
     [(value) => { value.imports[0].extra = true }, 'import_invalid'],
   ]
   for (const [mutate, reason] of cases) {
@@ -801,6 +819,8 @@ test('closure process graph and executed-image inventory reject fabricated ances
   const valid = closureFixture()
   const cases = [
     [(value) => { value.processes[1].sequence = 0 }, 'process_graph_invalid'],
+    [(value) => { value.processes[1].startEventOrdinal = 0 }, 'process_graph_invalid'],
+    [(value) => { value.processes[0].startEventOrdinal = 3 }, 'process_graph_invalid'],
     [(value) => { value.processes[1].parentSequence = null }, 'process_graph_invalid'],
     [(value) => { value.processes[1].parentSequence = 7 }, 'process_graph_invalid'],
     [(value) => { value.processes[0].sequence = 2 }, 'process_graph_invalid'],

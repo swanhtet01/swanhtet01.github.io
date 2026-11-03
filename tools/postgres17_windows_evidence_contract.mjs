@@ -124,16 +124,27 @@ export function validateSanitizedClosure(closure, expectedSha) {
     fail('bootstrap_closure_inventory_invalid')
   }
   for (const process of closure.processes) {
-    if (!exact(process, ['sequence', 'parentSequence', 'imageBindingId', 'sourceId', 'exitCode'])
+    if (!exact(process, ['sequence', 'parentSequence', 'imageBindingId', 'sourceId',
+      'startEventOrdinal', 'endEventOrdinal', 'exitCode'])
       || !integer(process.sequence, 0, 1000000)
       || !(process.parentSequence === null || integer(process.parentSequence, 0, 1000000))
+      || !integer(process.startEventOrdinal, 0, 1000000000)
+      || !integer(process.endEventOrdinal, 0, 1000000000)
+      || process.startEventOrdinal >= process.endEventOrdinal
       || !ID.test(process.imageBindingId || '') || !ID.test(process.sourceId || '')
       || process.exitCode !== 0) fail('bootstrap_closure_inventory_invalid')
   }
   const processesBySequence = new Map()
+  const lifecycleOrdinals = new Set()
   let roots = 0
   for (const process of closure.processes) {
     if (processesBySequence.has(process.sequence)) fail('bootstrap_closure_process_graph_invalid')
+    if (lifecycleOrdinals.has(process.startEventOrdinal)
+      || lifecycleOrdinals.has(process.endEventOrdinal)) {
+      fail('bootstrap_closure_process_graph_invalid')
+    }
+    lifecycleOrdinals.add(process.startEventOrdinal)
+    lifecycleOrdinals.add(process.endEventOrdinal)
     processesBySequence.set(process.sequence, process)
     if (process.parentSequence === null) roots++
   }
@@ -141,7 +152,9 @@ export function validateSanitizedClosure(closure, expectedSha) {
   for (const process of closure.processes) {
     if (process.parentSequence !== null
       && (!processesBySequence.has(process.parentSequence)
-        || process.parentSequence >= process.sequence)) {
+        || process.parentSequence >= process.sequence
+        || processesBySequence.get(process.parentSequence).startEventOrdinal
+          >= process.startEventOrdinal)) {
       fail('bootstrap_closure_process_graph_invalid')
     }
   }
@@ -182,13 +195,19 @@ export function validateSanitizedClosure(closure, expectedSha) {
   const observedImports = new Set()
   const importedBindings = new Set()
   for (const entry of closure.imports) {
-    if (!exact(entry, ['processSequence', 'bindingId', 'sourceId', 'relativePath', 'sha256'])
+    if (!exact(entry, ['processSequence', 'eventOrdinal', 'bindingId', 'sourceId',
+      'relativePath', 'sha256'])
       || !integer(entry.processSequence, 0, 1000000)
+      || !integer(entry.eventOrdinal, 0, 1000000000)
       || !ID.test(entry.bindingId || '') || !ID.test(entry.sourceId || '')
       || !safeRelative(entry.relativePath) || !SHA256.test(entry.sha256 || '')
-      || !processesBySequence.has(entry.processSequence)) {
+      || !processesBySequence.has(entry.processSequence)
+      || entry.eventOrdinal <= processesBySequence.get(entry.processSequence)?.startEventOrdinal
+      || entry.eventOrdinal >= processesBySequence.get(entry.processSequence)?.endEventOrdinal
+      || lifecycleOrdinals.has(entry.eventOrdinal)) {
       fail('bootstrap_closure_import_invalid')
     }
+    lifecycleOrdinals.add(entry.eventOrdinal)
     const binding = `${entry.bindingId}\0${entry.sourceId}`
     const file = filesByBinding.get(binding)
     if (!file || !file.uses.includes('imported')

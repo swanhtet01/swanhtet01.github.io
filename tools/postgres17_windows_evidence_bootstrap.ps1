@@ -390,9 +390,10 @@ try {
     Assert-Integer $closure.systemModuleCount 1 10000
     Assert-Integer $closure.importCount 1 10000
     foreach ($import in @($closure.imports)) {
-      Assert-ExactProperties $import @('processSequence', 'bindingId', 'sourceId',
+      Assert-ExactProperties $import @('processSequence', 'eventOrdinal', 'bindingId', 'sourceId',
         'relativePath', 'sha256')
       Assert-Integer $import.processSequence 0 1000000
+      Assert-Integer $import.eventOrdinal 0 1000000000
       Assert-BoundedId $import.bindingId
       Assert-BoundedId $import.sourceId
       Assert-SafeRelativePath $import.relativePath 'bootstrap_import_inventory_invalid'
@@ -401,9 +402,12 @@ try {
       }
     }
     foreach ($processRecord in @($closure.processes)) {
-      $allowedProcessKeys = @('sequence', 'parentSequence', 'imageBindingId', 'sourceId', 'exitCode')
+      $allowedProcessKeys = @('sequence', 'parentSequence', 'imageBindingId', 'sourceId',
+        'startEventOrdinal', 'endEventOrdinal', 'exitCode')
       Assert-ExactProperties $processRecord $allowedProcessKeys
       Assert-Integer $processRecord.sequence 0 1000000
+      Assert-Integer $processRecord.startEventOrdinal 0 1000000000
+      Assert-Integer $processRecord.endEventOrdinal 0 1000000000
       if ($null -ne $processRecord.parentSequence) { Assert-Integer $processRecord.parentSequence 0 1000000 }
       Assert-Integer $processRecord.exitCode 0 0
       Assert-BoundedId $processRecord.imageBindingId
