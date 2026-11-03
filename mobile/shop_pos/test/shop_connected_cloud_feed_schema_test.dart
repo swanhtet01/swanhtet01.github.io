@@ -14,6 +14,64 @@ import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'historical_shop_fixture_support.dart';
 
 void main() {
+  test('unmounted v41 SQL rejects duplicate, update and delete', () {
+    final definitions = shopConnectedCloudFeedSchemaDefinitionsV41();
+    expect(definitions.keys, <String>{
+      'shop_connected_cloud_feed_page_evidence',
+      'shop_connected_cloud_feed_page_evidence_no_update',
+      'shop_connected_cloud_feed_page_evidence_no_delete',
+    });
+    final connection = sqlite.sqlite3.openInMemory();
+    addTearDown(connection.close);
+    // This tests only SQL uniqueness and immutability. Parent-table FK,
+    // page-totality and cryptographic reconstruction require the future v41
+    // open/backup verifier and are not established by an in-memory draft.
+    for (final definition in definitions.values) {
+      connection.execute(definition);
+    }
+    const digest =
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const other =
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    connection.execute(
+      '''
+      INSERT INTO shop_connected_cloud_feed_page_evidence
+      (page_digest, request_json, request_digest, lease_digest,
+       authority_payload_digest, enrollment_evidence_digest,
+       time_entry_digest, time_ack_digest, time_head_digest,
+       boot_session_id, sample_monotonic_millis, trusted_now_millis)
+      VALUES (?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, 100, 1800000000000)
+    ''',
+      [digest, other, digest, digest, digest, digest, digest, digest, digest],
+    );
+    expect(
+      () => connection.execute(
+        'UPDATE shop_connected_cloud_feed_page_evidence SET trusted_now_millis = 1800000000001',
+      ),
+      throwsA(isA<sqlite.SqliteException>()),
+    );
+    expect(
+      () => connection.execute(
+        'DELETE FROM shop_connected_cloud_feed_page_evidence',
+      ),
+      throwsA(isA<sqlite.SqliteException>()),
+    );
+    expect(
+      () => connection.execute(
+        '''
+        INSERT INTO shop_connected_cloud_feed_page_evidence
+        (page_digest, request_json, request_digest, lease_digest,
+         authority_payload_digest, enrollment_evidence_digest,
+         time_entry_digest, time_ack_digest, time_head_digest,
+         boot_session_id, sample_monotonic_millis, trusted_now_millis)
+        VALUES (?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, 100, 1800000000000)
+      ''',
+        [digest, other, digest, digest, digest, digest, digest, digest, digest],
+      ),
+      throwsA(isA<sqlite.SqliteException>()),
+    );
+  });
+
   test(
     'retained signed page requires pinned issuer and exact cursor chain',
     () async {

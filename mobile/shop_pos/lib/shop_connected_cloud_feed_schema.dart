@@ -89,6 +89,42 @@ Map<String, String> shopConnectedCloudFeedSchemaDefinitionsV40() => {
   ),
 };
 
+/// Additive v41 evidence definition. Deliberately not installed by the v40
+/// migration: opening a v41 file must wait for the matching request, authority,
+/// time, backup and restore verifiers. An old nonempty v40 page cannot be
+/// backfilled with a request that was never retained.
+const shopConnectedCloudFeedPageEvidenceV41Sql = '''
+  CREATE TABLE shop_connected_cloud_feed_page_evidence (
+    page_digest TEXT PRIMARY KEY NOT NULL REFERENCES shop_connected_cloud_feed_pages(page_digest),
+    request_json TEXT NOT NULL CHECK (json_valid(request_json) AND length(request_json) <= 8192),
+    request_digest TEXT NOT NULL UNIQUE CHECK (length(request_digest) = 64),
+    lease_digest TEXT NOT NULL REFERENCES shop_site_offline_lease_payloads(payload_digest),
+    authority_payload_digest TEXT NOT NULL CHECK (length(authority_payload_digest) = 64),
+    enrollment_evidence_digest TEXT NOT NULL REFERENCES shop_site_enrollment_evidence(evidence_digest),
+    time_entry_digest TEXT NOT NULL REFERENCES shop_connected_time_client_entries(entry_digest),
+    time_ack_digest TEXT NOT NULL REFERENCES shop_connected_time_client_acks(ack_digest),
+    time_head_digest TEXT NOT NULL REFERENCES shop_connected_time_client_heads(head_digest),
+    boot_session_id TEXT NOT NULL CHECK (length(boot_session_id) = 64),
+    sample_monotonic_millis INTEGER NOT NULL CHECK (sample_monotonic_millis >= 0),
+    trusted_now_millis INTEGER NOT NULL CHECK (trusted_now_millis > 0)
+  )
+''';
+
+Map<String, String> shopConnectedCloudFeedSchemaDefinitionsV41() => {
+  'shop_connected_cloud_feed_page_evidence':
+      shopConnectedCloudFeedPageEvidenceV41Sql,
+  'shop_connected_cloud_feed_page_evidence_no_update':
+      _immutableCloudFeedTrigger(
+        'shop_connected_cloud_feed_page_evidence',
+        'update',
+      ),
+  'shop_connected_cloud_feed_page_evidence_no_delete':
+      _immutableCloudFeedTrigger(
+        'shop_connected_cloud_feed_page_evidence',
+        'delete',
+      ),
+};
+
 /// Empty production pins keep nonempty data closed. Test-only pins can verify
 /// retained signatures and ordered source pages; this does not renew a lease,
 /// clear a restore barrier, or grant permission to make a shared write.
