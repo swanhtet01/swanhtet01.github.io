@@ -1,9 +1,44 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 06:38 UTC
+- Last verified: 2026-11-03 06:52 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 06:52 UTC private feed-binding and Android shard successor
+
+- **PASS (source only):** private event-page successor
+  `2c1258c22226fd308bcd12dfed33eff516e3c54b`, tree
+  `f43259409855399e5a619a320367f8bf0493def6`, parent `27507cc2`,
+  patch SHA-256 `fa85751e678f79c6612d83c685ec9d24989112e6ed6d96cfa5153962a509c80c`.
+  Each manager-only sanitized held-reservation projection now carries the
+  exact sequence and digest of its checked source event row. Lookahead and
+  unrelated event payloads remain private. Affected Python matrix was
+  **37 PASS / 4 opt-in real-PostgreSQL SKIPPED**; claims guard **179/179 PASS**;
+  independent security review **ACCEPT**. This is not a native cloud feed:
+  the LAN replica ledger cannot safely accept stripped cloud projections,
+  and a separate authenticated response contract and transactional durable
+  native cloud cursor/backup schema remain **NOT RUN**.
+- **PASS (source/contract only):** private CI repair
+  `ff6bbf623b451c1140a82b9800c4ddd90f3af8df`, tree
+  `b9734029d8820d81f6da5e77ab27cd3435170f6a`, parent `2c1258c2`,
+  patch SHA-256 `5b50f5e90d90d4bdd6d4267deddad855ed01d9740669e46abf397a1ffee6b304`.
+  On published `d10cccb0`, Native run `41587213794` **FAIL**: the Android
+  persistence_b shard reached its 600-second limit after nine nonvisual files
+  had consumed 8m42s and visual capture was still progressing; no prior
+  assertion failure was identified. Five other Native jobs **PASS**. The
+  private repair partitions the nine files into measured 5/4 serial shards
+  and visual capture into its own shard; all test files, 600-second shard cap,
+  5400-second total cap, 120-minute job cap, production/QA guards and artifacts
+  remain unchanged. Native CI and QA isolation contracts **46/46 PASS**,
+  native verifier **PASS**, independent final review **ACCEPT**. Hosted Android
+  verification of this successor is **NOT RUN**; no APK or gallery artifact
+  from the failed run may be called complete.
+- **Published head unchanged:** draft PR #752 remains `d10cccb0`; neither
+  private successor was pushed. Connected mode remains default-off, and real
+  PostgreSQL, authenticated cloud ingress, native cloud cursor recovery,
+  two-device sync, installed-device and hardware acceptance remain **NOT RUN**.
+  App's fresh PostgreSQL rehearsal and dependency security are still **FAIL**.
 
 ## 2026-11-03 06:38 UTC private authenticated event-row projection
 
