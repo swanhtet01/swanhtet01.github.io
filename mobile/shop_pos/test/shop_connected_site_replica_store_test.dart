@@ -294,6 +294,14 @@ void main() {
         certificateSha256: certificate,
         observedAtMillis: observed,
       );
+      expect(
+        await store.sharedWritesPaused(
+          workspaceId: 'workspace_1',
+          siteId: 'site_1',
+          clientFingerprint: client,
+        ),
+        isTrue,
+      );
       final delta = _delta();
       await store.applyDelta(
         delta: delta,
@@ -306,6 +314,34 @@ void main() {
         clientFingerprint: client,
         certificateSha256: certificate,
         observedAtMillis: observed + 2,
+      );
+      expect(
+        await store.sharedWritesPaused(
+          workspaceId: 'workspace_1',
+          siteId: 'site_1',
+          clientFingerprint: client,
+        ),
+        isTrue,
+      );
+      await store.applyDelta(
+        delta: SiteDeltaV1(
+          workspaceId: 'workspace_1',
+          siteId: 'site_1',
+          afterCursor: 1,
+          nextCursor: 1,
+          events: const [],
+        ),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: observed + 3,
+      );
+      expect(
+        await store.sharedWritesPaused(
+          workspaceId: 'workspace_1',
+          siteId: 'site_1',
+          clientFingerprint: client,
+        ),
+        isFalse,
       );
       final rows = await store.readProjections(
         workspaceId: 'workspace_1',
@@ -335,7 +371,7 @@ void main() {
         snapshot: _snapshotAfterDelta(),
         clientFingerprint: client,
         certificateSha256: certificate,
-        observedAtMillis: observed + 3,
+        observedAtMillis: observed + 4,
       );
       expect(
         await store.readProjections(
@@ -420,6 +456,21 @@ void main() {
     );
     await expectLater(
       database.verifyConnectedReplicaEvidence(),
+      throwsStateError,
+    );
+    await expectLater(
+      store.applyDelta(
+        delta: SiteDeltaV1(
+          workspaceId: 'workspace_1',
+          siteId: 'site_1',
+          afterCursor: 1,
+          nextCursor: 1,
+          events: const [],
+        ),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: observed + 2,
+      ),
       throwsStateError,
     );
   });

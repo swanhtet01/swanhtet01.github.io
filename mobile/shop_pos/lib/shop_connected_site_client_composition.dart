@@ -199,6 +199,38 @@ class ShopConnectedSiteClientRuntime {
     }
   }
 
+  /// Drain a bounded number of authenticated pages after an offline interval.
+  /// A snapshot establishes the initial cursor; only an empty delta proves
+  /// that this client has caught up. A busy or broken feed never silently
+  /// converts partial replication into an available shared-write state.
+  Future<void> catchUp({int maximumPages = 64}) async {
+    if (maximumPages < 1 || maximumPages > 64) {
+      throw ArgumentError.value(maximumPages, 'maximumPages');
+    }
+    if (await continuationCursor() != null) {
+      await _pauseReplica();
+    }
+    for (var page = 0; page < maximumPages; page++) {
+      final before = await continuationCursor();
+      await synchronizeOnce();
+      final after = await continuationCursor();
+      if (before != null && before == after) return;
+      if (after == null || (before != null && after < before)) {
+        await _pauseReplica();
+        throw StateError('connected_client_catch_up_cursor_invalid');
+      }
+    }
+    await _pauseReplica();
+    throw StateError('connected_client_catch_up_incomplete');
+  }
+
+  Future<void> _pauseReplica() => _replica.markBindingUnavailable(
+    workspaceId: _pairing.workspaceId,
+    siteId: _pairing.siteId,
+    clientFingerprint: _signer.clientFingerprint,
+    observedAtMillis: _now().toUtc().millisecondsSinceEpoch,
+  );
+
   Future<ConnectedSiteApprovedBinding> _requireExactBinding() async {
     final binding = await _attempts.resolveActiveBinding(
       bindingDigest: _bindingDigest,

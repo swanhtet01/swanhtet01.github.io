@@ -40,7 +40,7 @@ void main() {
 
     expect(fixture.transport.calls, 1);
     expect(await composition.runtime!.continuationCursor(), 0);
-    expect(await composition.runtime!.sharedWritesPaused(), isFalse);
+    expect(await composition.runtime!.sharedWritesPaused(), isTrue);
     expect(
       await fixture.database
           .customSelect('SELECT COUNT(*) AS n FROM shop_sales')
@@ -104,6 +104,85 @@ void main() {
       throwsA(isA<ConnectedSiteTransportException>()),
     );
     expect(await composition.runtime!.sharedWritesPaused(), isTrue);
+  });
+
+  test('bounded catch-up proves an empty delta after snapshot', () async {
+    final fixture = await _Fixture.create(clock);
+    addTearDown(fixture.database.close);
+    final runtime = fixture.compose().runtime!;
+    fixture.transport.beforeResponse = () async {
+      if (fixture.transport.calls == 2) {
+        expect(await runtime.sharedWritesPaused(), isTrue);
+      }
+    };
+
+    await runtime.catchUp(maximumPages: 2);
+    expect(fixture.transport.calls, 2);
+    expect(await runtime.continuationCursor(), 0);
+    expect(await runtime.sharedWritesPaused(), isFalse);
+  });
+
+  test('multi-page recovery remains paused through reconnect', () async {
+    final fixture = await _Fixture.create(clock);
+    addTearDown(fixture.database.close);
+    final firstRuntime = fixture.compose().runtime!;
+    await firstRuntime.synchronizeOnce();
+    fixture.transport.deltaOnZero = _emptyProjectionDelta();
+    await firstRuntime.synchronizeOnce();
+    expect(await firstRuntime.continuationCursor(), 1);
+    expect(await firstRuntime.sharedWritesPaused(), isTrue);
+
+    final reopenedRuntime = fixture.compose().runtime!;
+    fixture.transport.beforeResponse = () async {
+      expect(await reopenedRuntime.sharedWritesPaused(), isTrue);
+    };
+    await reopenedRuntime.catchUp();
+    expect(await reopenedRuntime.continuationCursor(), 1);
+    expect(await reopenedRuntime.sharedWritesPaused(), isFalse);
+  });
+
+  test(
+    'offline interruption preserves cursor and restart catches up',
+    () async {
+      final fixture = await _Fixture.create(clock);
+      addTearDown(fixture.database.close);
+      final firstRuntime = fixture.compose().runtime!;
+      await firstRuntime.synchronizeOnce();
+      fixture.transport.fail = true;
+      await expectLater(
+        firstRuntime.catchUp(),
+        throwsA(isA<ConnectedSiteTransportException>()),
+      );
+      expect(await firstRuntime.continuationCursor(), 0);
+      expect(await firstRuntime.sharedWritesPaused(), isTrue);
+
+      fixture.transport.fail = false;
+      final reopenedRuntime = fixture.compose().runtime!;
+      await reopenedRuntime.catchUp();
+      expect(await reopenedRuntime.continuationCursor(), 0);
+      expect(await reopenedRuntime.sharedWritesPaused(), isFalse);
+    },
+  );
+
+  test('page budget cannot claim partial catch-up as complete', () async {
+    final fixture = await _Fixture.create(clock);
+    addTearDown(fixture.database.close);
+    final runtime = fixture.compose().runtime!;
+
+    await expectLater(
+      runtime.catchUp(maximumPages: 1),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'connected_client_catch_up_incomplete',
+        ),
+      ),
+    );
+    expect(await runtime.continuationCursor(), 0);
+    expect(await runtime.sharedWritesPaused(), isTrue);
+    await runtime.catchUp(maximumPages: 1);
+    expect(await runtime.sharedWritesPaused(), isFalse);
   });
 
   test('revocation before fetch pauses an existing replica', () async {
@@ -375,6 +454,7 @@ class _Security extends UnavailableConnectedPlatformSecurity {
 class _Transport implements ConnectedSiteHttpTransport {
   _Transport(this.snapshot);
   final SiteSnapshotV1 snapshot;
+  SiteDeltaV1? deltaOnZero;
   int calls = 0;
   bool fail = false;
   Future<void> Function()? beforeResponse;
@@ -403,11 +483,23 @@ class _Transport implements ConnectedSiteHttpTransport {
       payload = snapshot.toJson();
     } else if (uri.path == connectedSiteDeltaPath &&
         uri.queryParameters['after'] == '0') {
+      payload =
+          (deltaOnZero ??
+                  SiteDeltaV1(
+                    workspaceId: 'workspace_1',
+                    siteId: 'site_1',
+                    afterCursor: 0,
+                    nextCursor: 0,
+                    events: const [],
+                  ))
+              .toJson();
+    } else if (uri.path == connectedSiteDeltaPath &&
+        uri.queryParameters['after'] == '1') {
       payload = SiteDeltaV1(
         workspaceId: 'workspace_1',
         siteId: 'site_1',
-        afterCursor: 0,
-        nextCursor: 0,
+        afterCursor: 1,
+        nextCursor: 1,
         events: const [],
       ).toJson();
     } else {
@@ -421,6 +513,32 @@ class _Transport implements ConnectedSiteHttpTransport {
       ),
     );
   }
+}
+
+SiteDeltaV1 _emptyProjectionDelta() {
+  final event = <String, Object?>{
+    'eventId': 'event_1',
+    'workspaceId': 'workspace_1',
+    'siteId': 'site_1',
+    'aggregateType': 'cafeOrder',
+    'aggregateId': 'order_1',
+    'aggregateVersion': 1,
+    'eventType': 'shop.connected_replica.state.v1',
+    'occurredAt': '2026-11-02T00:00:00.000Z',
+    'payload': {
+      'contract': 'supermega.shop.connected-site-replica-state.v1',
+      'projections': _snapshot().projections,
+    },
+  };
+  return SiteDeltaV1(
+    workspaceId: 'workspace_1',
+    siteId: 'site_1',
+    afterCursor: 0,
+    nextCursor: 1,
+    events: [
+      {'cursor': 1, 'event': event, 'eventDigest': connectedSiteSha256(event)},
+    ],
+  );
 }
 
 SiteSnapshotV1 _snapshot() {

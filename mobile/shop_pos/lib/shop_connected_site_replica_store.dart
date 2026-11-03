@@ -91,7 +91,7 @@ class ShopConnectedSiteReplicaStore {
         snapshotJson: canonicalConnectedSiteJson(snapshot.unsignedPayload),
         checkpointDigest: snapshot.checkpointDigest,
         observedAtMillis: observedAtMillis,
-        writesPaused: false,
+        writesPaused: true,
       );
       await database.customStatement(
         'DELETE FROM shop_connected_replica_projections WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ?',
@@ -138,6 +138,30 @@ class ShopConnectedSiteReplicaStore {
       }
       final deltaJson = canonicalConnectedSiteJson(delta.toJson());
       final deltaDigest = connectedSiteSha256(delta.toJson());
+      if (head.read<int>('continuation_cursor') == delta.afterCursor &&
+          delta.nextCursor == delta.afterCursor &&
+          delta.events.isEmpty) {
+        // A pinned coordinator can report that there is no new page. This is
+        // not a replay of a previously committed delivery and must not create
+        // one. Check retained evidence before clearing a prior offline pause.
+        await database.verifyConnectedReplicaEvidence();
+        await _upsertHead(
+          workspaceId: delta.workspaceId,
+          siteId: delta.siteId,
+          clientFingerprint: clientFingerprint,
+          certificateSha256: certificateSha256,
+          evidenceStartCursor: head.read<int>('evidence_start_cursor'),
+          snapshotCursor: head.read<int>('snapshot_cursor'),
+          continuationCursor: delta.afterCursor,
+          snapshotVersion: head.read<int>('snapshot_version'),
+          snapshotJson: head.read<String>('snapshot_json'),
+          checkpointDigest: head.read<String>('checkpoint_digest'),
+          observedAtMillis: observedAtMillis,
+          writesPaused: false,
+        );
+        await database.verifyConnectedReplicaEvidence();
+        return;
+      }
       if (head.read<int>('continuation_cursor') == delta.nextCursor) {
         final delivery = await database
             .customSelect(
@@ -235,7 +259,7 @@ class ShopConnectedSiteReplicaStore {
         snapshotJson: head.read<String>('snapshot_json'),
         checkpointDigest: head.read<String>('checkpoint_digest'),
         observedAtMillis: observedAtMillis,
-        writesPaused: false,
+        writesPaused: true,
       );
       await database.verifyConnectedReplicaEvidence();
     });
