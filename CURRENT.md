@@ -20,6 +20,13 @@
   controls, rooted paths and traversal. Focused Node suites: **54/54 PASS**;
   `git diff --check` PASS. Independent read-only source review accepted the
   fail-closed design after a Windows-alias finding was corrected.
+- **PASS / NOT RUN (final-source Python boundary):**
+  `python -m unittest tests.test_connected_site_event_read
+  tests.test_connected_site_event_feed tests.test_connected_site_postgres17`
+  completed 13 tests: 9 non-PG PASS, 4 opt-in real-PG SKIPPED. The isolated
+  disposable PostgreSQL 17 tests and Windows rehearsal remain NOT RUN on
+  this private tree; the earlier hosted 3/3 disposable PG result belongs to
+  public head `5a9e89bb` only.
 - **FAIL / BLOCKED (unchanged rehearsal gate):**
   `node tools/record_postgres17_rehearsal.mjs --verify` returned exit 1,
   `database_rehearsal_evidence_stale`, `secretValuesExposed:false`. No Windows
@@ -181,8 +188,8 @@
   `tests/test_connected_site_postgres17.py`; patch SHA-256
   `9b9491a9b5916294a40c426608a173e5872d1557f81a6671348bc7c575ad94ae`.
   Independent review **ACCEPT**; `git diff --check` **PASS**; local Python
-  unittest invocation **PASS 3 / SKIP 4**, with the four real disposable
-  PostgreSQL tests **NOT RUN** here. This successor is not the public CI head
+  unittest invocation recorded **3 non-PG PASS / 4 opt-in real-PG SKIPPED**,
+  not a PostgreSQL runtime pass. This successor is not the public CI head
   and no hosted result may be attributed to it.
 
 ## 2026-11-03 04:19 UTC final-source affected regression closes
