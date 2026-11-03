@@ -1,9 +1,41 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 06:06 UTC
+- Last verified: 2026-11-03 06:18 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 06:18 UTC private observer launcher/import contract
+
+- **PASS (source only):** private implementation
+  `488364186810217e5bc24d628b3324ff619a57b6`, tree
+  `84f7114dcb39493eb10099564ba85fedb425d0c3`, parent `ad467c3b`,
+  changes only the pending Windows bootstrap policy, PowerShell bootstrap,
+  sanitized evidence contract and its tests. Binary patch SHA-256 is
+  `302d4709227347f1194ca61ee199893d9ecb1dcd5c1bbdf3e83ca87d05b5e2ee`.
+  Stage 2 now requires an explicit pinned native `.exe` launcher under the
+  non-reparse repository path with a fixed working directory. The v2 closure
+  contract requires loss-free, pre-spawn-through-drain import observation;
+  each import binds a known process to an exact runtime binding/path/digest,
+  every imported runtime file must be observed, and duplicate or unbound
+  imports fail closed. Negative cases include graph/path/hash substitutions,
+  lost/late/partial imports and failed cleanup. Focused Node suites **55/55
+  PASS**, claims guard **179/179 PASS**, diff check **PASS**; independent
+  read-only security review **ACCEPT** for a source contract only.
+- **BLOCKED / NOT RUN:** policy status/approval stay pending and the observer
+  command/hash stay null, so Rehearsal rejects before workspace creation or
+  download. No native observer implementation, Windows/PowerShell execution,
+  runtime import trace, installer, database or fresh receipt has run. Lexical
+  `.exe` plus digest is not PE/signature validation; real OS identity, trace
+  timing/loss and the isolated-host boundary need separate Windows evidence.
+- **Exact published CI:** draft PR #752 remains at `d10cccb0` while useful
+  Native run `41587213794` continues in the full Android shard. Its other
+  five jobs, including Windows PC and isolated Android/Windows QA, passed.
+  App run `41587206380` is terminal **FAIL** only at step 638/668 `hq:verify`
+  1/37 with `database_rehearsal_evidence_stale`; prior steps 1–637 passed.
+  Dependency run `41587213722` remains **FAIL** in app/kernel audits; Kernel
+  run `41587213702` **PASS**. The private observer successor is not published
+  or covered by these hosted runs. No manual workflow dispatch occurred.
 
 ## 2026-11-03 06:06 UTC exact-head CI and private capture-verifier hardening
 
