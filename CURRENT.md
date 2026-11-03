@@ -1,9 +1,34 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 20:45 UTC
+- Last verified: 2026-11-03 20:59 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 20:59 UTC private distinct-device feed recovery regression
+
+- **PASS (private, synthetic, default-off):** implementation
+  `59595d9d71a2a8beba666005ff30d5a41b9bebb8`, tree
+  `bc768926104c0233b3f352a0e0682fcffca97c75`, two-file patch SHA-256
+  `effe2fee0a4cdbd504f73975bc0cdf9b785549c3c1e57c956dbf821519e32e0a`.
+  A second independently seeded device identity builds its own signed enrollment,
+  lease, trusted-time, approval and feed evidence in a separate SQLite store.
+  It rejects the first device's signed page, then verifies local outage/reopen,
+  reconnect, idempotent replay, owner-signed local revocation and backup for
+  its own stores. The existing first-device process-harness test name and
+  default fixture identity remain unchanged. Exact-source Flutter file
+  **14/14 PASS** in 2m06s; focused first and second device cases **PASS**;
+  analyzer, formatter and diff check **PASS**. Independent read-only security
+  review **ACCEPT**, after reducing a formatting-only 4,440-line diff to a
+  109-line test-file diff. No production code or route changed.
+- **NOT RUN / BLOCKED:** these are two synthetic identities, not a common
+  deployed server delivering events to two installed devices. Real LAN/TLS,
+  cloud revocation propagation, physical outage/reconnect, signed production
+  custody and merchant acceptance remain unverified; connected mode stays off.
+  Five corrected disposable-PG17 cases remain **SKIPPED** locally. Draft PR
+  #752 stays at `07b12e5b796dee325fcfac9c853cbf59415c5644` while Native
+  `41713099835` has an active Android job; Windows and isolated Android QA
+  passed. This private source has no hosted exact-head result.
 
 ## 2026-11-03 20:45 UTC private synthetic HTTP feed composition
 
