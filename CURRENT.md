@@ -1,9 +1,41 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 10:44 UTC
+- Last verified: 2026-11-03 10:52 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 10:52 UTC private pinned authority-payload verification
+
+- **PASS (private default-off prerequisite):** source commit
+  `b140824bc302eaa02efa81b38f64263a4eca06f6`, tree
+  `fc2f78d76ff4405ab787feda688b844dcd2ab458`, parent `75f38ef5`,
+  two paths, staged patch SHA-256
+  `812d20650e63b79a27356a00ecf0156941553de6e8bd09d05b0fa5084589da8e`.
+  An explicit pinned Ed25519 issuer verifies exact authority-payload bytes;
+  unknown issuers, malformed/noncanonical signatures and changed bytes fail.
+  Pins are copied, not read back from caller-owned mutable collections.
+  Default composition remains unavailable without reviewed pins. Independent
+  read-only security review **ACCEPT** as a signature prerequisite only:
+  canonical payload parsing and scope checks remain the caller's duty.
+- **PASS (exact private source):** focused signature test **1/1**, full
+  authority-store test file **21/21**, targeted Flutter analysis and diff
+  whitespace check. Initial test invocation failed before loading tests
+  because the native compiler was absent from PATH; the rerun with the
+  pinned LLVM path passed. No production key was supplied.
+- **Environment preflight (10:52 UTC):** Flutter/Dart 3.47.8 are present at
+  `/tmp/supermega-flutter-3.47.8.O7Xfnph6/flutter/bin`, LLVM clang at
+  `/workspace/.toolchains/llvm-21.1.8-local/usr/lib/llvm-21/bin`, and the
+  offline `.dart_tool/package_config.json` is present. Prefix that LLVM
+  directory to PATH for Flutter tests; use `--no-pub`. Observed available
+  space was 2,207,375,360 bytes on `/dev/shm` and 569,954,304 bytes on the
+  durable overlay; these are point-in-time measurements, not a build budget.
+- **BLOCKED / NOT RUN:** the atomic cloud-feed apply still accepts
+  caller-supplied expectation and time, without a transactional current
+  signed-request, lease/revocation and trusted-time recheck. This commit does
+  not complete that gate or mount production sync. Real issuer/key custody,
+  rebootstrap, two-device and exact-private-head hosted tests are NOT RUN.
+  Public draft PR #752 remains at `578e51e24c3ef778e6d708b385598170b8fd445a`.
 
 ## 2026-11-03 10:44 UTC private encrypted nonempty-feed restore
 
