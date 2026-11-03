@@ -38,6 +38,15 @@ The workstation restrictions are in `docs/SHOP-ROLE-WORKSTATION-DELIVERY.md`.
 These needs do **not** authorize raw payload exposure or define a new merchant
 access policy.
 
+An unmounted `project_retail_reservation_held` source candidate accepts only
+the exact retail reserve/held envelope and line shape for a current manager/
+owner lease. It emits product IDs, quantities, reservation ID/state and
+candidate digests, omitting actor/device IDs, timestamps, prices and free text.
+Its caller-provided digest proves only internal consistency: no PostgreSQL row,
+signed upload, page sequence or durable client cursor is yet bound to that
+candidate. Release, expiry and commit projections are also absent. It must
+not drive stock availability or be delivered to any client in this state.
+
 ## Required next contract and decisions
 
 Before any event payload endpoint is mounted, reject unknown event types and
