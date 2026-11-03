@@ -14,7 +14,7 @@ import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'historical_shop_fixture_support.dart';
 
 void main() {
-  test('unmounted v41 SQL rejects duplicate, update and delete', () {
+  test('unmounted v41 SQL rejects orphan, duplicate, update and delete', () {
     final definitions = shopConnectedCloudFeedSchemaDefinitionsV41();
     expect(definitions.keys, <String>{
       'shop_connected_cloud_feed_page_evidence',
@@ -23,16 +23,38 @@ void main() {
     });
     final connection = sqlite.sqlite3.openInMemory();
     addTearDown(connection.close);
-    // This tests only SQL uniqueness and immutability. Parent-table FK,
-    // page-totality and cryptographic reconstruction require the future v41
-    // open/backup verifier and are not established by an in-memory draft.
+    // Minimal parent keys let this SQL test enforce declared foreign keys.
+    // Page-totality and cryptographic reconstruction still require the future
+    // v41 open/backup verifier; these parent stubs are not signed evidence.
+    for (final (table, key) in [
+      ('shop_connected_cloud_feed_pages', 'page_digest'),
+      ('shop_site_offline_lease_payloads', 'payload_digest'),
+      ('shop_site_enrollment_evidence', 'evidence_digest'),
+      ('shop_connected_time_client_entries', 'entry_digest'),
+      ('shop_connected_time_client_acks', 'ack_digest'),
+      ('shop_connected_time_client_heads', 'head_digest'),
+    ]) {
+      connection.execute('CREATE TABLE $table ($key TEXT PRIMARY KEY)');
+    }
     for (final definition in definitions.values) {
       connection.execute(definition);
     }
+    connection.execute('PRAGMA foreign_keys = ON');
     const digest =
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const other =
         'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    for (final (table, key) in [
+      ('shop_connected_cloud_feed_pages', 'page_digest'),
+      ('shop_site_offline_lease_payloads', 'payload_digest'),
+      ('shop_site_enrollment_evidence', 'evidence_digest'),
+      ('shop_connected_time_client_entries', 'entry_digest'),
+      ('shop_connected_time_client_acks', 'ack_digest'),
+      ('shop_connected_time_client_heads', 'head_digest'),
+    ]) {
+      connection.execute('INSERT INTO $table ($key) VALUES (?)', [digest]);
+    }
+    expect(connection.select('PRAGMA foreign_keys').single.columnAt(0), 1);
     connection.execute(
       '''
       INSERT INTO shop_connected_cloud_feed_page_evidence
@@ -47,6 +69,20 @@ void main() {
     expect(
       () => connection.execute(
         'UPDATE shop_connected_cloud_feed_page_evidence SET trusted_now_millis = 1800000000001',
+      ),
+      throwsA(isA<sqlite.SqliteException>()),
+    );
+    expect(
+      () => connection.execute(
+        '''
+        INSERT INTO shop_connected_cloud_feed_page_evidence
+        (page_digest, request_json, request_digest, lease_digest,
+         authority_payload_digest, enrollment_evidence_digest,
+         time_entry_digest, time_ack_digest, time_head_digest,
+         boot_session_id, sample_monotonic_millis, trusted_now_millis)
+        VALUES (?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, 100, 1800000000000)
+      ''',
+        [other, digest, digest, digest, digest, digest, digest, digest, digest],
       ),
       throwsA(isA<sqlite.SqliteException>()),
     );
