@@ -22,6 +22,93 @@ const _device = 'device-enrollment';
 const _nonce = 'pairing_nonce_enrollment_0001';
 
 void main() {
+  test('retained owner enrollment requires signed exact approval', () async {
+    final ownerPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 14),
+    );
+    final clientPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 15),
+    );
+    final ownerPublic = (await ownerPair.extractPublicKey()).bytes;
+    final fingerprint = sha256
+        .convert((await clientPair.extractPublicKey()).bytes)
+        .toString();
+    final unsigned = _evidence(
+      action: ShopOwnerEnrollmentAction.approve,
+      fingerprint: fingerprint,
+      observedAtMillis: _now - 100,
+      sessionGeneration: 1,
+    );
+    final signature = base64Url
+        .encode(
+          (await Ed25519().sign(
+            utf8.encode(canonicalConnectedSiteJson(unsigned.signingPayload)),
+            keyPair: ownerPair,
+          )).bytes,
+        )
+        .replaceAll('=', '');
+    final signed = ShopOwnerEnrollmentEvidenceV1(
+      action: unsigned.action,
+      tenantId: unsigned.tenantId,
+      siteId: unsigned.siteId,
+      coordinatorDeviceId: unsigned.coordinatorDeviceId,
+      deviceId: unsigned.deviceId,
+      clientFingerprint: unsigned.clientFingerprint,
+      sessionGeneration: unsigned.sessionGeneration,
+      observedAtMillis: unsigned.observedAtMillis,
+      authorityKeyId: unsigned.authorityKeyId,
+      signature: signature,
+      evidenceDigest: unsigned.evidenceDigest,
+    );
+    final bytes = canonicalConnectedSiteJson(signed.toJson());
+    ShopOwnerEnrollmentEvidenceV1 verify({
+      String? candidateBytes,
+      String site = _site,
+      String coordinator = _coordinator,
+      String device = _device,
+      String? expectedFingerprint,
+      String? expectedDigest,
+      int generation = 1,
+      int time = _now,
+      Map<String, List<int>>? pins,
+    }) => verifyRetainedEnrollmentApprovalSync(
+      canonicalEvidenceJson: candidateBytes ?? bytes,
+      expectedEvidenceDigest: expectedDigest ?? signed.evidenceDigest,
+      tenantId: _tenant,
+      siteId: site,
+      coordinatorDeviceId: coordinator,
+      deviceId: device,
+      clientFingerprint: expectedFingerprint ?? fingerprint,
+      sessionGeneration: generation,
+      trustedAtMillis: time,
+      pinnedOwnerIssuerKeys: pins ?? {'owner-key-1': ownerPublic},
+    );
+    expect(verify().evidenceDigest, signed.evidenceDigest);
+    expect(() => verify(site: 'other'), throwsFormatException);
+    expect(() => verify(coordinator: 'other'), throwsFormatException);
+    expect(() => verify(device: 'other'), throwsFormatException);
+    expect(() => verify(expectedFingerprint: '0' * 64), throwsFormatException);
+    expect(() => verify(expectedDigest: '0' * 64), throwsFormatException);
+    expect(() => verify(generation: 2), throwsFormatException);
+    expect(() => verify(time: _now - 101), throwsFormatException);
+    expect(() => verify(pins: const {}), throwsFormatException);
+    final revoke = {...signed.toJson(), 'action': 'revoke'};
+    expect(
+      () => verify(candidateBytes: canonicalConnectedSiteJson(revoke)),
+      throwsFormatException,
+    );
+    final altered = {
+      ...signed.toJson(),
+      'signature': base64Url
+          .encode(List<int>.filled(64, 1))
+          .replaceAll('=', ''),
+    };
+    expect(
+      () => verify(candidateBytes: canonicalConnectedSiteJson(altered)),
+      throwsFormatException,
+    );
+  });
+
   test(
     'v25 semantic validator rejects altered authority-chain bytes',
     () async {

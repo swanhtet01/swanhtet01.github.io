@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_retained_signature_verifier.dart';
 import 'shop_staff_authorization.dart';
 
 const shopOfflineStaffLeaseContract = 'supermega.shop.offline-staff-lease.v1';
@@ -220,6 +221,84 @@ class ShopOfflineStaffLeaseVerifier {
 
 String shopOfflineStaffLeasePayloadDigest(OfflineStaffLeaseV1 lease) =>
     connectedSiteSha256(lease.unsignedPayload);
+
+/// Reconstructs historical lease authority for synchronous snapshot checks.
+/// Pins and expected binding must come from reviewed independent authority,
+/// never from the retained lease JSON. This does not renew a lease on restore.
+VerifiedShopOfflineStaffLease verifyRetainedOfflineStaffLeaseSync({
+  required OfflineStaffLeaseV1 lease,
+  required ShopOfflineStaffLeaseExpectedBinding expected,
+  required int trustedAtMillis,
+  required Map<String, List<int>> pinnedIssuerKeys,
+  Duration maximumClockSkew = shopOfflineStaffLeaseDefaultClockSkew,
+}) {
+  _validateShape(lease);
+  if (maximumClockSkew.isNegative) {
+    _deny('shop_offline_staff_lease_clock_policy_invalid');
+  }
+  final role = _parseRole(lease.role);
+  final capabilities = _parseCapabilities(lease.capabilities);
+  if (capabilities.any(
+    (capability) => !ShopStaffRolePolicy.allows(role, capability),
+  )) {
+    _deny('shop_offline_staff_lease_role_capability_mismatch');
+  }
+  if (!capabilities.contains(expected.requiredCapability)) {
+    _deny('shop_offline_staff_lease_capability_denied');
+  }
+  if (lease.tenantId != expected.tenantId ||
+      lease.siteId != expected.siteId ||
+      lease.deviceId != expected.deviceId) {
+    _deny('shop_offline_staff_lease_binding_mismatch');
+  }
+  if (lease.sessionGeneration != expected.sessionGeneration) {
+    _deny('shop_offline_staff_lease_session_generation_mismatch');
+  }
+  if (lease.revocationGeneration != expected.revocationGeneration) {
+    _deny('shop_offline_staff_lease_revocation_generation_mismatch');
+  }
+  final validityMillis = lease.expiresAtMillis - lease.issuedAtMillis;
+  if (validityMillis <= 0 ||
+      validityMillis > shopOfflineStaffLeaseMaximumValidity.inMilliseconds) {
+    _deny('shop_offline_staff_lease_validity_invalid');
+  }
+  if (lease.issuedAtMillis >
+      trustedAtMillis + maximumClockSkew.inMilliseconds) {
+    _deny('shop_offline_staff_lease_not_yet_valid');
+  }
+  if (trustedAtMillis >= lease.expiresAtMillis) {
+    _deny('shop_offline_staff_lease_expired');
+  }
+  if (!_constantTimeTextEquals(
+    lease.payloadDigest,
+    shopOfflineStaffLeasePayloadDigest(lease),
+  )) {
+    _deny('shop_offline_staff_lease_digest_mismatch');
+  }
+  if (!verifyPinnedRetainedEd25519Sync(
+    canonicalSigningBytes: canonicalConnectedSiteJson(lease.unsignedPayload),
+    signature: lease.signature,
+    keyId: lease.keyId,
+    pinnedKeys: pinnedIssuerKeys,
+  )) {
+    _deny('shop_offline_staff_lease_signature_invalid');
+  }
+  return VerifiedShopOfflineStaffLease(
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    siteId: lease.siteId,
+    actorId: lease.actorId,
+    role: role,
+    capabilities: Set.unmodifiable(capabilities),
+    deviceId: lease.deviceId,
+    sessionGeneration: lease.sessionGeneration,
+    revocationGeneration: lease.revocationGeneration,
+    issuedAtMillis: lease.issuedAtMillis,
+    expiresAtMillis: lease.expiresAtMillis,
+    keyId: lease.keyId,
+    payloadDigest: lease.payloadDigest,
+  );
+}
 
 void _validateShape(OfflineStaffLeaseV1 lease) {
   if (!_keyIdPattern.hasMatch(lease.keyId) ||

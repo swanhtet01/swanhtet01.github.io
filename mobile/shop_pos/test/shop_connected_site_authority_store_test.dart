@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_retained_signature_verifier.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_database.dart';
@@ -82,6 +83,122 @@ void main() {
             ),
         _throwsCode('connected_site_authority_payload_signature_invalid'),
       );
+    },
+  );
+
+  test(
+    'retained authority binds signed current member and lease scope',
+    () async {
+      final pair = await Ed25519().newKeyPairFromSeed(List<int>.filled(32, 7));
+      final publicKey = (await pair.extractPublicKey()).bytes;
+      final bytes = _authorityPayload();
+      final signature = base64Url
+          .encode(
+            (await Ed25519().sign(utf8.encode(bytes), keyPair: pair)).bytes,
+          )
+          .replaceAll('=', '');
+      final payload = ConnectedSiteAuthorityPayloadV1.parse(
+        canonicalBytes: bytes,
+        signature: signature,
+      );
+      final unsignedLease = <String, Object>{
+        'protocolVersion': 1,
+        'leaseId': 'lease-authority-test',
+        'workspaceId': _workspace,
+        'siteId': _site,
+        'actorId': 'actor-one',
+        'role': 'cashierCounter',
+        'capabilities': ['counterSale'],
+        'deviceId': _device,
+        'sessionGeneration': 1,
+        'revocationGeneration': 1,
+        'issuedAt': DateTime.fromMillisecondsSinceEpoch(
+          _now - 1000,
+          isUtc: true,
+        ).toIso8601String(),
+        'expiresAt': DateTime.fromMillisecondsSinceEpoch(
+          _now + 60000,
+          isUtc: true,
+        ).toIso8601String(),
+        'issuerKeyId': 'lease-issuer',
+      };
+      OfflineStaffLeaseV1 lease(Map<String, Object> fields) =>
+          OfflineStaffLeaseV1.fromJson({
+            ...fields,
+            'payloadDigest': connectedSiteSha256(fields),
+            'signature': base64Url
+                .encode(List<int>.filled(64, 8))
+                .replaceAll('=', ''),
+          });
+      final validLease = lease(unsignedLease);
+      final pins = {'issuer-test-key': publicKey};
+      expect(payload.workspaceId, validLease.workspaceId);
+      expect(payload.authoritySequence, 1);
+      expect(payload.previousAuthorityDigest, isNull);
+      expect(payload.siteId, validLease.siteId);
+      expect(payload.revocationGeneration, validLease.revocationGeneration);
+      expect(payload.issuedAtMillis, lessThan(_now));
+      expect(payload.members.single.actorId, validLease.actorId);
+      expect(payload.members.single.role.name, validLease.role);
+      expect(
+        payload.members.single.sessionGeneration,
+        validLease.sessionGeneration,
+      );
+      expect(
+        payload.members.single.capabilities.single.name,
+        validLease.capabilities.single,
+      );
+      expect(
+        verifyPinnedRetainedEd25519Sync(
+          canonicalSigningBytes: payload.canonicalBytes,
+          signature: signature,
+          keyId: payload.issuerKeyId,
+          pinnedKeys: pins,
+        ),
+        isTrue,
+      );
+      ConnectedSiteAuthorityPayloadV1 check({
+        OfflineStaffLeaseV1? candidate,
+        String? candidateBytes,
+        String? candidateSignature,
+        int trustedTime = _now,
+        Map<String, List<int>>? candidatePins,
+        int sequence = 1,
+      }) => verifyRetainedAuthorityForLeaseSync(
+        canonicalBytes: candidateBytes ?? bytes,
+        signature: candidateSignature ?? signature,
+        expectedPayloadDigest: payload.payloadDigest,
+        expectedSequence: sequence,
+        expectedPreviousDigest: null,
+        lease: candidate ?? validLease,
+        trustedAtMillis: trustedTime,
+        pinnedIssuerKeys: candidatePins ?? pins,
+      );
+      expect(check().payloadDigest, payload.payloadDigest);
+      await PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(publicKeys: pins)
+          .verify(
+            canonicalPayloadBytes: bytes,
+            signature: signature,
+            issuerKeyId: payload.issuerKeyId,
+          );
+      for (final invalid in [
+        () =>
+            check(candidate: lease({...unsignedLease, 'workspaceId': 'other'})),
+        () => check(candidate: lease({...unsignedLease, 'actorId': 'other'})),
+        () => check(
+          candidate: lease({...unsignedLease, 'revocationGeneration': 2}),
+        ),
+        () => check(trustedTime: _now - 101),
+        () => check(candidatePins: const {}),
+        () => check(sequence: 2),
+        () => check(
+          candidateSignature: base64Url
+              .encode(List<int>.filled(64, 1))
+              .replaceAll('=', ''),
+        ),
+      ]) {
+        expect(invalid, throwsA(isA<ConnectedSiteReconciliationException>()));
+      }
     },
   );
 
@@ -1290,7 +1407,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 40);
+      expect(database.schemaVersion, 41);
       expect(await _count(database, 'shop_site_authority_payloads'), 0);
       expect(await _count(database, 'shop_site_authority_members'), 0);
       expect(await _count(database, 'shop_site_configuration_snapshots'), 0);
@@ -1325,7 +1442,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 40);
+      expect(database.schemaVersion, 41);
       expect(await _count(database, 'shop_site_authority_checkpoints'), 0);
       expect(
         await _count(database, 'shop_site_authority_bootstrap_provenance'),

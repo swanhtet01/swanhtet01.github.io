@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart' as crypto;
 
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_retained_signature_verifier.dart';
 import 'shop_connected_trusted_time_stream.dart';
 
 const shopConnectedTrustedTimeClientEntriesV39Sql = '''
@@ -108,6 +109,96 @@ String connectedTrustedTimeClientHeadDigest({
   'entryDigest': entryDigest,
   'ackDigest': ackDigest,
 });
+
+/// Historical verification of one retained v41 page's time sample. It never
+/// creates same-boot live time after reopen or restore. The expected identity,
+/// binding, key generations and pins must be independently authenticated.
+bool verifyRetainedTrustedTimeSampleV39Sync({
+  required String entryJson,
+  required String ackJson,
+  required String entryDigest,
+  required String ackDigest,
+  required String headDigest,
+  required String workspaceId,
+  required String siteId,
+  required String coordinatorDeviceId,
+  required String deviceId,
+  required String clientFingerprint,
+  required String clientSigningKeyId,
+  required int sessionGeneration,
+  required String coordinatorBindingDigest,
+  required int coordinatorBindingGeneration,
+  required String authorityKeyId,
+  required int authorityKeyGeneration,
+  required int authorityEpoch,
+  required String bootSessionId,
+  required int sampleMonotonicMillis,
+  required int trustedNowMillis,
+  required Map<String, List<int>> pinnedAuthorityKeys,
+  required Map<String, List<int>> pinnedClientKeys,
+}) {
+  try {
+    final entry = ConnectedTrustedTimeStreamEntryV2.fromCanonicalBytes(
+      utf8.encode(entryJson),
+    );
+    final ack = ConnectedTrustedTimeStreamAckV1.fromCanonicalBytes(
+      utf8.encode(ackJson),
+    );
+    final authorityKey = pinnedAuthorityKeys[authorityKeyId];
+    final clientKey = pinnedClientKeys[clientSigningKeyId];
+    if (authorityKey == null ||
+        clientKey == null ||
+        crypto.sha256.convert(authorityKey).toString() !=
+            entry.authorityKeyFingerprint ||
+        crypto.sha256.convert(clientKey).toString() != clientFingerprint ||
+        entry.kind != ConnectedTrustedTimeStreamEntryKind.time ||
+        entry.entryDigest != entryDigest ||
+        ack.ackDigest != ackDigest ||
+        !_ackMatchesEntry(ack, entry) ||
+        entry.workspaceId != workspaceId ||
+        entry.siteId != siteId ||
+        entry.coordinatorDeviceId != coordinatorDeviceId ||
+        entry.clientDeviceId != deviceId ||
+        entry.clientFingerprint != clientFingerprint ||
+        entry.sessionGeneration != sessionGeneration ||
+        entry.coordinatorBindingDigest != coordinatorBindingDigest ||
+        entry.coordinatorBindingGeneration != coordinatorBindingGeneration ||
+        entry.authorityKeyId != authorityKeyId ||
+        entry.authorityKeyGeneration != authorityKeyGeneration ||
+        entry.authorityEpoch != authorityEpoch ||
+        ack.clientSigningKeyId != clientSigningKeyId ||
+        ack.bootSessionId != bootSessionId ||
+        sampleMonotonicMillis < ack.acknowledgedAtMonotonicMillis ||
+        entry.observedAtMillis +
+                (sampleMonotonicMillis - ack.acknowledgedAtMonotonicMillis) !=
+            trustedNowMillis ||
+        trustedNowMillis > entry.validUntilMillis ||
+        connectedTrustedTimeClientHeadDigest(
+              streamDigest: connectedTrustedTimeClientStreamDigest(entry),
+              authoritySequence: entry.authoritySequence,
+              entryDigest: entry.entryDigest,
+              ackDigest: ack.ackDigest,
+            ) !=
+            headDigest ||
+        !verifyPinnedRetainedEd25519Sync(
+          canonicalSigningBytes: entry.canonicalSigningPayload,
+          signature: entry.authoritySignature,
+          keyId: authorityKeyId,
+          pinnedKeys: pinnedAuthorityKeys,
+        ) ||
+        !verifyPinnedRetainedEd25519Sync(
+          canonicalSigningBytes: ack.canonicalSigningPayload,
+          signature: ack.clientSignature,
+          keyId: clientSigningKeyId,
+          pinnedKeys: pinnedClientKeys,
+        )) {
+      return false;
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
 
 bool shopConnectedTrustedTimeClientRowsValidV39({
   required Iterable<Map<String, Object?>> entries,

@@ -1,9 +1,149 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_client_schema.dart';
 import 'package:supermega_shop/shop_connected_trusted_time_stream.dart';
 
 void main() {
+  test('retained signed time sample rejects altered time and scope', () async {
+    final authorityPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 12),
+    );
+    final clientPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 13),
+    );
+    final authorityPublic = (await authorityPair.extractPublicKey()).bytes;
+    final clientPublic = (await clientPair.extractPublicKey()).bytes;
+    final authorityFingerprint = crypto.sha256
+        .convert(authorityPublic)
+        .toString();
+    final clientFingerprint = crypto.sha256.convert(clientPublic).toString();
+    ConnectedTrustedTimeStreamEntryV2 entryWith(String signature) =>
+        ConnectedTrustedTimeStreamEntryV2(
+          workspaceId: 'workspace_1',
+          siteId: 'site_1',
+          coordinatorDeviceId: 'coordinator_1',
+          clientDeviceId: 'device_1',
+          clientFingerprint: clientFingerprint,
+          sessionGeneration: 3,
+          coordinatorBindingDigest: '2' * 64,
+          coordinatorBindingGeneration: 7,
+          authorityKeyId: 'time_key_1',
+          authorityKeyFingerprint: authorityFingerprint,
+          authorityKeyGeneration: 2,
+          authorityEpoch: 5,
+          authoritySequence: 1,
+          previousEntryDigest: null,
+          kind: ConnectedTrustedTimeStreamEntryKind.time,
+          observedAtMillis: 1800000000000,
+          validUntilMillis: 1800000060000,
+          authoritySignature: signature,
+        );
+    final entryUnsigned = entryWith(_authoritySignature);
+    final entrySignature = base64UrlEncode(
+      (await Ed25519().sign(
+        utf8.encode(entryUnsigned.canonicalSigningPayload),
+        keyPair: authorityPair,
+      )).bytes,
+    ).replaceAll('=', '');
+    final entry = entryWith(entrySignature);
+    ConnectedTrustedTimeStreamAckV1 ackWith(String signature) =>
+        ConnectedTrustedTimeStreamAckV1(
+          workspaceId: entry.workspaceId,
+          siteId: entry.siteId,
+          coordinatorDeviceId: entry.coordinatorDeviceId,
+          clientDeviceId: entry.clientDeviceId,
+          clientFingerprint: entry.clientFingerprint,
+          clientSigningKeyId: 'client_key_1',
+          sessionGeneration: entry.sessionGeneration,
+          coordinatorBindingDigest: entry.coordinatorBindingDigest,
+          coordinatorBindingGeneration: entry.coordinatorBindingGeneration,
+          authorityKeyGeneration: entry.authorityKeyGeneration,
+          authorityEpoch: entry.authorityEpoch,
+          authoritySequence: entry.authoritySequence,
+          entryDigest: entry.entryDigest,
+          resultingHeadDigest: entry.entryDigest,
+          bootSessionId: '3' * 64,
+          acknowledgedAtMonotonicMillis: 7000,
+          clientSignature: signature,
+        );
+    final ackUnsigned = ackWith(_clientSignature);
+    final ackSignature = base64UrlEncode(
+      (await Ed25519().sign(
+        utf8.encode(ackUnsigned.canonicalSigningPayload),
+        keyPair: clientPair,
+      )).bytes,
+    ).replaceAll('=', '');
+    final ack = ackWith(ackSignature);
+    final headDigest = connectedTrustedTimeClientHeadDigest(
+      streamDigest: connectedTrustedTimeClientStreamDigest(entry),
+      authoritySequence: entry.authoritySequence,
+      entryDigest: entry.entryDigest,
+      ackDigest: ack.ackDigest,
+    );
+    bool valid({
+      String? site,
+      String? coordinator,
+      int? epoch,
+      int? time,
+      String? candidateEntryJson,
+      String? candidateAckJson,
+      Map<String, List<int>>? authorityPins,
+      Map<String, List<int>>? clientPins,
+    }) => verifyRetainedTrustedTimeSampleV39Sync(
+      entryJson: candidateEntryJson ?? entry.canonicalJson,
+      ackJson: candidateAckJson ?? ack.canonicalJson,
+      entryDigest: entry.entryDigest,
+      ackDigest: ack.ackDigest,
+      headDigest: headDigest,
+      workspaceId: entry.workspaceId,
+      siteId: site ?? entry.siteId,
+      coordinatorDeviceId: coordinator ?? entry.coordinatorDeviceId,
+      deviceId: entry.clientDeviceId,
+      clientFingerprint: clientFingerprint,
+      clientSigningKeyId: ack.clientSigningKeyId,
+      sessionGeneration: entry.sessionGeneration,
+      coordinatorBindingDigest: entry.coordinatorBindingDigest,
+      coordinatorBindingGeneration: entry.coordinatorBindingGeneration,
+      authorityKeyId: entry.authorityKeyId,
+      authorityKeyGeneration: entry.authorityKeyGeneration,
+      authorityEpoch: epoch ?? entry.authorityEpoch,
+      bootSessionId: ack.bootSessionId,
+      sampleMonotonicMillis: 8000,
+      trustedNowMillis: time ?? 1800000001000,
+      pinnedAuthorityKeys:
+          authorityPins ?? {entry.authorityKeyId: authorityPublic},
+      pinnedClientKeys: clientPins ?? {ack.clientSigningKeyId: clientPublic},
+    );
+    expect(valid(), isTrue);
+    expect(valid(site: 'other'), isFalse);
+    expect(valid(coordinator: 'other'), isFalse);
+    expect(valid(epoch: entry.authorityEpoch + 1), isFalse);
+    expect(valid(time: 1800000001001), isFalse);
+    expect(valid(authorityPins: const {}), isFalse);
+    expect(valid(clientPins: const {}), isFalse);
+    expect(
+      valid(
+        candidateEntryJson: entry.canonicalJson.replaceFirst(
+          'workspace_1',
+          'workspace_2',
+        ),
+      ),
+      isFalse,
+    );
+    expect(
+      valid(
+        candidateAckJson: ack.canonicalJson.replaceFirst(
+          'device_1',
+          'device_2',
+        ),
+      ),
+      isFalse,
+    );
+  });
+
   test('per-client entries round-trip and chain without shared sequencing', () {
     final first = _entry();
     final decoded = ConnectedTrustedTimeStreamEntryV2.fromCanonicalBytes(

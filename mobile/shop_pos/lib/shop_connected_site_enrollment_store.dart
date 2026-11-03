@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:drift/drift.dart';
 
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_retained_signature_verifier.dart';
 import 'shop_database.dart';
 import 'shop_site_coordinator.dart';
 
@@ -75,6 +76,86 @@ class ShopOwnerEnrollmentEvidenceV1 {
     'signature': signature,
     'evidenceDigest': evidenceDigest,
   };
+}
+
+/// Historical owner-enrollment signature check for a retained cloud page.
+/// The caller must separately prove this is the latest approval for the
+/// device at the sample time, with no later revocation or key substitution.
+ShopOwnerEnrollmentEvidenceV1 verifyRetainedEnrollmentApprovalSync({
+  required String canonicalEvidenceJson,
+  required String expectedEvidenceDigest,
+  required String tenantId,
+  required String siteId,
+  required String coordinatorDeviceId,
+  required String deviceId,
+  required String clientFingerprint,
+  required int sessionGeneration,
+  required int trustedAtMillis,
+  required Map<String, List<int>> pinnedOwnerIssuerKeys,
+}) {
+  Never invalid() =>
+      throw const FormatException('retained_owner_enrollment_invalid');
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(canonicalEvidenceJson);
+  } on FormatException {
+    invalid();
+  }
+  const keys = <String>{
+    'schema',
+    'action',
+    'tenantId',
+    'siteId',
+    'coordinatorDeviceId',
+    'deviceId',
+    'clientFingerprint',
+    'sessionGeneration',
+    'observedAtMillis',
+    'authorityKeyId',
+    'signature',
+    'evidenceDigest',
+  };
+  if (decoded is! Map<String, dynamic> ||
+      decoded.keys.toSet().difference(keys).isNotEmpty ||
+      decoded.length != keys.length ||
+      canonicalConnectedSiteJson(decoded) != canonicalEvidenceJson ||
+      decoded['schema'] != 'supermega.shop.owner-enrollment-evidence.v1' ||
+      decoded['action'] != 'approve' ||
+      decoded['tenantId'] != tenantId ||
+      decoded['siteId'] != siteId ||
+      decoded['coordinatorDeviceId'] != coordinatorDeviceId ||
+      decoded['deviceId'] != deviceId ||
+      decoded['clientFingerprint'] != clientFingerprint ||
+      decoded['sessionGeneration'] != sessionGeneration ||
+      decoded['observedAtMillis'] is! int ||
+      (decoded['observedAtMillis'] as int) > trustedAtMillis ||
+      decoded['evidenceDigest'] != expectedEvidenceDigest ||
+      decoded['authorityKeyId'] is! String ||
+      decoded['signature'] is! String) {
+    invalid();
+  }
+  final evidence = ShopOwnerEnrollmentEvidenceV1(
+    action: ShopOwnerEnrollmentAction.approve,
+    tenantId: tenantId,
+    siteId: siteId,
+    coordinatorDeviceId: coordinatorDeviceId,
+    deviceId: deviceId,
+    clientFingerprint: clientFingerprint,
+    sessionGeneration: sessionGeneration,
+    observedAtMillis: decoded['observedAtMillis'] as int,
+    authorityKeyId: decoded['authorityKeyId'] as String,
+    signature: decoded['signature'] as String,
+    evidenceDigest: expectedEvidenceDigest,
+  );
+  if (!verifyPinnedRetainedEd25519Sync(
+    canonicalSigningBytes: canonicalConnectedSiteJson(evidence.signingPayload),
+    signature: evidence.signature,
+    keyId: evidence.authorityKeyId,
+    pinnedKeys: pinnedOwnerIssuerKeys,
+  )) {
+    invalid();
+  }
+  return evidence;
 }
 
 abstract interface class ShopOwnerEnrollmentEvidenceVerifier {

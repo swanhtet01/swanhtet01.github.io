@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 
+import 'shop_connected_retained_signature_verifier.dart';
 import 'shop_connected_site_contracts.dart';
 
 const connectedCloudDeviceKeyApprovalContract =
@@ -144,10 +143,11 @@ final class ConnectedCloudDeviceKeyApprovalV1 {
       invalid();
     }
     final unsigned = Map<String, Object?>.from(decoded)..remove('signature');
-    if (!JWTAlgorithm.EdDSA.verify(
-      EdDSAPublicKey(issuerKey),
-      Uint8List.fromList(utf8.encode(canonicalConnectedSiteJson(unsigned))),
-      Uint8List.fromList(signature),
+    if (!verifyPinnedRetainedEd25519Sync(
+      canonicalSigningBytes: canonicalConnectedSiteJson(unsigned),
+      signature: signatureText,
+      keyId: issuerKeyId,
+      pinnedKeys: pinnedCloudIssuerKeys,
     )) {
       invalid();
     }

@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 
 import 'shop_connected_site_cloud_feed_contract.dart';
 import 'shop_connected_cloud_device_key_approval.dart';
+import 'shop_connected_retained_signature_verifier.dart';
 import 'shop_connected_site_authority_store.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_offline_staff_lease.dart';
@@ -182,10 +181,11 @@ void verifyRetainedCloudFeedReadRequestSync({
   final unsigned = Map<String, Object?>.from(decoded)..remove('signature');
   if (signature.length != 64 ||
       base64Url.encode(signature).replaceAll('=', '') != signatureText ||
-      !JWTAlgorithm.EdDSA.verify(
-        EdDSAPublicKey(approvedCloudSigningPublicKey),
-        Uint8List.fromList(utf8.encode(canonicalConnectedSiteJson(unsigned))),
-        Uint8List.fromList(signature),
+      !verifyPinnedRetainedEd25519Sync(
+        canonicalSigningBytes: canonicalConnectedSiteJson(unsigned),
+        signature: signatureText,
+        keyId: signingKeyId,
+        pinnedKeys: {signingKeyId: approvedCloudSigningPublicKey},
       )) {
     invalid();
   }

@@ -51,6 +51,119 @@ void main() {
     expect(verified.payloadDigest, lease.payloadDigest);
   });
 
+  test(
+    'retained sync lease verifier matches async hostile decisions',
+    () async {
+      final valid = await _signedLease(keyPair: keyPair);
+      final badSignature = _copy(
+        valid,
+        signature: '${valid.signature.substring(0, 85)}A',
+      );
+      final expired = await _signedLease(
+        keyPair: keyPair,
+        issuedAtMillis: _now - 1000,
+        expiresAtMillis: _now,
+      );
+      final future = await _signedLease(
+        keyPair: keyPair,
+        issuedAtMillis: _now + const Duration(minutes: 6).inMilliseconds,
+      );
+      final wrongRole = await _signedLease(
+        keyPair: keyPair,
+        role: ShopStaffRole.cafeWaiter.name,
+        capabilities: const ['counterSale'],
+      );
+      final wrongScope = const ShopOfflineStaffLeaseExpectedBinding(
+        tenantId: 'other',
+        siteId: 'site-1',
+        deviceId: 'device-1',
+        sessionGeneration: 4,
+        revocationGeneration: 9,
+        requiredCapability: ShopStaffCapability.counterSale,
+      );
+      final cases =
+          <
+            (
+              OfflineStaffLeaseV1,
+              ShopOfflineStaffLeaseExpectedBinding,
+              Map<String, List<int>>,
+              String,
+            )
+          >[
+            (
+              badSignature,
+              expected,
+              {_keyId: publicKey},
+              'shop_offline_staff_lease_signature_invalid',
+            ),
+            (
+              expired,
+              expected,
+              {_keyId: publicKey},
+              'shop_offline_staff_lease_expired',
+            ),
+            (
+              future,
+              expected,
+              {_keyId: publicKey},
+              'shop_offline_staff_lease_not_yet_valid',
+            ),
+            (
+              wrongRole,
+              expected,
+              {_keyId: publicKey},
+              'shop_offline_staff_lease_role_capability_mismatch',
+            ),
+            (
+              valid,
+              wrongScope,
+              {_keyId: publicKey},
+              'shop_offline_staff_lease_binding_mismatch',
+            ),
+            (
+              valid,
+              expected,
+              <String, List<int>>{},
+              'shop_offline_staff_lease_signature_invalid',
+            ),
+          ];
+      final accepted = verifyRetainedOfflineStaffLeaseSync(
+        lease: valid,
+        expected: expected,
+        trustedAtMillis: _now,
+        pinnedIssuerKeys: {_keyId: publicKey},
+      );
+      expect(
+        accepted.payloadDigest,
+        (await verifier().verify(
+          lease: valid,
+          expected: expected,
+          nowMillis: _now,
+        )).payloadDigest,
+      );
+      for (final (lease, binding, pins, code) in cases) {
+        expect(
+          () => verifyRetainedOfflineStaffLeaseSync(
+            lease: lease,
+            expected: binding,
+            trustedAtMillis: _now,
+            pinnedIssuerKeys: pins,
+          ),
+          _denied(code),
+        );
+        await expectLater(
+          ShopOfflineStaffLeaseVerifier(
+            signatureVerifier:
+                PinnedEd25519ShopOfflineStaffLeaseSignatureVerifier(
+                  publicKeys: pins,
+                ),
+          ).verify(lease: lease, expected: binding, nowMillis: _now),
+          _denied(code),
+        );
+      }
+    },
+  );
+
   test('matches the cross-language canonical lease golden vector', () async {
     final fixture = jsonDecode(
       await File('test/fixtures/offline_staff_lease_v1_golden.json')

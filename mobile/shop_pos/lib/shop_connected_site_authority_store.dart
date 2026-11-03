@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart';
 
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_retained_signature_verifier.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_database.dart';
 import 'shop_staff_authorization.dart';
@@ -497,6 +498,57 @@ class ConnectedSiteAuthorityPayloadV1 {
       configurationDigest: connectedSiteSha256(configuration),
     );
   }
+}
+
+/// Historical synchronous authority proof for a retained feed page. The
+/// caller must first reconstruct the complete signed authority chain and
+/// establish which sequence was current at the page's trusted sample time.
+/// This one-row check cannot make a stale payload current by itself.
+ConnectedSiteAuthorityPayloadV1 verifyRetainedAuthorityForLeaseSync({
+  required String canonicalBytes,
+  required String signature,
+  required String expectedPayloadDigest,
+  required int expectedSequence,
+  required String? expectedPreviousDigest,
+  required OfflineStaffLeaseV1 lease,
+  required int trustedAtMillis,
+  required Map<String, List<int>> pinnedIssuerKeys,
+}) {
+  Never invalid() => throw const ConnectedSiteReconciliationException(
+    'connected_site_retained_authority_invalid',
+  );
+  final payload = ConnectedSiteAuthorityPayloadV1.parse(
+    canonicalBytes: canonicalBytes,
+    signature: signature,
+  );
+  if (payload.payloadDigest != expectedPayloadDigest ||
+      payload.authoritySequence != expectedSequence ||
+      payload.previousAuthorityDigest != expectedPreviousDigest ||
+      payload.workspaceId != lease.workspaceId ||
+      payload.siteId != lease.siteId ||
+      payload.revocationGeneration != lease.revocationGeneration ||
+      payload.issuedAtMillis > trustedAtMillis ||
+      !verifyPinnedRetainedEd25519Sync(
+        canonicalSigningBytes: payload.canonicalBytes,
+        signature: signature,
+        keyId: payload.issuerKeyId,
+        pinnedKeys: pinnedIssuerKeys,
+      )) {
+    invalid();
+  }
+  final matching = payload.members.where(
+    (member) =>
+        member.actorId == lease.actorId &&
+        member.role.name == lease.role &&
+        member.sessionGeneration == lease.sessionGeneration &&
+        lease.capabilities.every(
+          (capability) => member.capabilities.any(
+            (approved) => approved.name == capability,
+          ),
+        ),
+  );
+  if (matching.length != 1) invalid();
+  return payload;
 }
 
 class ConnectedSiteAuthorityCheckpointV1 {

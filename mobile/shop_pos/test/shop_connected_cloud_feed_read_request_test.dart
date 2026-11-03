@@ -5,13 +5,82 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_read_request.dart';
 import 'package:supermega_shop/shop_connected_cloud_device_key_approval.dart';
+import 'package:supermega_shop/shop_connected_retained_signature_verifier.dart';
 import 'package:supermega_shop/shop_connected_site_cloud_feed_contract.dart';
 import 'package:supermega_shop/shop_connected_site_authority_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
 import 'package:supermega_shop/shop_offline_staff_lease.dart';
 import 'package:supermega_shop/shop_staff_authorization.dart';
 
 void main() {
+  test('retained Ed25519 check matches async issuer verifiers', () async {
+    final key = await Ed25519().newKeyPairFromSeed(List<int>.filled(32, 11));
+    final publicKey = (await key.extractPublicKey()).bytes;
+    const keyId = 'issuer-1';
+    final payload = canonicalConnectedSiteJson({'subject': 'synthetic'});
+    final signed = await Ed25519().sign(utf8.encode(payload), keyPair: key);
+    final signature = base64Url.encode(signed.bytes).replaceAll('=', '');
+    final leaseVerifier = PinnedEd25519ShopOfflineStaffLeaseSignatureVerifier(
+      publicKeys: {keyId: publicKey},
+    );
+    final authorityVerifier =
+        PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(
+          publicKeys: {keyId: publicKey},
+        );
+    bool sync(String bytes, String value, {Map<String, List<int>>? pins}) =>
+        verifyPinnedRetainedEd25519Sync(
+          canonicalSigningBytes: bytes,
+          signature: value,
+          keyId: keyId,
+          pinnedKeys: pins ?? {keyId: publicKey},
+        );
+    expect(sync(payload, signature), isTrue);
+    expect(
+      await leaseVerifier.verify(
+        keyId: keyId,
+        message: utf8.encode(payload),
+        signature: signature,
+      ),
+      isTrue,
+    );
+    await authorityVerifier.verify(
+      canonicalPayloadBytes: payload,
+      signature: signature,
+      issuerKeyId: keyId,
+    );
+    for (final (bytes, value, pins) in [
+      (
+        canonicalConnectedSiteJson({'subject': 'altered'}),
+        signature,
+        <String, List<int>>{keyId: publicKey},
+      ),
+      (
+        payload,
+        'A${signature.substring(1)}',
+        <String, List<int>>{keyId: publicKey},
+      ),
+      (payload, signature, <String, List<int>>{}),
+    ]) {
+      expect(sync(bytes, value, pins: pins), isFalse);
+      expect(
+        await PinnedEd25519ShopOfflineStaffLeaseSignatureVerifier(
+          publicKeys: pins,
+        ).verify(keyId: keyId, message: utf8.encode(bytes), signature: value),
+        isFalse,
+      );
+      await expectLater(
+        PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(publicKeys: pins)
+            .verify(
+              canonicalPayloadBytes: bytes,
+              signature: value,
+              issuerKeyId: keyId,
+            ),
+        throwsA(isA<ConnectedSiteReconciliationException>()),
+      );
+    }
+  });
+
   test(
     'cloud-only device approval rejects LAN, expiry and wrong scope',
     () async {
