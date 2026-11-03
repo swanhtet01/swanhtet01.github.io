@@ -1,9 +1,31 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 12:27 UTC
+- Last verified: 2026-11-03 12:37 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 12:37 UTC private retained cloud request verification
+
+- **PASS (bounded source only):** checkpoint
+  `007f0122b78b19df190ccdc5eebf4f20cb4ca580`, tree
+  `55b01ad1856239f177ced58dd485305625d1e5a5`, native tree
+  `c9f8b32a0acfcd93f0670067a7fce2c36b40a20c`, runtime `lib/` tree
+  `f7b0e8329e98165fb5df2b849d8a597185a8f0ff`. A synchronous historical
+  signed-read-request verifier now checks canonical bytes, exact page/request
+  digest, scope, nonce, cursor, issuance window and Ed25519 signature against
+  an explicitly supplied approved cloud-device public key. The focused
+  positive and adversarial test **1/1 PASS**, targeted Flutter analysis
+  **PASS**, and independent security review **ACCEPT** after malformed
+  expectation bounds were added. This verifier is not yet invoked by v41
+  open/backup/restore and does not grant current authority.
+- **BLOCKED / NOT RUN:** no reviewed proof yet establishes that the retained
+  LAN pairing public key is approved for cloud read requests; it must not be
+  inferred from a matching algorithm or fingerprint. Nonempty v41 lease,
+  authority, enrollment and trusted-time reconstruction, current transaction
+  recheck, production issuer/key custody and two-device execution remain
+  unimplemented or unverified. Connected mode stays default-off. No public
+  PR update or exact-head CI was started for this private successor.
 
 ## 2026-11-03 12:27 UTC private empty-only v41 migration
 
