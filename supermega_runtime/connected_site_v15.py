@@ -156,7 +156,7 @@ class DeviceAuthority:
         _decode(self.public_key, 32, "authority_device_key")
         for value in (self.client_fingerprint, self.enrollment_evidence_digest, self.coordinator_binding_digest):
             _digest(value, "authority_device_digest")
-        if isinstance(self.session_generation, bool) or self.session_generation < 1:
+        if type(self.session_generation) is not int or self.session_generation < 1:
             _fail("authority_device_generation")
 
 
@@ -172,7 +172,7 @@ class CurrentMember:
         _identifier(self.role, "authority_role")
         if not self.capabilities or tuple(sorted(set(self.capabilities))) != self.capabilities:
             _fail("authority_capabilities")
-        if isinstance(self.session_generation, bool) or self.session_generation < 1:
+        if type(self.session_generation) is not int or self.session_generation < 1:
             _fail("authority_session_generation")
 
 
@@ -199,7 +199,7 @@ class SiteAuthority:
         _identifier(self.workspace_id, "authority_workspace")
         _identifier(self.site_id, "authority_site")
         generations = (self.authority_generation, self.configuration_generation, self.revocation_generation)
-        if any(isinstance(value, bool) for value in generations) or self.authority_generation < 1 or self.configuration_generation < 1 or self.revocation_generation < 0:
+        if any(type(value) is not int for value in generations) or self.authority_generation < 1 or self.configuration_generation < 1 or self.revocation_generation < 0:
             _fail("authority_generation")
         payload = dict(self.authority_payload)
         if digest(payload) != _digest(self.authority_payload_digest, "authority_payload_digest"):
@@ -320,6 +320,48 @@ class SiteAuthority:
         for key_id, key in self.issuer_keys.items():
             _identifier(key_id, "lease_issuer")
             _decode(key, 32, "lease_issuer_key")
+
+
+def verify_connected_site_lease(
+    value: Any, authority: SiteAuthority, device: DeviceAuthority, now: datetime,
+) -> dict[str, Any]:
+    """Verify the same signed current lease for writes and future read proofs."""
+    keys = {
+        "protocolVersion", "leaseId", "workspaceId", "siteId", "actorId", "role",
+        "capabilities", "deviceId", "sessionGeneration", "revocationGeneration",
+        "issuedAt", "expiresAt", "issuerKeyId", "payloadDigest", "signature",
+    }
+    lease = _exact(value, keys, "lease_shape")
+    if lease["protocolVersion"] != PROTOCOL_VERSION:
+        _fail("protocol_version")
+    if (type(lease["sessionGeneration"]) is not int
+        or type(lease["revocationGeneration"]) is not int):
+        _fail("lease_authority")
+    for field in ("leaseId", "workspaceId", "siteId", "actorId", "role", "deviceId", "issuerKeyId"):
+        _identifier(lease[field], f"lease_{field}")
+    capabilities = lease["capabilities"]
+    if not isinstance(capabilities, list) or not capabilities or capabilities != sorted(set(capabilities)):
+        _fail("lease_capabilities")
+    issued = _time(lease["issuedAt"], "lease_issued_at")
+    expires = _time(lease["expiresAt"], "lease_expires_at")
+    if expires <= issued or expires - issued > timedelta(days=7) or now < issued or now >= expires:
+        _fail("lease_expired")
+    if (
+        lease["workspaceId"] != authority.workspace_id
+        or lease["siteId"] != authority.site_id
+        or lease["deviceId"] != device.device_id
+        or lease["sessionGeneration"] != device.session_generation
+        or lease["revocationGeneration"] != authority.revocation_generation
+    ):
+        _fail("lease_authority")
+    unsigned = {key: lease[key] for key in keys - {"payloadDigest", "signature"}}
+    if digest(unsigned) != lease["payloadDigest"]:
+        _fail("lease_payload_digest")
+    issuer = authority.issuer_keys.get(lease["issuerKeyId"])
+    if issuer is None:
+        _fail("lease_issuer")
+    _verify(issuer, lease["signature"], canonical_json(unsigned).encode(), "lease_signature")
+    return lease
 
 
 @dataclass(frozen=True, slots=True)
@@ -1076,36 +1118,4 @@ class ConnectedSiteV15Adapter:
     def _validate_lease(
         self, value: Any, authority: SiteAuthority, device: DeviceAuthority, now: datetime
     ) -> dict[str, Any]:
-        keys = {
-            "protocolVersion", "leaseId", "workspaceId", "siteId", "actorId", "role",
-            "capabilities", "deviceId", "sessionGeneration", "revocationGeneration",
-            "issuedAt", "expiresAt", "issuerKeyId", "payloadDigest", "signature",
-        }
-        lease = _exact(value, keys, "lease_shape")
-        if lease["protocolVersion"] != PROTOCOL_VERSION:
-            _fail("protocol_version")
-        for field in ("leaseId", "workspaceId", "siteId", "actorId", "role", "deviceId", "issuerKeyId"):
-            _identifier(lease[field], f"lease_{field}")
-        capabilities = lease["capabilities"]
-        if not isinstance(capabilities, list) or not capabilities or capabilities != sorted(set(capabilities)):
-            _fail("lease_capabilities")
-        issued = _time(lease["issuedAt"], "lease_issued_at")
-        expires = _time(lease["expiresAt"], "lease_expires_at")
-        if expires <= issued or expires - issued > timedelta(days=7) or now < issued or now >= expires:
-            _fail("lease_expired")
-        if (
-            lease["workspaceId"] != authority.workspace_id
-            or lease["siteId"] != authority.site_id
-            or lease["deviceId"] != device.device_id
-            or lease["sessionGeneration"] != device.session_generation
-            or lease["revocationGeneration"] != authority.revocation_generation
-        ):
-            _fail("lease_authority")
-        unsigned = {key: lease[key] for key in keys - {"payloadDigest", "signature"}}
-        if digest(unsigned) != lease["payloadDigest"]:
-            _fail("lease_payload_digest")
-        issuer = authority.issuer_keys.get(lease["issuerKeyId"])
-        if issuer is None:
-            _fail("lease_issuer")
-        _verify(issuer, lease["signature"], canonical_json(unsigned).encode(), "lease_signature")
-        return lease
+        return verify_connected_site_lease(value, authority, device, now)

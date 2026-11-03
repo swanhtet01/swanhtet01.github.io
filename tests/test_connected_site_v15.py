@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import unittest
@@ -56,6 +57,8 @@ def _authority(
     key: _Key,
     *,
     authority_sequence: int = 1,
+    role: str = "cashierCounter",
+    capabilities: tuple[str, ...] = ("counterSale",),
 ) -> SiteAuthority:
     device = DeviceAuthority(
         device_id=device_id,
@@ -66,7 +69,7 @@ def _authority(
         coordinator_binding_digest=digest({"coordinator": site}),
         session_generation=2,
     )
-    member = CurrentMember("actor-1", "cashierCounter", ("counterSale",), 2)
+    member = CurrentMember("actor-1", role, capabilities, 2)
     if authority_sequence not in (1, 4):
         raise ValueError("unsupported synthetic authority sequence")
     revocations = [3] if authority_sequence == 1 else [1, 1, 2, 3]
@@ -95,7 +98,7 @@ def _authority(
             "issuerKeyId": "issuer-1",
             "membershipSnapshot": {
                 "revocationGeneration": revocation,
-                "members": [{"actorId": "actor-1", "role": "cashierCounter", "capabilities": ["counterSale"], "sessionGeneration": 2}],
+                "members": [{"actorId": "actor-1", "role": role, "capabilities": list(capabilities), "sessionGeneration": 2}],
             },
             "configurationSnapshot": {
                 "configurationVersion": configuration,
@@ -372,6 +375,19 @@ def _derived_upload(
 
 
 class ConnectedSiteV15Tests(unittest.TestCase):
+    def test_authority_and_enrollment_generations_require_exact_integers(self) -> None:
+        authority = _authority("workspace-a", "site-a", "device-a", DEVICE_A)
+        for field in ("authority_generation", "configuration_generation", "revocation_generation"):
+            with self.subTest(field=field), self.assertRaisesRegex(
+                ConnectedSiteV15Error, "authority_generation",
+            ):
+                replace(authority, **{field: float(getattr(authority, field))})
+        device = authority.devices["device-a"]
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "authority_device_generation"):
+            replace(device, session_generation=2.0)
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "authority_session_generation"):
+            replace(authority.members["actor-1"], session_generation=2.0)
+
     def test_database_conflict_timestamp_is_canonical_utc(self) -> None:
         local = datetime(
             2026,
