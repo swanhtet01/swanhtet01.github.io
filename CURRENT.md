@@ -1,9 +1,39 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 14:36 UTC
+- Last verified: 2026-11-03 15:00 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 15:00 UTC private test-only atomic v41 reader
+
+- **PASS (synthetic first page, default-off):** implementation
+  `54320a2a7359df1fafc054388a4376e25df464ce`, repository tree
+  `1e5114e4bd9dcdc2572b39ee94a37c87ec73f8f4`, native tree
+  `3545a6a412eb498eddb17a6ecb63990414b86605`, runtime `lib/` tree
+  `9fac4a77b3b24a55d02b8c8a48bb18a6721c18fa`. Test-only independent
+  fixture pins are deep-copied and cannot mix with legacy pins; product builds
+  retain the empty-only v41 gate. The 26 unfiltered historical tables are
+  capped and read inside one Drift transaction for test-only open, or one
+  SQLite `BEGIN DEFERRED` snapshot for backup verification. A signed first
+  page reopens and exports encrypted backup with explicit fixture trust;
+  default open/backup, missing retained request history, wrong owner pin,
+  pre-sample signed revocation and a second page fail closed. A WAL writer
+  test confirms SQLite's read-transaction snapshot behavior. Final-source
+  schema suite **13/13 PASS** in 1m25s, focused signed fixture **1/1 PASS**,
+  four-path Flutter analysis **PASS** and independent security review
+  **ACCEPT for test-only first-page wiring**. A combined schema/backup run
+  **114/114 PASS** in 7m05s on the pre-final source; the later runtime
+  mixed-pin guard and adversarial additions were verified by final-source
+  schema/focused tests, not by a repeated complete backup matrix.
+- **BLOCKED / NOT RUN:** no production pins or writer were added. The
+  first-page helper intentionally rejects additional pages and restored
+  nonempty state remains paused/rejected. Historical authenticity does not
+  authorize current or replayed writes; transaction-time current authority,
+  revocation, lease and trusted-time checks, atomic page/evidence/cursor apply,
+  encrypted nonempty restore, real issuer custody and installed two-device
+  evidence remain **NOT RUN**. Connected mode remains off; public PR #752 was
+  not changed.
 
 ## 2026-11-03 14:36 UTC private signed v41 historical fixture
 
