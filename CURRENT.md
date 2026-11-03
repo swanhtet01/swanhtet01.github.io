@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 19:45 UTC
+- Last verified: 2026-11-03 19:50 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 19:50 UTC checked-reader synthetic signed-response checkpoint
+
+- **PASS (private, test-only, default-off):** implementation
+  `2ce895409bec5b13bd26a9732f9fa24b8de34c58`, repository tree
+  `fe5b49aa6b482ab7aa9f2fbe10c0dcedc43cf769`, three-path patch SHA-256
+  `d581b6e5cc541b147856b740b98680e9def5a2135fc3c42cbfb3e9f1cd3a4463`.
+  A test-only wrapper now calls the actual checked Python event reader and
+  signs its exact sanitized page with a fixed fixture key. Synthetic SQL
+  tests bind same-site responses to two distinct enrolled device signing keys
+  and reject cross-device substitution, wrong tenant, stale cursor and
+  revoked device. An opt-in disposable PostgreSQL 17 assertion is added to
+  the existing isolated test but is **NOT RUN** in this environment because
+  PostgreSQL 17 is absent. Python focused reader/fixture tests **18/18 PASS**;
+  four disposable-PG17 tests **SKIPPED**. Python compilation and diff checks
+  **PASS**. Independent read-only security review **ACCEPT** for this narrow
+  test-only claim. No runtime module, listener or production key path changed.
+- **Important boundary:** the test signer runs after the reader transaction
+  closes, so it does not atomically fence a revocation between read and sign.
+  It must never be mounted as a production signer. This does not prove real
+  PostgreSQL execution, distinct native-device stores, network delivery or
+  installed two-device operation. A production ingress, protected signer and
+  same-boundary revocation fence remain required; connected mode stays off.
+- **Published draft PR #752:** remains at `611bdfc00181860422089274d6aa0a265b61712b`;
+  exact-head Native run `41699288011` remained **IN PROGRESS** at 19:50 UTC.
+  This private source has no hosted CI result. PostgreSQL Windows rehearsal,
+  dependency remediation, full-scope secret scan, signing and merchant
+  acceptance remain open.
 
 ## 2026-11-03 19:45 UTC synthetic Python/native signed-page bridge
 
