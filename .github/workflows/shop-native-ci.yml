@@ -204,10 +204,11 @@ jobs:
           persistence_c_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-c.XXXXXX")"
           visual_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-visual.XXXXXX")"
           connected_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected.XXXXXX")"
+          connected_b_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected-b.XXXXXX")"
           connected_successor_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected-successor.XXXXXX")"
           trusted_time_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-trusted-time.XXXXXX")"
           cleanup() {
-            rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp" "$connected_successor_tmp" "$trusted_time_tmp"
+            rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp" "$connected_b_tmp" "$connected_successor_tmp" "$trusted_time_tmp"
           }
           trap cleanup EXIT
           calculate_shard_budget() {
@@ -457,15 +458,7 @@ jobs:
               test/shop_connected_site_authority_store_test.dart \
               test/shop_connected_site_client_test.dart \
               test/shop_connected_site_contracts_test.dart \
-              test/shop_connected_site_database_adapter_test.dart \
-              test/shop_connected_site_enrollment_store_test.dart \
-              test/shop_connected_site_persistence_test.dart \
-              test/shop_connected_site_reconciliation_test.dart \
-              test/shop_connected_site_reconciliation_store_test.dart \
-              test/shop_connected_site_replica_store_test.dart \
-              test/shop_connected_stock_reservation_test.dart \
-              test/shop_offline_staff_lease_test.dart \
-              test/shop_site_coordinator_test.dart
+              test/shop_connected_site_database_adapter_test.dart
           )
           connected_status="$?"
           set -e
@@ -483,6 +476,37 @@ jobs:
             exit 124
           fi
           test "$connected_status" -eq 0
+
+          connected_b_budget="$(calculate_shard_budget)" || exit "$?"
+          connected_b_started_at="$(date +%s)"
+          set +e
+          (
+            TMPDIR="$connected_b_tmp" timeout --signal=TERM --kill-after=10s "${connected_b_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_connected_site_enrollment_store_test.dart \
+              test/shop_connected_site_persistence_test.dart \
+              test/shop_connected_site_reconciliation_test.dart \
+              test/shop_connected_site_reconciliation_store_test.dart \
+              test/shop_connected_site_replica_store_test.dart \
+              test/shop_connected_stock_reservation_test.dart \
+              test/shop_offline_staff_lease_test.dart \
+              test/shop_site_coordinator_test.dart
+          )
+          connected_b_status="$?"
+          set -e
+          if [ "$connected_b_status" -eq 124 ]; then
+            echo "shop_flutter_test_connected_b_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$connected_b_status" -ne 0 ]; then
+            echo "shop_flutter_test_connected_b_failed_status:$connected_b_status" >&2
+            exit "$connected_b_status"
+          fi
+          connected_b_elapsed="$(( $(date +%s) - connected_b_started_at ))"
+          if [ "$connected_b_elapsed" -ge "$connected_b_budget" ]; then
+            echo "shop_flutter_test_connected_b_budget_exhausted" >&2
+            exit 124
+          fi
+          test "$connected_b_status" -eq 0
 
           connected_successor_budget="$(calculate_shard_budget)" || exit "$?"
           connected_successor_started_at="$(date +%s)"

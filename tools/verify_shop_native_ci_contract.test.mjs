@@ -785,6 +785,29 @@ test('default-profile test shards run serially with fail-closed shard and total 
     ),
   )
 
+  const unboundedConnectedB = verifyShopNativeCiContract(
+    workflow.replace(
+      'TMPDIR="$connected_b_tmp" timeout --signal=TERM --kill-after=10s "${connected_b_budget}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$connected_b_tmp" flutter test --concurrency=2',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    unboundedConnectedB.failures.includes(
+      'native_connected_b_shard_not_bounded_or_sequential',
+    ),
+  )
+
+  const missingConnectedBPath = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_site_coordinator_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingConnectedBPath.failures.includes(
+      'native_connected_b_shard_inventory_or_order_wrong',
+    ),
+  )
+
   const unboundedBehaviorCore = verifyShopNativeCiContract(
     workflow.replace(
       'TMPDIR="$behavior_core_tmp" timeout --signal=TERM --kill-after=10s "${behavior_core_budget}s" flutter test --no-pub --concurrency=1',
@@ -942,6 +965,7 @@ test('default-profile test shards run serially with fail-closed shard and total 
     ['shop_flutter_test_persistence_c_budget_exhausted', 'native_persistence_c_shard_budget_exhaustion_not_fail_closed'],
     ['shop_flutter_test_visual_budget_exhausted', 'native_visual_shard_budget_exhaustion_not_fail_closed'],
     ['shop_flutter_test_connected_budget_exhausted', 'native_connected_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_connected_b_budget_exhausted', 'native_connected_b_shard_budget_exhaustion_not_fail_closed'],
     ['shop_flutter_test_total_budget_exhausted', 'native_test_total_budget_exhaustion_not_fail_closed'],
   ]) {
     const missingExhaustion = verifyShopNativeCiContract(
