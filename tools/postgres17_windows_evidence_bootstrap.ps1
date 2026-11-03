@@ -210,6 +210,7 @@ if ($Stage -eq 'Rehearsal') {
     -or $policy.closureObserver.sha256 -notmatch '^[0-9a-f]{64}$') {
     Fail 'bootstrap_closure_observer_unapproved'
   }
+  Assert-SafeRelativePath $policy.closureObserver.command 'bootstrap_closure_observer_launcher_invalid'
   foreach ($component in @('python', 'psycopg', 'psycopg_binary', 'openssl', 'node', 'git')) {
     if (@($registryPolicy.artifacts | Where-Object { $_.component -eq $component }).Count -lt 1) {
       Fail "bootstrap_registry_component_missing_$component"

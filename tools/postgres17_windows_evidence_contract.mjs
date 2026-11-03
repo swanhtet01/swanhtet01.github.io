@@ -154,7 +154,9 @@ export function validateSanitizedClosure(closure, expectedSha) {
       && (!processesBySequence.has(process.parentSequence)
         || process.parentSequence >= process.sequence
         || processesBySequence.get(process.parentSequence).startEventOrdinal
-          >= process.startEventOrdinal)) {
+          >= process.startEventOrdinal
+        || processesBySequence.get(process.parentSequence).endEventOrdinal
+          <= process.startEventOrdinal)) {
       fail('bootstrap_closure_process_graph_invalid')
     }
   }

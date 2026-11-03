@@ -181,6 +181,22 @@ test('PowerShell bootstrap separates non-executing capture from reviewed full-re
   const workspaceCreation = source.indexOf('[System.IO.Directory]::CreateDirectory($workRoot)')
   const installerDownload = source.indexOf('Download-Exact ([Uri]$policy.installer.url)')
   assert.ok(workspaceCreation > 0 && workspaceCreation < installerDownload)
+  const observerPathGuard = source.indexOf(
+    "Assert-SafeRelativePath $policy.closureObserver.command 'bootstrap_closure_observer_launcher_invalid'",
+  )
+  const observerPathJoin = source.indexOf('Join-Path $root $policy.closureObserver.command')
+  assert.ok(observerPathGuard > gate && observerPathGuard < workspaceCreation)
+  assert.ok(observerPathGuard < observerPathJoin && observerPathJoin < execute)
+  // The invoked guard rejects ADS, path aliases, traversal and trailing-dot
+  // Win32 normalization before a reviewed launcher can be resolved or run.
+  const relativeGuard = source.slice(
+    source.indexOf('function Assert-SafeRelativePath('),
+    source.indexOf('function Get-ReviewedBinding('),
+  )
+  for (const rejection of [
+    'IsPathFullyQualified($Value)', "$Value.Contains(':')", "$_ -in @('', '.', '..')",
+    "$_ -match '[. ]$'", 'com[1-9]|lpt[1-9]',
+  ]) assert.ok(relativeGuard.includes(rejection), rejection)
   for (const prerequisite of [
     "Fail 'bootstrap_stage2_authority_unapproved'",
     "Fail 'bootstrap_closure_observer_unapproved'",
@@ -821,6 +837,9 @@ test('closure process graph and executed-image inventory reject fabricated ances
     [(value) => { value.processes[1].sequence = 0 }, 'process_graph_invalid'],
     [(value) => { value.processes[1].startEventOrdinal = 0 }, 'process_graph_invalid'],
     [(value) => { value.processes[0].startEventOrdinal = 3 }, 'process_graph_invalid'],
+    [(value) => { value.processes[0].endEventOrdinal = 3;
+      value.processes[1].startEventOrdinal = 4;
+      value.processes[1].endEventOrdinal = 6 }, 'process_graph_invalid'],
     [(value) => { value.processes[1].parentSequence = null }, 'process_graph_invalid'],
     [(value) => { value.processes[1].parentSequence = 7 }, 'process_graph_invalid'],
     [(value) => { value.processes[0].sequence = 2 }, 'process_graph_invalid'],
