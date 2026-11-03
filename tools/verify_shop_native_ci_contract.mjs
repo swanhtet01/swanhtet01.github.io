@@ -103,6 +103,7 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
   'test/shop_staff_authorization_test.dart',
   'test/visual_capture_test.dart',
   'test/widget_checkout_test.dart',
+  'test/widget_checkout_second_test.dart',
   'test/widget_shell_test.dart',
   'test/widget_test_support.dart',
 ])
@@ -382,6 +383,12 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
+    'behavior_foundation_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-foundation.XXXXXX")"',
+    'native_behavior_foundation_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
     'behavior_shell_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-shell.XXXXXX")"',
     'native_behavior_shell_shard_temp_isolation_missing',
     failures,
@@ -390,6 +397,12 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     source,
     'behavior_checkout_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-checkout.XXXXXX")"',
     'native_behavior_checkout_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'behavior_checkout_second_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-behavior-checkout-second.XXXXXX")"',
+    'native_behavior_checkout_second_shard_temp_isolation_missing',
     failures,
   )
   requireToken(
@@ -460,6 +473,12 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
+    'TMPDIR="$behavior_foundation_tmp" timeout --signal=TERM --kill-after=10s "${behavior_foundation_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
+    'native_behavior_foundation_shard_not_bounded_or_sequential',
+    failures,
+  )
+  requireToken(
+    source,
     'TMPDIR="$behavior_shell_tmp" timeout --signal=TERM --kill-after=10s "${behavior_shell_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
     'native_behavior_shell_shard_not_bounded_or_sequential',
     failures,
@@ -468,6 +487,12 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     source,
     'TMPDIR="$behavior_checkout_tmp" timeout --signal=TERM --kill-after=10s "${behavior_checkout_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
     'native_behavior_checkout_shard_not_bounded_or_sequential',
+    failures,
+  )
+  requireToken(
+    source,
+    'TMPDIR="$behavior_checkout_second_tmp" timeout --signal=TERM --kill-after=10s "${behavior_checkout_second_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m',
+    'native_behavior_checkout_second_shard_not_bounded_or_sequential',
     failures,
   )
   requireToken(
@@ -508,7 +533,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp" "$connected_b_tmp" "$connected_successor_tmp" "$trusted_time_tmp"',
+    'rm -rf -- "$behavior_core_tmp" "$behavior_foundation_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$behavior_checkout_second_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp" "$connected_b_tmp" "$connected_successor_tmp" "$trusted_time_tmp"',
     'native_test_shard_cleanup_incomplete',
     failures,
   )
@@ -520,7 +545,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   if (/[ \t]&[ \t]*$/m.test(isolatedShardBlock) || /_pid="\$!"/.test(isolatedShardBlock)) {
     failures.push('native_test_shards_not_strictly_serial')
   }
-  const shards = ['behavior_core', 'behavior_shell', 'behavior_checkout', 'persistence_backup', 'persistence_a', 'persistence_b', 'persistence_c', 'visual', 'connected', 'connected_b', 'connected_successor', 'trusted_time']
+  const shards = ['behavior_core', 'behavior_foundation', 'behavior_shell', 'behavior_checkout', 'behavior_checkout_second', 'persistence_backup', 'persistence_a', 'persistence_b', 'persistence_c', 'visual', 'connected', 'connected_b', 'connected_successor', 'trusted_time']
   const shardPaths = (start, end) => {
     const startIndex = isolatedShardBlock.indexOf(start)
     const endIndex = isolatedShardBlock.indexOf(end)
@@ -537,7 +562,6 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     'test/shop_cafe_order_screen_test.dart',
     'test/shop_catalog_search_test.dart',
     'test/shop_correction_authorization_service_test.dart',
-    'test/shop_foundation_test.dart',
     'test/shop_operational_export_saver_test.dart',
     'test/shop_operational_export_test.dart',
     'test/shop_operational_export_widget_test.dart',
@@ -549,6 +573,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   ]
   const expectedBehaviorShellPaths = ['test/widget_shell_test.dart']
   const expectedBehaviorCheckoutPaths = ['test/widget_checkout_test.dart']
+  const expectedBehaviorCheckoutSecondPaths = ['test/widget_checkout_second_test.dart']
   const expectedPersistenceBackupPaths = ['test/shop_backup_test.dart']
   const expectedPersistenceBPaths = [
     'test/shop_correction_consumption_test.dart',
@@ -612,9 +637,15 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   ]
   if (JSON.stringify(shardPaths(
     'behavior_core_started_at="$(date +%s)"',
-    'behavior_shell_started_at="$(date +%s)"',
+    'behavior_foundation_started_at="$(date +%s)"',
   )) !== JSON.stringify(expectedBehaviorCorePaths)) {
     failures.push('native_behavior_core_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'behavior_foundation_started_at="$(date +%s)"',
+    'behavior_shell_started_at="$(date +%s)"',
+  )) !== JSON.stringify(['test/shop_foundation_test.dart'])) {
+    failures.push('native_behavior_foundation_shard_inventory_or_order_wrong')
   }
   if (JSON.stringify(shardPaths(
     'behavior_shell_started_at="$(date +%s)"',
@@ -624,9 +655,15 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   }
   if (JSON.stringify(shardPaths(
     'behavior_checkout_started_at="$(date +%s)"',
-    'persistence_backup_started_at="$(date +%s)"',
+    'behavior_checkout_second_started_at="$(date +%s)"',
   )) !== JSON.stringify(expectedBehaviorCheckoutPaths)) {
     failures.push('native_behavior_checkout_shard_inventory_or_order_wrong')
+  }
+  if (JSON.stringify(shardPaths(
+    'behavior_checkout_second_started_at="$(date +%s)"',
+    'persistence_backup_started_at="$(date +%s)"',
+  )) !== JSON.stringify(expectedBehaviorCheckoutSecondPaths)) {
+    failures.push('native_behavior_checkout_second_shard_inventory_or_order_wrong')
   }
   if (JSON.stringify(shardPaths(
     'persistence_backup_started_at="$(date +%s)"',

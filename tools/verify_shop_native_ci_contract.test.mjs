@@ -746,6 +746,27 @@ test('default-profile test shards run serially with fail-closed shard and total 
     ),
   )
 
+  const missingFoundation = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_foundation_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(missingFoundation.failures.includes('native_behavior_foundation_shard_inventory_or_order_wrong'))
+
+  const missingCheckoutSecond = verifyShopNativeCiContract(
+    workflow.replace('              test/widget_checkout_second_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(missingCheckoutSecond.failures.includes('native_behavior_checkout_second_shard_inventory_or_order_wrong'))
+
+  const unboundedCheckoutSecond = verifyShopNativeCiContract(
+    workflow.replace(
+      'TMPDIR="$behavior_checkout_second_tmp" timeout --signal=TERM --kill-after=10s "${behavior_checkout_second_budget}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$behavior_checkout_second_tmp" flutter test --concurrency=2',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(unboundedCheckoutSecond.failures.includes('native_behavior_checkout_second_shard_not_bounded_or_sequential'))
+
   const unboundedPersistenceA = verifyShopNativeCiContract(
     workflow.replace(
       'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${persistence_a_budget}s" flutter test --no-pub --concurrency=1',
@@ -1008,7 +1029,7 @@ test('default-profile test shards run serially with fail-closed shard and total 
 
   const incompleteCleanup = verifyShopNativeCiContract(
     workflow.replace(
-      'rm -rf -- "$behavior_core_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp"',
+      'rm -rf -- "$behavior_core_tmp" "$behavior_foundation_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$behavior_checkout_second_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp"',
       'rm -rf -- "$behavior_core_tmp"',
     ),
     gradleWrapper,
@@ -1043,13 +1064,13 @@ test('default-profile test shards run serially with fail-closed shard and total 
   const startsPersistenceBackupEarly = verifyShopNativeCiContract(
     workflow.replace(
       'persistence_backup_started_at="$(date +%s)"',
-      'behavior_checkout_started_at="$(date +%s)"',
+      'behavior_checkout_second_started_at="$(date +%s)"',
     ),
     gradleWrapper,
   )
   assert.ok(
     startsPersistenceBackupEarly.failures.includes(
-      'native_persistence_backup_shard_started_before_behavior_checkout_passed',
+      'native_persistence_backup_shard_started_before_behavior_checkout_second_passed',
     ),
   )
 

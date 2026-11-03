@@ -147,7 +147,7 @@ class _PrinterSetupDiscoveryFake extends PrinterDiscoveryService {
   }
 }
 
-enum WidgetTestPartition { shellAndRecovery, checkoutAndCatalog }
+enum WidgetTestPartition { shellAndRecovery, checkoutFirst, checkoutSecond }
 
 void registerWidgetTests(WidgetTestPartition partition) {
   if (partition == WidgetTestPartition.shellAndRecovery) {
@@ -5236,7 +5236,7 @@ void registerWidgetTests(WidgetTestPartition partition) {
     });
   }
 
-  if (partition == WidgetTestPartition.checkoutAndCatalog) {
+  if (partition == WidgetTestPartition.checkoutFirst) {
     testWidgets('managed staff context reaches the real counter sale', (
       tester,
     ) async {
@@ -7823,7 +7823,9 @@ END
         }
       },
     );
+  }
 
+  if (partition == WidgetTestPartition.checkoutSecond) {
     testWidgets('cashier can receive and count stock outside the sale screen', (
       tester,
     ) async {
