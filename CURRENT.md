@@ -1,9 +1,52 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 15:23 UTC
+- Last verified: 2026-11-03 17:29 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 17:29 UTC signed two-page fixture checkpoint
+
+- **PASS (private, test-only):** implementation
+  `89edd31999ca596151b22b5e1b14d3afbe1b540e`, repository tree
+  `c17a3f825eb5e55034ec3882c1d985611b5ae0f5`, native tree
+  `c817d255c00144965403e883047be88a4833e88a`, runtime `lib/` tree
+  `81029c743fb6bca67bdf04de024348ea925214e7`. Three local successors
+  after public `36120e56` authenticate every page in a contiguous retained
+  v41 feed, reject missing or duplicate request evidence, page/nonce reuse,
+  time rollback and broken cursor history, and allow only fixture-pinned
+  encrypted restore that remains paused behind a recovery barrier. A
+  test-only second-page writer verifies current authority and live time before
+  replay/write, atomically inserts the page and evidence with a cursor CAS,
+  and rechecks before commit. Synthetic tests cover injected rollback,
+  signed in-transaction revocation, changed-but-valid alternate batch,
+  expired and exact lost-response retries after reopen, and restore pause.
+  Final-source focused case **1/1 PASS**; the complete cloud-feed schema suite
+  **13/13 PASS** on the immediately preceding draft (the final change only
+  tightens revocation-test attribution), and changed-path analysis **PASS**.
+  Backup suite **89/89 PASS** on restore predecessor `ec180122`; it is not a
+  full backup rerun of `89edd319`. Independent security reviews **ACCEPT**
+  these bounded fixture-only slices. Worktree clean; these three successors
+  are **not published**.
+- **Published draft PR #752:** guarded non-force update to
+  `36120e56904931a4eab75b4277bbef29ad30dea6`, tree
+  `327ac7280f24730be56d720b504b4a8a981dbab4`, contains the reviewed
+  sorted Native inventory repair, advancing-clock first-page retry fix and
+  reused-request rejection. Exact-head Native run `41680077347` is still
+  **IN PROGRESS** (Windows and four isolated/iOS jobs PASS; full Android
+  running). Kernel run `41680077366` **PASS**; App run `41680067050` **FAIL**
+  at `database_rehearsal_evidence_stale`; Dependency run `41680077387`
+  **FAIL**; GitGuardian is **NEUTRAL**, not a completed full-scope scan. The
+  duplicate skipped App run `41680077367` is not a pass. Do not move the PR
+  while useful Android CI runs.
+- **BLOCKED / NOT RUN:** the second-page writer and pins are test-only and
+  cannot activate in product builds. Independent-handle second-page
+  concurrency, a real externally serialized revocation fence, refreshed
+  authority/time chains, authenticated ingress, mounted transport, installed
+  two-device sync, production key custody, PostgreSQL 17 Windows rehearsal,
+  compatible dependency remediation, full-scope secret scan, signing,
+  installed recovery and merchant acceptance remain open. Connected mode
+  stays off; no production or merchant action occurred.
 
 ## 2026-11-03 15:23 UTC private v41 first-page atomic writer
 
