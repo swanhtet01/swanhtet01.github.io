@@ -5545,7 +5545,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 40) return const {};
+  if (schemaVersion < 5 || schemaVersion > 41) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -6666,7 +6666,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 40;
+  int get schemaVersion => 41;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6726,12 +6726,22 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV39Schema();
       await _createConnectedCloudFeedSchemaV40();
       await _requireUnifiedV40Schema();
+      await _requireUnifiedV41Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 40) {
+        await _requireNoCloudFeedSchemaBeforeV41();
+        await _requireUnifiedV40Schema();
+        await _requireEmptyCloudFeedBeforeV41();
+        await _createConnectedCloudFeedSchemaV41();
+        await _requireUnifiedV41Schema();
+        return;
+      }
       await _requireNoCloudFeedSchemaBeforeV40();
+      await _requireNoCloudFeedSchemaBeforeV41();
       if (from == 39) {
         await _requireUnifiedV39Schema();
         await _createConnectedCloudFeedSchemaV40();
@@ -7195,11 +7205,11 @@ class ShopDatabase extends _$ShopDatabase {
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV40Schema();
+      await _requireUnifiedV41Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV40Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV41Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
@@ -7813,6 +7823,16 @@ class ShopDatabase extends _$ShopDatabase {
         in shopConnectedCloudFeedSchemaDefinitionsV40().values) {
       await customStatement(definition);
     }
+    // All pre-v40 branches create an empty feed, so install the additive v41
+    // evidence objects in the same transaction before the v41 beforeOpen.
+    await _createConnectedCloudFeedSchemaV41();
+  }
+
+  Future<void> _createConnectedCloudFeedSchemaV41() async {
+    for (final definition
+        in shopConnectedCloudFeedSchemaDefinitionsV41().values) {
+      await customStatement(definition);
+    }
   }
 
   Future<void> _requireNoCloudFeedSchemaBeforeV40() async {
@@ -7824,6 +7844,33 @@ class ShopDatabase extends _$ShopDatabase {
     ).get();
     if (rows.isNotEmpty) {
       throw StateError('A pre-v40 Shop database contains cloud-feed schema.');
+    }
+  }
+
+  Future<void> _requireNoCloudFeedSchemaBeforeV41() async {
+    final names = shopConnectedCloudFeedSchemaDefinitionsV41().keys.toList();
+    final placeholders = List.filled(names.length, '?').join(',');
+    final rows = await customSelect(
+      'SELECT name FROM sqlite_master WHERE name IN ($placeholders)',
+      variables: names.map(Variable<String>.new).toList(),
+    ).get();
+    if (rows.isNotEmpty) {
+      throw StateError('A pre-v41 Shop database contains request evidence schema.');
+    }
+  }
+
+  Future<void> _requireEmptyCloudFeedBeforeV41() async {
+    for (final table in const [
+      'shop_connected_cloud_feed_streams',
+      'shop_connected_cloud_feed_pages',
+      'shop_connected_cloud_feed_heads',
+      'shop_connected_cloud_feed_restore_barriers',
+    ]) {
+      final row = await customSelect('SELECT 1 FROM $table LIMIT 1')
+          .getSingleOrNull();
+      if (row != null) {
+        throw StateError('Nonempty v40 cloud feed lacks signed request evidence.');
+      }
     }
   }
 
@@ -10769,11 +10816,17 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _requireUnifiedV40Schema() async {
     await runZoned(
       _requireUnifiedV39Schema,
-      zoneValues: const {#shopAllowV40NestedSchemaVerification: true},
+      zoneValues: const {
+        #shopAllowV40NestedSchemaVerification: true,
+        #shopAllowV41NestedSchemaVerification: true,
+      },
     );
     final objects = await runZoned(
       _readSchemaObjects,
-      zoneValues: const {#shopAllowV40NestedSchemaVerification: false},
+      zoneValues: const {
+        #shopAllowV40NestedSchemaVerification: false,
+        #shopAllowV41NestedSchemaVerification: true,
+      },
     );
     final definitions = shopConnectedCloudFeedSchemaDefinitionsV40();
     final definitionsValid = _definitionGroupExact(
@@ -10798,6 +10851,41 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v40 cloud-feed schema failed verification '
         '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV41Schema() async {
+    await _requireUnifiedV40Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedCloudFeedSchemaDefinitionsV41();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    // No v41 producer may write until the signed request and current authority
+    // can be reconstructed by runtime, encrypted backup and staged restore.
+    // Requiring both tables empty makes a partial or forged record unusable.
+    final evidence = await customSelect(
+      'SELECT 1 FROM shop_connected_cloud_feed_page_evidence LIMIT 1',
+    ).getSingleOrNull();
+    await _requireEmptyCloudFeedBeforeV41();
+    if (!definitionsValid || evidence != null) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map((entry) => '${entry.key}:${objects[entry.key]?.type ?? 'missing'}')
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v41 request evidence failed verification '
+        '(definitions=$definitionsValid, evidencePresent=${evidence != null}, '
+        'mismatches=$mismatches).',
       );
     }
   }
@@ -12851,6 +12939,11 @@ class ShopDatabase extends _$ShopDatabase {
       }
       if (Zone.current[#shopAllowV40NestedSchemaVerification] == true &&
           shopConnectedCloudFeedSchemaDefinitionsV40().containsKey(name)) {
+        continue;
+      }
+      if ((Zone.current[#shopAllowV40NestedSchemaVerification] == true ||
+              Zone.current[#shopAllowV41NestedSchemaVerification] == true) &&
+          shopConnectedCloudFeedSchemaDefinitionsV41().containsKey(name)) {
         continue;
       }
       if (objects.containsKey(name)) {
