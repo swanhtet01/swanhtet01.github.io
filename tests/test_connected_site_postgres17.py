@@ -346,6 +346,10 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
             def cursor(self):
                 return PausedCursor(self.inner.cursor())
 
+        request = _resign(
+            request,
+            issuedAt=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        )
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(page, request, factory=lambda: PausedConnection(
                 self.psycopg.connect(self.runtime_url)))
@@ -393,7 +397,10 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
         self.assertEqual(visible, [(authority.workspace_id, 1),
                                    (authority.workspace_id, 2)])
         with self.assertRaisesRegex(ConnectedSiteV15Error, "cursor_changed"):
-            page(_resign(request, afterSequence=1, priorEventDigest="f" * 64))
+            page(_resign(
+                request, afterSequence=1, priorEventDigest="f" * 64,
+                issuedAt=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            ))
         with self.psycopg.connect(self.admin_url) as connection:
             connection.execute(
                 "update app_private.connected_site_leases set status='revoked' "
@@ -401,4 +408,7 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
                 (authority.workspace_id, authority.site_id, lease["leaseId"]),
             )
         with self.assertRaisesRegex(ConnectedSiteV15Error, "lease_changed"):
-            page(request)
+            page(_resign(
+                request,
+                issuedAt=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            ))
