@@ -1,9 +1,36 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 04:19 UTC
+- Last verified: 2026-11-03 04:30 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 04:30 UTC guarded draft CI and private PG test successor
+
+- Draft PR #752 was non-force fast-forwarded only after the remote branch
+  read back at `289ec76de4b80cd2de437afc3b28cfe76192ec1e`, the worktree
+  was clean, all prior same-PR CI was terminal, and independent cumulative
+  review accepted the default-off 27-path diff. The public PR remains draft,
+  unmerged and at ledger `5a9e89bbeeb53f8b4bef601e4f71b280cf4c4008`
+  (tree `76cdc36601a0374448368900a43618401dc8ce90`). Cumulative binary
+  patch SHA-256 from the prior public head to that ledger is
+  `4a1e8b3a06148bb548cf19f498318582a9031ccd2a739d2cd2d9425dd8bb607c`.
+  Automatic exact-head App, Native, Kernel and Dependency checks started;
+  no workflow was manually dispatched. Kernel **PASS**. Dependency Security
+  **FAIL** only app/kernel minimatch below 11.0.1; platform, Python and
+  added-line credential checks passed. App and Native remain **IN PROGRESS**
+  at this checkpoint and are not relabeled as passes.
+- A separate **private, unpublished** test-only successor
+  `4739ab73851702a85b6209af54c7c553b53aae4a` (tree
+  `f4b1356ff6add49591bad1e64845fa44864042f5`) refreshes and re-signs
+  the event-reader's 30-second request just before the initial disposable
+  PostgreSQL page and its late cursor/revocation assertions. It changes only
+  `tests/test_connected_site_postgres17.py`; patch SHA-256
+  `9b9491a9b5916294a40c426608a173e5872d1557f81a6671348bc7c575ad94ae`.
+  Independent review **ACCEPT**; `git diff --check` **PASS**; local Python
+  unittest invocation **PASS 3 / SKIP 4**, with the four real disposable
+  PostgreSQL tests **NOT RUN** here. This successor is not the public CI head
+  and no hosted result may be attributed to it.
 
 ## 2026-11-03 04:19 UTC final-source affected regression closes
 
