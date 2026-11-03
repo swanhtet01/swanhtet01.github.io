@@ -110,6 +110,7 @@ const CONNECTED_SUCCESSOR_DART_FORMAT_PATHS = Object.freeze([
   'lib/shop_connected_composition.dart',
   'lib/shop_connected_coordinator_health.dart',
   'lib/shop_connected_site_client_composition.dart',
+  'lib/shop_connected_site_cloud_feed_contract.dart',
   'lib/shop_connected_site_device_signer.dart',
   'lib/shop_connected_trusted_time_authority.dart',
   'lib/shop_connected_trusted_time_client_schema.dart',
@@ -128,6 +129,7 @@ const CONNECTED_SUCCESSOR_DART_FORMAT_PATHS = Object.freeze([
   'test/shop_connected_composition_test.dart',
   'test/shop_connected_coordinator_health_test.dart',
   'test/shop_connected_site_client_composition_test.dart',
+  'test/shop_connected_site_cloud_feed_contract_test.dart',
   'test/shop_connected_site_device_signer_test.dart',
   'test/shop_connected_trusted_time_authority_test.dart',
   'test/shop_connected_trusted_time_client_store_test.dart',
@@ -545,6 +547,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
     'test/shop_connected_composition_test.dart',
     'test/shop_connected_coordinator_health_test.dart',
     'test/shop_connected_site_client_composition_test.dart',
+    'test/shop_connected_site_cloud_feed_contract_test.dart',
     'test/shop_connected_site_device_signer_test.dart',
   ]
   const expectedTrustedTimePaths = [
