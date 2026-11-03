@@ -1,9 +1,42 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 20:10 UTC
+- Last verified: 2026-11-03 20:20 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 20:20 UTC cumulative v41 feed CI candidate
+
+- **PASS (private, default-off):** implementation
+  `5b1fb739dcd057acf9b9f41c68b939790677a9d8`, repository tree
+  `7bbb47652439b0527784448876d5df4540d343cb`, final two-path patch
+  SHA-256 `0705c43b5c5bef5083d12691bc1e0111e23662c9869cc18560abde74522ef761`.
+  The synthetic two-key reader test now obtains each principal through the
+  request-bound gateway resolver, rejecting peer-attestation replay onto a
+  different ASGI request. The opt-in disposable-PG17 race test additionally
+  checks that a signer exception returns no proof and releases site locks
+  before a bounded revocation UPDATE. The combined Python suite **25/25 PASS**;
+  five disposable-PG17 tests **SKIPPED**, not passed. Python compilation and
+  diff checks **PASS**; independent read-only review **ACCEPT**. No listener,
+  actual TLS attestation, production key or feature enablement was added.
+- **Cumulative publication preflight:** public draft #752 predecessor
+  `611bdfc00181860422089274d6aa0a265b61712b` is the merge-base of this
+  private lineage. The predecessor-to-ledger diff includes ten implementation
+  and ledger commits across the native v41 interruption harness, Python/native
+  synthetic fixture, checked-reader signer and gateway-bound tests. All
+  cumulative changes are private and have no hosted exact-head CI result.
+  Independent review accepted the preceding eight-commit cumulative diff;
+  separate independent delta review accepted the ninth source commit.
+- **NOT RUN / BLOCKED:** the PG17 revocation/rollback assertions need the
+  existing disposable hosted runner. They cannot be run locally because PG17
+  is absent. The test-only gateway attestation is injected, not actual TLS
+  ingress; two synthetic identities are not two installed clients. Protected
+  issuer custody, mounted transport, two-device offline/reconnect evidence,
+  PostgreSQL Windows rehearsal, dependency/security gates, signing and
+  merchant acceptance remain open. Connected mode stays disabled.
+- **Hosted status:** public Native run `41699288011` on `611bdfc0` remained
+  **IN PROGRESS** at 20:20 UTC. Do not move the public head while its Android
+  job is useful; published artifact results cannot validate this private tree.
 
 ## 2026-11-03 20:10 UTC transaction-bound synthetic feed sealing
 
