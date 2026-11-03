@@ -14,9 +14,10 @@ from supermega_runtime.connected_site_v15 import ConnectedSiteV15Error, digest
 from tests.test_connected_site_v15 import DEVICE_A, ISSUER, NOW, _authority
 
 
-def _fixture(*, role="manager", capabilities=("managementRead",), now=NOW):
+def _fixture(*, role="manager", capabilities=("managementRead",), now=NOW,
+             workspace="workspace-a", site="site-a"):
     authority = _authority(
-        "workspace-a", "site-a", "device-a", DEVICE_A,
+        workspace, site, "device-a", DEVICE_A,
         role=role, capabilities=capabilities,
     )
     device = authority.devices["device-a"]

@@ -9,9 +9,10 @@ No caller-supplied database URL or production credentials are accepted.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
+from threading import Event
 import unittest
 from uuid import uuid4
 
@@ -21,6 +22,9 @@ from supermega_runtime.connected_site_v15 import (
     PostgresConnectedSiteRepository,
     digest,
 )
+from supermega_runtime.connected_site_event_feed import read_event_headers
+from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
+from tests.test_connected_site_event_read import _fixture, _resign
 from tests.test_connected_site_v15 import DEVICE_A, DEVICE_B, NOW, _authority, _upload
 
 
@@ -231,3 +235,170 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
                 "select workspace_id from app_private.connected_sites order by workspace_id"
             ).fetchall()
         self.assertEqual(rows, [(self.authority.workspace_id,)])
+
+    def test_event_header_reader_snapshot_cursor_and_revocation(self) -> None:
+        # This opt-in test must run only in the disposable PG17 cluster above.
+        read_now = datetime.now(timezone.utc)
+        authority, lease, request = _fixture(
+            workspace=f"workspace-{uuid4().hex}", site=f"site-{uuid4().hex}",
+            now=read_now,
+        )
+        self._seed(authority, DEVICE_A)
+        principal = ConnectedSitePrincipal(
+            authority.workspace_id, authority.site_id, "device-a", True,
+            "synthetic-gateway",
+        )
+        with self.psycopg.connect(self.admin_url) as connection:
+            connection.execute(
+                "insert into app_private.connected_site_leases "
+                "(workspace_id,site_id,lease_id,actor_id,device_id,role,capabilities,"
+                "session_generation,revocation_generation,configuration_generation,"
+                "issuer_key_id,issuer_public_key,lease_json,lease_digest,issued_at,expires_at,status) "
+                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,'active')",
+                (authority.workspace_id, authority.site_id, lease["leaseId"],
+                 lease["actorId"], lease["deviceId"], lease["role"],
+                 lease["capabilities"], lease["sessionGeneration"],
+                 lease["revocationGeneration"], authority.configuration_generation,
+                 lease["issuerKeyId"], authority.issuer_keys[lease["issuerKeyId"]],
+                 json.dumps(lease, sort_keys=True), digest(lease),
+                 datetime.fromisoformat(lease["issuedAt"].replace("Z", "+00:00")),
+                 datetime.fromisoformat(lease["expiresAt"].replace("Z", "+00:00"))),
+            )
+
+        def append_event(sequence, prior):
+            event = {"synthetic": "metadata-only", "sequence": sequence,
+                     "privateRemark": "must-never-be-in-header"}
+            event_digest = digest(event)
+            command_id = f"read-fixture-{sequence}"
+            command_digest = digest({"command": command_id})
+            with self.psycopg.connect(self.admin_url) as connection:
+                connection.execute(
+                    "insert into app_private.connected_site_commands "
+                    "(workspace_id,site_id,command_id,command_digest,command_json,"
+                    "proof_json,proof_digest,actor_id,device_id,lease_id,aggregate_type,"
+                    "aggregate_id,expected_version,state) "
+                    "values (%s,%s,%s,%s,'{}'::jsonb,'{}'::jsonb,%s,%s,%s,%s,%s,%s,%s,'accepted')",
+                    (authority.workspace_id, authority.site_id, command_id,
+                     command_digest, digest({}), "actor-1", "device-a",
+                     lease["leaseId"], "retailCart", command_id, 0),
+                )
+                connection.execute(
+                    "insert into app_private.connected_site_events "
+                    "(workspace_id,site_id,event_sequence,event_id,event_digest,"
+                    "previous_event_digest,event_json,command_id,command_digest,"
+                    "aggregate_type,aggregate_id,aggregate_version) "
+                    "values (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,1)",
+                    (authority.workspace_id, authority.site_id, sequence,
+                     f"read-event-{sequence}", event_digest, prior,
+                     json.dumps(event), command_id, command_digest,
+                     "retailCart", command_id),
+                )
+            return event_digest
+
+        first_digest = append_event(1, None)
+
+        def page(read_request, *, factory=None):
+            return read_event_headers(
+                connection_factory=factory or (lambda: self.psycopg.connect(self.runtime_url)),
+                principal=principal, authority=authority, lease=lease,
+                request=read_request, now=datetime.now(timezone.utc),
+            )
+
+        # Pause after snapshot/authority locks but before the page SELECT.
+        # A direct test-only writer commits another event during the pause;
+        # the first reader must see one snapshot, then reconnect sees both.
+        entered = Event()
+        proceed = Event()
+
+        class PausedCursor:
+            def __init__(self, inner):
+                self.inner = inner
+
+            def __enter__(self):
+                self.inner.__enter__()
+                return self
+
+            def __exit__(self, *args):
+                return self.inner.__exit__(*args)
+
+            def execute(self, sql, params=None):
+                if "order by event_sequence limit" in sql:
+                    entered.set()
+                    if not proceed.wait(5):
+                        raise RuntimeError("disposable_pg17_page_pause_timeout")
+                return self.inner.execute(sql, params)
+
+            def __getattr__(self, name):
+                return getattr(self.inner, name)
+
+        class PausedConnection:
+            def __init__(self, inner):
+                self.inner = inner
+                self.autocommit = inner.autocommit
+
+            def __enter__(self):
+                self.inner.__enter__()
+                return self
+
+            def __exit__(self, *args):
+                return self.inner.__exit__(*args)
+
+            def cursor(self):
+                return PausedCursor(self.inner.cursor())
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(page, request, factory=lambda: PausedConnection(
+                self.psycopg.connect(self.runtime_url)))
+            self.assertTrue(entered.wait(5), "reader did not reach page query")
+            second_digest = append_event(2, first_digest)
+            proceed.set()
+            first_page = future.result(timeout=5)
+        self.assertEqual([row.sequence for row in first_page.headers], [1])
+        self.assertEqual(first_page.headers[0].event_digest, first_digest)
+        self.assertNotIn("privateRemark", repr(first_page))
+        second_page = page(_resign(
+            request, afterSequence=1, priorEventDigest=first_digest,
+            issuedAt=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        ))
+        self.assertEqual([row.sequence for row in second_page.headers], [2])
+        self.assertEqual(second_page.headers[0].event_digest, second_digest)
+        other = _authority(
+            f"workspace-{uuid4().hex}", f"site-{uuid4().hex}",
+            "device-b", DEVICE_B,
+        )
+        self._seed(other, DEVICE_B)
+        other_adapter = ConnectedSiteV15Adapter(
+            authorities={(other.workspace_id, other.site_id): other},
+            repository=self.repository, runtime_enabled=True,
+        )
+        other_adapter.reconcile(
+            workspace_id=other.workspace_id, site_id=other.site_id,
+            device_id="device-b", session_generation=2,
+            revocation_generation=3, after_cursor=0,
+            events=[_upload(other, key=DEVICE_B)], now=NOW,
+        )
+        with self.psycopg.connect(self.runtime_url) as connection:
+            connection.execute(
+                "select set_config('app.workspace_id', %s, true)",
+                (authority.workspace_id,),
+            )
+            connection.execute(
+                "select set_config('app.site_id', %s, true)",
+                (authority.site_id,),
+            )
+            visible = connection.execute(
+                "select workspace_id,event_sequence from app_private.connected_site_events "
+                "order by event_sequence"
+            ).fetchall()
+        self.assertEqual(visible, [(authority.workspace_id, 1),
+                                   (authority.workspace_id, 2)])
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "cursor_changed"):
+            page(_resign(request, afterSequence=1, priorEventDigest="f" * 64))
+        with self.psycopg.connect(self.admin_url) as connection:
+            connection.execute(
+                "update app_private.connected_site_leases set status='revoked' "
+                "where workspace_id=%s and site_id=%s and lease_id=%s",
+                (authority.workspace_id, authority.site_id, lease["leaseId"]),
+            )
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "lease_changed"):
+            page(request)
