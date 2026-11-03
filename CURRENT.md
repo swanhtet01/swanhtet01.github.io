@@ -1,9 +1,39 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 21:50 UTC
+- Last verified: 2026-11-03 22:01 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 22:01 UTC private two-device disposable-PG17 test candidate
+
+- **PASS (source/test review only):** implementation
+  `b83def7a75434b2ef25a78a4e0384e8c11059ece`, tree
+  `b16a813efa82a042759211e40e104984f3ed9bdb`, two-file patch SHA-256
+  `cf855b41b9d74e27145d89cbe550f855150ddc6118e44b0ddc22e989eab9a851`.
+  The existing opt-in disposable PostgreSQL 17 suite now has a synthetic
+  same-site A/B row fixture: two distinct registered signing keys and leases,
+  checked runtime-role SQL reads, request-bound injected gateway peers,
+  unmodified signed pages, a fresh TestClient/cursor-1 read and a direct
+  database device-revocation denial before the injected provider is updated.
+  It rejects cross-device request bodies and excludes private event remarks.
+  Python compilation, 5/5 available focused non-PG tests and diff check
+  **PASS**; all six disposable-PG17 tests **SKIPPED locally** because no PG17
+  binary is installed. Independent read-only security review **ACCEPT** for
+  a hosted test candidate. No production route, schema, trust pin or feature
+  flag changed.
+- **NOT RUN / boundary:** B is inserted as a synthetic registered row, not
+  exercised through a real enrollment protocol. The fresh TestClient and
+  manually signed cursor are not a network outage, installed client or durable
+  nonce-consumption proof. This test does not feed its real-PG response into
+  native v41; the separate Python-to-native harness still uses mock SQL.
+  Keep production sync disabled. Public PR #752 remains at `78e81ddb` while
+  Native `41724753880` has useful Android/Windows work in progress.
+- **Hosted predecessor evidence:** App `41724745058` ran the then-current
+  five disposable-PG17 cases **5/5 PASS**, including the corrected
+  signer/revocation lock case. It later **FAILED** at the unchanged
+  `database_rehearsal_evidence_stale` gate in canonical app verification.
+  Those five passes do not validate the new sixth case.
 
 ## 2026-11-03 21:50 UTC guarded draft publication and live checks
 
