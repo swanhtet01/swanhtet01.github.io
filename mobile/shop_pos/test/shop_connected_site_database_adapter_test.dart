@@ -598,8 +598,8 @@ void main() {
     final writer = ShopDatabase(NativeDatabase(file));
     try {
       await database.customSelect('PRAGMA journal_mode = WAL').getSingle();
-      await _seed(database);
       await writer.customSelect('PRAGMA journal_mode = WAL').getSingle();
+      await _seed(database);
       final reserve = _reserveCommand('snapshot-race');
       final handler = ShopConnectedSiteDatabaseCommandHandler(
         database: database,
@@ -623,13 +623,21 @@ void main() {
         timeAuthority: const _FixedTime(_now),
         connectedSiteEnabled: true,
       );
-      final released = await writerHandler
-          .handle(
-            _fingerprint,
-            _releaseCommand('snapshot-race-release', reserve),
-          )
-          .timeout(const Duration(seconds: 30));
-      expect(released.state, SiteCommandAckState.accepted);
+      await expectLater(
+        writerHandler.handle(
+          _fingerprint,
+          _releaseCommand('snapshot-race-release', reserve),
+        ),
+        throwsA(
+          isA<sqlite.SqliteException>()
+              .having((error) => error.resultCode, 'result code', 5)
+              .having(
+                (error) => error.causingStatement,
+                'statement',
+                'BEGIN IMMEDIATE',
+              ),
+        ),
+      );
       database.resumeProjection.complete();
       final before = await snapshotFuture.timeout(const Duration(seconds: 30));
       final beforeReservation = ConnectedStockReservationProjectionV1.fromJson(
@@ -637,6 +645,13 @@ void main() {
       ).reservation;
       expect(before.continuationCursor, 1);
       expect(beforeReservation.state, ConnectedStockReservationState.held);
+      final released = await writerHandler
+          .handle(
+            _fingerprint,
+            _releaseCommand('snapshot-race-release', reserve),
+          )
+          .timeout(const Duration(seconds: 30));
+      expect(released.state, SiteCommandAckState.accepted);
       final after = await reader.readSnapshot(_fingerprint);
       final afterReservation = ConnectedStockReservationProjectionV1.fromJson(
         (after.projections['stockReservations']! as List).single,
