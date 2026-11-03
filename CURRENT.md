@@ -17,7 +17,7 @@
   no-backfill guard without changing its version or installing v41 objects;
   partial-v41 branch-hop and forged evidence also fail closed. The historical
   v40 transaction suite remains executable only behind the test-only fixture
-  mode; product builds cannot select that mode. Cloud-feed schema regression
+  mode; `dart.vm.product` release builds cannot select that mode. Cloud-feed schema regression
   **10/10 PASS**, targeted Flutter analysis **PASS**, independent security
   review **ACCEPT** for this bounded empty-only migration.
 - **BLOCKED / NOT RUN:** nonempty v41 signed-request reconstruction and the
