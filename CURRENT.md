@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 04:42 UTC
+- Last verified: 2026-11-03 04:50 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
@@ -16,9 +16,11 @@
   PostgreSQL 17 rehearsal receipt. Kernel run `41578175580` **PASS**;
   Dependency run `41578175726` **FAIL** only app/kernel minimatch `<11.0.1`
   (`GHSA-g3hv-75wg-m249`), while platform, pip and credential-shape jobs
-  passed. Native run `41578175514` is **IN PROGRESS**: four isolated/iOS
-  jobs passed, main Windows passed backup/restore/no-replace and is building
-  unsigned output, and main Android remains in isolated test shards.
+  passed. Native run `41578175514` is **IN PROGRESS** at the bounded 04:50
+  readback: main Windows PC job `125726460287` **PASS**, including
+  backup/restore/no-replace and unsigned output; four isolated/iOS jobs
+  **PASS**; main Android job `125726460240` remains in isolated test shards,
+  with later Android artifact/gallery stages **NOT RUN** at this checkpoint.
 - The external GitGuardian check `125726448756` completed **NEUTRAL**, not
   PASS: its provider summary says the PR exceeded the configured size limit
   and was skipped to preserve the organization's GitHub API rate budget.
