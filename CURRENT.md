@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 03:50 UTC
+- Last verified: 2026-11-03 04:07 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 04:07 UTC private atomic-snapshot test repair
+
+- Local source commit `3fd27315cf9b7b8e84133f6d2d0f62d2d7256e61`
+  (tree `65feb423c5165e3bb1523781a1094a56831d1ccd`, parent
+  `df015be20034438cb460890ee500af633b321bb1`) changes only
+  `mobile/shop_pos/test/shop_connected_site_database_adapter_test.dart`.
+  Pre-commit binary patch SHA-256:
+  `dc3c92dcd1fe012dfde68c0515e92fa69ed49ee5fab422d8609db0470e814052`.
+- The first five-file adjacent persistence/reservation/backup regression on
+  source `12a32b5f` finished in 10m05s with **160 PASS / 1 FAIL**. The sole
+  failure was `snapshot cursor and projection share one SQLite epoch`:
+  its fixture opened a second Shop database after synthetic seeding and the
+  fail-closed v24 connected-stock schema verifier rejected that intermediate
+  state. No production verifier was changed. The revised fixture opens both
+  connections before seeding, proves the competing write is blocked by exact
+  SQLite `SQLITE_BUSY` code 5 at `BEGIN IMMEDIATE` while the snapshot is
+  paused, then checks held/cursor 1, retries after resume, and checks
+  released/cursor 2 plus one delta.
+- **PASS on final source:** the isolated case 1/1; the complete database
+  adapter file 25/25 in 1m41s; Dart formatting zero changes;
+  `git diff --check`; `flutter analyze --no-pub` no issues in 14.7s.
+  Independent read-only review **ACCEPT** with no concrete defect.
+- **NOT RUN on final source:** the entire five-file matrix (the other 160
+  tests passed on the immediate test-only predecessor), Windows-hosted/native
+  CI, installed two-device evidence and production activation. The exact
+  SQLite statement matcher still needs Windows-hosted confirmation. The
+  public PR head was not moved and connected mode remains default-off.
 
 ## 2026-11-03 03:50 UTC exact-private-source Flutter verification
 
