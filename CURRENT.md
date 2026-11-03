@@ -1,9 +1,14 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 12:37 UTC
+- Last verified: 2026-11-03 13:04 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 13:04 UTC private v41 cloud-key approval prerequisite
+
+- **PASS (bounded, default-off source only):** implementation `e9235300b58928823ce2779f664ae68a90966c0e`, repository tree `0497fabe800675edca3a16101b66f88ee6cb19ab`, native tree `2e289128cd751633b626f9292f6f595a71c19db2`, runtime `lib/` tree `126e2f2ac4aa7ba5931e952b832258d244619351`. A separate cloud-purpose Ed25519 device-key approval parser now requires an independently supplied pinned issuer key and generation, exact approval sequence/predecessor, site/device/key/enrollment/session/revocation binding and trusted-time validity. The private v41 evidence schema retains approval JSON and digest but still rejects every nonempty feed at open and backup. No producer or production issuer pin was enabled. A historical backup fixture now removes v41 child evidence before fabricating older versions; the production verifier is unchanged. Focused request tests **2/2 PASS**, final-source cloud-feed schema and backup matrix **112/112 PASS** in 6m53s, changed-path Flutter analysis and formatting **PASS**, independent review **ACCEPT** for this staged commit and fixture repair only. The pre-fix broad run was **FAIL** (94 pass / 18 historical fixture failures); those failures are not relabelled as passes on that old source.
+- **BLOCKED / NOT RUN:** nonempty-v41 reconstruction and atomic apply remain absent. A later verifier must recompute the retained approval digest, bind its public key to the exact signed request, verify independently authenticated enrollment, lease, authority, revocation and time proofs and approval history, then recheck live authority within one page/evidence/head transaction. Production pins remain empty; connected mode stays default-off. No current-head hosted CI, installed two-device sync, Windows PostgreSQL rehearsal, signing or pilot acceptance follows from these local tests. Public PR #752 was not changed by this private checkpoint.
 
 ## 2026-11-03 12:37 UTC private retained cloud request verification
 
