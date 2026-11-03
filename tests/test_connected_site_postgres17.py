@@ -9,6 +9,7 @@ No caller-supplied database URL or production credentials are accepted.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timezone
 import json
 import os
@@ -17,6 +18,12 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
+
+from supermega_runtime.connected_site_gateway import (
+    ConnectedSiteGatewayPrincipalResolver, GatewayPeerAttestation,
+)
 from supermega_runtime.connected_site_v15 import (
     ConnectedSiteV15Adapter,
     ConnectedSiteV15Error,
@@ -28,6 +35,8 @@ from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
 from tests.connected_site_signed_page_fixture import read_and_sign_test_only_page
 from tests import connected_site_signed_page_fixture as signed_fixture
 from tests.test_connected_site_event_read import _fixture, _resign
+from tests.test_connected_site_signed_page_fixture import _two_device_fixture
+from tests.test_connected_site_runtime import _Authorities
 from tests.test_connected_site_v15 import DEVICE_A, DEVICE_B, NOW, _authority, _upload
 
 
@@ -324,6 +333,189 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
                 request=request, now=read_now,
                 issuer_key_id="test_feed", issuer_seed=23,
             )
+
+    def test_two_registered_device_rows_read_signed_pages_after_fresh_client(self) -> None:
+        """Real PG/RLS rows; registration, peer and client transport are synthetic."""
+        setup_now = datetime.now(timezone.utc)
+        authority, lease_a, request_a, lease_b, request_b = _two_device_fixture(
+            workspace=f"workspace-{uuid4().hex}", site=f"site-{uuid4().hex}",
+            now=setup_now,
+        )
+        self._seed(authority, DEVICE_A)
+        device_b = authority.devices["device-b"]
+
+        def insert_lease(connection, lease):
+            connection.execute(
+                "insert into app_private.connected_site_leases "
+                "(workspace_id,site_id,lease_id,actor_id,device_id,role,capabilities,"
+                "session_generation,revocation_generation,configuration_generation,"
+                "issuer_key_id,issuer_public_key,lease_json,lease_digest,issued_at,expires_at,status) "
+                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,'active')",
+                (authority.workspace_id, authority.site_id, lease["leaseId"],
+                 lease["actorId"], lease["deviceId"], lease["role"],
+                 lease["capabilities"], lease["sessionGeneration"],
+                 lease["revocationGeneration"], authority.configuration_generation,
+                 lease["issuerKeyId"], authority.issuer_keys[lease["issuerKeyId"]],
+                 json.dumps(lease, sort_keys=True), digest(lease),
+                 datetime.fromisoformat(lease["issuedAt"].replace("Z", "+00:00")),
+                 datetime.fromisoformat(lease["expiresAt"].replace("Z", "+00:00"))),
+            )
+
+        with self.psycopg.connect(self.admin_url) as connection:
+            connection.execute(
+                "insert into app_private.connected_site_devices "
+                "(workspace_id,site_id,device_id,signing_key_id,signing_public_key,"
+                "client_fingerprint,enrollment_evidence_digest,coordinator_binding_digest,"
+                "session_generation,status) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,'active')",
+                (authority.workspace_id, authority.site_id, device_b.device_id,
+                 device_b.signing_key_id, device_b.public_key,
+                 device_b.client_fingerprint, device_b.enrollment_evidence_digest,
+                 device_b.coordinator_binding_digest, device_b.session_generation),
+            )
+            insert_lease(connection, lease_a)
+            insert_lease(connection, lease_b)
+            connection.execute(
+                "insert into app_private.connected_site_cursors "
+                "(workspace_id,site_id,device_id) values (%s,%s,%s)",
+                (authority.workspace_id, authority.site_id, device_b.device_id),
+            )
+
+        previous = None
+
+        def append_event(sequence: int) -> str:
+            nonlocal previous
+            event = {"synthetic": "shared-feed", "sequence": sequence,
+                     "privateRemark": "must-not-leave-pg"}
+            event_digest = digest(event)
+            command_id = f"two-device-read-{sequence}"
+            command_digest = digest({"command": command_id})
+            with self.psycopg.connect(self.admin_url) as connection:
+                connection.execute(
+                    "insert into app_private.connected_site_commands "
+                    "(workspace_id,site_id,command_id,command_digest,command_json,"
+                    "proof_json,proof_digest,actor_id,device_id,lease_id,aggregate_type,"
+                    "aggregate_id,expected_version,state) "
+                    "values (%s,%s,%s,%s,'{}'::jsonb,'{}'::jsonb,%s,%s,%s,%s,%s,%s,%s,'accepted')",
+                    (authority.workspace_id, authority.site_id, command_id,
+                     command_digest, digest({}), lease_a["actorId"], "device-a",
+                     lease_a["leaseId"], "retailCart", command_id, 0),
+                )
+                connection.execute(
+                    "insert into app_private.connected_site_events "
+                    "(workspace_id,site_id,event_sequence,event_id,event_digest,"
+                    "previous_event_digest,event_json,command_id,command_digest,"
+                    "aggregate_type,aggregate_id,aggregate_version) "
+                    "values (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,1)",
+                    (authority.workspace_id, authority.site_id, sequence,
+                     f"two-device-event-{sequence}", event_digest, previous,
+                     json.dumps(event), command_id, command_digest,
+                     "retailCart", command_id),
+                )
+            previous = event_digest
+            return event_digest
+
+        first_digest = append_event(1)
+        provider = _Authorities(authority)
+        current_now = datetime.now(timezone.utc)
+
+        def fresh_request(request, key):
+            unsigned = {field: value for field, value in request.items()
+                        if field != "signature"}
+            unsigned["issuedAt"] = current_now.isoformat(
+                timespec="milliseconds"
+            ).replace("+00:00", "Z")
+            return {**unsigned, "signature": key.sign(unsigned)}
+
+        request_a = fresh_request(request_a, DEVICE_A)
+        request_b = fresh_request(request_b, DEVICE_B)
+
+        def app_for(device_id: str, lease):
+            device = authority.devices[device_id]
+
+            def peer(http_request: Request):
+                return GatewayPeerAttestation(
+                    request=http_request, gateway_id="disposable-pg17-fixture",
+                    workspace_id=authority.workspace_id, site_id=authority.site_id,
+                    device_id=device_id, client_fingerprint=device.client_fingerprint,
+                    session_generation=device.session_generation,
+                    observed_at=current_now,
+                )
+
+            resolver = ConnectedSiteGatewayPrincipalResolver(
+                gateway_id="disposable-pg17-fixture", load_attested_peer=peer,
+                authority_provider=provider, now=lambda: current_now,
+            )
+            app = FastAPI()
+
+            @app.post("/test-only/feed")
+            async def feed(http_request: Request):
+                principal = resolver(http_request)
+                if principal is None:
+                    raise HTTPException(status_code=401)
+                try:
+                    return read_and_sign_test_only_page(
+                        connection_factory=lambda: self.psycopg.connect(self.runtime_url),
+                        principal=principal, authority=authority, lease=lease,
+                        request=await http_request.json(), now=current_now,
+                        issuer_key_id="test_feed", issuer_seed=23,
+                    )
+                except ConnectedSiteV15Error:
+                    raise HTTPException(status_code=403) from None
+
+            return app
+
+        app_a = app_for("device-a", lease_a)
+        app_b = app_for("device-b", lease_b)
+        with TestClient(app_a) as client_a, TestClient(app_b) as client_b:
+            response_a = client_a.post("/test-only/feed", json=request_a)
+            response_b = client_b.post("/test-only/feed", json=request_b)
+            self.assertEqual((response_a.status_code, response_b.status_code), (200, 200))
+            bytes_a, bytes_b = response_a.json(), response_b.json()
+            self.assertEqual(json.loads(bytes_a["pageJson"])["headers"][0]["eventDigest"], first_digest)
+            self.assertEqual(json.loads(bytes_b["pageJson"])["headers"][0]["eventDigest"], first_digest)
+            self.assertNotEqual(bytes_a["proofJson"], bytes_b["proofJson"])
+            self.assertNotIn("privateRemark", bytes_a["pageJson"] + bytes_b["pageJson"])
+            self.assertEqual(client_a.post("/test-only/feed", json=request_b).status_code, 403)
+            self.assertEqual(client_b.post("/test-only/feed", json=request_a).status_code, 403)
+            # This is a deterministic read retry, not durable nonce consumption.
+            self.assertEqual(client_b.post("/test-only/feed", json=request_b).json(), bytes_b)
+
+        second_digest = append_event(2)
+        current_now = datetime.now(timezone.utc)
+        unsigned_b = {key: value for key, value in request_b.items() if key != "signature"}
+        unsigned_b.update(afterSequence=1, priorEventDigest=first_digest,
+                          requestNonce="f" * 64,
+                          issuedAt=current_now.isoformat(timespec="milliseconds").replace("+00:00", "Z"))
+        continued_b = {**unsigned_b, "signature": DEVICE_B.sign(unsigned_b)}
+        with TestClient(app_b) as client_b:
+            continued = client_b.post("/test-only/feed", json=continued_b)
+            self.assertEqual(continued.status_code, 200)
+            self.assertEqual(json.loads(continued.json()["pageJson"])["headers"][0]["eventDigest"], second_digest)
+        with self.psycopg.connect(self.admin_url) as connection:
+            connection.execute(
+                "update app_private.connected_site_devices set status='revoked' "
+                "where workspace_id=%s and site_id=%s and device_id='device-b'",
+                (authority.workspace_id, authority.site_id),
+            )
+        current_now = datetime.now(timezone.utc)
+        principal_b = ConnectedSitePrincipal(
+            authority.workspace_id, authority.site_id, "device-b", True,
+            "disposable-pg17-fixture",
+        )
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "device_changed"):
+            read_and_sign_test_only_page(
+                connection_factory=lambda: self.psycopg.connect(self.runtime_url),
+                principal=principal_b, authority=authority, lease=lease_b,
+                request=fresh_request(request_b, DEVICE_B), now=current_now,
+                issuer_key_id="test_feed", issuer_seed=23,
+            )
+        provider.values[(authority.workspace_id, authority.site_id)] = replace(
+            authority, devices={**authority.devices,
+                                "device-b": replace(device_b, active=False)},
+        )
+        with TestClient(app_a) as client_a, TestClient(app_b) as client_b:
+            self.assertEqual(client_b.post("/test-only/feed", json=continued_b).status_code, 401)
+            self.assertEqual(client_a.post("/test-only/feed", json=fresh_request(request_a, DEVICE_A)).status_code, 200)
 
     def test_event_header_reader_snapshot_cursor_and_revocation(self) -> None:
         # This opt-in test must run only in the disposable PG17 cluster above.

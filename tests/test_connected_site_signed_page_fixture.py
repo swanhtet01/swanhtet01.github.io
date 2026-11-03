@@ -37,8 +37,10 @@ _FIXTURE = (
 )
 
 
-def _two_device_fixture():
-    authority_a, lease_a, request_a = _fixture()
+def _two_device_fixture(*, workspace="workspace-a", site="site-a", now=NOW):
+    authority_a, lease_a, request_a = _fixture(
+        workspace=workspace, site=site, now=now,
+    )
     device_b = DeviceAuthority(
         device_id="device-b", signing_key_id="key-device-b",
         public_key=DEVICE_B.public,
