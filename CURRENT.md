@@ -1,9 +1,42 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 09:04 UTC
+- Last verified: 2026-11-03 09:22 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 09:22 UTC private synchronous cloud-proof verification
+
+- **PASS (private source only):** implementation commit
+  `2f72c420bbc636f613fc9475f138da8427250b66`, tree
+  `1e1c39fcc8cacb45f12670361114b6adf1f9cb41`, parent
+  `1156bd5d649fa2077dff566b91a1092220cd29ac`; four paths,
+  staged binary patch SHA-256
+  `cee3d65bc3f6220cf1a0e0753405cfcb2054317753ef48ad1838c890f43b7343`.
+  The already-locked dart_jsonwebtoken 3.4.1 is a direct exact dependency;
+  its public raw EdDSA API provides synchronous verification against an
+  externally pinned public key for a future backup verifier. No JWT, secret
+  key, response-supplied pin or production issuer key is used. Independent
+  security review **ACCEPT** for this default-off prerequisite only.
+- **PASS (exact private source):** official Flutter 3.47.8 proof tests **5/5**,
+  including the RFC 8032 test-1 public vector, hostile signatures and
+  wrong-key checks; `flutter analyze --no-pub` found no issues, Dart format
+  was unchanged, native CI contract verifier and whitespace check passed.
+  Offline pub resolution changed the locked package only from transitive to
+  direct, retaining its version and SHA-256. An initial handwritten RFC test
+  had one missing hex nibble and failed; it was corrected against the RFC
+  before the final 5/5 pass.
+- **UNVERIFIED:** the earlier full backup run's one failure remains
+  unattributed because its output was truncated. A later failure-filtered
+  full rerun ended `DONE success=true` with no error event; that does not
+  establish the first failure's cause. No backup product fix is claimed.
+- **BLOCKED / NOT RUN:** the v40 row verifier and backup still reject all
+  nonempty feed rows. No atomic header/projection/cursor transaction, durable
+  replay, pin-aware backup acceptance, restore suspension/rebootstrap or
+  installed two-device evidence is claimed. The server-signed proof producer,
+  reviewed production public pin, and live trusted-time/lease/authority
+  binding remain necessary before activation. Connected mode is default-off;
+  this private successor has not been pushed to PR #752.
 
 ## 2026-11-03 09:04 UTC private v40 signed-proof retention
 
