@@ -1,9 +1,34 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 00:17 UTC
+- Last verified: 2026-11-03 00:35 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 00:35 UTC remote-event delivery review hold
+
+- Public draft PR #752 remains fixed at
+  `289ec76de4b80cd2de437afc3b28cfe76192ec1e`; Native run
+  `41549050338` is still **IN PROGRESS** at this timestamp. Windows PC and
+  the four isolated/Apple QA jobs passed separately; full Android has no
+  terminal outcome yet. No newer private source was published.
+- The current connected-site HTTP router has authority and upload/reconcile
+  routes but no remote-event read route, atomic PostgreSQL event reader or
+  durable cloud-download client cursor. A draft synthetic event-page endpoint
+  was **REJECTED** in independent security review and completely withdrawn:
+  the current principal binds a device, not a current staff actor/lease/read
+  capability; a substituted reader could emit a coherent-looking sensitive
+  or incomplete page. No endpoint, reader or permission expansion was kept.
+- Private test-only checkpoint `78ce8c7a478d51484d0dee2aeaa95d881ba44f12`
+  (tree `f2ea095e798a52e6ee64f4288bd202dcd31bb1fc`) asserts the synthetic
+  mounted router returns 404 for remote events until reviewed read authority
+  and a complete reader exist. Connected-site Python tests **45/45 PASS**,
+  whitespace and independent final-diff review **PASS**. Two-device remote
+  delivery, durable recovery, deployed PostgreSQL reader and installed-device
+  revocation remain **NOT RUN/BLOCKED**. Next implementation must first define
+  event-level actor/lease read policy and privacy filtering, then prove an
+  atomic tenant-scoped PostgreSQL page and durable client cursor under
+  reconnect/revocation tests; do not expose all site events to every device.
 
 ## 2026-11-03 00:17 UTC private gateway peer-binding foundation
 
