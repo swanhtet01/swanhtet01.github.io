@@ -1,9 +1,14 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 13:40 UTC
+- Last verified: 2026-11-03 13:44 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 13:44 UTC private pending-enrollment key join
+
+- **PASS (unmounted source only):** implementation `553668a1b4959c7dcbb4d6f46a81100937c1dc5d`, repository tree `f1b0e3006bed54803a946b8bcfa11a49d188c1ae`, native tree `05120672461e9bafe21f720e110e10add82bdb6c`, runtime `lib/` tree `9a07811930c3de4c9a33f15cb6ca44736f3f45cf`. The retained cloud approval/request verifier now compares the issuer-approved public key byte-for-byte with the independently supplied v25 pending-enrollment public key; substituted and absent keys fail. Focused request tests **3/3 PASS**, complete five-file retained-proof matrix **46/46 PASS** in 2m01s on this source, two-path Flutter analysis **PASS**, independent read-only review **ACCEPT for an unmounted prerequisite**. No production caller was added.
+- **BLOCKED / NOT RUN:** the caller must still validate the pending row, signed owner approval, full enrollment lifecycle and revocation, and the complete lease/authority/time chains before nonempty v41 open/backup or atomic apply can be allowed. Existing empty-only guards and default-off connected mode remain in force. This checkpoint does not prove installed sync, real issuer custody or release readiness; public PR #752 was not updated.
 
 ## 2026-11-03 13:40 UTC private retained-proof verification checkpoint
 
