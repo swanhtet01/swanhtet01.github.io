@@ -1,9 +1,34 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 06:18 UTC
+- Last verified: 2026-11-03 06:26 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 06:26 UTC private process/import event-order contract
+
+- **PASS (source only):** private implementation
+  `33c007442d7569f2facc9c715d679c985bac2147`, tree
+  `80dcabbc008e7e145203341a9ea00ad69488a654`, parent `910fa00c`,
+  changes only the Windows bootstrap, sanitized closure verifier and tests.
+  Binary patch SHA-256 is
+  `dbc1e3a7dad62c7d159b2a4004dbe507583d5ddef8fc1ed9fa6476415183a5cd`.
+  The v2 observer evidence now requires unique process start/end event
+  ordinals, parent starts before child, and every import event strictly within
+  its referenced process lifetime. Import ordinals cannot reuse lifecycle or
+  other import ordinals. Adversarial tests cover absent/malformed/out-of-order
+  fields, start/end boundaries and distinct imports with a reused event
+  ordinal. Focused Node suites **55/55 PASS**, diff check **PASS** and
+  independent read-only security review **ACCEPT** after the distinct-import
+  test was added. No policy approval or authoritative flag changed.
+- **BLOCKED / NOT RUN:** event ordinals are still observer-reported. There is
+  no implemented and Windows-validated native capture pipeline, retained raw
+  process/import log, or independently verified loss accounting. The pending
+  policy still has null observer command/hash; stage 2 remains disabled.
+  This private successor has not been published or covered by hosted CI.
+  The published `d10cccb0` Native run `41587213794` still has the full
+  Android shard in progress; its other five jobs passed. Keep the public head
+  fixed until useful exact-head checks finish.
 
 ## 2026-11-03 06:18 UTC private observer launcher/import contract
 
