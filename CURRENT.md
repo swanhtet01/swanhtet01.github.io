@@ -1,9 +1,38 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 15:00 UTC
+- Last verified: 2026-11-03 15:23 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 15:23 UTC private v41 first-page atomic writer
+
+- **PASS (test-only, unmounted):** implementation
+  `58fd77e3bcb8dca363f69a29d8653a70cd08d405`, repository tree
+  `5f8754bfdbb4dc97f04d169ee8f6dc429b2976e6`, native tree
+  `3bf7b09ad113b5b2af6c50683c9052e12ad8dfc2`, runtime `lib/` tree
+  `4483c99a6037de5c528dade7ecea580d4ab1d8e2`. A test-only first-page
+  method checks complete signed request, cloud-purpose key approval, lease,
+  enrollment, authority, revocation and retained trusted-time evidence before
+  replay or writes. It atomically retains one stream, page, request evidence
+  and head, then rechecks current state and validated time before commit.
+  Exact replay leaves one page; a different valid signed request cannot
+  replace cursor zero. Injected failure, changed validated time and signed
+  revocation inside the transaction roll back all four rows. An expired proof
+  at entry fails, and current revocation blocks replay. Final-source cloud
+  schema suite **13/13 PASS** in 1m30s, focused signed case **1/1 PASS**,
+  three-path Flutter analysis **PASS**, independent security review **ACCEPT
+  for this test-only slice**. A combined schema/backup regression **115/115
+  PASS** in 7m24s on the pre-final source; its later changed-byte and error-
+  distinction test additions were covered by final-source focused/schema
+  checks, not by another complete backup run.
+- **BLOCKED / NOT RUN:** this method is not mounted and cannot run in product
+  builds. The test time authority is injected; external WAL revocation races,
+  a serialized production current-authority fence, real same-boot trusted
+  time, issuer/key custody, authenticated ingress, multi-page chains,
+  nonempty restore and installed two-device sync remain unverified. Product
+  nonempty open/backup remains blocked with no pins; connected mode stays off.
+  Public PR #752 was not changed.
 
 ## 2026-11-03 15:00 UTC private test-only atomic v41 reader
 
