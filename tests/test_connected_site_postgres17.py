@@ -14,6 +14,7 @@ import json
 import os
 from threading import Event
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from supermega_runtime.connected_site_v15 import (
@@ -25,6 +26,7 @@ from supermega_runtime.connected_site_v15 import (
 from supermega_runtime.connected_site_event_feed import read_event_headers
 from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
 from tests.connected_site_signed_page_fixture import read_and_sign_test_only_page
+from tests import connected_site_signed_page_fixture as signed_fixture
 from tests.test_connected_site_event_read import _fixture, _resign
 from tests.test_connected_site_v15 import DEVICE_A, DEVICE_B, NOW, _authority, _upload
 
@@ -236,6 +238,82 @@ class ConnectedSitePostgres17Tests(unittest.TestCase):
                 "select workspace_id from app_private.connected_sites order by workspace_id"
             ).fetchall()
         self.assertEqual(rows, [(self.authority.workspace_id,)])
+
+    def test_signed_read_holds_revocation_row_lock_until_proof_is_sealed(self) -> None:
+        read_now = datetime.now(timezone.utc)
+        authority, lease, request = _fixture(
+            workspace=f"workspace-{uuid4().hex}", site=f"site-{uuid4().hex}",
+            now=read_now,
+        )
+        self._seed(authority, DEVICE_A)
+        with self.psycopg.connect(self.admin_url) as connection:
+            connection.execute(
+                "insert into app_private.connected_site_leases "
+                "(workspace_id,site_id,lease_id,actor_id,device_id,role,capabilities,"
+                "session_generation,revocation_generation,configuration_generation,"
+                "issuer_key_id,issuer_public_key,lease_json,lease_digest,issued_at,expires_at,status) "
+                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,'active')",
+                (authority.workspace_id, authority.site_id, lease["leaseId"],
+                 lease["actorId"], lease["deviceId"], lease["role"],
+                 lease["capabilities"], lease["sessionGeneration"],
+                 lease["revocationGeneration"], authority.configuration_generation,
+                 lease["issuerKeyId"], authority.issuer_keys[lease["issuerKeyId"]],
+                 json.dumps(lease, sort_keys=True), digest(lease),
+                 datetime.fromisoformat(lease["issuedAt"].replace("Z", "+00:00")),
+                 datetime.fromisoformat(lease["expiresAt"].replace("Z", "+00:00"))),
+            )
+        principal = ConnectedSitePrincipal(
+            authority.workspace_id, authority.site_id, "device-a", True,
+            "synthetic-gateway",
+        )
+        entered = Event()
+        proceed = Event()
+        original_sign = signed_fixture._signature
+
+        def paused_sign(seed, fields):
+            entered.set()
+            if not proceed.wait(5):
+                raise RuntimeError("disposable_pg17_sign_pause_timeout")
+            return original_sign(seed, fields)
+
+        try:
+            with patch.object(signed_fixture, "_signature", side_effect=paused_sign):
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    signed_future = pool.submit(
+                        read_and_sign_test_only_page,
+                        connection_factory=lambda: self.psycopg.connect(self.runtime_url),
+                        principal=principal, authority=authority, lease=lease,
+                        request=request, now=read_now,
+                        issuer_key_id="test_feed", issuer_seed=23,
+                    )
+                    self.assertTrue(entered.wait(5), "signer did not reach the locked read")
+                    with self.assertRaises(self.psycopg.errors.LockNotAvailable):
+                        with self.psycopg.connect(self.admin_url) as connection:
+                            connection.execute("set local lock_timeout = '300ms'")
+                            connection.execute(
+                                "update app_private.connected_sites set revocation_generation="
+                                "revocation_generation+1 where workspace_id=%s and site_id=%s",
+                                (authority.workspace_id, authority.site_id),
+                            )
+                    proceed.set()
+                    signed = signed_future.result(timeout=5)
+        finally:
+            proceed.set()
+        self.assertEqual(json.loads(signed["proofJson"])["revocationGeneration"],
+                         authority.revocation_generation)
+        with self.psycopg.connect(self.admin_url) as connection:
+            connection.execute(
+                "update app_private.connected_sites set revocation_generation="
+                "revocation_generation+1 where workspace_id=%s and site_id=%s",
+                (authority.workspace_id, authority.site_id),
+            )
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "authority_changed"):
+            read_and_sign_test_only_page(
+                connection_factory=lambda: self.psycopg.connect(self.runtime_url),
+                principal=principal, authority=authority, lease=lease,
+                request=request, now=read_now,
+                issuer_key_id="test_feed", issuer_seed=23,
+            )
 
     def test_event_header_reader_snapshot_cursor_and_revocation(self) -> None:
         # This opt-in test must run only in the disposable PG17 cluster above.

@@ -11,7 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
-from typing import Any, Mapping
+import inspect
+from typing import Any, Callable, Mapping
 
 from .connected_site_event_read import AuthorizedEventRead, authorize_event_read
 from .connected_site_runtime import ConnectedSitePrincipal
@@ -136,6 +137,9 @@ def _read_page(
     *, connection_factory: Any, principal: ConnectedSitePrincipal,
     authority: SiteAuthority, lease: Mapping[str, Any],
     request: Mapping[str, Any], now: datetime, include_retail_held: bool,
+    seal_checked_retail_page: Callable[
+        [RetailReservationPage, Mapping[str, Any], Mapping[str, Any]], Any
+    ] | None = None,
 ) -> tuple[EventHeaderPage, tuple[RetailProjectionEntry, ...], AuthorizedEventRead]:
     """Read one consistent tenant page after rechecking current DB authority.
 
@@ -306,6 +310,26 @@ def _read_page(
                 last.sequence if last else grant.after_sequence,
                 last.event_digest if last else grant.prior_event_digest, has_more,
             )
+            if seal_checked_retail_page is not None:
+                if not include_retail_held:
+                    _fail("retail_seal_scope")
+                checked = RetailReservationPage(
+                    headers=page, projections=tuple(projections),
+                    actor_id=grant.actor_id, device_id=grant.device_id,
+                    authority_generation=grant.authority_generation,
+                    revocation_generation=grant.revocation_generation,
+                    authority_payload_digest=grant.authority_payload_digest,
+                    lease_digest=grant.lease_digest,
+                    request_digest=grant.request_digest,
+                    request_nonce=grant.request_nonce,
+                )
+                sealed = seal_checked_retail_page(checked, request, lease)
+                if inspect.isawaitable(sealed):
+                    _fail("retail_seal_async")
+                # Signing can take time. The row locks are still held here;
+                # reject a proof finished after lease or request expiry.
+                check_live_time()
+                return sealed
             return page, tuple(projections), grant
 
 
@@ -326,17 +350,27 @@ def read_retail_reservation_page(
     *, connection_factory: Any, principal: ConnectedSitePrincipal,
     authority: SiteAuthority, lease: Mapping[str, Any],
     request: Mapping[str, Any], now: datetime,
-) -> RetailReservationPage:
+    seal_checked_page: Callable[
+        [RetailReservationPage, Mapping[str, Any], Mapping[str, Any]], Any
+    ] | None = None,
+) -> RetailReservationPage | Any:
     """Return a manager-only sanitized held-reservation view in one DB snapshot.
 
     No route or native client calls this source-only seam. Other event types
-    advance the checked cursor but never return their raw payloads.
+    advance the checked cursor but never return their raw payloads. An injected
+    synchronous sealer runs before the transaction and authority row locks are
+    released. It must be side-effect-free until this call returns, and must
+    not use a response-supplied trust root or expose raw event rows.
     """
-    headers, projections, grant = _read_page(
+    result = _read_page(
         connection_factory=connection_factory, principal=principal,
         authority=authority, lease=lease, request=request, now=now,
         include_retail_held=True,
+        seal_checked_retail_page=seal_checked_page,
     )
+    if seal_checked_page is not None:
+        return result
+    headers, projections, grant = result
     return RetailReservationPage(
         headers=headers, projections=projections,
         actor_id=grant.actor_id, device_id=grant.device_id,

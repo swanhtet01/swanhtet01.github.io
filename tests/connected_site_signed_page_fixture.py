@@ -35,64 +35,69 @@ def read_and_sign_test_only_page(
     lease: Mapping[str, Any], request: Mapping[str, Any], now: datetime,
     issuer_key_id: str, issuer_seed: int,
 ) -> dict[str, str]:
-    """Exercise the checked SQL reader and seal its exact result with a test key.
+    """Seal the checked SQL page under its row locks with a fixed test key.
 
-    This is not a mounted route or production signer. A separate device/issuer
-    custody and post-read revocation protocol remain release gates.
+    This is not a mounted route or production signer. Protected key custody,
+    authenticated ingress and installed-device evidence remain release gates.
     """
-    request_snapshot = dict(request)
-    lease_snapshot = dict(lease)
-    checked_page = read_retail_reservation_page(
+    def seal(
+        checked_page: RetailReservationPage,
+        checked_request: Mapping[str, Any], checked_lease: Mapping[str, Any],
+    ) -> dict[str, str]:
+        page = checked_page.to_wire()
+        if (
+            not isinstance(now, datetime) or now.tzinfo is None
+            or not isinstance(issuer_key_id, str)
+            or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", issuer_key_id)
+            or page["requestDigest"] != digest(checked_request)
+            or page["leaseDigest"] != checked_lease.get("payloadDigest")
+            or page["workspaceId"] != principal.workspace_id
+            or page["siteId"] != principal.site_id
+            or page["deviceId"] != principal.device_id
+            or checked_page.request_nonce != checked_request.get("requestNonce")
+        ):
+            raise ConnectedSiteV15Error("connected_site_test_page_binding_invalid")
+        issued = int(now.astimezone(timezone.utc).timestamp() * 1000)
+        lease_expiry = datetime.fromisoformat(
+            checked_lease["expiresAt"].replace("Z", "+00:00")
+        )
+        expires = min(issued + 30000, int(lease_expiry.timestamp() * 1000))
+        if issued <= 0 or expires <= issued:
+            raise ConnectedSiteV15Error("connected_site_test_page_expired")
+        proof = {
+            "contract": "supermega.connected-cloud-feed-proof.v1",
+            "protocolVersion": 1,
+            "issuerKeyId": issuer_key_id,
+            "issuedAtMillis": issued,
+            "expiresAtMillis": expires,
+            "workspaceId": page["workspaceId"],
+            "siteId": page["siteId"],
+            "actorId": page["actorId"],
+            "actorRole": checked_lease["role"],
+            "deviceId": page["deviceId"],
+            "authorityGeneration": page["authorityGeneration"],
+            "revocationGeneration": page["revocationGeneration"],
+            "authorityPayloadDigest": page["authorityPayloadDigest"],
+            "leaseDigest": page["leaseDigest"],
+            "requestDigest": page["requestDigest"],
+            "requestNonce": checked_page.request_nonce,
+            "afterSequence": page["afterSequence"],
+            "priorEventDigest": page["priorEventDigest"],
+            "nextSequence": page["nextSequence"],
+            "nextEventDigest": page["nextEventDigest"],
+            "pageDigest": page["pageDigest"],
+        }
+        return {
+            "requestJson": canonical_json(checked_request),
+            "pageJson": canonical_json(page),
+            "proofJson": canonical_json({**proof, "signature": _signature(issuer_seed, proof)}),
+        }
+
+    return read_retail_reservation_page(
         connection_factory=connection_factory, principal=principal,
-        authority=authority, lease=lease_snapshot, request=request_snapshot,
-        now=now,
+        authority=authority, lease=lease, request=request, now=now,
+        seal_checked_page=seal,
     )
-    page = checked_page.to_wire()
-    if (
-        not isinstance(now, datetime) or now.tzinfo is None
-        or not isinstance(issuer_key_id, str)
-        or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", issuer_key_id)
-        or page["requestDigest"] != digest(request_snapshot)
-        or page["leaseDigest"] != lease_snapshot.get("payloadDigest")
-        or page["workspaceId"] != principal.workspace_id
-        or page["siteId"] != principal.site_id
-        or page["deviceId"] != principal.device_id
-        or checked_page.request_nonce != request_snapshot.get("requestNonce")
-    ):
-        raise ConnectedSiteV15Error("connected_site_test_page_binding_invalid")
-    issued = int(now.astimezone(timezone.utc).timestamp() * 1000)
-    lease_expiry = datetime.fromisoformat(lease_snapshot["expiresAt"].replace("Z", "+00:00"))
-    expires = min(issued + 30000, int(lease_expiry.timestamp() * 1000))
-    if issued <= 0 or expires <= issued:
-        raise ConnectedSiteV15Error("connected_site_test_page_expired")
-    proof = {
-        "contract": "supermega.connected-cloud-feed-proof.v1",
-        "protocolVersion": 1,
-        "issuerKeyId": issuer_key_id,
-        "issuedAtMillis": issued,
-        "expiresAtMillis": expires,
-        "workspaceId": page["workspaceId"],
-        "siteId": page["siteId"],
-        "actorId": page["actorId"],
-        "actorRole": lease_snapshot["role"],
-        "deviceId": page["deviceId"],
-        "authorityGeneration": page["authorityGeneration"],
-        "revocationGeneration": page["revocationGeneration"],
-        "authorityPayloadDigest": page["authorityPayloadDigest"],
-        "leaseDigest": page["leaseDigest"],
-        "requestDigest": page["requestDigest"],
-        "requestNonce": checked_page.request_nonce,
-        "afterSequence": page["afterSequence"],
-        "priorEventDigest": page["priorEventDigest"],
-        "nextSequence": page["nextSequence"],
-        "nextEventDigest": page["nextEventDigest"],
-        "pageDigest": page["pageDigest"],
-    }
-    return {
-        "requestJson": canonical_json(request_snapshot),
-        "pageJson": canonical_json(page),
-        "proofJson": canonical_json({**proof, "signature": _signature(issuer_seed, proof)}),
-    }
 
 
 def build_signed_v41_fixture() -> dict[str, str]:

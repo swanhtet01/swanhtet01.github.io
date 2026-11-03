@@ -7,16 +7,19 @@ from pathlib import Path
 import unittest
 from dataclasses import replace
 from base64 import urlsafe_b64decode
+from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
+from supermega_runtime.connected_site_event_feed import read_retail_reservation_page
 from supermega_runtime.connected_site_v15 import (
     ConnectedSiteV15Error, DeviceAuthority, canonical_json, digest,
 )
 from tests.connected_site_signed_page_fixture import (
     build_signed_v41_fixture, read_and_sign_test_only_page,
 )
+from tests import connected_site_signed_page_fixture as signed_fixture
 from tests.test_connected_site_event_feed import _Script
 from tests.test_connected_site_event_read import _fixture, _resign
 from tests.test_connected_site_v15 import DEVICE_B, ISSUER, NOW
@@ -29,6 +32,69 @@ _FIXTURE = (
 
 
 class SignedPageFixtureTest(unittest.TestCase):
+    def test_sealer_runs_before_checked_transaction_releases(self):
+        authority, lease, request = _fixture()
+        principal = ConnectedSitePrincipal(
+            authority.workspace_id, authority.site_id, request["deviceId"],
+            True, "synthetic-gateway",
+        )
+        script = _Script(authority, lease, events=[])
+        transaction_open = False
+        original_connect = script.connect
+        original_sign = signed_fixture._signature
+
+        class ObservedConnection:
+            def __init__(self, inner):
+                self.inner = inner
+                self.autocommit = inner.autocommit
+
+            def __enter__(self):
+                nonlocal transaction_open
+                transaction_open = True
+                return self.inner.__enter__()
+
+            def __exit__(self, *args):
+                nonlocal transaction_open
+                transaction_open = False
+                return self.inner.__exit__(*args)
+
+        def observed_connect():
+            return ObservedConnection(original_connect())
+
+        def checked_sign(seed, fields):
+            self.assertTrue(transaction_open)
+            return original_sign(seed, fields)
+
+        with patch.object(signed_fixture, "_signature", side_effect=checked_sign):
+            read_and_sign_test_only_page(
+                connection_factory=observed_connect, principal=principal,
+                authority=authority, lease=lease, request=request, now=NOW,
+                issuer_key_id="test_feed", issuer_seed=23,
+            )
+        self.assertFalse(transaction_open)
+        self.assertEqual(script.clock_reads, 3)
+
+        class DeferredSeal:
+            def __await__(self):
+                yield None
+
+        with self.assertRaisesRegex(ConnectedSiteV15Error, "retail_seal_async"):
+            read_retail_reservation_page(
+                connection_factory=observed_connect, principal=principal,
+                authority=authority, lease=lease, request=request, now=NOW,
+                seal_checked_page=lambda *_: DeferredSeal(),
+            )
+        self.assertFalse(transaction_open)
+        self.assertEqual(script.clock_reads, 5)
+        with patch.object(signed_fixture, "_signature", side_effect=RuntimeError("signer_failed")):
+            with self.assertRaisesRegex(RuntimeError, "signer_failed"):
+                read_and_sign_test_only_page(
+                    connection_factory=observed_connect, principal=principal,
+                    authority=authority, lease=lease, request=request, now=NOW,
+                    issuer_key_id="test_feed", issuer_seed=23,
+                )
+        self.assertFalse(transaction_open)
+
     def test_python_wire_type_bytes_match_retained_native_fixture(self):
         retained = _FIXTURE.read_text(encoding="utf-8").strip()
         generated = build_signed_v41_fixture()
@@ -66,7 +132,7 @@ class SignedPageFixtureTest(unittest.TestCase):
         self.assertEqual(proof["requestDigest"], digest(request))
         self.assertEqual(proof["deviceId"], request["deviceId"])
         self.assertTrue(any("event_json::text" in sql for sql, _ in script.queries))
-        self.assertEqual(script.clock_reads, 2)
+        self.assertEqual(script.clock_reads, 3)
         unsigned_proof = {key: value for key, value in proof.items() if key != "signature"}
         Ed25519PrivateKey.from_private_bytes(bytes([23]) * 32).public_key().verify(
             urlsafe_b64decode(proof["signature"] + "=="),
