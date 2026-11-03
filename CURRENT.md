@@ -1,9 +1,34 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 20:59 UTC
+- Last verified: 2026-11-03 21:08 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 21:08 UTC authenticated HTTP to native feed bridge preflight
+
+- **PASS (private source boundary):** exact private source remains
+  `c92ddc96cc780b64a9b94fbed5b105627371690c`, tree
+  `5224429ffe3e417ab7e02ebbd8570f37a0f9c8fc`, with a clean worktree.
+  The existing Python test-only HTTP feed suite is **5/5 PASS** on this source;
+  its resolver binds two signed device requests to request-attested peers and
+  the checked reader signs under its transaction. The native v41 suite remains
+  **14/14 PASS** from the preceding checkpoint. Independent read-only design
+  review confirmed that their current identities are incompatible: Python uses
+  `device-a`/`device-b` and a November 2026 authority/lease/clock, whereas
+  native v41 uses `device_v41_fixture`/`device_v41_second` and a January 2027
+  signed evidence chain. No bytes from the HTTP TestClient route were applied
+  to either native store, and no real PostgreSQL or installed device was used.
+- **BLOCKED (test integration, not production):** relabeling response IDs,
+  replacing digests, or re-signing the Python response in Dart would erase the
+  producer and device-binding proof. The next source slice is one shared,
+  source-pinned two-device synthetic fixture: Python must validate the native
+  devices' exact signed requests/leases through the existing checked reader
+  and authenticated test route, retain canonical unmodified response bytes,
+  and native must apply each device's matching bytes with swapped-device,
+  replay, cursor, expiry, revocation, reopen and backup negatives. Review the
+  entire fixture chain before running the bridge. The HTTP route remains
+  test-only; production ingress, keys and connected mode remain unmounted/off.
 
 ## 2026-11-03 20:59 UTC private distinct-device feed recovery regression
 
