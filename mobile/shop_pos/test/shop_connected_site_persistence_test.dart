@@ -517,6 +517,48 @@ void main() {
         connectedTimeAuthority: const _FixedTime(_now + 10000),
       );
       expect(await database.readReservedStockQuantity('shared-adoption'), 1);
+      final projection = await database.readConnectedReplicaProjectionV2(
+        tenantId: _tenant,
+        siteId: _site,
+      );
+      final committedProof = ConnectedStockReservationProjectionV1.fromJson(
+        (projection['stockReservations']! as List).singleWhere(
+          (value) => (value as Map)['reservationId'] == own.reservationId,
+        ),
+      );
+      final committedReservation = committedProof.reservation;
+      final committedRow = await database
+          .customSelect(
+            'SELECT transition_json FROM '
+            'shop_connected_stock_reservation_transitions '
+            'WHERE reservation_id = ?',
+            variables: [Variable<String>(own.reservationId)],
+          )
+          .getSingle();
+      final committedTransition =
+          ConnectedStockReservationTransitionV1.fromJson(
+            jsonDecode(committedRow.read<String>('transition_json')),
+          );
+      expect(
+        committedReservation.state,
+        ConnectedStockReservationState.committed,
+      );
+      expect(
+        committedReservation.reservationDigest,
+        committedTransition.after.reservationDigest,
+      );
+      expect(
+        committedProof.terminalTransition!.transitionDigest,
+        committedTransition.transitionDigest,
+      );
+      expect(
+        committedProof.terminalTransition!.saleBinding?.saleId,
+        committedTransition.saleBinding?.saleId,
+      );
+      expect(
+        committedTransition.saleBinding?.saleCommandId,
+        'shared-adoption-sale',
+      );
       final retailStates = await database
           .customSelect(
             'SELECT header.reservation_id, transition.to_state '

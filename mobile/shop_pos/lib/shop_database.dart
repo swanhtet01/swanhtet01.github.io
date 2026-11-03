@@ -7279,8 +7279,14 @@ class ShopDatabase extends _$ShopDatabase {
           .add(Map<String, Object?>.from(payload));
     }
     final reservationRows = await customSelect(
-      'SELECT header.reservation_id, header.reservation_json, '
-      "COALESCE(transition.to_state, 'held') AS state "
+      'SELECT header.reservation_id, header.reservation_json, header.tenant_id, '
+      'header.site_id, header.actor_id, header.device_id, header.capability, '
+      'header.workflow_type, header.subject_id, header.basket_digest, '
+      'header.initial_reservation_digest, header.issued_at_millis, '
+      'header.expires_at_millis, transition.from_state, transition.to_state, '
+      'transition.before_digest, transition.after_digest, '
+      'transition.transition_digest, transition.transition_json, '
+      'transition.sale_id, transition.occurred_at_millis '
       'FROM shop_connected_stock_reservation_headers header '
       'LEFT JOIN shop_connected_stock_reservation_transitions transition '
       'ON transition.reservation_id = header.reservation_id '
@@ -7288,6 +7294,75 @@ class ShopDatabase extends _$ShopDatabase {
       'ORDER BY header.reservation_id',
       variables: [Variable(tenantId), Variable(siteId)],
     ).get();
+    final stockReservations = <Map<String, Object?>>[];
+    for (final row in reservationRows) {
+      final initial = ConnectedStockReservationV1.fromJson(
+        jsonDecode(row.read<String>('reservation_json')),
+      );
+      if (initial.state != ConnectedStockReservationState.held ||
+          initial.stateVersion != 1 ||
+          initial.reservationId != row.read<String>('reservation_id') ||
+          initial.workspaceId != tenantId ||
+          initial.siteId != siteId ||
+          initial.actorId != row.read<String>('actor_id') ||
+          initial.deviceId != row.read<String>('device_id') ||
+          initial.capability.name != row.read<String>('capability') ||
+          initial.workflowType.name != row.read<String>('workflow_type') ||
+          initial.subjectId != row.read<String>('subject_id') ||
+          initial.basketDigest != row.read<String>('basket_digest') ||
+          initial.reservationDigest !=
+              row.read<String>('initial_reservation_digest') ||
+          row.read<String>('tenant_id') != tenantId ||
+          row.read<String>('site_id') != siteId ||
+          DateTime.parse(initial.issuedAt).millisecondsSinceEpoch !=
+              row.read<int>('issued_at_millis') ||
+          DateTime.parse(initial.expiresAt).millisecondsSinceEpoch !=
+              row.read<int>('expires_at_millis') ||
+          canonicalConnectedSiteJson(initial.toJson()) !=
+              row.read<String>('reservation_json')) {
+        throw StateError('Connected replica reservation evidence is invalid.');
+      }
+      final terminalState = row.readNullable<String>('to_state');
+      if (terminalState == null) {
+        if (row.readNullable<String>('transition_json') != null) {
+          throw StateError('Connected replica terminal evidence is invalid.');
+        }
+        stockReservations.add(
+          ConnectedStockReservationProjectionV1(reservation: initial).toJson(),
+        );
+        continue;
+      }
+      final transitionJson = row.readNullable<String>('transition_json');
+      if (transitionJson == null) {
+        throw StateError('Connected replica terminal evidence is invalid.');
+      }
+      final transition = ConnectedStockReservationTransitionV1.fromJson(
+        jsonDecode(transitionJson),
+      );
+      if (canonicalConnectedSiteJson(transition.before.toJson()) !=
+              canonicalConnectedSiteJson(initial.toJson()) ||
+          row.readNullable<String>('from_state') != 'held' ||
+          transition.after.state.name != terminalState ||
+          transition.before.reservationDigest !=
+              row.readNullable<String>('before_digest') ||
+          transition.after.reservationDigest !=
+              row.readNullable<String>('after_digest') ||
+          transition.transitionDigest !=
+              row.readNullable<String>('transition_digest') ||
+          transition.saleBinding?.saleId !=
+              row.readNullable<String>('sale_id') ||
+          DateTime.parse(transition.transitionedAt).millisecondsSinceEpoch !=
+              row.readNullable<int>('occurred_at_millis') ||
+          canonicalConnectedSiteJson(transition.toJson()) != transitionJson) {
+        throw StateError('Connected replica terminal evidence is invalid.');
+      }
+      stockReservations.add(
+        ConnectedStockReservationProjectionV1(
+          reservation: transition.after,
+          terminalTransition: transition,
+        ).toJson(),
+      );
+    }
     final conflictRows = await customSelect(
       'SELECT conflict.conflict_id, conflict.reason_code, conflict.state, '
       'command.aggregate_id, COALESCE(aggregate.version, command.expected_version) AS actual_version '
@@ -7322,16 +7397,7 @@ class ShopDatabase extends _$ShopDatabase {
                 kitchenByOrder[row.read<String>('id')] ?? const <Object?>[],
           },
       ],
-      'stockReservations': [
-        for (final row in reservationRows)
-          {
-            ...(jsonDecode(row.read<String>('reservation_json')) as Map)
-                .cast<String, Object?>(),
-            'reservationId': row.read<String>('reservation_id'),
-            'state': row.read<String>('state'),
-            'stateVersion': row.read<String>('state') == 'held' ? 1 : 2,
-          },
-      ],
+      'stockReservations': stockReservations,
       'conflicts': [
         for (final row in conflictRows)
           {
@@ -14460,6 +14526,16 @@ class ShopDatabase extends _$ShopDatabase {
           eventDigest: reservation.reservationDigest,
           ackDigest: reservation.reservationDigest,
           conflictCode: 'reservation_digest_mismatch',
+        );
+      }
+      if (targetState == ConnectedStockReservationState.expired &&
+          now < DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch) {
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.conflict,
+          canonicalVersion: reservation.stateVersion,
+          eventDigest: null,
+          ackDigest: reservation.reservationDigest,
+          conflictCode: 'reservation_not_expired',
         );
       }
       final at = DateTime.fromMillisecondsSinceEpoch(

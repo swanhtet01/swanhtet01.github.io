@@ -857,36 +857,41 @@ class ShopConnectedSiteDatabaseReplicationReader
 
   @override
   Future<SiteSnapshotV1> readSnapshot(String clientFingerprint) async {
-    await _requireActiveClient(clientFingerprint);
-    final projections = await database.readConnectedReplicaProjectionV2(
-      tenantId: workspaceId,
-      siteId: siteId,
-    );
-    final cursorRow = await database
-        .customSelect(
-          'SELECT COALESCE(MAX(replica_sequence), 0) AS cursor '
-          'FROM shop_site_replica_event_envelopes '
-          'WHERE tenant_id = ? AND site_id = ?',
-          variables: [Variable<String>(workspaceId), Variable<String>(siteId)],
-        )
-        .getSingle();
-    final cursor = cursorRow.read<int>('cursor');
-    final unsigned = <String, Object?>{
-      'protocolVersion': connectedSiteProtocolVersion,
-      'workspaceId': workspaceId,
-      'siteId': siteId,
-      'version': 2,
-      'continuationCursor': cursor,
-      'projections': projections,
-    };
-    return SiteSnapshotV1(
-      workspaceId: workspaceId,
-      siteId: siteId,
-      version: 2,
-      continuationCursor: cursor,
-      projections: projections,
-      checkpointDigest: connectedSiteSha256(unsigned),
-    );
+    return database.transaction(() async {
+      await _requireActiveClient(clientFingerprint);
+      final projections = await database.readConnectedReplicaProjectionV2(
+        tenantId: workspaceId,
+        siteId: siteId,
+      );
+      final cursorRow = await database
+          .customSelect(
+            'SELECT COALESCE(MAX(replica_sequence), 0) AS cursor '
+            'FROM shop_site_replica_event_envelopes '
+            'WHERE tenant_id = ? AND site_id = ?',
+            variables: [
+              Variable<String>(workspaceId),
+              Variable<String>(siteId),
+            ],
+          )
+          .getSingle();
+      final cursor = cursorRow.read<int>('cursor');
+      final unsigned = <String, Object?>{
+        'protocolVersion': connectedSiteProtocolVersion,
+        'workspaceId': workspaceId,
+        'siteId': siteId,
+        'version': 2,
+        'continuationCursor': cursor,
+        'projections': projections,
+      };
+      return SiteSnapshotV1(
+        workspaceId: workspaceId,
+        siteId: siteId,
+        version: 2,
+        continuationCursor: cursor,
+        projections: projections,
+        checkpointDigest: connectedSiteSha256(unsigned),
+      );
+    });
   }
 
   Future<void> _requireActiveClient(String clientFingerprint) async {

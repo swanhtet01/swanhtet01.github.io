@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import 'shop_connected_site_attempt_store.dart';
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_stock_reservation.dart';
 import 'shop_database.dart';
 
 /// Durable, read-only client replica. It never mutates authoritative sale,
@@ -501,6 +502,20 @@ class ShopConnectedSiteReplicaStore {
       for (final item in raw) {
         if (item is! Map) throw const FormatException('connected replica row');
         final row = item.cast<String, Object?>();
+        if (kind == 'stockReservation') {
+          // A historical terminal row without its transition cannot be
+          // reconstructed from a digest. Reject it until an explicit,
+          // reviewed replica rebootstrap replaces the old evidence.
+          final reservation = ConnectedStockReservationProjectionV1.fromJson(
+            row,
+          ).reservation;
+          if (reservation.workspaceId != localWorkspaceId ||
+              reservation.siteId != localSiteId ||
+              reservation.reservationId != row[idField] ||
+              reservation.stateVersion != row[versionField]) {
+            throw const FormatException('connected replica reservation scope');
+          }
+        }
         final id = row[idField];
         final version = row[versionField];
         if (id is! String || id.isEmpty || version is! int || version < 0) {

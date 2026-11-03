@@ -11,7 +11,9 @@ import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_replica_store.dart';
+import 'package:supermega_shop/shop_connected_stock_reservation.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_staff_authorization.dart';
 
 import 'historical_shop_fixture_support.dart';
 
@@ -84,6 +86,15 @@ void main() {
             .then((row) => row.read<int>('n')),
         0,
       );
+      await expectLater(
+        store.applySnapshot(
+          snapshot: _snapshot(reservationWorkspaceId: 'workspace_other'),
+          clientFingerprint: client,
+          certificateSha256: certificate,
+          observedAtMillis: observed,
+        ),
+        throwsFormatException,
+      );
       await store.applySnapshot(
         snapshot: _snapshot(),
         clientFingerprint: client,
@@ -118,6 +129,68 @@ void main() {
         ),
         throwsStateError,
       );
+    },
+  );
+
+  test(
+    'terminal sale proof is retained but cannot create a local sale',
+    () async {
+      final store = ShopConnectedSiteReplicaStore(
+        database: database,
+        localWorkspaceId: 'workspace_1',
+        localSiteId: 'site_1',
+        localClientDeviceId: 'device_1',
+        localClientFingerprint: client,
+        localClientSigningKeyId: 'key_1',
+        approvedBindingDigest: approvedBindingDigest,
+        bindingResolver: bindingResolver,
+        runtimeEnabled: true,
+      );
+      final committed = _committedStockProjection();
+      await expectLater(
+        store.applySnapshot(
+          snapshot: _snapshot(
+            stockProjection: Map<String, Object?>.from(committed)
+              ..remove('terminalTransition'),
+          ),
+          clientFingerprint: client,
+          certificateSha256: certificate,
+          observedAtMillis: observed,
+        ),
+        throwsFormatException,
+      );
+      final changed = Map<String, Object?>.from(committed);
+      final transition = Map<String, Object?>.from(
+        changed['terminalTransition']! as Map,
+      );
+      transition['saleBinding'] = {
+        ...(transition['saleBinding']! as Map).cast<String, Object?>(),
+        'saleId': 'substituted-sale',
+      };
+      changed['terminalTransition'] = transition;
+      await expectLater(
+        store.applySnapshot(
+          snapshot: _snapshot(stockProjection: changed),
+          clientFingerprint: client,
+          certificateSha256: certificate,
+          observedAtMillis: observed,
+        ),
+        throwsFormatException,
+      );
+      await store.applySnapshot(
+        snapshot: _snapshot(stockProjection: committed),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: observed,
+      );
+      final projections = await store.readProjections(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: client,
+      );
+      expect(projections, hasLength(3));
+      expect(await database.countSales(), 0);
+      expect(await database.readReservedStockQuantity('product_1'), 0);
     },
   );
 
@@ -324,6 +397,77 @@ void main() {
     );
   });
 
+  test('terminal sale proof is required for delta and exact replay', () async {
+    final store = ShopConnectedSiteReplicaStore(
+      database: database,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
+      localClientFingerprint: client,
+      localClientSigningKeyId: 'key_1',
+      approvedBindingDigest: approvedBindingDigest,
+      bindingResolver: bindingResolver,
+      runtimeEnabled: true,
+    );
+    await store.applySnapshot(
+      snapshot: _snapshot(),
+      clientFingerprint: client,
+      certificateSha256: certificate,
+      observedAtMillis: observed,
+    );
+    final committed = _committedStockProjection();
+    final withoutProof = Map<String, Object?>.from(committed)
+      ..remove('terminalTransition');
+    SiteDeltaV1 delivery(Map<String, Object?> projection) => SiteDeltaV1(
+      workspaceId: 'workspace_1',
+      siteId: 'site_1',
+      afterCursor: 0,
+      nextCursor: 1,
+      events: [_entry(1, stockProjection: projection)],
+    );
+    await expectLater(
+      store.applyDelta(
+        delta: delivery(withoutProof),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: observed + 1,
+      ),
+      throwsFormatException,
+    );
+    expect(
+      await database
+          .customSelect(
+            'SELECT COUNT(*) AS n FROM shop_connected_replica_events',
+          )
+          .getSingle()
+          .then((row) => row.read<int>('n')),
+      0,
+    );
+    final accepted = delivery(committed);
+    await store.applyDelta(
+      delta: accepted,
+      clientFingerprint: client,
+      certificateSha256: certificate,
+      observedAtMillis: observed + 2,
+    );
+    await store.applyDelta(
+      delta: accepted,
+      clientFingerprint: client,
+      certificateSha256: certificate,
+      observedAtMillis: observed + 3,
+    );
+    expect(await database.countSales(), 0);
+    expect(
+      await database
+          .customSelect(
+            'SELECT COUNT(*) AS n FROM shop_connected_replica_events',
+          )
+          .getSingle()
+          .then((row) => row.read<int>('n')),
+      1,
+    );
+  });
+
   test('exact replay rejects a tail subset of an accepted delivery', () async {
     final store = ShopConnectedSiteReplicaStore(
       database: database,
@@ -516,7 +660,7 @@ void main() {
       runtimeEnabled: true,
     );
     await store.applySnapshot(
-      snapshot: _snapshot(),
+      snapshot: _snapshot(stockProjection: _committedStockProjection()),
       clientFingerprint: client,
       certificateSha256: certificate,
       observedAtMillis: observed,
@@ -572,6 +716,18 @@ void main() {
     final restored = ShopDatabase(NativeDatabase(file));
     addTearDown(restored.close);
     await restored.verifyConnectedReplicaEvidence();
+    final retained = await restored
+        .customSelect(
+          'SELECT payload_json FROM shop_connected_replica_projections '
+          "WHERE projection_kind = 'stockReservation'",
+        )
+        .getSingle();
+    final proof = ConnectedStockReservationProjectionV1.fromJson(
+      jsonDecode(retained.read<String>('payload_json')),
+    );
+    expect(proof.reservation.state, ConnectedStockReservationState.committed);
+    expect(proof.terminalTransition?.saleBinding?.saleId, 'sale_1');
+    expect(await restored.countSales(), 0);
   });
 
   test('v31 live database migrates to empty verified replica schema', () async {
@@ -948,7 +1104,11 @@ Future<void> _writeAuthenticatedArchive(
   await target.writeAsBytes([...header, ...box.cipherText, ...box.mac.bytes]);
 }
 
-SiteSnapshotV1 _snapshot({String workspaceId = 'workspace_1'}) {
+SiteSnapshotV1 _snapshot({
+  String workspaceId = 'workspace_1',
+  String? reservationWorkspaceId,
+  Map<String, Object?>? stockProjection,
+}) {
   final projections = <String, Object?>{
     'schema': 'supermega.shop.connected-site-projections.v2',
     'aggregates': [
@@ -969,7 +1129,8 @@ SiteSnapshotV1 _snapshot({String workspaceId = 'workspace_1'}) {
       },
     ],
     'stockReservations': [
-      {'reservationId': 'reservation_1', 'stateVersion': 1, 'state': 'held'},
+      stockProjection ??
+          _stockReservation(reservationWorkspaceId ?? workspaceId),
     ],
     'conflicts': <Object?>[],
   };
@@ -991,8 +1152,14 @@ SiteSnapshotV1 _snapshot({String workspaceId = 'workspace_1'}) {
   );
 }
 
-Map<String, Object?> _entry(int cursor) {
-  final projections = _projectionsAfterDelta();
+Map<String, Object?> _entry(
+  int cursor, {
+  Map<String, Object?>? stockProjection,
+}) {
+  final projections = Map<String, Object?>.from(_projectionsAfterDelta());
+  if (stockProjection != null) {
+    projections['stockReservations'] = [stockProjection];
+  }
   final event = <String, Object?>{
     'eventId': 'event_$cursor',
     'workspaceId': 'workspace_1',
@@ -1061,11 +1228,52 @@ Map<String, Object?> _projectionsAfterDelta() => <String, Object?>{
       'ticket': <String, Object?>{},
     },
   ],
-  'stockReservations': [
-    {'reservationId': 'reservation_1', 'stateVersion': 1, 'state': 'held'},
-  ],
+  'stockReservations': [_stockReservation('workspace_1')],
   'conflicts': <Object?>[],
 };
+
+Map<String, Object> _stockReservation(String workspaceId) =>
+    ConnectedStockReservationV1.held(
+      reservationId: 'reservation_1',
+      workspaceId: workspaceId,
+      siteId: 'site_1',
+      actorId: 'actor_1',
+      deviceId: 'device_1',
+      workflowType: ConnectedStockWorkflowType.retailCart,
+      subjectId: 'cart_1',
+      capability: ShopStaffCapability.counterSale,
+      lines: [
+        ConnectedStockReservationLineV1(productId: 'product_1', quantity: 1),
+      ],
+      issuedAt: '2026-11-01T12:00:00.000Z',
+      expiresAt: '2026-11-01T13:00:00.000Z',
+    ).toJson();
+
+Map<String, Object?> _committedStockProjection() {
+  final held = ConnectedStockReservationV1.fromJson(
+    _stockReservation('workspace_1'),
+  );
+  const committedAt = '2026-11-01T12:05:00.000Z';
+  final binding = ConnectedStockSaleBindingV1.create(
+    reservation: held,
+    saleId: 'sale_1',
+    saleCommandId: 'sale-command_1',
+    saleCommandDigest: 'a' * 64,
+    committedAt: committedAt,
+  );
+  final transition = transitionConnectedStockReservation(
+    reservation: held,
+    expectedReservationDigest: held.reservationDigest,
+    targetState: ConnectedStockReservationState.committed,
+    transitionedAt: committedAt,
+    reason: 'sale_committed',
+    saleBinding: binding,
+  );
+  return ConnectedStockReservationProjectionV1(
+    reservation: transition.after,
+    terminalTransition: transition,
+  ).toJson();
+}
 
 Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
   ShopDatabase database,

@@ -520,6 +520,56 @@ class ConnectedStockReservationTransitionV1 {
   }
 }
 
+/// The read-only replica carries the complete terminal proof, not just a
+/// terminal state and digest. A client can validate the sale binding without
+/// gaining authority to create a sale or change stock.
+class ConnectedStockReservationProjectionV1 {
+  ConnectedStockReservationProjectionV1({
+    required this.reservation,
+    this.terminalTransition,
+  }) {
+    if (reservation.state == ConnectedStockReservationState.held) {
+      if (terminalTransition != null) _invalid('unexpected_terminal_proof');
+    } else if (terminalTransition == null ||
+        canonicalConnectedSiteJson(terminalTransition!.after.toJson()) !=
+            canonicalConnectedSiteJson(reservation.toJson())) {
+      _invalid('terminal_proof_mismatch');
+    }
+  }
+
+  final ConnectedStockReservationV1 reservation;
+  final ConnectedStockReservationTransitionV1? terminalTransition;
+
+  Map<String, Object?> toJson() => {
+    ...reservation.toJson(),
+    if (terminalTransition != null)
+      'terminalTransition': terminalTransition!.toJson(),
+  };
+
+  factory ConnectedStockReservationProjectionV1.fromJson(Object? value) {
+    if (value is! Map) _invalid('projection_shape');
+    final row = <String, Object?>{};
+    for (final entry in value.entries) {
+      if (entry.key is! String) _invalid('projection_shape');
+      row[entry.key as String] = entry.value;
+    }
+    final hasProof = row.containsKey('terminalTransition');
+    final proof = row.remove('terminalTransition');
+    final reservation = ConnectedStockReservationV1.fromJson(row);
+    if (hasProof !=
+        (reservation.state != ConnectedStockReservationState.held)) {
+      _invalid('terminal_proof_presence');
+    }
+    final transition = hasProof
+        ? ConnectedStockReservationTransitionV1.fromJson(proof)
+        : null;
+    return ConnectedStockReservationProjectionV1(
+      reservation: reservation,
+      terminalTransition: transition,
+    );
+  }
+}
+
 void _validateTransitionSemantics({
   required ConnectedStockReservationV1 before,
   required ConnectedStockReservationV1 after,

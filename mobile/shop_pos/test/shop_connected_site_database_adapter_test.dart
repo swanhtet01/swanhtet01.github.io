@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -466,6 +467,43 @@ void main() {
         final released = await handler.handle(_fingerprint, release);
         expect(released.state, SiteCommandAckState.accepted);
         expect(released.canonicalVersion, 2);
+        final releasedSnapshot = await reader.readSnapshot(_fingerprint);
+        final releasedProof = ConnectedStockReservationProjectionV1.fromJson(
+          (releasedSnapshot.projections['stockReservations']! as List).single,
+        );
+        final releasedProjection = releasedProof.reservation;
+        final heldReservation = ConnectedStockReservationV1.fromJson(
+          reserve.payload['reservation'],
+        );
+        final transitionRow = await database
+            .customSelect(
+              'SELECT transition_json FROM shop_connected_stock_reservation_transitions '
+              'WHERE reservation_id = ?',
+              variables: [Variable<String>(heldReservation.reservationId)],
+            )
+            .getSingle();
+        final retainedTransition =
+            ConnectedStockReservationTransitionV1.fromJson(
+              jsonDecode(transitionRow.read<String>('transition_json')),
+            );
+        expect(
+          releasedProjection.state,
+          ConnectedStockReservationState.released,
+        );
+        expect(
+          releasedProjection.reservationDigest,
+          retainedTransition.after.reservationDigest,
+        );
+        expect(
+          releasedProof.terminalTransition!.transitionDigest,
+          retainedTransition.transitionDigest,
+        );
+        expect(
+          releasedProjection.reservationDigest,
+          isNot(heldReservation.reservationDigest),
+        );
+        expect(releasedProjection.workspaceId, _workspace);
+        expect(releasedProjection.siteId, _site);
         expect((await reader.readDelta(_fingerprint, 1)).events, hasLength(1));
         expect(await database.readReservedStockQuantity('adapter-item'), 0);
         expect(
@@ -483,6 +521,138 @@ void main() {
       }
     },
   );
+
+  test('reservation expiry waits for its exact boundary', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await _seed(database);
+      final reserve = _reserveCommand('expiry-boundary');
+      final reservation = ConnectedStockReservationV1.fromJson(
+        reserve.payload['reservation'],
+      );
+      final handler = ShopConnectedSiteDatabaseCommandHandler(
+        database: database,
+        timeAuthority: const _FixedTime(_now),
+        connectedSiteEnabled: true,
+      );
+      expect(
+        (await handler.handle(_fingerprint, reserve)).state,
+        SiteCommandAckState.accepted,
+      );
+      Future<ShopConnectedStockReservationResult> expire(int atMillis) =>
+          database.expireConnectedStockReservation(
+            tenantId: _workspace,
+            siteId: _site,
+            reservationId: reservation.reservationId,
+            expectedReservationDigest: reservation.reservationDigest,
+            operationId: 'expiry-boundary-operation',
+            timeAuthority: _FixedTime(atMillis),
+            connectedSiteEnabled: true,
+          );
+
+      final early = await expire(_now + 29999);
+      expect(
+        early.disposition,
+        ShopConnectedStockReservationDisposition.conflict,
+      );
+      expect(early.conflictCode, 'reservation_not_expired');
+      expect(await database.readReservedStockQuantity('adapter-item'), 1);
+
+      final accepted = await expire(_now + 30000);
+      expect(
+        accepted.disposition,
+        ShopConnectedStockReservationDisposition.accepted,
+      );
+      expect(
+        (await expire(_now + 30001)).disposition,
+        ShopConnectedStockReservationDisposition.replayed,
+      );
+      final projection = await database.readConnectedReplicaProjectionV2(
+        tenantId: _workspace,
+        siteId: _site,
+      );
+      final expiredProof = ConnectedStockReservationProjectionV1.fromJson(
+        (projection['stockReservations']! as List).single,
+      );
+      final expired = expiredProof.reservation;
+      expect(expired.state, ConnectedStockReservationState.expired);
+      expect(
+        expired.reservationDigest,
+        accepted.transition!.after.reservationDigest,
+      );
+      expect(
+        expiredProof.terminalTransition!.transitionDigest,
+        accepted.transition!.transitionDigest,
+      );
+      expect(await database.readReservedStockQuantity('adapter-item'), 0);
+      expect(await database.countSales(), 0);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test('snapshot cursor and projection share one SQLite epoch', () async {
+    final root = await Directory.systemTemp.createTemp('snapshot-epoch-');
+    final file = File('${root.path}/shop.sqlite');
+    final database = _PausedProjectionDatabase(file);
+    final writer = ShopDatabase(NativeDatabase(file));
+    try {
+      await database.customSelect('PRAGMA journal_mode = WAL').getSingle();
+      await _seed(database);
+      await writer.customSelect('PRAGMA journal_mode = WAL').getSingle();
+      final reserve = _reserveCommand('snapshot-race');
+      final handler = ShopConnectedSiteDatabaseCommandHandler(
+        database: database,
+        timeAuthority: const _FixedTime(_now),
+        connectedSiteEnabled: true,
+      );
+      expect(
+        (await handler.handle(_fingerprint, reserve)).state,
+        SiteCommandAckState.accepted,
+      );
+      final reader = ShopConnectedSiteDatabaseReplicationReader(
+        database: database,
+        workspaceId: _workspace,
+        siteId: _site,
+      );
+      database.pauseNextProjection = true;
+      final snapshotFuture = reader.readSnapshot(_fingerprint);
+      await database.projectionRead.future.timeout(const Duration(seconds: 30));
+      final writerHandler = ShopConnectedSiteDatabaseCommandHandler(
+        database: writer,
+        timeAuthority: const _FixedTime(_now),
+        connectedSiteEnabled: true,
+      );
+      final released = await writerHandler
+          .handle(
+            _fingerprint,
+            _releaseCommand('snapshot-race-release', reserve),
+          )
+          .timeout(const Duration(seconds: 30));
+      expect(released.state, SiteCommandAckState.accepted);
+      database.resumeProjection.complete();
+      final before = await snapshotFuture.timeout(const Duration(seconds: 30));
+      final beforeReservation = ConnectedStockReservationProjectionV1.fromJson(
+        (before.projections['stockReservations']! as List).single,
+      ).reservation;
+      expect(before.continuationCursor, 1);
+      expect(beforeReservation.state, ConnectedStockReservationState.held);
+      final after = await reader.readSnapshot(_fingerprint);
+      final afterReservation = ConnectedStockReservationProjectionV1.fromJson(
+        (after.projections['stockReservations']! as List).single,
+      ).reservation;
+      expect(after.continuationCursor, 2);
+      expect(afterReservation.state, ConnectedStockReservationState.released);
+      expect((await reader.readDelta(_fingerprint, 1)).events, hasLength(1));
+    } finally {
+      if (!database.resumeProjection.isCompleted) {
+        database.resumeProjection.complete();
+      }
+      await writer.close();
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
 
   test(
     'wrong workflow, changed replay and competing hold fail closed',
@@ -2580,6 +2750,31 @@ class _ExplodingCafeStore extends ShopCafeOrderStore {
     Map<String, CafeModifierSnapshot> modifierCatalog,
     ShopConnectedCafeProjectionContext context,
   ) => throw StateError('synthetic projector failure');
+}
+
+class _PausedProjectionDatabase extends ShopDatabase {
+  _PausedProjectionDatabase(File file) : super(NativeDatabase(file));
+
+  final projectionRead = Completer<void>();
+  final resumeProjection = Completer<void>();
+  bool pauseNextProjection = false;
+
+  @override
+  Future<Map<String, Object?>> readConnectedReplicaProjectionV2({
+    required String tenantId,
+    required String siteId,
+  }) async {
+    final projection = await super.readConnectedReplicaProjectionV2(
+      tenantId: tenantId,
+      siteId: siteId,
+    );
+    if (pauseNextProjection) {
+      pauseNextProjection = false;
+      projectionRead.complete();
+      await resumeProjection.future;
+    }
+    return projection;
+  }
 }
 
 class _FixedTime implements ShopConnectedSiteCoordinatorTimeAuthority {
