@@ -105,18 +105,23 @@ function Assert-Integer($Value, [long]$Minimum, [long]$Maximum) {
     Fail 'bootstrap_closure_inventory_invalid'
   }
 }
+function Assert-SafeRelativePath($Value, [string]$Code) {
+  if ($Value -isnot [string] -or [string]::IsNullOrWhiteSpace($Value)) { Fail $Code }
+  if ([System.IO.Path]::IsPathFullyQualified($Value)
+    -or $Value.StartsWith('/') -or $Value.StartsWith('\') -or $Value.Contains(':')
+    -or @($Value -split '[\\/]' | Where-Object {
+        $_ -in @('', '.', '..') -or $_ -match '[. ]$' -or $_ -match '[\x00-\x1f\x7f]'
+        -or $_ -match '^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)'
+      }).Count -ne 0) { Fail $Code }
+}
 function Get-ReviewedBinding($Profile, [string]$Role) {
   $matches = @($Profile.bindings | Where-Object { $_.role -eq $Role })
   if ($matches.Count -ne 1) { Fail "bootstrap_runtime_binding_missing_$Role" }
   $binding = $matches[0]
   Assert-BoundedId $binding.bindingId
   Assert-BoundedId $binding.sourceId
-  if ($binding.relativePath -isnot [string] -or [string]::IsNullOrWhiteSpace($binding.relativePath)
-    -or [System.IO.Path]::IsPathFullyQualified($binding.relativePath)
-    -or $binding.relativePath.StartsWith('/') -or $binding.relativePath.StartsWith('\')
-    -or $binding.relativePath.Contains(':')
-    -or @($binding.relativePath -split '[\\/]' | Where-Object { $_ -in @('', '.', '..') }).Count -ne 0
-    -or $binding.bytes -lt 1 -or $binding.sha256 -notmatch '^[0-9a-f]{64}$'
+  Assert-SafeRelativePath $binding.relativePath "bootstrap_runtime_binding_invalid_$Role"
+  if ($binding.bytes -lt 1 -or $binding.sha256 -notmatch '^[0-9a-f]{64}$'
     -or @($binding.uses) -notcontains 'executed') {
     Fail "bootstrap_runtime_binding_invalid_$Role"
   }
@@ -385,12 +390,8 @@ try {
       Assert-BoundedId $file.bindingId
       Assert-BoundedId $file.sourceId
       Assert-Integer $file.bytes 1 1099511627776
-      if ($file.relativePath -isnot [string] -or [string]::IsNullOrWhiteSpace($file.relativePath)
-        -or [System.IO.Path]::IsPathFullyQualified($file.relativePath)
-        -or $file.relativePath.StartsWith('/') -or $file.relativePath.StartsWith('\')
-        -or $file.relativePath.Contains(':')
-        -or @($file.relativePath -split '[\\/]' | Where-Object { $_ -in @('', '.', '..') }).Count -ne 0
-        -or $file.sha256 -notmatch '^[0-9a-f]{64}$'
+      Assert-SafeRelativePath $file.relativePath 'bootstrap_closure_inventory_invalid'
+      if ($file.sha256 -notmatch '^[0-9a-f]{64}$'
         -or @($file.uses).Count -lt 1
         -or @($file.uses | Sort-Object -Unique).Count -ne @($file.uses).Count
         -or @($file.uses | Where-Object { $_ -notin @('executed', 'imported', 'loaded') }).Count -ne 0) {

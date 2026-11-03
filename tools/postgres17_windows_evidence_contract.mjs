@@ -14,9 +14,11 @@ function exact(value, keys) {
 }
 function integer(value, min, max) { return Number.isSafeInteger(value) && value >= min && value <= max }
 function safeRelative(value) {
-  return typeof value === 'string' && value.length > 0 && !isAbsolute(value)
-    && !value.startsWith('/') && !value.startsWith('\\') && !value.includes(':')
-    && !value.split(/[\\/]/).some((part) => ['', '.', '..'].includes(part))
+  if (typeof value !== 'string' || !value || isAbsolute(value)
+    || value.startsWith('/') || value.startsWith('\\') || value.includes(':')) return false
+  return value.split(/[\\/]/).every((part) => part && part !== '.' && part !== '..'
+    && !/[. ]$/.test(part) && !/[\x00-\x1f\x7f]/.test(part)
+    && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))
 }
 function safeJson(bytes) {
   if (bytes.length < 2 || bytes.length > 1024 * 1024) fail('bootstrap_evidence_size_invalid')
@@ -121,6 +123,21 @@ export function validateSanitizedClosure(closure, expectedSha) {
       || !ID.test(process.imageBindingId || '') || !ID.test(process.sourceId || '')
       || process.exitCode !== 0) fail('bootstrap_closure_inventory_invalid')
   }
+  const processesBySequence = new Map()
+  let roots = 0
+  for (const process of closure.processes) {
+    if (processesBySequence.has(process.sequence)) fail('bootstrap_closure_process_graph_invalid')
+    processesBySequence.set(process.sequence, process)
+    if (process.parentSequence === null) roots++
+  }
+  if (roots !== 1) fail('bootstrap_closure_process_graph_invalid')
+  for (const process of closure.processes) {
+    if (process.parentSequence !== null
+      && (!processesBySequence.has(process.parentSequence)
+        || process.parentSequence >= process.sequence)) {
+      fail('bootstrap_closure_process_graph_invalid')
+    }
+  }
   for (const file of closure.runtimeFiles) {
     if (!exact(file, ['bindingId', 'sourceId', 'relativePath', 'bytes', 'sha256', 'uses'])
       || !ID.test(file.bindingId || '') || !ID.test(file.sourceId || '')
@@ -128,6 +145,31 @@ export function validateSanitizedClosure(closure, expectedSha) {
       || !SHA256.test(file.sha256 || '') || !Array.isArray(file.uses) || file.uses.length < 1
       || new Set(file.uses).size !== file.uses.length || file.uses.some((use) => !USES.has(use))) {
       fail('bootstrap_closure_inventory_invalid')
+    }
+  }
+  const filesByBinding = new Map()
+  const paths = new Set()
+  for (const file of closure.runtimeFiles) {
+    const binding = `${file.bindingId}\0${file.sourceId}`
+    const path = file.relativePath.replaceAll('\\', '/').toLowerCase()
+    if (filesByBinding.has(binding) || paths.has(path)) {
+      fail('bootstrap_closure_runtime_binding_ambiguous')
+    }
+    filesByBinding.set(binding, file)
+    paths.add(path)
+  }
+  const executedBindings = new Set()
+  for (const process of closure.processes) {
+    const binding = `${process.imageBindingId}\0${process.sourceId}`
+    const file = filesByBinding.get(binding)
+    if (!file || !file.uses.includes('executed')) {
+      fail('bootstrap_closure_process_image_unbound')
+    }
+    executedBindings.add(binding)
+  }
+  for (const [binding, file] of filesByBinding) {
+    if (file.uses.includes('executed') && !executedBindings.has(binding)) {
+      fail('bootstrap_closure_process_image_unobserved')
     }
   }
   for (const module of closure.systemModules) {

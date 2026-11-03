@@ -251,6 +251,12 @@ test('missing source, duplicate binding ID, and case-folded path collision fail 
     const collision = structuredClone(input.profile)
     collision.bindings[1].relativePath = collision.bindings[0].relativePath.toUpperCase()
     assert.throws(() => inspectPostgres17ToolchainProfile(collision), /toolchain_path_duplicate/)
+    for (const path of ['bin/postgres.exe.', 'bin/postgres.exe ', 'bin/CON.txt',
+      'bin/no\u0000de.exe']) {
+      const alias = structuredClone(input.profile)
+      alias.bindings[0].relativePath = path
+      assert.throws(() => inspectPostgres17ToolchainProfile(alias), /toolchain_profile_invalid/)
+    }
   } finally { await rm(input.root, { recursive: true, force: true }) }
 })
 

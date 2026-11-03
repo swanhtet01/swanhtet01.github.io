@@ -196,6 +196,9 @@ test('PowerShell bootstrap separates non-executing capture from reviewed full-re
   assert.equal(source.includes('Get-Process).Modules'), false)
   assert.equal(source.includes('Get-FileHash'), false)
   assert.equal(source.includes('Start-Service'), false)
+  assert.ok(source.includes("Assert-SafeRelativePath $file.relativePath 'bootstrap_closure_inventory_invalid'"))
+  assert.ok(source.includes("$_ -match '[. ]$'"))
+  assert.ok(source.includes('com[1-9]|lpt[1-9]'))
 })
 
 test('official registry contract requires official metadata and independent approvals', () => {
@@ -733,6 +736,10 @@ test('sanitized closure schema rejects omissions, wrong types, surplus fields, a
     (value) => { value.runtimeFiles[0].relativePath = '\\?\\C:\\node.exe' },
     (value) => { value.runtimeFiles[0].relativePath = 'C:\\node.exe' },
     (value) => { value.runtimeFiles[0].relativePath = '../node.exe' },
+    (value) => { value.runtimeFiles[0].relativePath = 'node/node.exe.' },
+    (value) => { value.runtimeFiles[0].relativePath = 'node/node.exe ' },
+    (value) => { value.runtimeFiles[0].relativePath = 'node/CON.txt' },
+    (value) => { value.runtimeFiles[0].relativePath = 'node/no\u0000de.exe' },
     (value) => { delete value.sourceIdentity },
     (value) => { value.sourceIdentity.head = 'd'.repeat(40) },
     (value) => { value.sourceIdentity.tree = 'not-a-tree' },
@@ -744,7 +751,34 @@ test('sanitized closure schema rejects omissions, wrong types, surplus fields, a
   ]
   for (const mutate of mutations) {
     const changed = structuredClone(valid); mutate(changed)
-    assert.throws(() => validateSanitizedClosure(changed, valid.exactSha), /closure_inventory_invalid/)
+    assert.throws(() => validateSanitizedClosure(changed, valid.exactSha), /bootstrap_closure_/)
+  }
+})
+
+test('closure process graph and executed-image inventory reject fabricated ancestry', () => {
+  const valid = closureFixture()
+  const cases = [
+    [(value) => { value.processes[1].sequence = 0 }, 'process_graph_invalid'],
+    [(value) => { value.processes[1].parentSequence = null }, 'process_graph_invalid'],
+    [(value) => { value.processes[1].parentSequence = 7 }, 'process_graph_invalid'],
+    [(value) => { value.processes[0].sequence = 2 }, 'process_graph_invalid'],
+    [(value) => { value.processes[0].imageBindingId = 'other' }, 'process_image_unbound'],
+    [(value) => { value.runtimeFiles[0].uses = ['loaded'] }, 'process_image_unbound'],
+    [(value) => { value.runtimeFiles[1].bindingId = 'node-binding';
+      value.runtimeFiles[1].sourceId = 'node-source' }, 'runtime_binding_ambiguous'],
+    [(value) => { value.runtimeFiles[1].relativePath = 'NODE\\NODE.EXE' },
+      'runtime_binding_ambiguous'],
+    [(value) => {
+      value.runtimeFiles.push({ bindingId: 'orphan', sourceId: 'orphan-source',
+        relativePath: 'orphan.exe', bytes: 10, sha256: 'a'.repeat(64), uses: ['executed'] })
+      value.runtimeFileCount++
+    }, 'process_image_unobserved'],
+  ]
+  for (const [mutate, reason] of cases) {
+    const changed = structuredClone(valid)
+    mutate(changed)
+    assert.throws(() => validateSanitizedClosure(changed, valid.exactSha),
+      new RegExp(`bootstrap_closure_${reason}`), reason)
   }
 })
 

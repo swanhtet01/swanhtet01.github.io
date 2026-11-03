@@ -97,11 +97,11 @@ function hasExactKeys(value, required, optional = []) {
 }
 
 function safeRelativePath(value) {
-  return typeof value === 'string'
-    && value.length > 0
-    && !isAbsolute(value)
-    && !value.split(/[\\/]/).includes('..')
-    && !value.includes(':')
+  if (typeof value !== 'string' || !value || isAbsolute(value)
+    || value.startsWith('/') || value.startsWith('\\') || value.includes(':')) return false
+  return value.split(/[\\/]/).every((part) => part && part !== '.' && part !== '..'
+    && !/[. ]$/.test(part) && !/[\x00-\x1f\x7f]/.test(part)
+    && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))
 }
 
 function exactBinding(binding) {
