@@ -1,6 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:cryptography/cryptography.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 
 import 'shop_connected_site_cloud_feed_contract.dart';
 import 'shop_connected_site_contracts.dart';
@@ -148,16 +149,20 @@ class ConnectedCloudFeedPinnedIssuerVerifier {
   final Map<String, List<int>> _keys;
 
   Future<void> verify(ConnectedCloudFeedProofV1 proof) async {
+    verifySync(proof);
+  }
+
+  /// The same raw Ed25519 check can be used by the synchronous backup reader.
+  /// This never accepts an issuer key from the signed response or database.
+  void verifySync(ConnectedCloudFeedProofV1 proof) {
     final key = _keys[proof.issuerKeyId];
     if (key == null) {
       throw StateError('connected_cloud_feed_issuer_unavailable');
     }
-    final valid = await Ed25519().verify(
-      utf8.encode(proof.unsignedBytes),
-      signature: Signature(
-        proof.signatureBytes,
-        publicKey: SimplePublicKey(key, type: KeyPairType.ed25519),
-      ),
+    final valid = JWTAlgorithm.EdDSA.verify(
+      EdDSAPublicKey(key),
+      Uint8List.fromList(utf8.encode(proof.unsignedBytes)),
+      Uint8List.fromList(proof.signatureBytes),
     );
     if (!valid) {
       throw const FormatException('connected_cloud_feed_signature_invalid');

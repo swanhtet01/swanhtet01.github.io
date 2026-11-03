@@ -45,6 +45,9 @@ dependencies:
   ffi: 2.2.0
   crypto: 3.0.7
   cryptography: 2.9.0
+  # The locked EdDSA algorithm exposes synchronous raw-signature verification
+  # for the fail-closed SQLite backup verifier; no JWT or secret key is used.
+  dart_jsonwebtoken: 3.4.1
   sqlite3: 3.5.2
   network_info_plus: 8.2.2
   unified_esc_pos_printer: 3.4.0

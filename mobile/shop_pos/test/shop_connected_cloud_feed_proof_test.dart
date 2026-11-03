@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_proof.dart';
 import 'package:supermega_shop/shop_connected_site_cloud_feed_contract.dart';
@@ -99,6 +101,25 @@ Future<String> _signed(
 }
 
 void main() {
+  test('synchronous EdDSA matches RFC 8032 empty-message vector', () {
+    List<int> hex(String value) => [
+      for (var index = 0; index < value.length; index += 2)
+        int.parse(value.substring(index, index + 2), radix: 16),
+    ];
+    final key = EdDSAPublicKey(
+      hex('d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a'),
+    );
+    final signature = Uint8List.fromList(
+      hex(
+        'e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155'
+        '5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b',
+      ),
+    );
+    expect(JWTAlgorithm.EdDSA.verify(key, Uint8List(0), signature), isTrue);
+    signature[0] ^= 1;
+    expect(JWTAlgorithm.EdDSA.verify(key, Uint8List(0), signature), isFalse);
+  });
+
   test('pinned issuer authenticates exact empty page and request', () async {
     final keyPair = await Ed25519().newKeyPairFromSeed(List.filled(32, 1));
     final publicKey = await keyPair.extractPublicKey();
@@ -182,4 +203,65 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test(
+    'synchronous archive verifier agrees with Ed25519 on hostile bytes',
+    () async {
+      final keyPair = await Ed25519().newKeyPairFromSeed(List.filled(32, 5));
+      final publicKey = await keyPair.extractPublicKey();
+      final page = _page();
+      final signed = await _signed(_unsignedProof(page), keyPair);
+      final verifier = ConnectedCloudFeedPinnedIssuerVerifier({
+        'issuer-1': publicKey.bytes,
+      });
+
+      ConnectedCloudFeedProofV1 parse(String bytes) =>
+          ConnectedCloudFeedProofV1.parse(
+            canonicalBytes: bytes,
+            page: page,
+            expected: _expected,
+            requestNonce: _nonce,
+            actorRole: 'manager',
+            trustedNowMillis: 1500,
+          );
+
+      final valid = parse(signed);
+      verifier.verifySync(valid);
+      expect(
+        await Ed25519().verify(
+          utf8.encode(valid.unsignedBytes),
+          signature: Signature(valid.signatureBytes, publicKey: publicKey),
+        ),
+        isTrue,
+      );
+
+      final decoded = Map<String, Object?>.from(jsonDecode(signed) as Map);
+      final signature = base64Url.decode('${decoded['signature']}==');
+      for (final hostile in <List<int>>[
+        [...signature]..[0] ^= 1,
+        [...signature]..[63] = 255,
+        List<int>.filled(64, 0),
+      ]) {
+        decoded['signature'] = base64Url.encode(hostile).replaceAll('=', '');
+        final altered = parse(canonicalConnectedSiteJson(decoded));
+        expect(() => verifier.verifySync(altered), throwsFormatException);
+        expect(
+          await Ed25519().verify(
+            utf8.encode(altered.unsignedBytes),
+            signature: Signature(hostile, publicKey: publicKey),
+          ),
+          isFalse,
+        );
+      }
+      final wrongKey = await Ed25519()
+          .newKeyPairFromSeed(List.filled(32, 6))
+          .then((pair) => pair.extractPublicKey());
+      expect(
+        () =>
+            ConnectedCloudFeedPinnedIssuerVerifier({'issuer-1': wrongKey.bytes})
+                .verifySync(valid),
+        throwsFormatException,
+      );
+    },
+  );
 }
