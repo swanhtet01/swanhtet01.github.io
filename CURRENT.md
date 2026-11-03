@@ -1,9 +1,39 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 20:20 UTC
+- Last verified: 2026-11-03 20:33 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 20:33 UTC exact-head PG17 lock-test correction
+
+- **Published draft PR #752:** guarded non-force fast-forward from
+  `611bdfc00181860422089274d6aa0a265b61712b` to
+  `07b12e5b796dee325fcfac9c853cbf59415c5644` succeeded; remote readback
+  matched. Previous Native run `41699288011` was terminal **SUCCESS 6/6**.
+  New exact-head Native run `41713099835` is **IN PROGRESS** and its public
+  head must remain fixed while useful jobs run. Exact-head App run
+  `41713092081` is terminal **FAIL** at the opt-in disposable-PG17 test:
+  four pre-existing cases **PASS**, new signer/revocation case **ERROR**.
+  App setup, PostgreSQL 17 provision and canonical API contracts passed;
+  later App stages were skipped, not passed.
+- **PASS (private test-only correction):** implementation
+  `489ea4318ac6e9c5e84a17ab7d532254cccd2ecb`, tree
+  `da756c18d7ca5dd184f1b3775b8b7f4261d271b3`, one-path patch SHA-256
+  `b1a04853148710cc254d9e7eada148ec746d78e08e00d19e70f75947dbff1ffc`.
+  The new PG test tried to advance `connected_sites.revocation_generation` on
+  its synthetic enabled site; the production authority trigger correctly
+  rejected that invalid transition. The test now uses the permitted
+  active-to-revoked device-status transition, preserving the read-locked
+  revocation race, failed-seal lock-release and subsequent denial checks.
+  Local focused Python suite **25/25 PASS**, five real-PG17 cases **SKIPPED**;
+  compilation and diff checks **PASS**. Independent read-only review
+  **ACCEPT**. No production schema, verifier or authorization gate changed.
+- **NOT RUN / BLOCKED:** the corrected PG17 race must run on a later exact
+  hosted head; no local PG17 binary exists. The new Native run is not yet
+  terminal. Mounted TLS ingress, production signer custody, installed
+  two-device sync, PostgreSQL Windows rehearsal, dependency/security gates,
+  signing and merchant acceptance remain open; connected mode stays off.
 
 ## 2026-11-03 20:20 UTC cumulative v41 feed CI candidate
 
