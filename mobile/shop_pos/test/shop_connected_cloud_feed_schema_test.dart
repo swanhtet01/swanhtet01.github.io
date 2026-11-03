@@ -3,17 +3,830 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_backup.dart';
+import 'package:supermega_shop/shop_connected_cloud_feed_proof.dart';
+import 'package:supermega_shop/shop_connected_cloud_feed_read_request.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_connected_site_cloud_feed_contract.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_authority_store.dart';
+import 'package:supermega_shop/shop_connected_site_enrollment_store.dart';
+import 'package:supermega_shop/shop_connected_site_reconciliation.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_client_store.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_stream.dart';
+import 'package:supermega_shop/shop_offline_staff_lease.dart';
+import 'package:supermega_shop/shop_staff_authorization.dart';
+import 'package:supermega_shop/shop_site_coordinator.dart';
 
 import 'historical_shop_fixture_support.dart';
 
 void main() {
+  test('v41 signed historical page stays closed after later revocation', () async {
+    const now = 1800000001000;
+    const workspace = 'workspace_v41_fixture';
+    const site = 'site_v41_fixture';
+    const coordinator = 'counter_v41_fixture';
+    const device = 'device_v41_fixture';
+    const nonce = 'pairing_nonce_v41_fixture_0001';
+    final root = await Directory.systemTemp.createTemp('shop-v41-signed-v25-');
+    addTearDown(() => root.delete(recursive: true));
+    final file = File('${root.path}/shop.sqlite');
+    final ownerPair = await Ed25519().newKeyPairFromSeed(List.filled(32, 17));
+    final clientPair = await Ed25519().newKeyPairFromSeed(List.filled(32, 18));
+    final ownerKey = (await ownerPair.extractPublicKey()).bytes;
+    final clientKey = (await clientPair.extractPublicKey()).bytes;
+    final fingerprint = crypto.sha256.convert(clientKey).toString();
+    var clock = now;
+    var database = ShopDatabase(NativeDatabase(file));
+    var store = ShopConnectedSiteEnrollmentStore(
+      database: database,
+      nowMillis: () => clock,
+    );
+    await store.registerPairingNonce(
+      tenantId: workspace,
+      siteId: site,
+      coordinatorDeviceId: coordinator,
+      nonce: nonce,
+      issuedAtMillis: now - 2000,
+      expiresAtMillis: now + 60000,
+    );
+    expect(
+      await store.consumeAndCreatePending(
+        PairingNonceClaim(
+          workspaceId: workspace,
+          siteId: site,
+          coordinatorDeviceId: coordinator,
+          nonce: nonce,
+          clientFingerprint: fingerprint,
+          clientPublicKey: base64Url.encode(clientKey).replaceAll('=', ''),
+          keyAlgorithm: 'ed25519',
+          observedAt: DateTime.fromMillisecondsSinceEpoch(
+            now - 1000,
+            isUtc: true,
+          ),
+          expiresAt: DateTime.fromMillisecondsSinceEpoch(
+            now + 60000,
+            isUtc: true,
+          ),
+        ),
+      ),
+      isTrue,
+    );
+    Future<ShopOwnerEnrollmentEvidenceV1> signedEvidence({
+      required ShopOwnerEnrollmentAction action,
+      required int generation,
+      required int observedAt,
+    }) async {
+      final placeholder = ShopOwnerEnrollmentEvidenceV1(
+        action: action,
+        tenantId: workspace,
+        siteId: site,
+        coordinatorDeviceId: coordinator,
+        deviceId: device,
+        clientFingerprint: fingerprint,
+        sessionGeneration: generation,
+        observedAtMillis: observedAt,
+        authorityKeyId: 'owner_fixture',
+        signature: base64Url
+            .encode(List<int>.filled(64, 0))
+            .replaceAll('=', ''),
+        evidenceDigest: connectedSiteSha256({
+          'schema': 'supermega.shop.owner-enrollment-evidence.v1',
+          'action': action.name,
+          'tenantId': workspace,
+          'siteId': site,
+          'coordinatorDeviceId': coordinator,
+          'deviceId': device,
+          'clientFingerprint': fingerprint,
+          'sessionGeneration': generation,
+          'observedAtMillis': observedAt,
+          'authorityKeyId': 'owner_fixture',
+        }),
+      );
+      final signature = await Ed25519().sign(
+        utf8.encode(canonicalConnectedSiteJson(placeholder.signingPayload)),
+        keyPair: ownerPair,
+      );
+      return ShopOwnerEnrollmentEvidenceV1(
+        action: action,
+        tenantId: workspace,
+        siteId: site,
+        coordinatorDeviceId: coordinator,
+        deviceId: device,
+        clientFingerprint: fingerprint,
+        sessionGeneration: generation,
+        observedAtMillis: observedAt,
+        authorityKeyId: 'owner_fixture',
+        signature: base64Url.encode(signature.bytes).replaceAll('=', ''),
+        evidenceDigest: placeholder.evidenceDigest,
+      );
+    }
+
+    final verifier = _PinnedV41OwnerVerifier(
+      ownerKey: ownerKey,
+      workspace: workspace,
+      site: site,
+      coordinator: coordinator,
+      device: device,
+      fingerprint: fingerprint,
+    );
+    final approval = await signedEvidence(
+      action: ShopOwnerEnrollmentAction.approve,
+      generation: 1,
+      observedAt: now - 800,
+    );
+    await store.importOwnerEvidence(approval, verifier: verifier);
+    await database.customInsert(
+      'INSERT INTO shop_site_revocation_observations '
+      '(tenant_id, site_id, generation, observed_at_millis, source_digest) '
+      'VALUES (?, ?, 1, ?, ?)',
+      variables: [
+        const Variable<String>(workspace),
+        const Variable<String>(site),
+        const Variable<int>(now - 600),
+        Variable<String>(connectedSiteSha256({'fixture': 'revocation-origin'})),
+      ],
+    );
+    final authorityPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 19),
+    );
+    final authorityPublic = (await authorityPair.extractPublicKey()).bytes;
+    final authorityUnsigned = <String, Object?>{
+      'authorityEventId': 'authority_fixture_1',
+      'authoritySequence': 1,
+      'configurationSnapshot': {
+        'businessProfile': {
+          'schemaId': 'supermega-business-profile',
+          'templateId': 'retail',
+          'templateVersion': 1,
+        },
+        'catalogReference': {
+          'catalogDigest': connectedSiteSha256({'catalog': 'fixture'}),
+          'catalogVersion': 1,
+        },
+        'configurationVersion': 1,
+      },
+      'issuedAtMillis': now - 500,
+      'issuerKeyId': 'authority_fixture',
+      'membershipSnapshot': {
+        'members': [
+          {
+            'actorId': 'actor_fixture',
+            'capabilities': ['managementRead'],
+            'role': 'manager',
+            'sessionGeneration': 1,
+          },
+        ],
+        'revocationGeneration': 1,
+      },
+      'previousAuthorityDigest': null,
+      'protocolVersion': 1,
+      'schemaId': 'ConnectedSiteAuthorityPayloadV1',
+      'siteId': site,
+      'workspaceId': workspace,
+    };
+    final authorityBytes = canonicalConnectedSiteJson({
+      ...authorityUnsigned,
+      'payloadDigest': connectedSiteSha256(authorityUnsigned),
+    });
+    Future<String> authoritySign(String bytes) async => base64Url
+        .encode(
+          (await Ed25519().sign(
+            utf8.encode(bytes),
+            keyPair: authorityPair,
+          )).bytes,
+        )
+        .replaceAll('=', '');
+    final authoritySignature = await authoritySign(authorityBytes);
+    final authorityPayload = ConnectedSiteAuthorityPayloadV1.parse(
+      canonicalBytes: authorityBytes,
+      signature: authoritySignature,
+    );
+    final checkpointUnsigned = <String, Object?>{
+      'chainDigest': connectedSiteSha256([
+        {
+          'authoritySequence': 1,
+          'payloadDigest': authorityPayload.payloadDigest,
+          'signatureDigest': crypto.sha256
+              .convert(utf8.encode(authoritySignature))
+              .toString(),
+        },
+      ]),
+      'deviceId': device,
+      'firstAuthoritySequence': 1,
+      'issuedAtMillis': now - 400,
+      'issuerKeyId': 'authority_fixture',
+      'lastAuthoritySequence': 1,
+      'payloads': [
+        {
+          'canonicalPayloadBytes': authorityBytes,
+          'signature': authoritySignature,
+        },
+      ],
+      'protocolVersion': 1,
+      'schemaId': ConnectedSiteAuthorityCheckpointV1.schemaId,
+      'siteId': site,
+      'workspaceId': workspace,
+    };
+    final checkpointBytes = canonicalConnectedSiteJson({
+      ...checkpointUnsigned,
+      'checkpointDigest': connectedSiteSha256(checkpointUnsigned),
+    });
+    await ShopConnectedSiteAuthorityPayloadStore(
+      database: database,
+      nowMillis: () => clock,
+      verifier: PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(
+        publicKeys: {'authority_fixture': authorityPublic},
+      ),
+      runtimeEnabled: true,
+    ).applyCheckpoint(
+      ConnectedSiteScope(
+        workspaceId: workspace,
+        siteId: site,
+        deviceId: device,
+      ),
+      canonicalCheckpointBytes: checkpointBytes,
+      signature: await authoritySign(checkpointBytes),
+    );
+    final leasePair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 20),
+    );
+    final leaseUnsigned = <String, Object>{
+      'protocolVersion': 1,
+      'leaseId': 'lease_v41_fixture',
+      'workspaceId': workspace,
+      'siteId': site,
+      'actorId': 'actor_fixture',
+      'role': 'manager',
+      'capabilities': ['managementRead'],
+      'deviceId': device,
+      'sessionGeneration': 1,
+      'revocationGeneration': 1,
+      'issuedAt': DateTime.fromMillisecondsSinceEpoch(
+        now - 300,
+        isUtc: true,
+      ).toIso8601String(),
+      'expiresAt': DateTime.fromMillisecondsSinceEpoch(
+        now + 60000,
+        isUtc: true,
+      ).toIso8601String(),
+      'issuerKeyId': 'lease_fixture',
+    };
+    final lease = OfflineStaffLeaseV1.fromJson({
+      ...leaseUnsigned,
+      'payloadDigest': connectedSiteSha256(leaseUnsigned),
+      'signature': base64Url
+          .encode(
+            (await Ed25519().sign(
+              utf8.encode(canonicalConnectedSiteJson(leaseUnsigned)),
+              keyPair: leasePair,
+            )).bytes,
+          )
+          .replaceAll('=', ''),
+    });
+    await database.customInsert(
+      'INSERT INTO shop_site_offline_leases '
+      '(lease_id, tenant_id, site_id, actor_id, actor_role, capabilities_json, '
+      'device_id, session_generation, revocation_generation, issued_at_millis, '
+      'expires_at_millis, key_id, payload_digest, signature) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(lease.leaseId),
+        Variable<String>(workspace),
+        Variable<String>(site),
+        Variable<String>(lease.actorId),
+        Variable<String>(lease.role),
+        Variable<String>(canonicalConnectedSiteJson(lease.capabilities)),
+        Variable<String>(device),
+        const Variable<int>(1),
+        const Variable<int>(1),
+        Variable<int>(lease.issuedAtMillis),
+        Variable<int>(lease.expiresAtMillis),
+        Variable<String>(lease.issuerKeyId),
+        Variable<String>(lease.payloadDigest),
+        Variable<String>(lease.signature),
+      ],
+    );
+    final issuerEvidence = canonicalConnectedSiteJson({
+      'contract': 'supermega.test.lease-issuer-evidence.v1',
+      'issuer': 'lease_fixture',
+    });
+    await database.retainConnectedLeasePayloadV34(
+      lease,
+      retainedAtMillis: now - 200,
+      issuerEvidenceDigest: connectedSiteSha256(jsonDecode(issuerEvidence)),
+      issuerEvidenceJson: issuerEvidence,
+    );
+    final timePair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 21),
+    );
+    final timeKey = (await timePair.extractPublicKey()).bytes;
+    ConnectedTrustedTimeStreamEntryV2 timeEntry(String signature) =>
+        ConnectedTrustedTimeStreamEntryV2(
+          workspaceId: workspace,
+          siteId: site,
+          coordinatorDeviceId: coordinator,
+          clientDeviceId: device,
+          clientFingerprint: fingerprint,
+          sessionGeneration: 1,
+          coordinatorBindingDigest: 'c' * 64,
+          coordinatorBindingGeneration: 1,
+          authorityKeyId: 'time_fixture',
+          authorityKeyFingerprint: crypto.sha256.convert(timeKey).toString(),
+          authorityKeyGeneration: 1,
+          authorityEpoch: 1,
+          authoritySequence: 1,
+          previousEntryDigest: null,
+          kind: ConnectedTrustedTimeStreamEntryKind.time,
+          observedAtMillis: now - 1000,
+          validUntilMillis: now + 60000,
+          authoritySignature: signature,
+        );
+    final zeroSignature = base64Url
+        .encode(List<int>.filled(64, 0))
+        .replaceAll('=', '');
+    final unsignedTime = timeEntry(zeroSignature);
+    final signedTime = timeEntry(
+      base64Url
+          .encode(
+            (await Ed25519().sign(
+              utf8.encode(unsignedTime.canonicalSigningPayload),
+              keyPair: timePair,
+            )).bytes,
+          )
+          .replaceAll('=', ''),
+    );
+    ConnectedTrustedTimeStreamAckV1 timeAck(String signature) =>
+        ConnectedTrustedTimeStreamAckV1(
+          workspaceId: workspace,
+          siteId: site,
+          coordinatorDeviceId: coordinator,
+          clientDeviceId: device,
+          clientFingerprint: fingerprint,
+          clientSigningKeyId: fingerprint,
+          sessionGeneration: 1,
+          coordinatorBindingDigest: 'c' * 64,
+          coordinatorBindingGeneration: 1,
+          authorityKeyGeneration: 1,
+          authorityEpoch: 1,
+          authoritySequence: 1,
+          entryDigest: signedTime.entryDigest,
+          resultingHeadDigest: signedTime.entryDigest,
+          bootSessionId: 'b' * 64,
+          acknowledgedAtMonotonicMillis: 7000,
+          clientSignature: signature,
+        );
+    final unsignedAck = timeAck(zeroSignature);
+    final signedAck = timeAck(
+      base64Url
+          .encode(
+            (await Ed25519().sign(
+              utf8.encode(unsignedAck.canonicalSigningPayload),
+              keyPair: clientPair,
+            )).bytes,
+          )
+          .replaceAll('=', ''),
+    );
+    final timeHead = await ShopConnectedTrustedTimeClientStore(
+      database,
+      enabled: true,
+    ).persist(entry: signedTime, acknowledgement: signedAck);
+    expect(
+      verifyRetainedTrustedTimeSampleV39Sync(
+        entryJson: signedTime.canonicalJson,
+        ackJson: signedAck.canonicalJson,
+        entryDigest: signedTime.entryDigest,
+        ackDigest: signedAck.ackDigest,
+        headDigest: timeHead.headDigest,
+        workspaceId: workspace,
+        siteId: site,
+        coordinatorDeviceId: coordinator,
+        deviceId: device,
+        clientFingerprint: fingerprint,
+        clientSigningKeyId: fingerprint,
+        sessionGeneration: 1,
+        coordinatorBindingDigest: 'c' * 64,
+        coordinatorBindingGeneration: 1,
+        authorityKeyId: 'time_fixture',
+        authorityKeyGeneration: 1,
+        authorityEpoch: 1,
+        bootSessionId: 'b' * 64,
+        sampleMonotonicMillis: 8000,
+        trustedNowMillis: now,
+        pinnedAuthorityKeys: {'time_fixture': timeKey},
+        pinnedClientKeys: {fingerprint: clientKey},
+      ),
+      isTrue,
+    );
+    await database.verifyReadyForUse();
+    await database.close();
+    database = ShopDatabase(NativeDatabase(file));
+    await database.verifyReadyForUse();
+    final enrolledAt = await database
+        .customSelect(
+          'SELECT enrolled_at_millis FROM shop_site_devices WHERE device_id = ?',
+          variables: [Variable<String>(device)],
+        )
+        .getSingle();
+    expect(
+      enrolledAt.read<int>('enrolled_at_millis'),
+      approval.observedAtMillis,
+    );
+    expect(
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+      returnsNormally,
+    );
+    clock = now + 500;
+    store = ShopConnectedSiteEnrollmentStore(
+      database: database,
+      nowMillis: () => clock,
+    );
+    final revocation = await signedEvidence(
+      action: ShopOwnerEnrollmentAction.revoke,
+      generation: 2,
+      observedAt: clock,
+    );
+    await store.importOwnerEvidence(revocation, verifier: verifier);
+    await database.verifyReadyForUse();
+    await database.close();
+    expect(
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+      returnsNormally,
+    );
+    database = ShopDatabase(NativeDatabase(file));
+    await database.verifyReadyForUse();
+    final cloudPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 22),
+    );
+    final feedPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.filled(32, 23),
+    );
+    Future<String> signFields(
+      Map<String, Object?> fields,
+      SimpleKeyPair pair,
+    ) async => base64Url
+        .encode(
+          (await Ed25519().sign(
+            utf8.encode(canonicalConnectedSiteJson(fields)),
+            keyPair: pair,
+          )).bytes,
+        )
+        .replaceAll('=', '');
+    final cloudApprovalUnsigned = <String, Object?>{
+      'contract': 'supermega.connected-cloud-device-key-approval.v1',
+      'purpose': 'connected-site-event-read.v1',
+      'workspaceId': workspace,
+      'siteId': site,
+      'deviceId': device,
+      'signingKeyId': fingerprint,
+      'publicKey': base64Url.encode(clientKey).replaceAll('=', ''),
+      'clientFingerprint': fingerprint,
+      'enrollmentEvidenceDigest': approval.evidenceDigest,
+      'sessionGeneration': 1,
+      'revocationGeneration': 1,
+      'approvalSequence': 1,
+      'previousApprovalDigest': null,
+      'issuerKeyId': 'cloud_fixture',
+      'issuerKeyGeneration': 1,
+      'issuedAtMillis': now - 250,
+      'expiresAtMillis': now + 30000,
+    };
+    final cloudApprovalJson = canonicalConnectedSiteJson({
+      ...cloudApprovalUnsigned,
+      'signature': await signFields(cloudApprovalUnsigned, cloudPair),
+    });
+    final requestNonce = 'a' * 64;
+    final requestUnsigned = <String, Object?>{
+      'contract': 'supermega.connected-site-event-read-request.v1',
+      'workspaceId': workspace,
+      'siteId': site,
+      'actorId': 'actor_fixture',
+      'deviceId': device,
+      'clientFingerprint': fingerprint,
+      'enrollmentEvidenceDigest': approval.evidenceDigest,
+      'authorityGeneration': 1,
+      'authorityPayloadDigest': authorityPayload.payloadDigest,
+      'revocationGeneration': 1,
+      'afterSequence': 0,
+      'priorEventDigest': null,
+      'limit': 64,
+      'leaseDigest': lease.payloadDigest,
+      'issuedAt': DateTime.fromMillisecondsSinceEpoch(
+        now - 200,
+        isUtc: true,
+      ).toIso8601String(),
+      'requestNonce': requestNonce,
+      'signingKeyId': fingerprint,
+      'signatureAlgorithm': 'ed25519',
+    };
+    final requestJson = canonicalConnectedSiteJson({
+      ...requestUnsigned,
+      'signature': await signFields(requestUnsigned, clientPair),
+    });
+    final requestDigest = connectedSiteSha256(jsonDecode(requestJson));
+    final streamDigest = connectedSiteSha256({
+      'contract': 'supermega.connected-cloud-feed-stream.v1',
+      'workspaceId': workspace,
+      'siteId': site,
+      'actorId': 'actor_fixture',
+      'actorRole': 'manager',
+      'deviceId': device,
+      'authorityGeneration': 1,
+      'revocationGeneration': 1,
+      'authorityPayloadDigest': authorityPayload.payloadDigest,
+      'leaseDigest': lease.payloadDigest,
+    });
+    final pageUnsigned = <String, Object?>{
+      'contract': 'supermega.connected-site-retail-feed.v1',
+      'protocolVersion': 1,
+      'workspaceId': workspace,
+      'siteId': site,
+      'actorId': 'actor_fixture',
+      'deviceId': device,
+      'authorityGeneration': 1,
+      'revocationGeneration': 1,
+      'authorityPayloadDigest': authorityPayload.payloadDigest,
+      'leaseDigest': lease.payloadDigest,
+      'requestDigest': requestDigest,
+      'afterSequence': 0,
+      'priorEventDigest': null,
+      'headers': [
+        {'sequence': 1, 'eventDigest': 'e' * 64, 'previousEventDigest': null},
+      ],
+      'projections': <Object>[],
+      'nextSequence': 1,
+      'nextEventDigest': 'e' * 64,
+      'hasMore': false,
+    };
+    final pageDigest = connectedSiteSha256(pageUnsigned);
+    final pageJson = canonicalConnectedSiteJson({
+      ...pageUnsigned,
+      'pageDigest': pageDigest,
+    });
+    final proofUnsigned = <String, Object?>{
+      'contract': 'supermega.connected-cloud-feed-proof.v1',
+      'protocolVersion': 1,
+      'issuerKeyId': 'feed_fixture',
+      'issuedAtMillis': now - 100,
+      'expiresAtMillis': now + 30000,
+      'workspaceId': workspace,
+      'siteId': site,
+      'actorId': 'actor_fixture',
+      'actorRole': 'manager',
+      'deviceId': device,
+      'authorityGeneration': 1,
+      'revocationGeneration': 1,
+      'authorityPayloadDigest': authorityPayload.payloadDigest,
+      'leaseDigest': lease.payloadDigest,
+      'requestDigest': requestDigest,
+      'requestNonce': requestNonce,
+      'afterSequence': 0,
+      'priorEventDigest': null,
+      'nextSequence': 1,
+      'nextEventDigest': 'e' * 64,
+      'pageDigest': pageDigest,
+    };
+    final proofJson = canonicalConnectedSiteJson({
+      ...proofUnsigned,
+      'signature': await signFields(proofUnsigned, feedPair),
+    });
+    await database.transaction(() async {
+      await database.customInsert(
+        'INSERT INTO shop_connected_cloud_feed_streams '
+        '(stream_digest, workspace_id, site_id, actor_id, device_id, '
+        'actor_role, lease_digest, authority_payload_digest, '
+        'authority_generation, revocation_generation) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)',
+        variables: [
+          Variable<String>(streamDigest),
+          const Variable<String>(workspace),
+          const Variable<String>(site),
+          const Variable<String>('actor_fixture'),
+          const Variable<String>(device),
+          const Variable<String>('manager'),
+          Variable<String>(lease.payloadDigest),
+          Variable<String>(authorityPayload.payloadDigest),
+        ],
+      );
+      await database.customInsert(
+        'INSERT INTO shop_connected_cloud_feed_pages '
+        '(page_digest, stream_digest, after_sequence, prior_event_digest, '
+        'next_sequence, next_event_digest, page_json, request_nonce, '
+        'authenticated_proof_json, authenticated_proof_digest) '
+        'VALUES (?, ?, 0, NULL, 1, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(pageDigest),
+          Variable<String>(streamDigest),
+          Variable<String>('e' * 64),
+          Variable<String>(pageJson),
+          Variable<String>(requestNonce),
+          Variable<String>(proofJson),
+          Variable<String>(connectedSiteSha256(jsonDecode(proofJson))),
+        ],
+      );
+      await database.customInsert(
+        'INSERT INTO shop_connected_cloud_feed_heads '
+        '(stream_digest, next_sequence, next_event_digest, last_page_digest, restore_paused) '
+        'VALUES (?, 1, ?, ?, 0)',
+        variables: [
+          Variable<String>(streamDigest),
+          Variable<String>('e' * 64),
+          Variable<String>(pageDigest),
+        ],
+      );
+      await database.customInsert(
+        'INSERT INTO shop_connected_cloud_feed_page_evidence '
+        '(page_digest, request_json, request_digest, cloud_key_approval_json, '
+        'cloud_key_approval_digest, lease_digest, authority_payload_digest, '
+        'enrollment_evidence_digest, time_entry_digest, time_ack_digest, '
+        'time_head_digest, boot_session_id, sample_monotonic_millis, trusted_now_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 8000, ?)',
+        variables: [
+          Variable<String>(pageDigest),
+          Variable<String>(requestJson),
+          Variable<String>(requestDigest),
+          Variable<String>(cloudApprovalJson),
+          Variable<String>(connectedSiteSha256(jsonDecode(cloudApprovalJson))),
+          Variable<String>(lease.payloadDigest),
+          Variable<String>(authorityPayload.payloadDigest),
+          Variable<String>(approval.evidenceDigest),
+          Variable<String>(signedTime.entryDigest),
+          Variable<String>(signedAck.ackDigest),
+          Variable<String>(timeHead.headDigest),
+          Variable<String>('b' * 64),
+          const Variable<int>(now),
+        ],
+      );
+    });
+    Future<List<Map<String, Object?>>> rows(String table) async =>
+        (await database.customSelect('SELECT * FROM $table').get())
+            .map((row) => Map<String, Object?>.from(row.data))
+            .toList(growable: false);
+    final feedPublic = (await feedPair.extractPublicKey()).bytes;
+    expect(
+      shopConnectedCloudFeedRowsValidV40(
+        streams: await rows('shop_connected_cloud_feed_streams'),
+        pages: await rows('shop_connected_cloud_feed_pages'),
+        heads: await rows('shop_connected_cloud_feed_heads'),
+        restoreBarriers: await rows(
+          'shop_connected_cloud_feed_restore_barriers',
+        ),
+        trustedIssuerKeys: {'feed_fixture': feedPublic},
+      ),
+      isTrue,
+    );
+    expect(
+      shopConnectedCloudFeedEvidenceCoverageV41(
+        pages: await rows('shop_connected_cloud_feed_pages'),
+        evidence: await rows('shop_connected_cloud_feed_page_evidence'),
+      ),
+      isTrue,
+    );
+    final expected = ConnectedSiteRetailFeedExpectation(
+      workspaceId: workspace,
+      siteId: site,
+      actorId: 'actor_fixture',
+      deviceId: device,
+      authorityGeneration: 1,
+      revocationGeneration: 1,
+      authorityPayloadDigest: authorityPayload.payloadDigest,
+      leaseDigest: lease.payloadDigest,
+      requestDigest: requestDigest,
+      afterSequence: 0,
+      priorEventDigest: null,
+      limit: 64,
+    );
+    verifyRetainedCloudFeedReadWithApprovalSync(
+      requestBytes: requestJson,
+      approvalBytes: cloudApprovalJson,
+      approvalDigest: connectedSiteSha256(jsonDecode(cloudApprovalJson)),
+      pinnedCloudIssuerKeys: {
+        'cloud_fixture': (await cloudPair.extractPublicKey()).bytes,
+      },
+      pinnedIssuerKeyGeneration: 1,
+      expectedApprovalSequence: 1,
+      expectedPreviousApprovalDigest: null,
+      expected: expected,
+      requestNonce: requestNonce,
+      clientFingerprint: fingerprint,
+      enrollmentEvidenceDigest: approval.evidenceDigest,
+      expectedPendingEnrollmentPublicKey: clientKey,
+      signingKeyId: fingerprint,
+      sessionGeneration: 1,
+      trustedAtIssueMillis: now,
+    );
+    verifyRetainedOfflineStaffLeaseSync(
+      lease: lease,
+      expected: ShopOfflineStaffLeaseExpectedBinding(
+        tenantId: workspace,
+        siteId: site,
+        deviceId: device,
+        sessionGeneration: 1,
+        revocationGeneration: 1,
+        requiredCapability: ShopStaffCapability.managementRead,
+      ),
+      trustedAtMillis: now,
+      pinnedIssuerKeys: {
+        'lease_fixture': (await leasePair.extractPublicKey()).bytes,
+      },
+    );
+    verifyRetainedAuthorityForLeaseSync(
+      canonicalBytes: authorityBytes,
+      signature: authoritySignature,
+      expectedPayloadDigest: authorityPayload.payloadDigest,
+      expectedSequence: 1,
+      expectedPreviousDigest: null,
+      lease: lease,
+      trustedAtMillis: now,
+      pinnedIssuerKeys: {'authority_fixture': authorityPublic},
+    );
+    final parsedPage = ConnectedSiteRetailFeedPageV1.parse(
+      canonicalBytes: pageJson,
+      expected: expected,
+    );
+    ConnectedCloudFeedProofV1.parse(
+      canonicalBytes: proofJson,
+      page: parsedPage,
+      expected: expected,
+      requestNonce: requestNonce,
+      actorRole: 'manager',
+      trustedNowMillis: now,
+    );
+    final retainedTimeEntries = await rows(
+      'shop_connected_time_client_entries',
+    );
+    final retainedTimeAcks = await rows('shop_connected_time_client_acks');
+    final retainedTimeHeads = await rows('shop_connected_time_client_heads');
+    expect(retainedTimeEntries, hasLength(1));
+    expect(retainedTimeAcks, hasLength(1));
+    expect(retainedTimeHeads, hasLength(1));
+    expect(
+      verifyRetainedTrustedTimeSampleV39Sync(
+        entryJson: retainedTimeEntries.single['entry_json'] as String,
+        ackJson: retainedTimeAcks.single['ack_json'] as String,
+        entryDigest: retainedTimeEntries.single['entry_digest'] as String,
+        ackDigest: retainedTimeAcks.single['ack_digest'] as String,
+        headDigest: retainedTimeHeads.single['head_digest'] as String,
+        workspaceId: workspace,
+        siteId: site,
+        coordinatorDeviceId: coordinator,
+        deviceId: device,
+        clientFingerprint: fingerprint,
+        clientSigningKeyId: fingerprint,
+        sessionGeneration: 1,
+        coordinatorBindingDigest: 'c' * 64,
+        coordinatorBindingGeneration: 1,
+        authorityKeyId: 'time_fixture',
+        authorityKeyGeneration: 1,
+        authorityEpoch: 1,
+        bootSessionId: 'b' * 64,
+        sampleMonotonicMillis: 8000,
+        trustedNowMillis: now,
+        pinnedAuthorityKeys: {'time_fixture': timeKey},
+        pinnedClientKeys: {fingerprint: clientKey},
+      ),
+      isTrue,
+    );
+    expect(revocation.observedAtMillis, greaterThan(now));
+    final currentDevice = await database
+        .customSelect(
+          'SELECT state, revoked_at_millis FROM shop_site_devices WHERE device_id = ?',
+          variables: [const Variable<String>(device)],
+        )
+        .getSingle();
+    expect(currentDevice.read<String>('state'), 'revoked');
+    expect(currentDevice.read<int>('revoked_at_millis'), greaterThan(now));
+    await database.close();
+    database = ShopDatabase.withCorrectionReceiptVerifier(
+      executor: NativeDatabase(file),
+      correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+      testOnlyCloudFeedPinnedKeys: {'feed_fixture': feedPublic},
+    );
+    await expectLater(
+      database.verifyReadyForUse(),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('Nonempty v40 cloud feed lacks signed request evidence'),
+        ),
+      ),
+    );
+    await database.close();
+    expect(
+      () => ShopBackup.verifySnapshot(
+        file,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedPinnedKeys: {'feed_fixture': feedPublic},
+      ),
+      throwsFormatException,
+    );
+  });
   test('v41 open and backup share exact page evidence coverage', () {
     const pageDigest =
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -1201,4 +2014,42 @@ void main() {
     await expectLater(database.verifyReadyForUse(), throwsStateError);
     await database.close();
   });
+}
+
+final class _PinnedV41OwnerVerifier
+    implements ShopOwnerEnrollmentEvidenceVerifier {
+  const _PinnedV41OwnerVerifier({
+    required this.ownerKey,
+    required this.workspace,
+    required this.site,
+    required this.coordinator,
+    required this.device,
+    required this.fingerprint,
+  });
+
+  final List<int> ownerKey;
+  final String workspace;
+  final String site;
+  final String coordinator;
+  final String device;
+  final String fingerprint;
+
+  @override
+  Future<bool> verify(ShopOwnerEnrollmentEvidenceV1 evidence) async {
+    if (evidence.tenantId != workspace ||
+        evidence.siteId != site ||
+        evidence.coordinatorDeviceId != coordinator ||
+        evidence.deviceId != device ||
+        evidence.clientFingerprint != fingerprint ||
+        evidence.authorityKeyId != 'owner_fixture') {
+      return false;
+    }
+    return Ed25519().verify(
+      utf8.encode(canonicalConnectedSiteJson(evidence.signingPayload)),
+      signature: Signature(
+        base64Url.decode('${evidence.signature}=='),
+        publicKey: SimplePublicKey(ownerKey, type: KeyPairType.ed25519),
+      ),
+    );
+  }
 }
