@@ -1,9 +1,41 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 23:11 UTC
+- Last verified: 2026-11-03 23:26 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 23:26 UTC exact-head PG17 bridge failure and private repair
+
+- **FAIL (hosted, exact public head):** draft PR #752 is at
+  `5a6badd0e798cce068c5601bfc43f0eb02558e8d`. Co-located bridge run
+  `41737357179` failed before any native PostgreSQL response was consumed:
+  device-A fixture export took 35.429s, then the real PG reader rejected its
+  previously signed cursor-1 request as `connected_site_event_read_time_stale`.
+  This is a test-harness ordering failure, not evidence of a product assertion
+  failure. The production 30-second request TTL and trusted-time verifier
+  remain unchanged. Native run `41737357285` still has useful Android and
+  Windows jobs active; keep the public head fixed until they finish.
+- **PASS (private source and synthetic verification only):** the three-file
+  successor signs each device's cursor-1 request immediately after its native
+  fixture export and before checked SQL, then supplies those exact request
+  bytes to its native consume test. Only the opt-in real-PG synthetic fixture
+  extends its lease/time/approval/revocation windows enough to allow the slow
+  export; default fixtures and production limits are unchanged. A controlled
+  36-second delay rejected the old request with HTTP 403 while a freshly
+  signed request passed. The complete local mock bridge passed device-A
+  export (15.012s), device-B export (12.627s), and two-store native consume
+  (143.363s). Dart format and focused Flutter analysis passed; the 18-case
+  Python reader/PG run had 12 passes and six real-PG skips; compilation and diff
+  check passed. An initial A-only run failed without a retained assertion
+  location; a subsequent fresh-path A-only run passed, so the initial failure
+  is not silently counted as a pass. Independent read-only security review
+  accepted the final diff for hosted testing, including the analyzer-only
+  map-construction adjustment.
+- **NOT RUN / held:** the repaired real PostgreSQL-to-native bridge has not
+  run; it needs a reviewed successor and exact-head hosted CI after the useful
+  Native jobs finish. No production ingress, connected-mode enablement,
+  installed two-device operation, signing or merchant acceptance is claimed.
 
 ## 2026-11-03 23:11 UTC public predecessor CI terminal
 

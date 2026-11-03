@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import tempfile
@@ -92,10 +93,18 @@ def _run_bridge(flutter: Path, *, real_pg: bool, pg_fixture) -> None:
             if real_pg:
                 if pg_fixture is None:
                     raise RuntimeError("native_v41_bridge_pg_fixture_missing")
+                # The database and first-page fixture already exist. Sign the
+                # cursor-1 request only now, immediately before checked SQL;
+                # a slow Flutter export cannot consume its 30-second TTL.
+                issued_at = datetime.now(timezone.utc).isoformat(
+                    timespec="milliseconds").replace("+00:00", "Z")
+                suffix = "A" if index == 0 else "B"
+                fixture_env[f"SUPERMEGA_CLOUD_FEED_V41_REQUEST_ISSUED_AT_{suffix}"] = issued_at
                 response, previous = build_pg_response(
                     database, admin_url=pg_fixture.admin_url,
                     runtime_url=pg_fixture.runtime_url,
                     first=index == 0, previous=previous,
+                    request_issued_at=issued_at,
                 )
             else:
                 response = build_response(database)

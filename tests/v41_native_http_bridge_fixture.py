@@ -75,7 +75,7 @@ class _NativeScript:
         return _Connection(self)
 
 
-def load_native_context(native_database: Path):
+def load_native_context(native_database: Path, *, request_issued_at: str | None = None):
     with sqlite3.connect(native_database) as db:
         db.row_factory = sqlite3.Row
         retained = _one(db, "SELECT request_json FROM shop_connected_cloud_feed_page_evidence")
@@ -123,13 +123,17 @@ def load_native_context(native_database: Path):
         )
     unsigned = {key: value for key, value in first_request.items() if key != "signature"}
     unsigned.update(afterSequence=1, priorEventDigest=first_digest, requestNonce="9" * 64)
+    if request_issued_at is not None:
+        unsigned["issuedAt"] = request_issued_at
     signature = client_key.sign(canonical_json(unsigned).encode())
     request = {**unsigned, "signature": base64.urlsafe_b64encode(signature).decode().rstrip("=")}
     return authority, device, lease, request, first_digest
 
 
-def build_response(native_database: Path, *, now: datetime | None = None) -> dict[str, str]:
-    authority, device, lease, request, first_digest = load_native_context(native_database)
+def build_response(native_database: Path, *, now: datetime | None = None,
+                   request_issued_at: str | None = None) -> dict[str, str]:
+    authority, device, lease, request, first_digest = load_native_context(
+        native_database, request_issued_at=request_issued_at)
     # Source-pinned test clock, never derived from the caller's HTTP body.
     now = now or datetime.fromtimestamp(1800000000.9, tz=timezone.utc)
     script = _NativeScript(authority, lease, now, first_digest)
@@ -184,6 +188,7 @@ def build_response(native_database: Path, *, now: datetime | None = None) -> dic
 def build_pg_response(native_database: Path, *, admin_url: str,
                       runtime_url: str, first: bool,
                       previous: tuple[str, str, str] | None,
+                      request_issued_at: str,
                       ) -> tuple[dict[str, str], tuple[str, str, str]]:
     """Read actual disposable PG17/RLS rows; never accept a production URL.
 
@@ -192,7 +197,8 @@ def build_pg_response(native_database: Path, *, admin_url: str,
     """
     import psycopg
 
-    authority, device, lease, request, first_digest = load_native_context(native_database)
+    authority, device, lease, request, first_digest = load_native_context(
+        native_database, request_issued_at=request_issued_at)
     admin_target = urlsplit(admin_url)
     runtime_target = urlsplit(runtime_url)
     if (

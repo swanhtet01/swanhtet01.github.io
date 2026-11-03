@@ -323,7 +323,7 @@ void main() {
         isUtc: true,
       ).toIso8601String(),
       'expiresAt': DateTime.fromMillisecondsSinceEpoch(
-        now + 60000,
+        now + (realPgAnchor ? 180000 : 60000),
         isUtc: true,
       ).toIso8601String(),
       'issuerKeyId': 'lease_fixture',
@@ -395,7 +395,7 @@ void main() {
           previousEntryDigest: null,
           kind: ConnectedTrustedTimeStreamEntryKind.time,
           observedAtMillis: now - 1000,
-          validUntilMillis: now + 60000,
+          validUntilMillis: now + (realPgAnchor ? 110000 : 60000),
           authoritySignature: signature,
         );
     final zeroSignature = base64Url
@@ -494,7 +494,7 @@ void main() {
     );
     final preRevocationFile = File('${root.path}/pre-revocation.sqlite');
     await database.exportVerifiedLocalSnapshot(preRevocationFile);
-    clock = now + (realPgAnchor ? 40000 : 500);
+    clock = now + (realPgAnchor ? 100000 : 500);
     store = ShopConnectedSiteEnrollmentStore(
       database: database,
       nowMillis: () => clock,
@@ -547,7 +547,7 @@ void main() {
       'issuerKeyId': 'cloud_fixture',
       'issuerKeyGeneration': 1,
       'issuedAtMillis': now - 250,
-      'expiresAtMillis': now + 30000,
+      'expiresAtMillis': now + (realPgAnchor ? 110000 : 30000),
     };
     final cloudApprovalJson = canonicalConnectedSiteJson({
       ...cloudApprovalUnsigned,
@@ -887,12 +887,20 @@ void main() {
         );
     expect(valid(history), isTrue);
     final secondNonce = '9' * 64;
+    final requestIssuedOverride =
+        Platform.environment[secondary
+            ? 'SUPERMEGA_CLOUD_FEED_V41_REQUEST_ISSUED_AT_B'
+            : 'SUPERMEGA_CLOUD_FEED_V41_REQUEST_ISSUED_AT_A'];
+    if (requestIssuedOverride != null) expect(realPgAnchor, isTrue);
     final secondRequestUnsigned = <String, Object?>{
       ...requestUnsigned,
       'afterSequence': 1,
       'priorEventDigest': firstEventDigest,
       'requestNonce': secondNonce,
     };
+    if (requestIssuedOverride != null) {
+      secondRequestUnsigned['issuedAt'] = requestIssuedOverride;
+    }
     final secondRequestJson = canonicalConnectedSiteJson({
       ...secondRequestUnsigned,
       'signature': await signFields(secondRequestUnsigned, clientPair),
@@ -905,6 +913,11 @@ void main() {
         (secondary
             ? Platform.environment['SUPERMEGA_CLOUD_FEED_V41_HTTP_RESPONSE']
             : null);
+    if (Platform.environment['SUPERMEGA_CLOUD_FEED_V41_DISPOSABLE_PG17'] ==
+            '1' &&
+        externalResponsePath != null) {
+      expect(requestIssuedOverride != null, isTrue);
+    }
     final secondEventDigest = externalResponsePath == null
         ? 'd' * 64
         : connectedSiteSha256({'synthetic': 'v41-bridge-second'});
@@ -977,7 +990,7 @@ void main() {
         : int.parse(trustedNowOverride);
     final secondMonotonicSample = 8000 + secondTrustedNow - now;
     expect(secondTrustedNow, greaterThan(now));
-    expect(secondTrustedNow, lessThan(now + 30000));
+    expect(secondTrustedNow, lessThan(now + (realPgAnchor ? 90000 : 30000)));
     expect(secondTrustedNow, lessThan(revocation.observedAtMillis));
     final secondPageRow = <String, Object?>{
       ...history['shop_connected_cloud_feed_pages']!.single,
