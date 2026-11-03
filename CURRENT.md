@@ -1,9 +1,47 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 07:03 UTC
+- Last verified: 2026-11-03 07:08 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 07:08 UTC guarded PR update and private cloud-feed page contract
+
+- **PASS (publication guard):** draft PR #752 was re-read at
+  `d10cccb04abd4f347de196bc29db32a785144a09`; the reviewed private
+  stack was clean, its merge-base was exactly that predecessor, and all
+  exact-predecessor CI was terminal. A plain non-force push advanced only
+  `codex/postgres17-provenance-integration-20261031` to
+  `065a90d21c8424c4eb2ab685a36104817ee55a1c`, tree
+  `b1343b553ad539705a27c903ab16f9b67c9395c5`, with 13 ordered commits
+  and cumulative binary diff SHA-256
+  `97bc53e1df4c6c826b13227af3756c052051a83d588f37b37bbe4240e649ae68`.
+  Remote ref and draft PR readbacks both matched; no force, merge, deployment,
+  signing, manual dispatch or connected-mode enablement occurred.
+- **PASS / FAIL / IN PROGRESS (hosted exact head):** Kernel run `41593896393`
+  **PASS**; Dependency Security run `41593896401` **FAIL** (existing advisory
+  gate); App run `41593891230` and Native run `41593896415` are **IN PROGRESS**.
+  A redundant App run `41593896435` was **SKIPPED**, not a pass. Hold the PR
+  head fixed until useful runs finish; source-only tests do not substitute for
+  those hosted results.
+- **PASS (private source only):** unpushed successor
+  `88ac05bebdde45126ac8fd35079172ec143fef78`, tree
+  `05e548d0ecc833387237a2c1e3e76676c569b281`, parent published
+  `065a90d2`, adds a versioned sanitized retail-feed page with request, lease,
+  actor/device and authority-generation bindings and exact source-header
+  sequence/digest pairing. Checked projections are retained as immutable
+  canonical bytes; caller mutation, swapped/duplicate/out-of-page projection
+  and malformed bytes fail closed. Affected Python matrix **38 PASS / 4 opt-in
+  real-PostgreSQL SKIPPED**, diff check **PASS**, independent security review
+  **ACCEPT**. Patch SHA-256
+  `a1afdb411a59b259937754a747d347cc3bf88672337b6e39e8cf3645dd51126b`.
+  The page digest is internal consistency, **not** response authentication.
+- **NOT RUN / BLOCKED:** the cloud reader is still unmounted. No native
+  transactional cloud header/projection/cursor ledger, authenticated response
+  route, restart/lost-response device proof, real PostgreSQL row proof or
+  two-device sync exists for this private successor. The existing LAN replica
+  cursor must not be reused for the distinct cloud trust stream. Connected
+  mode stays off; PostgreSQL rehearsal and dependency gates remain open.
 
 ## 2026-11-03 07:03 UTC reviewed cumulative PR candidate
 
