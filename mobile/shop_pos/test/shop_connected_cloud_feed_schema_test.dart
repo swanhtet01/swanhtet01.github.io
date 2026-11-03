@@ -877,6 +877,12 @@ void main() {
       ...secondProofUnsigned,
       'signature': await signFields(secondProofUnsigned, feedPair),
     });
+    final pythonSignedPage = jsonDecode(
+      await File('test/fixtures/v41_python_signed_page.json').readAsString(),
+    ) as Map<String, dynamic>;
+    expect(pythonSignedPage['requestJson'], secondRequestJson);
+    expect(pythonSignedPage['pageJson'], secondPageJson);
+    expect(pythonSignedPage['proofJson'], secondProofJson);
     final secondPageRow = <String, Object?>{
       ...history['shop_connected_cloud_feed_pages']!.single,
       'page_digest': secondPageDigest,
@@ -1015,7 +1021,7 @@ void main() {
       limit: 64,
     );
     final secondEvidence = ShopCloudFeedV41FirstPageEvidence(
-      requestJson: secondRequestJson,
+      requestJson: pythonSignedPage['requestJson'] as String,
       cloudKeyApprovalJson: cloudApprovalJson,
       enrollmentEvidenceDigest: approval.evidenceDigest,
       timeEntryDigest: signedTime.entryDigest,
@@ -1034,12 +1040,129 @@ void main() {
       expected: secondExpected,
       actorRole: 'manager',
       requestNonce: secondNonce,
-      pageJson: secondPageJson,
-      proofJson: secondProofJson,
+      pageJson: pythonSignedPage['pageJson'] as String,
+      proofJson: pythonSignedPage['proofJson'] as String,
       evidence: secondEvidence,
       testOnlyBeforeCommit: beforeCommit,
     );
     await twoPageDatabase.close();
+    final onlineFile = await twoPageFile.copy(
+      '${root.path}/online-client.sqlite',
+    );
+    // Synthetic outage/reconnect of two stores for one fixture device, not
+    // enrollment or delivery between two physical devices.
+    final offlineFile = await twoPageFile.copy(
+      '${root.path}/offline-client.sqlite',
+    );
+    final onlineClient = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(onlineFile),
+      trust: trust,
+    );
+    await onlineClient.verifyReadyForUse();
+    await expectLater(
+      onlineClient.testOnlyApplyConnectedCloudFeedSecondPageV41(
+        trust: trust,
+        timeAuthority: _V41FixtureTime(workspace, site, [
+          now + 1,
+        ], secondEvidence),
+        expected: secondExpected,
+        actorRole: 'manager',
+        requestNonce: secondNonce,
+        pageJson: (pythonSignedPage['pageJson'] as String).replaceFirst(
+          'd' * 64,
+          'c' * 64,
+        ),
+        proofJson: pythonSignedPage['proofJson'] as String,
+        evidence: secondEvidence,
+      ),
+      throwsFormatException,
+      reason: 'altered Python page bytes cannot be paired with retained proof',
+    );
+    await applySecondPage(
+      onlineClient,
+      _V41FixtureTime(workspace, site, [now + 1], secondEvidence),
+    );
+    final offlineBeforeReconnect = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(offlineFile),
+      trust: trust,
+    );
+    await offlineBeforeReconnect.verifyReadyForUse();
+    expect(
+      (await offlineBeforeReconnect
+              .customSelect(
+                'SELECT next_sequence FROM shop_connected_cloud_feed_heads',
+              )
+              .getSingle())
+          .read<int>('next_sequence'),
+      1,
+      reason: 'a disconnected client cannot inherit another store cursor',
+    );
+    await offlineBeforeReconnect.close();
+    final reconnectedClient = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      executor: NativeDatabase(offlineFile),
+      trust: trust,
+    );
+    await reconnectedClient.verifyReadyForUse();
+    await applySecondPage(
+      reconnectedClient,
+      _V41FixtureTime(workspace, site, [now + 1], secondEvidence),
+    );
+    await applySecondPage(
+      reconnectedClient,
+      _V41FixtureTime(
+        workspace,
+        site,
+        [now + 3],
+        secondEvidence,
+        initialMonotonicAdvance: 2,
+      ),
+    );
+    for (final client in [onlineClient, reconnectedClient]) {
+      expect(
+        (await client
+                .customSelect(
+                  'SELECT next_sequence, next_event_digest FROM shop_connected_cloud_feed_heads',
+                )
+                .getSingle())
+            .read<int>('next_sequence'),
+        2,
+      );
+      expect(
+        await client
+            .customSelect(
+              'SELECT * FROM shop_connected_cloud_feed_pages ORDER BY after_sequence',
+            )
+            .get(),
+        hasLength(2),
+      );
+    }
+    await ShopConnectedSiteEnrollmentStore(
+      database: reconnectedClient,
+      nowMillis: () => now + 500,
+    ).importOwnerEvidence(revocation, verifier: verifier);
+    await expectLater(
+      applySecondPage(
+        reconnectedClient,
+        _V41FixtureTime(
+          workspace,
+          site,
+          [now + 3],
+          secondEvidence,
+          initialMonotonicAdvance: 2,
+        ),
+      ),
+      throwsStateError,
+      reason: 'revocation blocks replay on the affected client store',
+    );
+    await onlineClient.close();
+    await reconnectedClient.close();
+    for (final clientFile in [onlineFile, offlineFile]) {
+      ShopBackup.verifySnapshot(
+        clientFile,
+        expectedSchemaVersion: 41,
+        testOnlyCloudFeedV41Trust: trust,
+      );
+    }
     final contendedFile = await twoPageFile.copy(
       '${root.path}/two-page-contended.sqlite',
     );
