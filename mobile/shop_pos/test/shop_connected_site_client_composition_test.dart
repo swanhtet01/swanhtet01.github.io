@@ -70,6 +70,14 @@ void main() {
     expect(fixture.transport.calls, 0);
   });
 
+  test('rebootstrap refuses the same client key before network I/O', () async {
+    final fixture = await _Fixture.create(clock);
+    addTearDown(fixture.database.close);
+    final runtime = fixture.compose().runtime!;
+    await expectLater(runtime.rebootstrapFrom(runtime), throwsStateError);
+    expect(fixture.transport.calls, 0);
+  });
+
   test('substituted composition pauses an existing replica', () async {
     final fixture = await _Fixture.create(clock);
     addTearDown(fixture.database.close);

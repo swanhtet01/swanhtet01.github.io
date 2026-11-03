@@ -1238,6 +1238,28 @@ void main() {
     });
 
     test('wrong role, site, revocation and expiry deny', () async {
+      final wrongReadRole = await _signedLease(
+        issuerKey,
+        role: ShopStaffRole.cashierCounter.name,
+        capabilities: const ['managementRead'],
+      );
+      expect(
+        await authorizer(
+          _LeaseSource(
+            CoordinatorLeaseMaterial(
+              lease: wrongReadRole,
+              sessionGeneration: 4,
+              revocationGeneration: 9,
+            ),
+          ),
+        ).authorize(
+          _authorizationRequest(
+            operation: CoordinatorSiteOperation.snapshotRead,
+            capability: ShopStaffCapability.managementRead,
+          ),
+        ),
+        isFalse,
+      );
       final wrongRole = await _signedLease(
         issuerKey,
         role: ShopStaffRole.cafeWaiter.name,
@@ -1352,33 +1374,39 @@ void main() {
       );
     });
 
-    test(
-      'explicit station policy can grant reads but never commands',
-      () async {
-        final policy = _StationPolicy();
-        final value = authorizer(_LeaseSource(null), stationPolicy: policy);
-        expect(
-          await value.authorize(
-            _authorizationRequest(
-              operation: CoordinatorSiteOperation.snapshotRead,
-              capability: ShopStaffCapability.managementRead,
-            ),
+    test('station policy cannot grant management reads or commands', () async {
+      final policy = _StationPolicy();
+      final value = authorizer(_LeaseSource(null), stationPolicy: policy);
+      expect(
+        await value.authorize(
+          _authorizationRequest(
+            operation: CoordinatorSiteOperation.snapshotRead,
+            capability: ShopStaffCapability.managementRead,
           ),
-          isTrue,
-        );
-        expect(
-          await value.authorize(
-            _authorizationRequest(
-              operation: CoordinatorSiteOperation.command,
-              capability: ShopStaffCapability.counterSale,
-              actorId: 'actor_1',
-              leaseDigest: _digest,
-            ),
+        ),
+        isFalse,
+      );
+      expect(
+        await value.authorize(
+          _authorizationRequest(
+            operation: CoordinatorSiteOperation.snapshotRead,
+            capability: ShopStaffCapability.cafeKitchenStatus,
           ),
-          isFalse,
-        );
-      },
-    );
+        ),
+        isTrue,
+      );
+      expect(
+        await value.authorize(
+          _authorizationRequest(
+            operation: CoordinatorSiteOperation.command,
+            capability: ShopStaffCapability.counterSale,
+            actorId: 'actor_1',
+            leaseDigest: _digest,
+          ),
+        ),
+        isFalse,
+      );
+    });
   });
 }
 

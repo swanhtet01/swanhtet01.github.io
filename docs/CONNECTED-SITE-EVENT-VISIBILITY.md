@@ -38,6 +38,33 @@ The workstation restrictions are in `docs/SHOP-ROLE-WORKSTATION-DELIVERY.md`.
 These needs do **not** authorize raw payload exposure or define a new merchant
 access policy.
 
+The separate native private-LAN snapshot/delta source is also default-off.
+Its full reservation terminal proof contains an opaque sale ID and command
+digest, so its minimum read role is **owner or manager** with a current signed
+`managementRead` lease for the same tenant, site and enrolled device. A station
+policy or paired device without that lease cannot grant this full read. Cashier,
+waiter, kitchen/bar and stock-staff clients have no approved full-state read;
+they need separately reviewed redacted projections. The proof contains no
+customer/payment payload, but its sale linkage is still financial activity
+metadata and must not be treated as public. This LAN rule does not authorize a
+cloud event-payload endpoint or make the unmounted transport production-ready.
+The native client runtime exposes no user-facing raw-projection read method;
+the internal replica inspection method returns metadata only. The SQLite
+evidence itself remains readable to code with direct database access on the
+same device, so device custody and encrypted-at-rest acceptance remain
+separate gates, not a substitute for role-gated UI delivery.
+
+An older client replica may retain a terminal reservation row without its
+transition and sale binding. Those historical bytes cannot be reinterpreted
+as proof. The default-off rebootstrap path requires a retained revocation of
+the old coordinator binding, a separately enrolled device and signing key,
+and a fresh authenticated snapshot at or beyond the old cursor. It pauses the
+old namespace and preserves its immutable events and existing projection
+bytes (projection rows themselves are not storage-immutable); a failure
+to authenticate or apply the new snapshot leaves the old namespace paused.
+No automatic key generation, old-row deletion, cloud reconciliation or
+production recovery is implied by this source-only path.
+
 An unmounted `project_retail_reservation_held` source candidate accepts only
 the exact retail reserve/held envelope and line shape for a current manager/
 owner lease. It emits product IDs, quantities, reservation ID/state and

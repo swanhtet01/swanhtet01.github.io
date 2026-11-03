@@ -214,7 +214,11 @@ class OfflineLeaseCoordinatorSiteAuthorizer
       leaseDigest: request.leaseDigest,
     );
     if (material == null) {
-      return isRead && await stationReadPolicy.allows(request);
+      // Full snapshot/delta projections can include sale-linked terminal
+      // proof. Station enrollment alone must never grant management reads.
+      return isRead &&
+          request.requiredCapability != ShopStaffCapability.managementRead &&
+          await stationReadPolicy.allows(request);
     }
     late final int verifiedNowMillis;
     try {

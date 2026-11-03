@@ -50,6 +50,14 @@ class ShopConnectedSiteReplicaStore {
       );
       _requireBinding(head, certificateSha256);
       if (head != null &&
+          await _hasUnprovedTerminalProjection(
+            snapshot.workspaceId,
+            snapshot.siteId,
+            clientFingerprint,
+          )) {
+        throw StateError('connected_replica_rebootstrap_required');
+      }
+      if (head != null &&
           canonicalConnectedSiteJson(snapshot.projections) !=
               canonicalConnectedSiteJson(
                 await _readCurrentProjectionState(
@@ -121,6 +129,13 @@ class ShopConnectedSiteReplicaStore {
         throw StateError('connected_replica_delta_cursor_mismatch');
       }
       _requireBinding(head, certificateSha256);
+      if (await _hasUnprovedTerminalProjection(
+        delta.workspaceId,
+        delta.siteId,
+        clientFingerprint,
+      )) {
+        throw StateError('connected_replica_rebootstrap_required');
+      }
       final deltaJson = canonicalConnectedSiteJson(delta.toJson());
       final deltaDigest = connectedSiteSha256(delta.toJson());
       if (head.read<int>('continuation_cursor') == delta.nextCursor) {
@@ -274,6 +289,128 @@ class ShopConnectedSiteReplicaStore {
     });
   }
 
+  /// Retires an old read-only replica whose terminal reservation lacks proof.
+  /// The old cursor and immutable events are preserved; this method also
+  /// leaves the old projection bytes unchanged under their original
+  /// fingerprint. A separately enrolled device/key and fresh snapshot start
+  /// a new namespace. The caller must fetch that snapshot through the pinned
+  /// LAN client; this store checks its scope, cursor and approved binding but
+  /// does not authenticate the transport itself. An absent approval leaves
+  /// writes paused.
+  Future<void> rebootstrapIncompleteTerminalReplica({
+    required ShopConnectedSiteReplicaStore successor,
+    required SiteSnapshotV1 freshSnapshot,
+    required String certificateSha256,
+    required int observedAtMillis,
+  }) async {
+    _requireEnabled(
+      localClientFingerprint,
+      certificateSha256,
+      observedAtMillis,
+    );
+    _requireScope(freshSnapshot.workspaceId, freshSnapshot.siteId);
+    if (!identical(database, successor.database) ||
+        !successor.runtimeEnabled ||
+        successor.localWorkspaceId != localWorkspaceId ||
+        successor.localSiteId != localSiteId ||
+        successor.localClientFingerprint == localClientFingerprint ||
+        successor.localClientDeviceId == localClientDeviceId ||
+        successor.localClientSigningKeyId == localClientSigningKeyId) {
+      throw StateError('connected_replica_rebootstrap_identity_invalid');
+    }
+    final oldHead = await _head(
+      localWorkspaceId,
+      localSiteId,
+      localClientFingerprint,
+    );
+    if (oldHead == null) {
+      throw StateError('connected_replica_rebootstrap_source_missing');
+    }
+    final latestAuthority = await database
+        .customSelect(
+          'SELECT action FROM ('
+          'SELECT action, approval_generation FROM shop_site_coordinator_bindings '
+          'WHERE workspace_id = ? AND site_id = ? AND client_device_id = ? '
+          'UNION ALL '
+          'SELECT action, approval_generation FROM shop_site_coordinator_binding_revocations '
+          'WHERE workspace_id = ? AND site_id = ? AND client_device_id = ?) '
+          'ORDER BY approval_generation DESC LIMIT 1',
+          variables: [
+            Variable(localWorkspaceId),
+            Variable(localSiteId),
+            Variable(localClientDeviceId),
+            Variable(localWorkspaceId),
+            Variable(localSiteId),
+            Variable(localClientDeviceId),
+          ],
+        )
+        .getSingleOrNull();
+    if (latestAuthority?.read<String>('action') != 'revoke' ||
+        observedAtMillis < oldHead.read<int>('updated_at_millis')) {
+      throw StateError('connected_replica_rebootstrap_retirement_required');
+    }
+    final rows = await database
+        .customSelect(
+          'SELECT payload_json FROM shop_connected_replica_projections '
+          "WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? "
+          "AND projection_kind = 'stockReservation'",
+          variables: [
+            Variable(localWorkspaceId),
+            Variable(localSiteId),
+            Variable(localClientFingerprint),
+          ],
+        )
+        .get();
+    var incompleteTerminal = false;
+    for (final row in rows) {
+      final decoded = jsonDecode(row.read<String>('payload_json'));
+      if (decoded is! Map) {
+        throw StateError('connected_replica_rebootstrap_evidence_invalid');
+      }
+      final payload = decoded.cast<String, Object?>();
+      if (payload.containsKey('terminalTransition')) {
+        final proof = ConnectedStockReservationProjectionV1.fromJson(payload);
+        if (proof.reservation.workspaceId != localWorkspaceId ||
+            proof.reservation.siteId != localSiteId) {
+          throw StateError('connected_replica_rebootstrap_scope_invalid');
+        }
+        continue;
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(payload);
+      if (reservation.workspaceId != localWorkspaceId ||
+          reservation.siteId != localSiteId) {
+        throw StateError('connected_replica_rebootstrap_scope_invalid');
+      }
+      incompleteTerminal |=
+          reservation.state != ConnectedStockReservationState.held;
+    }
+    if (!incompleteTerminal ||
+        freshSnapshot.version < 2 ||
+        freshSnapshot.continuationCursor <
+            oldHead.read<int>('continuation_cursor') ||
+        await successor._head(
+              localWorkspaceId,
+              localSiteId,
+              successor.localClientFingerprint,
+            ) !=
+            null) {
+      throw StateError('connected_replica_rebootstrap_not_fresh');
+    }
+    await markBindingUnavailable(
+      workspaceId: localWorkspaceId,
+      siteId: localSiteId,
+      clientFingerprint: localClientFingerprint,
+      observedAtMillis: observedAtMillis,
+    );
+    await database.verifyConnectedReplicaEvidence();
+    await successor.applySnapshot(
+      snapshot: freshSnapshot,
+      clientFingerprint: successor.localClientFingerprint,
+      certificateSha256: certificateSha256,
+      observedAtMillis: observedAtMillis,
+    );
+  }
+
   Future<List<Map<String, Object?>>> readProjections({
     required String workspaceId,
     required String siteId,
@@ -283,9 +420,12 @@ class ShopConnectedSiteReplicaStore {
     if (clientFingerprint != localClientFingerprint) {
       throw StateError('connected_replica_client_substituted');
     }
+    // This general-purpose API is intentionally metadata-only. Retained
+    // payload_json can contain a sale binding or café free text and requires
+    // a separate current role-gated read contract before UI exposure.
     return (await database
             .customSelect(
-              'SELECT projection_kind, aggregate_id, aggregate_version, last_cursor, payload_json, payload_digest '
+              'SELECT projection_kind, aggregate_version, last_cursor '
               'FROM shop_connected_replica_projections WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
               'ORDER BY projection_kind, aggregate_id',
               variables: [
@@ -309,7 +449,59 @@ class ShopConnectedSiteReplicaStore {
       throw StateError('connected_replica_client_substituted');
     }
     final head = await _head(workspaceId, siteId, clientFingerprint);
-    return head == null || head.read<int>('writes_paused') == 1;
+    if (head == null || head.read<int>('writes_paused') == 1) return true;
+    try {
+      return await _hasUnprovedTerminalProjection(
+        workspaceId,
+        siteId,
+        clientFingerprint,
+      );
+    } on Object {
+      return true;
+    }
+  }
+
+  Future<bool> _hasUnprovedTerminalProjection(
+    String workspaceId,
+    String siteId,
+    String clientFingerprint,
+  ) async {
+    final rows = await database
+        .customSelect(
+          'SELECT payload_json FROM shop_connected_replica_projections '
+          "WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? "
+          "AND projection_kind = 'stockReservation'",
+          variables: [
+            Variable(workspaceId),
+            Variable(siteId),
+            Variable(clientFingerprint),
+          ],
+        )
+        .get();
+    for (final row in rows) {
+      final decoded = jsonDecode(row.read<String>('payload_json'));
+      if (decoded is! Map) {
+        throw const FormatException('connected replica reservation shape');
+      }
+      final payload = decoded.cast<String, Object?>();
+      if (payload.containsKey('terminalTransition')) {
+        final proof = ConnectedStockReservationProjectionV1.fromJson(payload);
+        if (proof.reservation.workspaceId != workspaceId ||
+            proof.reservation.siteId != siteId) {
+          throw const FormatException('connected replica reservation scope');
+        }
+      } else {
+        final reservation = ConnectedStockReservationV1.fromJson(payload);
+        if (reservation.workspaceId != workspaceId ||
+            reservation.siteId != siteId) {
+          throw const FormatException('connected replica reservation scope');
+        }
+        if (reservation.state != ConnectedStockReservationState.held) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /// Returns the durable continuation cursor for this exact client replica.

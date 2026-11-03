@@ -139,12 +139,24 @@ class ShopConnectedSiteClientRuntime {
     clientFingerprint: _signer.clientFingerprint,
   );
 
-  Future<List<Map<String, Object?>>> readProjections() =>
-      _replica.readProjections(
-        workspaceId: _pairing.workspaceId,
-        siteId: _pairing.siteId,
-        clientFingerprint: _signer.clientFingerprint,
-      );
+  /// Re-enrolls an incomplete historical terminal replica under a new
+  /// platform identity. The new snapshot is fetched over the already pinned,
+  /// signed LAN client; the replica store preserves the old evidence bytes.
+  Future<void> rebootstrapFrom(ShopConnectedSiteClientRuntime retired) async {
+    if (retired._pairing.workspaceId != _pairing.workspaceId ||
+        retired._pairing.siteId != _pairing.siteId ||
+        retired._signer.clientFingerprint == _signer.clientFingerprint) {
+      throw StateError('connected_replica_rebootstrap_scope_invalid');
+    }
+    final binding = await _requireExactBinding();
+    final snapshot = await _client.readSnapshot();
+    await retired._replica.rebootstrapIncompleteTerminalReplica(
+      successor: _replica,
+      freshSnapshot: snapshot,
+      certificateSha256: binding.certificateSha256,
+      observedAtMillis: _now().toUtc().millisecondsSinceEpoch,
+    );
+  }
 
   Future<void> synchronizeOnce() async {
     try {

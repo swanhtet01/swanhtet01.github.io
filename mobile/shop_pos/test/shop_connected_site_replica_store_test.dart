@@ -189,6 +189,14 @@ void main() {
         clientFingerprint: client,
       );
       expect(projections, hasLength(3));
+      expect(
+        projections.any((row) => row.containsKey('payload_json')),
+        isFalse,
+      );
+      expect(
+        canonicalConnectedSiteJson(projections),
+        isNot(contains('sale_1')),
+      );
       expect(await database.countSales(), 0);
       expect(await database.readReservedStockQuantity('product_1'), 0);
     },
@@ -305,6 +313,24 @@ void main() {
         clientFingerprint: client,
       );
       expect(rows, hasLength(3));
+      Future<List<Map<String, Object?>>> retainedRows() async =>
+          (await database
+                  .customSelect(
+                    'SELECT projection_kind, aggregate_id, aggregate_version, '
+                    'last_cursor, payload_json, payload_digest '
+                    'FROM shop_connected_replica_projections '
+                    'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+                    'ORDER BY projection_kind, aggregate_id',
+                    variables: [
+                      const Variable('workspace_1'),
+                      const Variable('site_1'),
+                      Variable(client),
+                    ],
+                  )
+                  .get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList();
+      final retainedBefore = await retainedRows();
       await store.applySnapshot(
         snapshot: _snapshotAfterDelta(),
         clientFingerprint: client,
@@ -327,6 +353,7 @@ void main() {
       Map<String, Object?> content(Map<String, Object?> row) =>
           Map<String, Object?>.from(row)..remove('last_cursor');
       expect(refreshed.map(content), rows.map(content));
+      expect((await retainedRows()).map(content), retainedBefore.map(content));
       expect(
         await database
             .customSelect('SELECT COUNT(*) AS n FROM shop_sales')
@@ -466,6 +493,213 @@ void main() {
           .then((row) => row.read<int>('n')),
       1,
     );
+  });
+
+  test('legacy terminal replica reboots only under revoked old and new key', () async {
+    final oldStore = ShopConnectedSiteReplicaStore(
+      database: database,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientDeviceId: 'device_1',
+      localClientFingerprint: client,
+      localClientSigningKeyId: 'key_1',
+      approvedBindingDigest: approvedBindingDigest,
+      bindingResolver: bindingResolver,
+      runtimeEnabled: true,
+    );
+    await oldStore.applySnapshot(
+      snapshot: _snapshot(),
+      clientFingerprint: client,
+      certificateSha256: certificate,
+      observedAtMillis: observed,
+    );
+    final legacy = Map<String, Object?>.from(_committedStockProjection())
+      ..remove('terminalTransition');
+    final oldSnapshot = _snapshot(stockProjection: legacy);
+    final oldBytes = canonicalConnectedSiteJson(legacy);
+    await database.transaction(() async {
+      await database.customStatement(
+        'UPDATE shop_connected_replica_heads SET snapshot_json = ?, '
+        'checkpoint_digest = ? WHERE client_fingerprint = ?',
+        [
+          canonicalConnectedSiteJson(oldSnapshot.unsignedPayload),
+          oldSnapshot.checkpointDigest,
+          client,
+        ],
+      );
+      await database.customStatement(
+        'UPDATE shop_connected_replica_projections SET aggregate_version = 2, '
+        'payload_json = ?, payload_digest = ? WHERE client_fingerprint = ? '
+        "AND projection_kind = 'stockReservation'",
+        [oldBytes, connectedSiteSha256(legacy), client],
+      );
+    });
+    await database.verifyConnectedReplicaEvidence();
+    expect(
+      await oldStore.sharedWritesPaused(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: client,
+      ),
+      isTrue,
+    );
+    await expectLater(
+      oldStore.applyDelta(
+        delta: _delta(),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: observed + 1,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      oldStore.applySnapshot(
+        snapshot: _snapshot(stockProjection: _committedStockProjection()),
+        clientFingerprint: client,
+        certificateSha256: certificate,
+        observedAtMillis: observed + 1,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      oldStore.rebootstrapIncompleteTerminalReplica(
+        successor: oldStore,
+        freshSnapshot: _snapshot(stockProjection: _committedStockProjection()),
+        certificateSha256: certificate,
+        observedAtMillis: observed + 1,
+      ),
+      throwsStateError,
+    );
+    final successorApproval = await _seedApprovedBinding(
+      database,
+      clock,
+      keyOffset: 33,
+      deviceId: 'device_2',
+      signingKeyId: 'key_2',
+      pairingNonce: 'pairing_nonce_successor_abcdefghijkl',
+    );
+    final successor = ShopConnectedSiteReplicaStore(
+      database: database,
+      localWorkspaceId: 'workspace_1',
+      localSiteId: 'site_1',
+      localClientDeviceId: 'device_2',
+      localClientFingerprint: successorApproval.$1,
+      localClientSigningKeyId: 'key_2',
+      approvedBindingDigest: successorApproval.$2,
+      bindingResolver: successorApproval.$3,
+      runtimeEnabled: true,
+    );
+    await expectLater(
+      oldStore.rebootstrapIncompleteTerminalReplica(
+        successor: successor,
+        freshSnapshot: _snapshot(stockProjection: _committedStockProjection()),
+        certificateSha256: certificate,
+        observedAtMillis: observed + 1,
+      ),
+      throwsStateError,
+    );
+    await bindingResolver.revoke(
+      ConnectedCoordinatorRevocationV1(
+        targetBindingDigest: approvedBindingDigest,
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientDeviceId: 'device_1',
+        approvalGeneration: 2,
+        issuedAtMillis: observed,
+        authorityKeyId: 'authority_1',
+        authoritySignature: 'A' * 86,
+      ),
+    );
+    await expectLater(
+      oldStore.rebootstrapIncompleteTerminalReplica(
+        successor: successor,
+        freshSnapshot: _snapshot(stockProjection: legacy),
+        certificateSha256: certificate,
+        observedAtMillis: observed + 1,
+      ),
+      throwsFormatException,
+    );
+    expect(
+      await oldStore.sharedWritesPaused(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: client,
+      ),
+      isTrue,
+    );
+    expect(
+      await successor.continuationCursor(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: successorApproval.$1,
+      ),
+      isNull,
+    );
+    await oldStore.rebootstrapIncompleteTerminalReplica(
+      successor: successor,
+      freshSnapshot: _snapshot(stockProjection: _committedStockProjection()),
+      certificateSha256: certificate,
+      observedAtMillis: observed + 1,
+    );
+    expect(
+      await oldStore.sharedWritesPaused(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: client,
+      ),
+      isTrue,
+    );
+    expect(
+      await successor.continuationCursor(
+        workspaceId: 'workspace_1',
+        siteId: 'site_1',
+        clientFingerprint: successorApproval.$1,
+      ),
+      0,
+    );
+    final oldProjection = await database
+        .customSelect(
+          'SELECT payload_json FROM shop_connected_replica_projections '
+          "WHERE client_fingerprint = ? AND projection_kind = 'stockReservation'",
+          variables: [Variable(client)],
+        )
+        .getSingle();
+    expect(oldProjection.read<String>('payload_json'), oldBytes);
+    final successorProjection = await database
+        .customSelect(
+          'SELECT payload_json FROM shop_connected_replica_projections '
+          "WHERE client_fingerprint = ? AND projection_kind = 'stockReservation'",
+          variables: [Variable(successorApproval.$1)],
+        )
+        .getSingle();
+    final successorProof = ConnectedStockReservationProjectionV1.fromJson(
+      jsonDecode(successorProjection.read<String>('payload_json')),
+    );
+    expect(successorProof.terminalTransition?.saleBinding?.saleId, 'sale_1');
+    final oldHead = await database
+        .customSelect(
+          'SELECT snapshot_json FROM shop_connected_replica_heads '
+          'WHERE client_fingerprint = ?',
+          variables: [Variable(client)],
+        )
+        .getSingle();
+    expect(
+      oldHead.read<String>('snapshot_json'),
+      canonicalConnectedSiteJson(oldSnapshot.unsignedPayload),
+    );
+    expect(
+      await database
+          .customSelect(
+            'SELECT COUNT(*) AS n FROM shop_connected_replica_events '
+            'WHERE client_fingerprint = ?',
+            variables: [Variable(client)],
+          )
+          .getSingle()
+          .then((row) => row.read<int>('n')),
+      0,
+    );
+    expect(await database.countSales(), 0);
+    await database.verifyConnectedReplicaEvidence();
   });
 
   test('exact replay rejects a tail subset of an accepted delivery', () async {
@@ -1277,9 +1511,13 @@ Map<String, Object?> _committedStockProjection() {
 
 Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
   ShopDatabase database,
-  DateTime now,
-) async {
-  final publicKey = List<int>.generate(32, (index) => index + 1);
+  DateTime now, {
+  int keyOffset = 1,
+  String deviceId = 'device_1',
+  String signingKeyId = 'key_1',
+  String pairingNonce = 'pairing_nonce_abcdefghijklmnop',
+}) async {
+  final publicKey = List<int>.generate(32, (index) => index + keyOffset);
   final fingerprint = crypto.sha256.convert(publicKey).toString();
   final observed = now
       .subtract(const Duration(minutes: 2))
@@ -1290,7 +1528,7 @@ Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
     'tenantId': 'workspace_1',
     'siteId': 'site_1',
     'coordinatorDeviceId': 'coordinator_1',
-    'deviceId': 'device_1',
+    'deviceId': deviceId,
     'clientFingerprint': fingerprint,
     'sessionGeneration': 1,
     'observedAtMillis': observed,
@@ -1308,7 +1546,7 @@ Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
       'coordinator_device_id, issued_at_millis, expires_at_millis, consumed_at_millis) '
       'VALUES (?, ?, ?, ?, ?, ?, ?)',
       [
-        'pairing_nonce_abcdefghijklmnop',
+        pairingNonce,
         'workspace_1',
         'site_1',
         'coordinator_1',
@@ -1323,7 +1561,7 @@ Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         fingerprint,
-        'pairing_nonce_abcdefghijklmnop',
+        pairingNonce,
         'workspace_1',
         'site_1',
         'coordinator_1',
@@ -1335,7 +1573,7 @@ Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
     await database.customStatement(
       'INSERT INTO shop_site_devices (device_id, tenant_id, site_id, public_key_fingerprint, '
       "session_generation, state, enrolled_at_millis) VALUES (?, ?, ?, ?, ?, 'active', ?)",
-      ['device_1', 'workspace_1', 'site_1', fingerprint, 1, observed],
+      [deviceId, 'workspace_1', 'site_1', fingerprint, 1, observed],
     );
     await database.customStatement(
       'INSERT INTO shop_site_enrollment_evidence (evidence_digest, action, tenant_id, site_id, '
@@ -1347,7 +1585,7 @@ Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
         'workspace_1',
         'site_1',
         'coordinator_1',
-        'device_1',
+        deviceId,
         fingerprint,
         1,
         observed,
@@ -1362,9 +1600,9 @@ Future<(String, String, ShopConnectedSiteAttemptStore)> _seedApprovedBinding(
     coordinatorDeviceId: 'coordinator_1',
     pairingDigest: '1' * 64,
     enrollmentEvidenceDigest: evidenceDigest,
-    clientDeviceId: 'device_1',
+    clientDeviceId: deviceId,
     clientFingerprint: fingerprint,
-    clientSigningKeyId: 'key_1',
+    clientSigningKeyId: signingKeyId,
     address: '192.168.1.2',
     port: 9443,
     certificateSha256: '4' * 64,
