@@ -30,11 +30,44 @@ class ConnectedCloudFeedProofV1 {
     required String requestNonce,
     required String actorRole,
     required int trustedNowMillis,
+  }) => _parse(
+    canonicalBytes: canonicalBytes,
+    page: page,
+    expected: expected,
+    requestNonce: requestNonce,
+    actorRole: actorRole,
+    trustedNowMillis: trustedNowMillis,
+  );
+
+  /// Archived proofs retain their signed issuance window. Restore checks the
+  /// signature and chain, but must separately pause use until fresh authority.
+  static ConnectedCloudFeedProofV1 parseRetained({
+    required String canonicalBytes,
+    required ConnectedSiteRetailFeedPageV1 page,
+    required ConnectedSiteRetailFeedExpectation expected,
+    required String requestNonce,
+    required String actorRole,
+  }) => _parse(
+    canonicalBytes: canonicalBytes,
+    page: page,
+    expected: expected,
+    requestNonce: requestNonce,
+    actorRole: actorRole,
+    trustedNowMillis: null,
+  );
+
+  static ConnectedCloudFeedProofV1 _parse({
+    required String canonicalBytes,
+    required ConnectedSiteRetailFeedPageV1 page,
+    required ConnectedSiteRetailFeedExpectation expected,
+    required String requestNonce,
+    required String actorRole,
+    required int? trustedNowMillis,
   }) {
     if (canonicalBytes.length > 4096 ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(requestNonce) ||
         !const {'owner', 'manager'}.contains(actorRole) ||
-        trustedNowMillis <= 0) {
+        (trustedNowMillis != null && trustedNowMillis <= 0)) {
       throw const FormatException('connected_cloud_feed_proof_invalid');
     }
     Object? decoded;
@@ -89,8 +122,8 @@ class ConnectedCloudFeedProofV1 {
         issued <= 0 ||
         expires - issued < 1 ||
         expires - issued > 300000 ||
-        trustedNowMillis < issued ||
-        trustedNowMillis > expires ||
+        (trustedNowMillis != null &&
+            (trustedNowMillis < issued || trustedNowMillis > expires)) ||
         proof['workspaceId'] != expected.workspaceId ||
         proof['siteId'] != expected.siteId ||
         proof['actorId'] != expected.actorId ||

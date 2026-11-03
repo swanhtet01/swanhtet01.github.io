@@ -14,6 +14,8 @@ import 'shop_models.dart';
 import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_cloud_feed_schema.dart';
+import 'shop_connected_cloud_feed_proof.dart';
+import 'shop_connected_site_cloud_feed_contract.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
 import 'shop_connected_trusted_time_client_schema.dart';
@@ -6548,6 +6550,7 @@ class ShopDatabase extends _$ShopDatabase {
   static Future<void> migrateAndVerifyRestoreFile(
     File file, {
     ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
   }) async {
     final database = ShopDatabase.withCorrectionReceiptVerifier(
       executor: NativeDatabase(
@@ -6557,12 +6560,14 @@ class ShopDatabase extends _$ShopDatabase {
       correctionReceiptVerifier:
           correctionReceiptVerifier ??
           ShopCorrectionReceiptVerifier.production(),
+      testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
     );
     try {
       await database.verifyReadyForUse();
       await database.markCorrectionRestorePending();
       await database._suspendTrustedTimeIssuerAfterRestoreV38();
       await database._markTrustedTimeClientStreamsRestoredV39();
+      await database._suspendCloudFeedAfterRestoreV40();
       await database.verifyReadyForUse();
       final row = await database
           .customSelect('PRAGMA user_version')
@@ -6595,6 +6600,24 @@ class ShopDatabase extends _$ShopDatabase {
         correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
       );
 
+  /// Only fixture keys may open retained nonempty cloud-feed rows. Product
+  /// builds have no issuer pin until a separately reviewed authority exists.
+  factory ShopDatabase.testOnlyWithCloudFeedPins({
+    required QueryExecutor executor,
+    required Map<String, List<int>> trustedIssuerKeys,
+  }) {
+    if (!_testMutationBypassAvailable) {
+      throw UnsupportedError(
+        'Test cloud-feed pins are unavailable in product builds.',
+      );
+    }
+    return ShopDatabase.withCorrectionReceiptVerifier(
+      executor: executor,
+      correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+      testOnlyCloudFeedPinnedKeys: trustedIssuerKeys,
+    );
+  }
+
   factory ShopDatabase.testOnlyWithSaleAndCashShiftClock({
     QueryExecutor? executor,
     required DateTime Function() clock,
@@ -6616,6 +6639,7 @@ class ShopDatabase extends _$ShopDatabase {
     required this.correctionReceiptVerifier,
     bool testOnlyAllowUnconsumedAuthorization = false,
     DateTime Function()? testOnlySaleAndCashShiftClock,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
   }) : assert(
          !testOnlyAllowUnconsumedAuthorization || _testMutationBypassAvailable,
          'Unconsumed correction authorization is unavailable in product builds.',
@@ -6625,9 +6649,16 @@ class ShopDatabase extends _$ShopDatabase {
            : DateTime.now,
        testOnlyAllowUnconsumedAuthorization =
            testOnlyAllowUnconsumedAuthorization && _testMutationBypassAvailable,
+       _testOnlyCloudFeedPinnedKeys = _testMutationBypassAvailable
+           ? Map<String, List<int>>.unmodifiable({
+               for (final entry in testOnlyCloudFeedPinnedKeys.entries)
+                 entry.key: List<int>.unmodifiable(entry.value),
+             })
+           : const {},
        super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
+  final Map<String, List<int>> _testOnlyCloudFeedPinnedKeys;
   final bool testOnlyAllowUnconsumedAuthorization;
   final DateTime Function() _saleAndCashShiftClock;
 
@@ -10784,10 +10815,233 @@ class ShopDatabase extends _$ShopDatabase {
         restoreBarriers: await rows(
           'shop_connected_cloud_feed_restore_barriers',
         ),
+        trustedIssuerKeys: _testOnlyCloudFeedPinnedKeys,
       );
     } on Object {
       return false;
     }
+  }
+
+  Future<void> _suspendCloudFeedAfterRestoreV40() async {
+    await transaction(() async {
+      if (!await _v40ConnectedCloudFeedRowsValid()) {
+        throw StateError('Restored cloud-feed evidence is invalid.');
+      }
+      final heads = await customSelect(
+        'SELECT stream_digest, next_sequence, next_event_digest, '
+        'last_page_digest FROM shop_connected_cloud_feed_heads',
+      ).get();
+      for (final head in heads) {
+        final digest = head.read<String>('stream_digest');
+        final existing = await customSelect(
+          'SELECT barrier_digest FROM shop_connected_cloud_feed_restore_barriers '
+          'WHERE stream_digest = ?',
+          variables: [Variable<String>(digest)],
+        ).get();
+        await customUpdate(
+          'UPDATE shop_connected_cloud_feed_heads SET restore_paused = 1 '
+          'WHERE stream_digest = ?',
+          variables: [Variable<String>(digest)],
+        );
+        if (existing.isEmpty) {
+          final barrier = {
+            'contract': 'supermega.connected-cloud-feed-restore-barrier.v1',
+            'streamDigest': digest,
+            'nextSequence': head.read<int>('next_sequence'),
+            'nextEventDigest': head.read<String?>('next_event_digest'),
+            'lastPageDigest': head.read<String?>('last_page_digest'),
+          };
+          await customInsert(
+            'INSERT INTO shop_connected_cloud_feed_restore_barriers '
+            '(stream_digest, barrier_digest, next_sequence, '
+            'next_event_digest, last_page_digest, barrier_json) '
+            'VALUES (?, ?, ?, ?, ?, ?)',
+            variables: [
+              Variable<String>(digest),
+              Variable<String>(connectedSiteSha256(barrier)),
+              Variable<int>(head.read<int>('next_sequence')),
+              Variable<String>(head.read<String?>('next_event_digest')),
+              Variable<String>(head.read<String?>('last_page_digest')),
+              Variable<String>(canonicalConnectedSiteJson(barrier)),
+            ],
+          );
+        }
+      }
+      if (!await _v40ConnectedCloudFeedRowsValid()) {
+        throw StateError('Cloud-feed restore pause cannot be reconstructed.');
+      }
+    });
+  }
+
+  /// Exercises the signed-page transaction without mounting connected sync.
+  /// Product builds cannot supply test pins. Live authority/lease/clock ingress
+  /// and a server signer must be reviewed before any production equivalent.
+  Future<void> testOnlyApplyConnectedCloudFeedPageV40({
+    required ConnectedSiteRetailFeedExpectation expected,
+    required String actorRole,
+    required String requestNonce,
+    required String pageJson,
+    required String proofJson,
+    required int trustedNowMillis,
+  }) async {
+    if (!_testMutationBypassAvailable || _testOnlyCloudFeedPinnedKeys.isEmpty) {
+      throw UnsupportedError(
+        'Authenticated cloud feed test authority unavailable.',
+      );
+    }
+    final page = ConnectedSiteRetailFeedPageV1.parse(
+      canonicalBytes: pageJson,
+      expected: expected,
+    );
+    if (page.nextSequence <= expected.afterSequence) {
+      throw StateError('Empty cloud-feed pages cannot advance a cursor.');
+    }
+    final proof = ConnectedCloudFeedProofV1.parse(
+      canonicalBytes: proofJson,
+      page: page,
+      expected: expected,
+      requestNonce: requestNonce,
+      actorRole: actorRole,
+      trustedNowMillis: trustedNowMillis,
+    );
+    ConnectedCloudFeedPinnedIssuerVerifier(_testOnlyCloudFeedPinnedKeys)
+        .verifySync(proof);
+    final streamDigest = connectedSiteSha256({
+      'contract': 'supermega.connected-cloud-feed-stream.v1',
+      'workspaceId': expected.workspaceId,
+      'siteId': expected.siteId,
+      'actorId': expected.actorId,
+      'actorRole': actorRole,
+      'deviceId': expected.deviceId,
+      'authorityGeneration': expected.authorityGeneration,
+      'revocationGeneration': expected.revocationGeneration,
+      'authorityPayloadDigest': expected.authorityPayloadDigest,
+      'leaseDigest': expected.leaseDigest,
+    });
+    await transaction(() async {
+      if (!await _v40ConnectedCloudFeedRowsValid()) {
+        throw StateError('Stored cloud-feed evidence is invalid.');
+      }
+      final restoreBarriers = await customSelect(
+        'SELECT barrier_digest FROM shop_connected_cloud_feed_restore_barriers '
+        'WHERE stream_digest = ?',
+        variables: [Variable<String>(streamDigest)],
+      ).get();
+      if (restoreBarriers.isNotEmpty) {
+        throw StateError('Cloud-feed restore requires fresh rebootstrap.');
+      }
+      final replay = await customSelect(
+        'SELECT page_digest, page_json, authenticated_proof_json, '
+        'authenticated_proof_digest, request_nonce '
+        'FROM shop_connected_cloud_feed_pages '
+        'WHERE stream_digest = ? AND after_sequence = ?',
+        variables: [
+          Variable<String>(streamDigest),
+          Variable<int>(expected.afterSequence),
+        ],
+      ).get();
+      if (replay.isNotEmpty) {
+        if (replay.length != 1 ||
+            replay.single.read<String>('page_digest') != page.pageDigest ||
+            replay.single.read<String>('page_json') != pageJson ||
+            replay.single.read<String>('request_nonce') != requestNonce ||
+            replay.single.read<String>('authenticated_proof_json') !=
+                proofJson ||
+            replay.single.read<String>('authenticated_proof_digest') !=
+                proof.proofDigest) {
+          throw StateError('Cloud-feed cursor replay changed bytes.');
+        }
+        return;
+      }
+      final heads = await customSelect(
+        'SELECT next_sequence, next_event_digest, restore_paused '
+        'FROM shop_connected_cloud_feed_heads WHERE stream_digest = ?',
+        variables: [Variable<String>(streamDigest)],
+      ).get();
+      if (heads.isEmpty) {
+        if (expected.afterSequence != 0 || expected.priorEventDigest != null) {
+          throw StateError('Cloud-feed initial cursor mismatch.');
+        }
+        await customInsert(
+          'INSERT INTO shop_connected_cloud_feed_streams '
+          '(stream_digest, workspace_id, site_id, actor_id, device_id, '
+          'actor_role, lease_digest, authority_payload_digest, '
+          'authority_generation, revocation_generation) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(streamDigest),
+            Variable<String>(expected.workspaceId),
+            Variable<String>(expected.siteId),
+            Variable<String>(expected.actorId),
+            Variable<String>(expected.deviceId),
+            Variable<String>(actorRole),
+            Variable<String>(expected.leaseDigest),
+            Variable<String>(expected.authorityPayloadDigest),
+            Variable<int>(expected.authorityGeneration),
+            Variable<int>(expected.revocationGeneration),
+          ],
+        );
+      } else if (heads.length != 1 ||
+          heads.single.read<int>('restore_paused') != 0 ||
+          heads.single.read<int>('next_sequence') != expected.afterSequence ||
+          heads.single.read<String?>('next_event_digest') !=
+              expected.priorEventDigest) {
+        throw StateError('Cloud-feed cursor or restore state changed.');
+      }
+      await customInsert(
+        'INSERT INTO shop_connected_cloud_feed_pages '
+        '(page_digest, stream_digest, after_sequence, prior_event_digest, '
+        'next_sequence, next_event_digest, page_json, request_nonce, '
+        'authenticated_proof_json, authenticated_proof_digest) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(page.pageDigest),
+          Variable<String>(streamDigest),
+          Variable<int>(expected.afterSequence),
+          Variable<String>(expected.priorEventDigest),
+          Variable<int>(page.nextSequence),
+          Variable<String>(page.nextEventDigest!),
+          Variable<String>(pageJson),
+          Variable<String>(requestNonce),
+          Variable<String>(proofJson),
+          Variable<String>(proof.proofDigest),
+        ],
+      );
+      if (heads.isEmpty) {
+        await customInsert(
+          'INSERT INTO shop_connected_cloud_feed_heads '
+          '(stream_digest, next_sequence, next_event_digest, '
+          'last_page_digest, restore_paused) VALUES (?, ?, ?, ?, 0)',
+          variables: [
+            Variable<String>(streamDigest),
+            Variable<int>(page.nextSequence),
+            Variable<String>(page.nextEventDigest!),
+            Variable<String>(page.pageDigest),
+          ],
+        );
+      } else {
+        final changed = await customUpdate(
+          'UPDATE shop_connected_cloud_feed_heads SET next_sequence = ?, '
+          'next_event_digest = ?, last_page_digest = ? '
+          'WHERE stream_digest = ? AND next_sequence = ? '
+          'AND next_event_digest = ? AND restore_paused = 0',
+          variables: [
+            Variable<int>(page.nextSequence),
+            Variable<String>(page.nextEventDigest!),
+            Variable<String>(page.pageDigest),
+            Variable<String>(streamDigest),
+            Variable<int>(expected.afterSequence),
+            Variable<String>(expected.priorEventDigest!),
+          ],
+        );
+        if (changed != 1) {
+          throw StateError('Cloud-feed head compare-and-swap failed.');
+        }
+      }
+      if (!await _v40ConnectedCloudFeedRowsValid()) {
+        throw StateError('Cloud-feed transaction cannot be reconstructed.');
+      }
+    });
   }
 
   Future<bool> _v39ConnectedTrustedTimeClientRowsValid() async {

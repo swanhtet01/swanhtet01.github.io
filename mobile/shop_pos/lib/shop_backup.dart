@@ -872,11 +872,13 @@ abstract final class ShopBackup {
     File file, {
     int? expectedSchemaVersion,
     bool allowRuntimeUnboundCorrectionHistory = false,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
   }) => _verifySnapshot(
     file,
     minimumSchemaVersion: oldestSupportedSchemaVersion,
     expectedSchemaVersion: expectedSchemaVersion,
     allowRuntimeUnboundCorrectionHistory: allowRuntimeUnboundCorrectionHistory,
+    testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
   );
 
   /// Verifies an already-installed Shop store before Drift may migrate it.
@@ -894,7 +896,14 @@ abstract final class ShopBackup {
     required int minimumSchemaVersion,
     int? expectedSchemaVersion,
     required bool allowRuntimeUnboundCorrectionHistory,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
   }) {
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw UnsupportedError(
+        'Test cloud-feed pins are unavailable in product builds.',
+      );
+    }
     final connection = sqlite3.open(file.path, mode: OpenMode.readOnly);
     try {
       final version = connection.select('PRAGMA user_version');
@@ -913,6 +922,7 @@ abstract final class ShopBackup {
         minimumSchemaVersion: minimumSchemaVersion,
         allowRuntimeUnboundCorrectionHistory:
             allowRuntimeUnboundCorrectionHistory,
+        testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
       );
       final hasCorrectionSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
@@ -1396,6 +1406,7 @@ abstract final class ShopBackup {
     int schemaVersion, {
     required int minimumSchemaVersion,
     required bool allowRuntimeUnboundCorrectionHistory,
+    required Map<String, List<int>> testOnlyCloudFeedPinnedKeys,
   }) {
     if (schemaVersion < minimumSchemaVersion ||
         schemaVersion > supportedSchemaVersion) {
@@ -2045,7 +2056,11 @@ abstract final class ShopBackup {
               trustedTimeClientDefinitions,
               trustedTimeClientDefinitions.keys.toSet(),
             )) &&
-        (schemaVersion < 40 || _v40ConnectedCloudFeedRowsValid(connection)) &&
+        (schemaVersion < 40 ||
+            _v40ConnectedCloudFeedRowsValid(
+              connection,
+              testOnlyCloudFeedPinnedKeys,
+            )) &&
         (schemaVersion < 40 ||
             _snapshotDefinitionGroupExact(
               objects,
@@ -3830,7 +3845,10 @@ abstract final class ShopBackup {
     }
   }
 
-  static bool _v40ConnectedCloudFeedRowsValid(Database connection) {
+  static bool _v40ConnectedCloudFeedRowsValid(
+    Database connection,
+    Map<String, List<int>> trustedIssuerKeys,
+  ) {
     try {
       List<Map<String, Object?>> rows(String table) => connection
           .select('SELECT * FROM $table')
@@ -3841,6 +3859,7 @@ abstract final class ShopBackup {
         pages: rows('shop_connected_cloud_feed_pages'),
         heads: rows('shop_connected_cloud_feed_heads'),
         restoreBarriers: rows('shop_connected_cloud_feed_restore_barriers'),
+        trustedIssuerKeys: trustedIssuerKeys,
       );
     } on Object {
       return false;
