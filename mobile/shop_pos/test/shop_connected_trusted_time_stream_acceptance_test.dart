@@ -2,6 +2,7 @@
 // identity state.
 // ignore_for_file: prefer_initializing_formals
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +48,91 @@ void main() {
     expect(verifier.calls, 1);
     expect(signer.signCalls, 1);
     expect(signer.verifyCalls, 1);
+  });
+
+  test('live reading binds accepted entry, ack and same-boot sample', () async {
+    final client = _client(enabled: true, clock: _Clock(monotonic: [100, 125]));
+    final accepted = await client.accept(_entry());
+    final reading = await client.readLiveTime();
+    expect(reading.entryDigest, accepted.entry.entryDigest);
+    expect(reading.ackDigest, accepted.acknowledgement.ackDigest);
+    expect(reading.bootSessionId, accepted.acknowledgement.bootSessionId);
+    expect(reading.monotonicMillis, 125);
+    expect(reading.effectiveTimeMillis, 1800000000025);
+    await expectLater(
+      _client(enabled: true).readLiveTime(),
+      throwsA(_state('connected_trusted_time_stream_live_unavailable')),
+    );
+  });
+
+  test('successive live readings reject monotonic rollback', () async {
+    final client = _client(
+      enabled: true,
+      clock: _Clock(monotonic: [100, 130, 125]),
+    );
+    await client.accept(_entry());
+    expect((await client.readLiveTime()).monotonicMillis, 130);
+    await expectLater(
+      client.readLiveTime(),
+      throwsA(_state('connected_trusted_time_stream_clock_stale')),
+    );
+  });
+
+  test('overlapping live reads fail closed', () async {
+    final clock = _BlockingClock();
+    final client = _client(enabled: true, clock: clock);
+    await client.accept(_entry());
+    final first = client.readLiveTime();
+    await clock.entered.future;
+    await expectLater(
+      client.readLiveTime(),
+      throwsA(_state('connected_trusted_time_stream_live_unavailable')),
+    );
+    clock.release.complete();
+    expect((await first).monotonicMillis, 125);
+  });
+
+  test(
+    'live reading rejects expiry, boot swap and monotonic rollback',
+    () async {
+      for (final (clock, reason) in [
+        (
+          _Clock(monotonic: [100, 60101]),
+          'connected_trusted_time_stream_live_expired',
+        ),
+        (
+          _Clock(boot: ['3' * 64, '4' * 64], monotonic: [100, 125]),
+          'connected_trusted_time_stream_clock_stale',
+        ),
+        (
+          _Clock(monotonic: [100, 99]),
+          'connected_trusted_time_stream_clock_stale',
+        ),
+      ]) {
+        final client = _client(enabled: true, clock: clock);
+        await client.accept(_entry());
+        await expectLater(client.readLiveTime(), throwsA(_state(reason)));
+      }
+    },
+  );
+
+  test('continuity head denies the previous live time', () async {
+    final client = _client(enabled: true, clock: _Clock(monotonic: [100, 200]));
+    final first = _entry();
+    await client.accept(first);
+    await client.accept(
+      _entry(
+        sequence: 2,
+        predecessor: first.entryDigest,
+        kind: ConnectedTrustedTimeStreamEntryKind.continuity,
+        observedAtMillis: 1800000000100,
+        validUntilMillis: 1800000000100,
+      ),
+    );
+    await expectLater(
+      client.readLiveTime(),
+      throwsA(_state('connected_trusted_time_stream_live_unavailable')),
+    );
   });
 
   test(
@@ -264,7 +350,7 @@ ConnectedTrustedTimeStreamClientAcceptance _client({
   bool enabled = false,
   _Verifier? verifier,
   _Signer? signer,
-  _Clock? clock,
+  ConnectedTrustedTimePlatformClock? clock,
 }) => ConnectedTrustedTimeStreamClientAcceptance(
   enabled: enabled,
   scope: ConnectedTrustedTimeScope(
@@ -342,6 +428,23 @@ final class _Clock implements ConnectedTrustedTimePlatformClock {
   Future<int> monotonicMillis() async {
     final call = monotonicCalls++;
     return _monotonic[call < _monotonic.length ? call : _monotonic.length - 1];
+  }
+}
+
+final class _BlockingClock implements ConnectedTrustedTimePlatformClock {
+  final Completer<void> entered = Completer<void>();
+  final Completer<void> release = Completer<void>();
+  int calls = 0;
+
+  @override
+  Future<String> bootSessionId() async => '3' * 64;
+
+  @override
+  Future<int> monotonicMillis() async {
+    if (calls++ == 0) return 100;
+    entered.complete();
+    await release.future;
+    return 125;
   }
 }
 

@@ -90,6 +90,24 @@ final class ConnectedTrustedTimeStreamAcceptance {
   final bool replayed;
 }
 
+/// Volatile same-boot evidence for a current reading. Retained stream rows
+/// cannot recreate this capability after restart or restore.
+final class ConnectedTrustedTimeLiveReading {
+  const ConnectedTrustedTimeLiveReading({
+    required this.entryDigest,
+    required this.ackDigest,
+    required this.bootSessionId,
+    required this.monotonicMillis,
+    required this.effectiveTimeMillis,
+  });
+
+  final String entryDigest;
+  final String ackDigest;
+  final String bootSessionId;
+  final int monotonicMillis;
+  final int effectiveTimeMillis;
+}
+
 /// Default-off, transport-neutral acceptance boundary for a V2 client stream.
 ///
 /// It verifies exact scope, authority identity, chain continuity, local boot
@@ -126,6 +144,53 @@ final class ConnectedTrustedTimeStreamClientAcceptance {
   _AcceptedState? _state;
   _TimeAnchor? _lastTime;
   bool _accepting = false;
+  bool _readingLive = false;
+  int? _lastLiveMonotonicMillis;
+
+  /// A newer continuity entry never grants time. A live read requires the
+  /// latest accepted entry to be time-kind and the same platform boot on both
+  /// sides of the monotonic sample.
+  Future<ConnectedTrustedTimeLiveReading> readLiveTime() async {
+    if (!enabled || _accepting || _readingLive) {
+      throw StateError('connected_trusted_time_stream_live_unavailable');
+    }
+    final state = _state;
+    if (state == null ||
+        state.entry.kind != ConnectedTrustedTimeStreamEntryKind.time) {
+      throw StateError('connected_trusted_time_stream_live_unavailable');
+    }
+    _readingLive = true;
+    try {
+      final beforeBoot = await _clock.bootSessionId();
+      final monotonic = await _clock.monotonicMillis();
+      final afterBoot = await _clock.bootSessionId();
+      if (_accepting ||
+          !identical(state, _state) ||
+          beforeBoot != state.ack.bootSessionId ||
+          afterBoot != beforeBoot ||
+          monotonic < state.ack.acknowledgedAtMonotonicMillis ||
+          (_lastLiveMonotonicMillis != null &&
+              monotonic < _lastLiveMonotonicMillis!)) {
+        throw StateError('connected_trusted_time_stream_clock_stale');
+      }
+      final effective =
+          state.entry.observedAtMillis +
+          (monotonic - state.ack.acknowledgedAtMonotonicMillis);
+      if (effective > state.entry.validUntilMillis) {
+        throw StateError('connected_trusted_time_stream_live_expired');
+      }
+      _lastLiveMonotonicMillis = monotonic;
+      return ConnectedTrustedTimeLiveReading(
+        entryDigest: state.entry.entryDigest,
+        ackDigest: state.ack.ackDigest,
+        bootSessionId: beforeBoot,
+        monotonicMillis: monotonic,
+        effectiveTimeMillis: effective,
+      );
+    } finally {
+      _readingLive = false;
+    }
+  }
 
   Future<ConnectedTrustedTimeStreamAcceptance> accept(
     ConnectedTrustedTimeStreamEntryV2 candidate,
