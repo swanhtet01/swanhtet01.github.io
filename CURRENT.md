@@ -20,7 +20,9 @@
   **14/14 PASS** in 2m06s; focused first and second device cases **PASS**;
   analyzer, formatter and diff check **PASS**. Independent read-only security
   review **ACCEPT**, after reducing a formatting-only 4,440-line diff to a
-  109-line test-file diff. No production code or route changed.
+  109-line test-file diff. The unchanged task-owned OS process-interruption
+  harness also **PASS 4/4** (kill before/after commit, rollback/reopen and
+  v41 signed-page recovery). No production code or route changed.
 - **NOT RUN / BLOCKED:** these are two synthetic identities, not a common
   deployed server delivering events to two installed devices. Real LAN/TLS,
   cloud revocation propagation, physical outage/reconnect, signed production
