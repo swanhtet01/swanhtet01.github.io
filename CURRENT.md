@@ -1,9 +1,45 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 05:56 UTC
+- Last verified: 2026-11-03 06:06 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-03 06:06 UTC exact-head CI and private capture-verifier hardening
+
+- **PASS (private source only):** implementation
+  `bbf2deed49801f618579e1b0789d78a045fc14fd`, tree
+  `1a439bea9226b8093b7bb4e207d8f8fbbd1a1447`, parent `d10cccb0`,
+  changes only the sanitized Windows stage-1 evidence verifier and its tests.
+  Binary patch SHA-256 is
+  `03b1f927479c485988a8598b6be1206259e60ddfbc99a9d605971198ca844536`.
+  A reported capture now must match the committed EDB installer name, size and
+  SHA-256; signer raw-DER digest, subject and issuer; timestamp certificate;
+  code-signing EKU; and authoritative documentation URL/digest. Eleven
+  substitution/shape cases fail closed. Focused Node suites **54/54 PASS**,
+  claims guard **179/179 PASS**, `git diff --check` **PASS**. Independent
+  read-only security review **ACCEPT**. This checks reported JSON against a
+  source-controlled policy; it does not verify Authenticode at runtime, make
+  stage 1 authoritative, or authorize installer execution. Windows PowerShell,
+  observer probe and genuine rehearsal remain **NOT RUN** on this source.
+- **PASS / FAIL / IN PROGRESS (published exact head):** reviewed draft PR #752
+  was fast-forwarded non-force from `5a9e89bb` to ledger
+  `d10cccb04abd4f347de196bc29db32a785144a09`; the private `bbf2deed`
+  successor is not published. At this checkpoint Kernel run `41587213702`
+  **PASS**; Dependency run `41587213722` **FAIL** at app/kernel audits while
+  platform, Python runtime and added-line credential scan **PASS**. App run
+  `41587206380` and Native run `41587213794` are **IN PROGRESS**; redundant
+  same-repository App PR run `41587213792` is intentionally **SKIPPED**.
+  Native synthetic Android QA packaging passed, but the full Android and
+  remaining native jobs are not terminal. GitGuardian is **NEUTRAL / INCOMPLETE**,
+  not a security pass. Do not replace these live statuses with a pass or move
+  the PR head while useful jobs run.
+- **BLOCKED:** stage 2 still lacks reviewed official multi-source artifacts,
+  retained canonical observations, runtime bindings, a proven loss-aware
+  Windows closure observer, and explicit isolated-run execution authority.
+  Draft registration-only PR #753 remains blocked and does not itself run or
+  authorize the probe. The stale PostgreSQL receipt, minimatch advisory,
+  full-scope security scan and installed-device acceptance remain open.
 
 ## 2026-11-03 05:56 UTC private Windows rehearsal closure hardening
 
