@@ -7,6 +7,26 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PRIVATE HISTORICAL-TRUST SOURCE PASS / WRITER STILL BLOCKED:**
+  `de4372778d9b2389b945670f1050df15f2ba5013`, tree
+  `c850eeb31047497665b53f6e9d19c366a4f97cc2`, adds a private
+  source-owned v41 historical trust capability, currently with an empty
+  reviewed product registry. Synthetic pins can be supplied only by an
+  AOT-guarded test factory. Automatic database open and explicit verification
+  collect nonempty history under one transaction; snapshot verification uses
+  one SQLite read snapshot; encrypted export and staged fresh-target restore
+  propagate the same capability. Mixing it with caller fixture pins now
+  throws at runtime. The focused composed source-backed open/export/restore
+  test **1/1 PASS**, including default rejection, mixed-source rejection and
+  restored `restore_paused=1`; neighboring original signed-history fixture
+  **1/1 PASS**; four-file Dart analysis and `git diff --check` PASS.
+  Independent security review found and then accepted a corrected automatic
+  open-time snapshot gap. Historical authenticity grants **no current
+  authorization or write permission**. The product issuer registry is still
+  empty, the v41 page writer remains test-only, and a real product nonempty
+  restore, release-AOT build, device keys, installed two-device journey and
+  merchant acceptance are **NOT RUN/BLOCKED**. No live sync was enabled.
+
 - **PRIVATE COMPOSED FEED FIXTURE PASS / PRODUCT PATH BLOCKED:** implementation
   `457b467fcebd00f1b2630162c90d95648b029dc3`, tree
   `d19be01362fc0de0d7dcdd4b379183ef004f4f19`, adds one isolated
