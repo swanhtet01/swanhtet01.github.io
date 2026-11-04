@@ -7,6 +7,25 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PRIVATE PRODUCT-WRITER PREREQUISITE PASS / ENTRY NOT RELEASED:**
+  implementation `ae6f4359fffcb420fa54c45a0ed02e95a77e7fc5`, tree
+  `db4c1d98c880f3ab2b63a085793fdc30622ed28a`, extracts the existing
+  first-page stream/page/evidence/head writer body into a private method
+  called only by the AOT-guarded test wrapper. The wrapper retains the same
+  SQLite transaction, current-authority/time checks, exact replay comparison,
+  rollback and restore-pause behavior. Composed journey **1/1 PASS**, original
+  signed historical page regression **1/1 PASS**, targeted Dart analysis and
+  `git diff --check` PASS; independent read-only review ACCEPTED the
+  behavior-preserving extraction. No public product caller or trust bypass was
+  added. A safe product entry must derive source-pinned feed/owner/lease/
+  authority/time issuer roots, protected enrolled-device possession and a
+  validated same-boot clock internally, then bind the current gate and private
+  writer under one transaction. Those roots and rotation policy need Swan's
+  approval; the reviewed registry remains empty. Do not expose a caller-
+  supplied trust DTO or test-only writer as a product entry. Public Native
+  `41762841148` is now terminal SUCCESS on older head `7103418c`; that does
+  not verify these private successors. No successor publication or hosted CI.
+
 - **PRIVATE HISTORICAL-TRUST SOURCE PASS / WRITER STILL BLOCKED:**
   `de4372778d9b2389b945670f1050df15f2ba5013`, tree
   `c850eeb31047497665b53f6e9d19c366a4f97cc2`, adds a private
