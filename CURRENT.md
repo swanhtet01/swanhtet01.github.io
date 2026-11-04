@@ -18,10 +18,24 @@
   ACCEPTED **draft CI only**. Automatic runs: push App `41771859570`, Native
   `41771866482` IN_PROGRESS; disposable PG17/native bridge `41771866490` SUCCESS;
   Kernel `41771866500` SUCCESS; Dependency Security `41771866543` FAILURE at
-  app/kernel locked-dependency audit; redundant PR App `41771866505` SKIPPED.
+  app/kernel locked-dependency audit; push App `41771859570` FAILURE at
+  `hq:verify` step 1/37 (`database_rehearsal_evidence_stale`), and redundant
+  PR App `41771866505` SKIPPED.
   No installed-device, product-authority, Windows HQ rehearsal, merchant or
   production acceptance follows. Keep this public head fixed while useful
   checks run; no merge, deployment, signing or sync enablement.
+
+- **PRIVATE PRODUCT ENTRY CONTRACT ONLY / NOT A WORKING WRITER:**
+  `52acd1c177076e47d33a93d9489786d9fac83474` adds a public
+  first-page method that accepts no caller trust, issuer pins, clock or gate,
+  checks the source-owned product registry and fails before mutation because
+  that registry is empty. Both missing-product-trust and legacy fixture-pin
+  nonpromotion tests **2/2 PASS**, and the full v41 schema file **18/18
+  PASS** in 2m44s; two-file Dart analysis, formatting and diff check PASS.
+  Independent review ACCEPTED this as a fail-closed API
+  placeholder, explicitly **not** functional product apply. Protected
+  identity, current lease/revocation/time composition and the private writer
+  transaction remain to be integrated and verified; no pilot claim follows.
 
 - **PRIVATE PRODUCT-WRITER PREREQUISITE PASS / ENTRY NOT RELEASED:**
   implementation `ae6f4359fffcb420fa54c45a0ed02e95a77e7fc5`, tree
