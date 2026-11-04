@@ -1,9 +1,29 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 00:38 UTC
+- Last verified: 2026-11-04 00:43 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 00:43 UTC exact-head disposable PG17-to-native bridge
+
+- **PASS (hosted synthetic, exact draft head):** one guarded non-force update
+  moved draft PR #752 from `5a6badd0e798cce068c5601bfc43f0eb02558e8d`
+  to reviewed ledger `39f1c3dc8537b5647b6dfca39118da9b66daa6f2`;
+  remote and PR readbacks agree. The co-located bridge run `41748476155`
+  completed **SUCCESS** on that head using disposable PostgreSQL 17.11.
+  Device-A export/checked-PG-to-native phases passed in 24.688s/15.416s;
+  device B passed in 11.884s/15.136s. The test uses distinct synthetic
+  device keys/leases and checked SQL/RLS, with exact original signed bytes,
+  but no installed networked devices, production ingress or key custody.
+- **IN PROGRESS / BLOCKED:** exact-head Native `41748476173` and the
+  push-triggered App run `41748468202` are still running. The same-repository
+  PR App run `41748476117` is **SKIPPED** and is not App coverage. Kernel
+  `41748476161` **PASS**; Dependency Security `41748476214` **FAIL** on the
+  unresolved advisory. Keep this head fixed while useful checks run. The
+  Windows HQ rehearsal, full security disposition, production signing,
+  installed recovery, physical two-device sync and merchant acceptance
+  remain blocked or **NOT RUN**.
 
 ## 2026-11-04 00:38 UTC predecessor Native CI terminal and successor gate
 
