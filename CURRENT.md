@@ -5,6 +5,32 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-04 private Windows device-profile verifier checkpoint
+
+- **SOURCE-ONLY PARTIAL PASS / CONNECTED MODE OFF:** implementation
+  `7fbdd68ba49e4dc00d04d53cc9088028d61a5f1c`, tree
+  `ddfd8f6915b9c4a68ed9d714f94bc06d3388b711`, introduces a versioned
+  P-256/SHA-256 public device-signature profile for private Python command
+  validation and Dart public verification. The canonical profile uses a
+  65-byte uncompressed SEC1 point, SHA-256 point fingerprint, 64-byte P1363
+  low-S signature and one SHA-256 over canonical bytes. Dart explicitly
+  rejects off-curve and out-of-field points. Existing Ed25519 cloud issuers
+  and Android identity behavior remain unchanged. No private key was created.
+- **EXACT PRIVATE CHECKS:** Python connected-device/site/read tests **20/20
+  PASS**; Flutter contract tests **10/10 PASS**; focused Flutter analysis
+  **PASS**; native CI verifier **PASS** and contract tests **22/22 PASS**;
+  `git diff --check` **PASS**. Independent security reviewer initially
+  **BLOCKED** the unchecked Dart curve point, then **ACCEPTED** the corrected
+  eight-file verifier slice. This is not an enrollment or end-to-end pass.
+- **STILL BLOCKED/NOT RUN:** signed enrollment/profile persistence, outer
+  upload and event-read admission, device pairing, native CNG/TPM signing and
+  installed export-denial/restart proof, mixed Android/Windows two-device LAN
+  journey, product issuer/key custody and activation. Product issuer pins
+  remain empty and connected mode stays default-off. Public draft PR #752
+  remains at `52c3f65a4c0acb8805dfd71b3418004488090214`; Native run
+  `41771866482` was still in progress on its Android job at this checkpoint,
+  with five sibling jobs successful. It does not test the private successor.
+
 ## 2026-11-04 predecessor native run closed
 
 - **PRIVATE DEFAULT-OFF SERVER SIGNER COMPOSITION PASS:** implementation
