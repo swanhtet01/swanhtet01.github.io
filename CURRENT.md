@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 02:02 UTC
+- Last verified: 2026-11-04 (private source checkpoint; hosted successor checks NOT RUN)
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 private native cloud-feed HTTP reader
+
+- **SOURCE PASS / PILOT BLOCKED:** implementation commit
+  `ce2b925b5c963485f2c171d6796a8b03f3a8ca8c`, tree
+  `769923ff9524b38688a370f48b60922ecc8ee261`, adds a default-off
+  authenticated HTTPS reader for the source-only `/api/connected-site/v1/event-feed`
+  route. It sends exact canonical request bytes through the existing
+  origin-bound authenticated executor and requires exact request echo, canonical
+  response/page, current proof window and separately pinned Ed25519 issuer
+  verification. The returned receipt is **not** durable apply authority; the
+  v41 transaction and current authority/time gate remain separate. The native
+  CI inventory and formatting contract include the new library and test.
+- **VERIFIED locally on this exact source:** five focused Flutter reader tests
+  passed, including valid signed response, wrong pin-independent page/role
+  substitutions and signature-only corruption; the reader, proof and page
+  contract trio passed 16/16; Dart analysis for both new files passed; native
+  CI contract 22/22 passed, inventory verifier passed, `git diff --check`
+  passed. Independent read-only reviewer accepted after two findings were
+  fixed (format inventory and weak negative pin). The final combined 16-test
+  trio preceded the last test adjustment, so final-source broader regression
+  remains **NOT RUN**.
+- **NOT RUN / BLOCKED:** no real cloud ingress is mounted, no production issuer
+  or device key custody is configured, no production database writer invokes
+  this reader, no installed two-device offline/reconnect test has run, and no
+  hosted CI covers this private successor yet. Public PR #752 remains at
+  `4161952717b549a5b1abbd4d425dfed612acf7c8` while its Native run is
+  useful. App/HQ rehearsal and dependency-security gates remain FAIL/BLOCKED.
 
 ## 2026-11-04 02:02 UTC dependency-security compatibility check
 
