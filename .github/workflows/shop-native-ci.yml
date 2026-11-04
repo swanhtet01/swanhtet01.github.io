@@ -65,6 +65,7 @@ jobs:
       - name: Check connected successor formatting
         run: |
           dart format --output=none --set-exit-if-changed \
+            lib/shop_connected_cloud_feed_http.dart \
             lib/shop_connected_cloud_feed_proof.dart \
             lib/shop_connected_cloud_feed_read_request.dart \
             lib/shop_connected_cloud_feed_schema.dart \
@@ -88,6 +89,7 @@ jobs:
             lib/shop_connected_trusted_time_verifier.dart \
             test/historical_shop_fixture_support.dart \
             test/shop_connected_cloud_feed_interrupt_worker_test.dart \
+            test/shop_connected_cloud_feed_http_test.dart \
             test/shop_connected_cloud_feed_proof_test.dart \
             test/shop_connected_cloud_feed_read_request_test.dart \
             test/shop_connected_cloud_feed_schema_test.dart \
@@ -130,6 +132,7 @@ jobs:
           test/shop_cash_movement_test.dart
           test/shop_catalog_search_test.dart
           test/shop_connected_application_boundary_test.dart
+          test/shop_connected_cloud_feed_http_test.dart
           test/shop_connected_cloud_feed_interrupt_worker_test.dart
           test/shop_connected_cloud_feed_proof_test.dart
           test/shop_connected_cloud_feed_read_request_test.dart
@@ -566,6 +569,7 @@ jobs:
           set +e
           (
             TMPDIR="$connected_successor_tmp" timeout --signal=TERM --kill-after=10s "${connected_successor_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m \
+              test/shop_connected_cloud_feed_http_test.dart \
               test/shop_connected_cloud_feed_proof_test.dart \
               test/shop_connected_cloud_feed_read_request_test.dart \
               test/shop_connected_cloud_feed_schema_test.dart \
