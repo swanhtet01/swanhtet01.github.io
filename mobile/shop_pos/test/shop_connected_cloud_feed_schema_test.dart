@@ -2824,6 +2824,60 @@ void main() {
     );
   }
 
+  test('product first-page entry rejects without reviewed trust and writes nothing', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.verifyReadyForUse();
+    await expectLater(
+      database.applyConnectedCloudFeedFirstPage(
+        receipt: const ConnectedCloudFeedHttpReceipt(
+          requestJson: '{}',
+          pageJson: '{}',
+          proofJson: '{}',
+        ),
+        enrolledDeviceAlias: 'enrolled-device',
+      ),
+      throwsStateError,
+    );
+    for (final table in [
+      'shop_connected_cloud_feed_streams',
+      'shop_connected_cloud_feed_pages',
+      'shop_connected_cloud_feed_page_evidence',
+      'shop_connected_cloud_feed_heads',
+    ]) {
+      final count =
+          (await database
+                  .customSelect('SELECT COUNT(*) AS n FROM $table')
+                  .getSingle())
+              .read<int>('n');
+      expect(count, 0, reason: table);
+    }
+  });
+
+  test(
+    'fixture issuer pins never promote the product cloud-feed entry',
+    () async {
+      final fixtureDatabase = ShopDatabase.testOnlyWithCloudFeedPins(
+        executor: NativeDatabase.memory(),
+        trustedIssuerKeys: {'fixture-issuer': List<int>.filled(32, 7)},
+      );
+      addTearDown(fixtureDatabase.close);
+      await fixtureDatabase.verifyReadyForUse();
+      await expectLater(
+        fixtureDatabase.applyConnectedCloudFeedFirstPage(
+          receipt: const ConnectedCloudFeedHttpReceipt(
+            requestJson: '{}',
+            pageJson: '{}',
+            proofJson: '{}',
+          ),
+          enrolledDeviceAlias: 'enrolled-device',
+        ),
+        throwsStateError,
+        reason: 'fixture trust must never promote a product writer',
+      );
+    },
+  );
+
   test('signed authority gate serializes independent revocation and rejects expiry', () async {
     await runSignedPageFixture(
       deviceId: 'device_v41_fixture',

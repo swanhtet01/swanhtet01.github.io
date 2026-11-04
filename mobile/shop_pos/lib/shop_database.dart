@@ -15,6 +15,7 @@ import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_cloud_feed_schema.dart';
 import 'shop_connected_cloud_feed_proof.dart';
+import 'shop_connected_cloud_feed_http.dart';
 import 'shop_connected_cloud_feed_v41_verifier.dart';
 import 'shop_connected_site_cloud_feed_contract.dart';
 import 'shop_connected_site_reconciliation.dart';
@@ -11382,6 +11383,32 @@ class ShopDatabase extends _$ShopDatabase {
         throw StateError('Cloud-feed transaction cannot be reconstructed.');
       }
     });
+  }
+
+  /// Product entry boundary for an authenticated first-page receipt. It takes
+  /// no caller-supplied pins, clock, authority gate or fixture permission.
+  /// Until reviewed product issuer roots and protected custody are present,
+  /// even a well-formed receipt must fail before any database mutation.
+  Future<void> applyConnectedCloudFeedFirstPage({
+    required ConnectedCloudFeedHttpReceipt receipt,
+    required String enrolledDeviceAlias,
+  }) async {
+    if (enrolledDeviceAlias.isEmpty ||
+        receipt.requestJson.isEmpty ||
+        receipt.pageJson.isEmpty ||
+        receipt.proofJson.isEmpty) {
+      throw const FormatException('connected_cloud_feed_product_input_invalid');
+    }
+    final pinned =
+        ShopCloudFeedHistoricalTrustSource.production().verifiedHistory;
+    if (pinned == null) {
+      throw StateError('Cloud-feed product authority is unavailable.');
+    }
+    // A future product composition must independently recover the enrolled
+    // device, current signed lease/revocation and same-boot accepted time,
+    // then enter the writer transaction before calling the private core.
+    // A reviewed historical pin alone never authorizes a current write.
+    throw StateError('Cloud-feed product writer is not enabled.');
   }
 
   /// Synthetic first-page writer only. A production writer needs real issuer
