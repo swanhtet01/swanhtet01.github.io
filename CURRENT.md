@@ -1,9 +1,29 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 01:35 UTC
+- Last verified: 2026-11-04 01:40 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 01:40 UTC private real-PG route verification candidate
+
+- **SOURCE PREPARED / HOSTED EXECUTION NOT RUN:** private implementation
+  `f28eee845f9937af817e7a2f7321fe01e9561fac`, repository tree
+  `aa3236aad92c464cd630d4f56c72cf52af682e53`, one-file patch SHA-256
+  `4ebf2a40add52bbce4d91a538fe2c460997bc2736e1a448a7e47e391ccfb4408`.
+  The existing disposable PostgreSQL 17 → native two-store fixture is prepared
+  to use the same checked HTTP feed route instead of calling the reader/sealer
+  directly. It tests exact signed-page bytes, wrong-device denial and
+  PostgreSQL-row device revocation. A reviewer found and then accepted a fix
+  for a millisecond signer/verification clock race: the synthetic signer uses
+  the route's same server-side trusted sample. Connected-site Python discovery
+  **81 run, 75 pass, 6 opt-in PG17 skips**, Python compilation and diff check
+  **PASS**. Independent security review **ACCEPT for hosted CI only**.
+  This real-PG route branch has **NOT RUN** locally because no PostgreSQL 17
+  binary is installed; public bridge run `41755294111` passed on predecessor
+  `41619527` and cannot validate this private successor. The published PR
+  head remains fixed during useful Native and App checks. No production
+  listener, issuer custody or installed two-device path is enabled.
 
 ## 2026-11-04 01:35 UTC checked-route two-store synthetic bridge
 
