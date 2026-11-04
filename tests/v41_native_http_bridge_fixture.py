@@ -361,6 +361,40 @@ def build_pg_response(native_database: Path, *, admin_url: str,
         if response.status_code != 200:
             raise ValueError(f"native_v41_pg_route_rejected:{response.status_code}")
         result = response.json()
+        replay = client.post(path, json=request)
+        if (replay.status_code != 200
+                or replay.json()["requestJson"] != result["requestJson"]
+                or replay.json()["pageJson"] != result["pageJson"]):
+            raise ValueError("native_v41_pg_exact_request_replay_changed")
+        with psycopg.connect(admin_url) as connection:
+            event_count = connection.execute(
+                "select count(*) from app_private.connected_site_events "
+                "where workspace_id=%s and site_id=%s",
+                (workspace, site),
+            ).fetchone()
+        if event_count != (2,):
+            raise ValueError("native_v41_pg_replay_changed_events")
+        wrong_cursor_unsigned = {
+            key: value for key, value in request.items() if key != "signature"
+        }
+        wrong_cursor_unsigned["priorEventDigest"] = "f" * 64
+        wrong_cursor_unsigned["issuedAt"] = datetime.now(timezone.utc).isoformat(
+            timespec="milliseconds"
+        ).replace("+00:00", "Z")
+        wrong_cursor_key = _key(18 if first else 24)[0]
+        wrong_cursor_signature = wrong_cursor_key.sign(
+            canonical_json(wrong_cursor_unsigned).encode()
+        )
+        wrong_cursor = {
+            **wrong_cursor_unsigned,
+            "signature": base64.urlsafe_b64encode(
+                wrong_cursor_signature
+            ).decode().rstrip("="),
+        }
+        conflict = client.post(path, json=wrong_cursor)
+        if (conflict.status_code != 409
+                or conflict.json()["detail"]["error"] != "event_page_cursor_changed"):
+            raise ValueError("native_v41_pg_wrong_cursor_denial_changed")
         wrong_device = client.post(path, json={**request, "deviceId": "wrong"})
         if (wrong_device.status_code != 422
                 or wrong_device.json()["detail"]["error"] != "event_read_scope"):
