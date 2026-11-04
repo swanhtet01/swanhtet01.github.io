@@ -5,6 +5,17 @@
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
+## 2026-11-04 predecessor native run closed
+
+- **PASS for predecessor only:** Native POS run `41755293925` is terminal
+  SUCCESS on public `4161952717b549a5b1abbd4d425dfed612acf7c8`, all six
+  jobs including Android Flutter shards, process interruption, gallery and
+  debug APK packaging. This is not verification of the later private feed
+  reader or enrollment/trust changes. The exact-source push App run remains
+  blocked by `database_rehearsal_evidence_stale`, and the dependency gate by
+  vulnerable minimatch paths. No installed two-device or signed production
+  artifact acceptance is implied.
+
 ## 2026-11-04 private native cloud-feed HTTP reader
 
 - **SOURCE PASS / CURRENT AUTHORITY BLOCKED:** successor
