@@ -36,10 +36,13 @@ void main() {
     final fingerprint = sha256.convert(point).toString();
     final owner = await Ed25519().newKeyPairFromSeed(List<int>.filled(32, 14));
     final ownerPublic = (await owner.extractPublicKey()).bytes;
-    ShopOwnerEnrollmentEvidenceV2 evidence(String signature) {
+    ShopOwnerEnrollmentEvidenceV2 evidence(
+      String signature, {
+      ShopOwnerEnrollmentAction action = ShopOwnerEnrollmentAction.approve,
+    }) {
       final payload = <String, Object>{
         'schema': 'supermega.shop.owner-enrollment-evidence.v2',
-        'action': 'approve',
+        'action': action.name,
         'tenantId': _tenant,
         'siteId': _site,
         'coordinatorDeviceId': _coordinator,
@@ -53,7 +56,7 @@ void main() {
         'authorityKeyId': 'owner-key-1',
       };
       return ShopOwnerEnrollmentEvidenceV2(
-        action: ShopOwnerEnrollmentAction.approve,
+        action: action,
         tenantId: _tenant,
         siteId: _site,
         coordinatorDeviceId: _coordinator,
@@ -79,17 +82,39 @@ void main() {
         )
         .replaceAll('=', '');
     final signed = evidence(signature);
+    final unsignedRevoke = evidence(
+      'A' * 86,
+      action: ShopOwnerEnrollmentAction.revoke,
+    );
+    final revokeSignature = base64Url
+        .encode(
+          (await Ed25519().sign(
+            utf8.encode(
+              canonicalConnectedSiteJson(unsignedRevoke.signingPayload),
+            ),
+            keyPair: owner,
+          )).bytes,
+        )
+        .replaceAll('=', '');
+    final signedRevoke = evidence(
+      revokeSignature,
+      action: ShopOwnerEnrollmentAction.revoke,
+    );
     final bytes = canonicalConnectedSiteJson(signed.toJson());
     ShopOwnerEnrollmentEvidenceV2 verify({
       String? json,
+      ShopOwnerEnrollmentAction action = ShopOwnerEnrollmentAction.approve,
       String tenant = _tenant,
       String keyId = 'key-v2',
       String? expectedPoint,
       String? expectedFingerprint,
       Map<String, List<int>>? pins,
     }) => verifyRetainedOwnerEnrollmentV2Sync(
+      expectedAction: action,
       canonicalEvidenceJson: json ?? bytes,
-      expectedEvidenceDigest: signed.evidenceDigest,
+      expectedEvidenceDigest: action == ShopOwnerEnrollmentAction.approve
+          ? signed.evidenceDigest
+          : signedRevoke.evidenceDigest,
       tenantId: tenant,
       siteId: _site,
       coordinatorDeviceId: _coordinator,
@@ -102,6 +127,17 @@ void main() {
       pinnedOwnerIssuerKeys: pins ?? {'owner-key-1': ownerPublic},
     );
     expect(verify().signingKeyId, 'key-v2');
+    expect(
+      verify(
+        json: canonicalConnectedSiteJson(signedRevoke.toJson()),
+        action: ShopOwnerEnrollmentAction.revoke,
+      ).action,
+      ShopOwnerEnrollmentAction.revoke,
+    );
+    expect(
+      () => verify(json: canonicalConnectedSiteJson(signedRevoke.toJson())),
+      throwsFormatException,
+    );
     expect(() => verify(tenant: 'other'), throwsFormatException);
     expect(() => verify(keyId: 'other'), throwsFormatException);
     expect(

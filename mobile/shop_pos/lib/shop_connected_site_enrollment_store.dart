@@ -238,9 +238,11 @@ class ShopOwnerEnrollmentEvidenceV2 {
   };
 }
 
-/// Historical authenticity only; current revocation must be checked again at
-/// admission. Issuer keys remain Ed25519 and must be pinned independently.
+/// Historical authenticity only; this can verify either an approval or its
+/// separately signed revocation. The current chain/head and revocation must be
+/// checked again at admission. Ed25519 issuer keys are pinned independently.
 ShopOwnerEnrollmentEvidenceV2 verifyRetainedOwnerEnrollmentV2Sync({
+  ShopOwnerEnrollmentAction expectedAction = ShopOwnerEnrollmentAction.approve,
   required String canonicalEvidenceJson,
   required String expectedEvidenceDigest,
   required String tenantId,
@@ -266,7 +268,7 @@ ShopOwnerEnrollmentEvidenceV2 verifyRetainedOwnerEnrollmentV2Sync({
       canonicalConnectedSiteJson(decoded) != canonicalEvidenceJson ||
       decoded.length != 15 ||
       decoded['schema'] != 'supermega.shop.owner-enrollment-evidence.v2' ||
-      decoded['action'] != 'approve' ||
+      decoded['action'] != expectedAction.name ||
       decoded['signingProfile'] != connectedP256DeviceProfileV2 ||
       decoded['tenantId'] != tenantId ||
       decoded['siteId'] != siteId ||
@@ -284,7 +286,7 @@ ShopOwnerEnrollmentEvidenceV2 verifyRetainedOwnerEnrollmentV2Sync({
     invalid();
   }
   final evidence = ShopOwnerEnrollmentEvidenceV2(
-    action: ShopOwnerEnrollmentAction.approve,
+    action: expectedAction,
     tenantId: tenantId,
     siteId: siteId,
     coordinatorDeviceId: coordinatorDeviceId,
