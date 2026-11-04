@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'shop_connected_platform_security.dart';
+import 'shop_connected_site_enrollment_store.dart';
 
 /// A device-bound public trust snapshot. This does not authorize a feed write:
 /// the database must recheck the current signed lease, revocation and time
@@ -24,6 +25,26 @@ final class ConnectedCloudFeedDeviceTrust {
   final Map<String, List<int>> feedIssuerKeys;
 }
 
+/// Signed historical enrollment binding. It is not current membership or
+/// revocation authority; an atomic writer must recheck both before replay.
+final class ConnectedCloudFeedEnrolledDeviceTrust {
+  ConnectedCloudFeedEnrolledDeviceTrust._({
+    required this.deviceTrust,
+    required this.tenantId,
+    required this.siteId,
+    required this.deviceId,
+    required this.sessionGeneration,
+    required this.enrollmentEvidenceDigest,
+  });
+
+  final ConnectedCloudFeedDeviceTrust deviceTrust;
+  final String tenantId;
+  final String siteId;
+  final String deviceId;
+  final int sessionGeneration;
+  final String enrollmentEvidenceDigest;
+}
+
 /// Source-reviewed issuer pins must be supplied by the application build,
 /// never by the HTTP reply, QR pairing payload or local database. This seam is
 /// disabled until the owner approves a real issuer registry and native custody.
@@ -36,15 +57,18 @@ final class ConnectedCloudFeedProductionTrustSource {
          platformSecurity: platformSecurity,
          runtimeEnabled: runtimeEnabled,
          reviewedFeedIssuerKeys: _sourcePinnedFeedIssuerKeys,
+         reviewedOwnerIssuerKeys: _sourcePinnedOwnerIssuerKeys,
        );
 
   static const Map<String, List<int>> _sourcePinnedFeedIssuerKeys = {};
+  static const Map<String, List<int>> _sourcePinnedOwnerIssuerKeys = {};
 
   /// Synthetic pins cannot enter product AOT, even if a caller enables the
   /// source seam. The actual product issuer registry requires separate review.
   factory ConnectedCloudFeedProductionTrustSource.testOnlyWithIssuerKeys({
     required ConnectedPlatformSecurity platformSecurity,
     required Map<String, List<int>> issuerKeys,
+    Map<String, List<int>> ownerIssuerKeys = const {},
   }) {
     if (const bool.fromEnvironment('dart.vm.product')) {
       throw UnsupportedError('Fixture feed issuer pins are unavailable.');
@@ -53,6 +77,7 @@ final class ConnectedCloudFeedProductionTrustSource {
       platformSecurity: platformSecurity,
       runtimeEnabled: true,
       reviewedFeedIssuerKeys: issuerKeys,
+      reviewedOwnerIssuerKeys: ownerIssuerKeys,
     );
   }
 
@@ -60,14 +85,64 @@ final class ConnectedCloudFeedProductionTrustSource {
     required this.platformSecurity,
     required this.runtimeEnabled,
     required Map<String, List<int>> reviewedFeedIssuerKeys,
+    required Map<String, List<int>> reviewedOwnerIssuerKeys,
   }) : reviewedFeedIssuerKeys = Map.unmodifiable({
          for (final entry in reviewedFeedIssuerKeys.entries)
            entry.key: List<int>.unmodifiable(entry.value),
+       }),
+       reviewedOwnerIssuerKeys = Map.unmodifiable({
+         for (final entry in reviewedOwnerIssuerKeys.entries)
+           entry.key: List<int>.unmodifiable(entry.value),
        });
+
+  final Map<String, List<int>> reviewedOwnerIssuerKeys;
 
   final ConnectedPlatformSecurity platformSecurity;
   final Map<String, List<int>> reviewedFeedIssuerKeys;
   final bool runtimeEnabled;
+
+  Future<ConnectedCloudFeedEnrolledDeviceTrust> loadEnrolled({
+    required String alias,
+    required String expectedSigningKeyId,
+    required String expectedFingerprintSha256,
+    required String canonicalEnrollmentJson,
+    required String enrollmentEvidenceDigest,
+    required String tenantId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required String deviceId,
+    required int sessionGeneration,
+    required int trustedAtMillis,
+  }) async {
+    if (!runtimeEnabled || reviewedOwnerIssuerKeys.isEmpty) {
+      throw StateError('Cloud-feed owner issuer unavailable.');
+    }
+    final device = await load(
+      alias: alias,
+      expectedSigningKeyId: expectedSigningKeyId,
+      expectedFingerprintSha256: expectedFingerprintSha256,
+    );
+    verifyRetainedEnrollmentApprovalSync(
+      canonicalEvidenceJson: canonicalEnrollmentJson,
+      expectedEvidenceDigest: enrollmentEvidenceDigest,
+      tenantId: tenantId,
+      siteId: siteId,
+      coordinatorDeviceId: coordinatorDeviceId,
+      deviceId: deviceId,
+      clientFingerprint: device.publicKeyFingerprintSha256,
+      sessionGeneration: sessionGeneration,
+      trustedAtMillis: trustedAtMillis,
+      pinnedOwnerIssuerKeys: reviewedOwnerIssuerKeys,
+    );
+    return ConnectedCloudFeedEnrolledDeviceTrust._(
+      deviceTrust: device,
+      tenantId: tenantId,
+      siteId: siteId,
+      deviceId: deviceId,
+      sessionGeneration: sessionGeneration,
+      enrollmentEvidenceDigest: enrollmentEvidenceDigest,
+    );
+  }
 
   Future<ConnectedCloudFeedDeviceTrust> load({
     required String alias,
