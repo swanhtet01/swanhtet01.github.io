@@ -7,6 +7,20 @@
 
 ## 2026-11-04 private Windows device-profile verifier checkpoint
 
+- **PRIVATE SIGNED V2 ENROLLMENT PROOF PARTIAL PASS:** implementation
+  `f1521694ad1ff8717616046d299d93221a79c1c6`, tree
+  `a8932c41acc19a3b6a09b1ccca84cbb962dfcec6`, adds an explicit owner-
+  signed v2 approval binding tenant/site/coordinator/device, P-256 profile,
+  key ID, complete canonical public point, fingerprint and generation.
+  Existing v1 approval bytes and Ed25519 issuer verification are unchanged.
+  Exact enrollment-store Flutter tests **6/6 PASS** (34 seconds), focused v2
+  test **1/1 PASS**, three-file Flutter analysis and diff check PASS;
+  independent security review ACCEPTED the partial signed contract. The v1
+  database intentionally does **not** import this new type: additive v42
+  durable enrollment, open/backup/restore validation, v2 pairing, current
+  revocation and Windows CNG possession remain **NOT RUN**. Do not treat this
+  proof format as an approved Windows enrollment or pilot capability.
+
 - **PRIVATE ISSUER CUSTODY DESIGN PASS / ADAPTER NOT RUN:**
   `43dade03a748a41c54c64883ba36b2b94742a915`, tree
   `b1546217d72f64919e28db13fae88a7cf446c497`, records default-off
