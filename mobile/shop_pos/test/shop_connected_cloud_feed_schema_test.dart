@@ -529,6 +529,36 @@ void main() {
         timeSource: liveTime,
         runtimeEnabled: true,
       );
+      final revocationReplies = ReceivePort();
+      final revocationReady = Completer<SendPort>();
+      final revocationAttempting = Completer<void>();
+      final revocationResults = <Completer<String?>>[];
+      final revocationMessages = revocationReplies.listen((message) {
+        final values = message as List<Object?>;
+        if (values[0] == 'ready') {
+          revocationReady.complete(values[1] as SendPort);
+        } else if (values[0] == 'init_error') {
+          revocationReady.completeError(StateError('${values[1]}'));
+        } else if (values[0] == 'attempting') {
+          if (!revocationAttempting.isCompleted) {
+            revocationAttempting.complete();
+          }
+        } else if (values[0] == 'done') {
+          revocationResults.removeAt(0).complete(values[1] as String?);
+        }
+      });
+      final revocationWorker = await Isolate.spawn(
+        _v41SignedRevocationWorker,
+        <Object>[file.path, ownerKey, revocationReplies.sendPort],
+      );
+      addTearDown(() async {
+        revocationWorker.kill();
+        await revocationMessages.cancel();
+        revocationReplies.close();
+      });
+      final revocationCommand = await revocationReady.future.timeout(
+        const Duration(seconds: 10),
+      );
       await database.customStatement(
         'CREATE TABLE gate_probe (id INTEGER NOT NULL)',
       );
@@ -587,7 +617,41 @@ void main() {
         'active',
         reason: 'the rejected transaction also rolls back its revocation',
       );
-      await store.importOwnerEvidence(signedRevocation, verifier: verifier);
+      clock = now + 2;
+      final insideReplay = Completer<void>();
+      final finishReplay = Completer<void>();
+      final replay = gate.run(
+        enrollment: enrollment,
+        lease: lease,
+        mutation: () async {
+          insideReplay.complete();
+          await finishReplay.future;
+          return 42;
+        },
+      );
+      await insideReplay.future;
+      final firstRevocation = Completer<String?>();
+      revocationResults.add(firstRevocation);
+      revocationCommand.send(<Object>[signedRevocation.toJson(), now + 2]);
+      try {
+        await revocationAttempting.future.timeout(const Duration(seconds: 10));
+        expect(
+          await firstRevocation.future.timeout(const Duration(seconds: 10)),
+          contains('database is locked'),
+          reason:
+              'signed competing writer must fail while replay holds the fence',
+        );
+      } finally {
+        if (!finishReplay.isCompleted) finishReplay.complete();
+      }
+      expect(await replay, 42);
+      final retry = Completer<String?>();
+      revocationResults.add(retry);
+      revocationCommand.send(<Object>[signedRevocation.toJson(), now + 2]);
+      expect(
+        await retry.future.timeout(const Duration(seconds: 10)),
+        equals(null),
+      );
       await expectLater(
         gate.run(
           enrollment: enrollment,
@@ -2544,17 +2608,14 @@ void main() {
     );
   }
 
-  test(
-    'signed retained authority and lease fence reject expired mutation',
-    () async {
-      await runSignedPageFixture(
-        deviceId: 'device_v41_fixture',
-        clientSeed: 18,
-        secondary: false,
-        testCurrentGate: true,
-      );
-    },
-  );
+  test('signed authority gate serializes independent revocation and rejects expiry', () async {
+    await runSignedPageFixture(
+      deviceId: 'device_v41_fixture',
+      clientSeed: 18,
+      secondary: false,
+      testCurrentGate: true,
+    );
+  });
   test(
     'v41 signed historical page stays closed after later revocation',
     () async {
@@ -3922,6 +3983,62 @@ final class _PinnedV41OwnerVerifier
         publicKey: SimplePublicKey(ownerKey, type: KeyPairType.ed25519),
       ),
     );
+  }
+}
+
+Future<void> _v41SignedRevocationWorker(List<Object> arguments) async {
+  final path = arguments[0] as String;
+  final ownerKey = (arguments[1] as List).cast<int>();
+  final reply = arguments[2] as SendPort;
+  final database = ShopDatabase(NativeDatabase(File(path)));
+  final commands = ReceivePort();
+  try {
+    await database.verifyReadyForUse();
+    await database.customStatement('PRAGMA busy_timeout = 200');
+    reply.send(<Object>['ready', commands.sendPort]);
+    await for (final message in commands) {
+      try {
+        final command = (message as List).cast<Object>();
+        final evidence = (command[0] as Map).cast<String, Object>();
+        final now = command[1] as int;
+        final signed = ShopOwnerEnrollmentEvidenceV1(
+          action: ShopOwnerEnrollmentAction.revoke,
+          tenantId: evidence['tenantId'] as String,
+          siteId: evidence['siteId'] as String,
+          coordinatorDeviceId: evidence['coordinatorDeviceId'] as String,
+          deviceId: evidence['deviceId'] as String,
+          clientFingerprint: evidence['clientFingerprint'] as String,
+          sessionGeneration: evidence['sessionGeneration'] as int,
+          observedAtMillis: evidence['observedAtMillis'] as int,
+          authorityKeyId: evidence['authorityKeyId'] as String,
+          signature: evidence['signature'] as String,
+          evidenceDigest: evidence['evidenceDigest'] as String,
+        );
+        reply.send(<Object?>['attempting', null]);
+        await ShopConnectedSiteEnrollmentStore(
+          database: database,
+          nowMillis: () => now,
+        ).importOwnerEvidence(
+          signed,
+          verifier: _PinnedV41OwnerVerifier(
+            ownerKey: ownerKey,
+            workspace: signed.tenantId,
+            site: signed.siteId,
+            coordinator: signed.coordinatorDeviceId,
+            device: signed.deviceId,
+            fingerprint: signed.clientFingerprint,
+          ),
+        );
+        reply.send(<Object?>['done', null]);
+      } catch (error) {
+        reply.send(<Object>['done', error.toString()]);
+      }
+    }
+  } catch (error) {
+    reply.send(<Object>['init_error', error.toString()]);
+  } finally {
+    commands.close();
+    await database.close();
   }
 }
 
