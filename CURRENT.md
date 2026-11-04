@@ -1,9 +1,37 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 01:02 UTC
+- Last verified: 2026-11-04 01:16 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 01:16 UTC PostgreSQL rehearsal source-inventory repair
+
+- **PASS (private source prerequisite only):** implementation
+  `d53c932a405924d935549bbbe616b0748de85bb3`, tree
+  `e266fdc96ea3bc27a21abb18dde27f5e59a2260e`, adds the v16
+  connected-upload migration to Node's *source-only* inventory, matching the
+  existing Python runner and migration verifier. The 24 authoritative v14
+  rehearsal migrations and schema-version gate are unchanged. Before repair,
+  two inventory contracts failed; after repair, **85/85 Node** and **30/30
+  Python** focused contracts pass. Independent read-only review **ACCEPT**.
+- **FAIL / BLOCKED (real evidence):** `node tools/record_postgres17_rehearsal.mjs
+  --verify` still returns `database_rehearsal_evidence_stale`, with
+  `secretValuesExposed:false`. The retained 2026-10-23 receipt belongs to
+  commit `efc9897b`, v13/23 migrations, 51 implementation files and digest
+  `sha256:0ee24429...5055977255dd0f`; current source binds 82 files and digest
+  `sha256:c121d581...e40c1fd0`. The v16 inventory fix intentionally changes
+  that digest rather than blessing the old receipt. The current profile,
+  source-registry and publisher policies have pending approvals; runtime
+  bindings, verified Windows load/import closure and reviewed observer
+  launcher are absent. Draft PR #753 contains the one-file manual workflow,
+  but the workflow is not registered on default `main` (GitHub workflow API
+  404). No Windows capture, installer, rehearsal or dispatch ran. The next
+  owner-controlled sequence is exact-source workflow registration/review,
+  non-authoritative observer probe and retained source authentication,
+  independent policy/profile/closure review, then a separately authorized
+  isolated Windows rehearsal and fresh exact-source receipt. The synthetic
+  Linux PG17-to-native bridge does not satisfy this gate.
 
 ## 2026-11-04 01:02 UTC private feed-route replay regression
 
