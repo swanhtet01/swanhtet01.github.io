@@ -7,6 +7,25 @@
 
 ## 2026-11-04 private native cloud-feed HTTP reader
 
+- **SOURCE PASS / PRODUCTION AUTHORITY BLOCKED:** successor implementation
+  `6cda009133188452ede7137c273fd454129f86be`, tree
+  `df60144be7ba01b8881710cdf4543e057f0f6493`, adds a default-off
+  device-key trust source over the existing Android/Windows platform-security
+  contract. A fresh random challenge proves that the loaded alias, key ID and
+  fingerprint correspond to the private key retained by the platform signer.
+  The only product issuer registry is private, source-defined and currently
+  empty; a runtime caller cannot inject issuer pins. A separate test-only
+  factory accepts fixture pins only outside product AOT. The resulting trust
+  snapshot has a private constructor and is **not** tenant/lease authority.
+  Seven focused HTTP/trust Flutter tests passed on the final source, Dart
+  analysis and native CI contract 22/22 passed; independent adversarial review
+  accepted after closing arbitrary-pin and forgeable-snapshot findings.
+  Actual reviewed issuer pins, independently enrolled tenant/device binding,
+  current lease/revocation/trusted-time checks inside atomic apply, nonempty
+  product open/restore and installed two-device evidence remain NOT RUN or
+  BLOCKED. No product write path consumes this source yet; do not mistake the
+  test-only v41 writer for a production writer.
+
 - **SOURCE PASS / PILOT BLOCKED:** implementation commit
   `ce2b925b5c963485f2c171d6796a8b03f3a8ca8c`, tree
   `769923ff9524b38688a370f48b60922ecc8ee261`, adds a default-off
