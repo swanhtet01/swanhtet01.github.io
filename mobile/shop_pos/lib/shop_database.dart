@@ -16,6 +16,8 @@ import 'shop_connected_site_contracts.dart';
 import 'shop_connected_cloud_feed_schema.dart';
 import 'shop_connected_cloud_feed_proof.dart';
 import 'shop_connected_cloud_feed_http.dart';
+import 'shop_connected_cloud_feed_current_gate.dart';
+import 'shop_connected_cloud_feed_production_trust.dart';
 import 'shop_connected_cloud_feed_v41_verifier.dart';
 import 'shop_connected_site_cloud_feed_contract.dart';
 import 'shop_connected_site_reconciliation.dart';
@@ -11423,6 +11425,9 @@ class ShopDatabase extends _$ShopDatabase {
     required String pageJson,
     required String proofJson,
     required ShopCloudFeedV41FirstPageEvidence evidence,
+    ShopConnectedCloudFeedCurrentGate? currentGate,
+    ConnectedCloudFeedEnrolledDeviceTrust? enrollment,
+    OfflineStaffLeaseV1? lease,
     Future<void> Function()? testOnlyBeforeCommit,
   }) async {
     if (!_testMutationBypassAvailable ||
@@ -11430,19 +11435,49 @@ class ShopDatabase extends _$ShopDatabase {
         expected.priorEventDigest != null) {
       throw UnsupportedError('Test v41 first-page authority unavailable.');
     }
-    await transaction(
-      () => _applyConnectedCloudFeedFirstPageV41InTransaction(
-        trust: trust,
-        timeAuthority: timeAuthority,
-        expected: expected,
-        actorRole: actorRole,
-        requestNonce: requestNonce,
-        pageJson: pageJson,
-        proofJson: proofJson,
-        evidence: evidence,
-        testOnlyBeforeCommit: testOnlyBeforeCommit,
-      ),
+    if ((currentGate == null) != (enrollment == null) ||
+        (currentGate == null) != (lease == null) ||
+        (currentGate != null &&
+            (!identical(currentGate.database, this) ||
+                !identical(currentGate.timeSource, timeAuthority) ||
+                enrollment!.tenantId != expected.workspaceId ||
+                enrollment.siteId != expected.siteId ||
+                enrollment.deviceId != expected.deviceId ||
+                enrollment.sessionGeneration != trust.sessionGeneration ||
+                enrollment.deviceTrust.publicKeyFingerprintSha256 !=
+                    trust.clientFingerprint ||
+                lease!.workspaceId != expected.workspaceId ||
+                lease.siteId != expected.siteId ||
+                lease.deviceId != expected.deviceId ||
+                lease.actorId != expected.actorId ||
+                lease.role != actorRole ||
+                lease.payloadDigest != expected.leaseDigest ||
+                lease.sessionGeneration != enrollment.sessionGeneration ||
+                lease.revocationGeneration != expected.revocationGeneration))) {
+      throw StateError(
+        'Cloud-feed current gate is not bound to this database.',
+      );
+    }
+    Future<void> write() => _applyConnectedCloudFeedFirstPageV41InTransaction(
+      trust: trust,
+      timeAuthority: timeAuthority,
+      expected: expected,
+      actorRole: actorRole,
+      requestNonce: requestNonce,
+      pageJson: pageJson,
+      proofJson: proofJson,
+      evidence: evidence,
+      testOnlyBeforeCommit: testOnlyBeforeCommit,
     );
+    if (currentGate == null) {
+      await transaction(write);
+    } else {
+      await currentGate.run(
+        enrollment: enrollment!,
+        lease: lease!,
+        mutation: write,
+      );
+    }
   }
 
   /// Reusable atomic body. Callers must already hold this database's writer

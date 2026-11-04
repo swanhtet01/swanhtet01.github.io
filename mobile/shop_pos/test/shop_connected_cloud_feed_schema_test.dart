@@ -2126,23 +2126,51 @@ void main() {
                   )
                   .getSingle())
               .read<int>('next_sequence');
-      Future<void> gatedApply({Future<void> Function()? beforeCommit}) =>
-          pageGate.run(
-            enrollment: pageEnrollment,
-            lease: lease,
-            mutation: () =>
-                pageGateDatabase.testOnlyApplyConnectedCloudFeedFirstPageV41(
-                  trust: trust,
-                  timeAuthority: pageTime,
-                  expected: expected,
-                  actorRole: 'manager',
-                  requestNonce: requestNonce,
-                  pageJson: receipt.pageJson,
-                  proofJson: receipt.proofJson,
-                  evidence: pageEvidence,
-                  testOnlyBeforeCommit: beforeCommit,
-                ),
-          );
+      Future<void> gatedApply({
+        Future<void> Function()? beforeCommit,
+        ConnectedSiteRetailFeedExpectation? pageExpected,
+        ShopConnectedCloudFeedLiveTimeSource? pageTimeSource,
+      }) => pageGateDatabase.testOnlyApplyConnectedCloudFeedFirstPageV41(
+        trust: trust,
+        timeAuthority: pageTimeSource ?? pageTime,
+        expected: pageExpected ?? expected,
+        actorRole: 'manager',
+        requestNonce: requestNonce,
+        pageJson: receipt.pageJson,
+        proofJson: receipt.proofJson,
+        evidence: pageEvidence,
+        currentGate: pageGate,
+        enrollment: pageEnrollment,
+        lease: lease,
+        testOnlyBeforeCommit: beforeCommit,
+      );
+      await expectLater(
+        gatedApply(
+          pageExpected: ConnectedSiteRetailFeedExpectation(
+            workspaceId: expected.workspaceId,
+            siteId: expected.siteId,
+            actorId: expected.actorId,
+            deviceId: 'wrong_device',
+            authorityGeneration: expected.authorityGeneration,
+            revocationGeneration: expected.revocationGeneration,
+            authorityPayloadDigest: expected.authorityPayloadDigest,
+            leaseDigest: expected.leaseDigest,
+            requestDigest: expected.requestDigest,
+            afterSequence: expected.afterSequence,
+            priorEventDigest: expected.priorEventDigest,
+            limit: expected.limit,
+          ),
+        ),
+        throwsStateError,
+      );
+      await expectLater(
+        gatedApply(
+          pageTimeSource: _V41FixtureTime(workspace, site, [now], pageEvidence),
+        ),
+        throwsStateError,
+      );
+      expect(await pageCount(), 0, reason: 'cross-scope gate wrote a page');
+      expect(await headCount(), 0, reason: 'mismatched clock advanced cursor');
       await expectLater(
         gatedApply(beforeCommit: () async => throw StateError('interrupted')),
         throwsStateError,
