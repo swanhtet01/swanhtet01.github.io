@@ -1,11 +1,25 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 (published draft 52c3f65a; hosted checks in progress)
+- Last verified: 2026-11-04 (published draft 52c3f65a; private v42 migration reviewed)
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
 ## 2026-11-04 private Windows device-profile verifier checkpoint
+
+- **PRIVATE V42 EMPTY-ONLY MIGRATION PASS / V2 WRITES BLOCKED:** implementation
+  `0ff80d3b3b6a972e26534f02f850a490a091c41c`, tree
+  `f25854e6730b7cafa086461855ffb58d9664a3aa`, adds separate v2 pending,
+  signed-evidence and device-profile tables without changing v1 enrollment.
+  Exact open, historical v41 upgrade, encrypted backup and fresh-target
+  restore reject nonempty v2 rows or a partial pre-v42 schema. Final-source
+  backup **102/102 PASS**, cloud-feed schema **18/18 PASS**, foundation
+  **81/81 PASS**, enrollment **9/9 PASS**, focused analysis and diff check
+  PASS. Independent read-only review ACCEPTED this empty-only slice; other
+  affected native suites and hosted CI are **NOT RUN** on this source. A signed
+  cross-table v2 verifier, guarded enrollment writes, current revocation,
+  Windows CNG/TPM custody and installed two-device acceptance remain
+  **BLOCKED/NOT RUN**. This private checkpoint is not published or pilot-ready.
 
 - **PRIVATE SIGNED V2 ENROLLMENT PROOF PARTIAL PASS:** implementation
   `f1521694ad1ff8717616046d299d93221a79c1c6`, tree
