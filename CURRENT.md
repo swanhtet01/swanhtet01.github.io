@@ -1,9 +1,33 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 01:16 UTC
+- Last verified: 2026-11-04 01:35 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 01:35 UTC checked-route two-store synthetic bridge
+
+- **PASS (private test-only integration):** implementation
+  `59188f38949b93273f497824fa4459e11e2407e4`, tree
+  `ab416864118b85b0d5132cd657d3197ee6b43de4`, two-file patch SHA-256
+  `45cad4dc77ae5d8202ecc7c4b197d5f467060548b8e26a33b78c376b471b88a9`.
+  The existing synthetic Python HTTP → two native SQLite-store fixture now
+  uses the new checked, default-off event-feed router instead of its bespoke
+  handler. Its fixed test-only signer retains checked SQL-page/request/lease
+  bindings; the fixture requires exact wrong-device denial (422 and
+  `event_read_scope`) and missing-peer denial (401). Final-source mock bridge
+  **PASS**: native export A 13.708s, B 12.926s and combined Dart consume
+  136.083s. Connected-site Python discovery **81 run, 75 pass, 6 opt-in PG17
+  skips**; compile and diff checks **PASS**. Independent review found a weak
+  denial assertion; after repair its final-diff review **ACCEPT**. This
+  exercises synthetic/TestClient bytes only; real PostgreSQL through the new
+  route, mTLS ingress, protected issuer, deployed transport, lost network
+  responses and installed devices are **NOT RUN**.
+- **PASS (public exact predecessor only):** Native run `41748476173` on
+  `39f1c3dc8537b5647b6dfca39118da9b66daa6f2` is terminal **SUCCESS**
+  across all six jobs, including full Android and Windows. Its artifacts and
+  result do not validate the newer private source. App HQ rehearsal and
+  dependency-security gates remain **FAIL / BLOCKED**. Connected mode is off.
 
 ## 2026-11-04 01:16 UTC PostgreSQL rehearsal source-inventory repair
 
