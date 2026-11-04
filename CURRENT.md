@@ -7,6 +7,22 @@
 
 ## 2026-11-04 private native cloud-feed HTTP reader
 
+- **SOURCE PASS / CURRENT AUTHORITY BLOCKED:** successor
+  `764428866404667580711bbd2e84730c253c110a`, tree
+  `b3eefb8b36a44827db787999bf0eb110893edaa1`, binds a proved
+  platform device key to canonical, owner-signed historical enrollment
+  evidence using the existing retained-enrollment verifier. It checks
+  tenant/site/coordinator/device/session, fingerprint, digest, owner pin and
+  observed time; product owner/feed registries remain empty and noninjectable.
+  Three focused Flutter tests pass, including wrong-site/device/session,
+  future evidence and wrong owner pin; Dart analysis passes. Independent
+  adversarial review accepted the historical-evidence scope. This does **not**
+  prove latest enrollment, current membership, lease or absence of a later
+  revocation. It is not connected to the v41 writer. Transaction-bound
+  current-authority/time, nonempty product restore and installed-device
+  evidence remain BLOCKED/NOT RUN. No live credentials or issuer keys were
+  configured.
+
 - **SOURCE PASS / PRODUCTION AUTHORITY BLOCKED:** successor implementation
   `6cda009133188452ede7137c273fd454129f86be`, tree
   `df60144be7ba01b8881710cdf4543e057f0f6493`, adds a default-off
