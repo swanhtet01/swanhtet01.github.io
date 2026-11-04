@@ -7,6 +7,19 @@
 
 ## 2026-11-04 private Windows device-profile verifier checkpoint
 
+- **PRIVATE V2 EVENT-READ ADMISSION PARTIAL PASS:** implementation
+  `f8361cbd24051d6bdbdd5a0a307abd4909034eba`, tree
+  `045ffd5b61ef7ac6796d6434e3e7dbc531ddee4c`, adds profile-selected
+  v2 contract and P-256 signature verification to default-off manager-feed
+  authorization. It retains existing tenant/site/device principal binding,
+  signed lease, role, current revocation, issued-time and cursor checks;
+  Ed25519 v1 remains accepted only for legacy v1 devices. Related Python
+  gateway/event-read/site/profile suite **27/27 PASS**, compile and diff
+  checks PASS; independent security review ACCEPTED this narrow source
+  slice. The test uses an injected v2 device authority, not a signed v2
+  enrollment. Native v2 request creation, durable profile persistence, live
+  ingress, Windows CNG custody and installed mixed-device proof are NOT RUN.
+
 - **SOURCE-ONLY PARTIAL PASS / CONNECTED MODE OFF:** implementation
   `7fbdd68ba49e4dc00d04d53cc9088028d61a5f1c`, tree
   `ddfd8f6915b9c4a68ed9d714f94bc06d3388b711`, introduces a versioned
