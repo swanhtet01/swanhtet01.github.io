@@ -1,9 +1,28 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-03 23:37 UTC
+- Last verified: 2026-11-04 00:38 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 00:38 UTC predecessor Native CI terminal and successor gate
+
+- **PASS (exact public predecessor only):** Native run `41737357285` on
+  `5a6badd0e798cce068c5601bfc43f0eb02558e8d` is terminal **SUCCESS**
+  across all six jobs. The Android isolated Flutter shards completed
+  successfully at 00:23:54 UTC after starting 23:14:29 UTC; real Flutter and
+  authenticated cloud-feed interruption scenarios, analysis, gallery,
+  unsigned-release rejection and debug APK packaging also passed. Windows
+  PC and isolated Android, Windows, iOS and iPad jobs passed. These are QA
+  artifacts and source-bound CI evidence for the predecessor, not builds of
+  the private JIT successor or installed-device acceptance.
+- **READY FOR GUARDED CI, NOT RELEASE:** the clean private repair is an
+  independently accepted fast-forward of that predecessor. Its real
+  disposable-PG17-to-native job remains **NOT RUN** on repaired source;
+  `41737357179` failed on the predecessor's stale test request. A remote
+  exact-head check and one non-force draft PR update are the next steps.
+  App/HQ rehearsal, dependency security, complete secret review, production
+  signing and physical two-device pilot gates remain blocked or unrun.
 
 ## 2026-11-03 23:26 UTC exact-head PG17 bridge failure and private repair
 
