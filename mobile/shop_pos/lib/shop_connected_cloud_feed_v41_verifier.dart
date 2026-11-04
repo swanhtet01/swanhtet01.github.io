@@ -11,6 +11,32 @@ import 'shop_database.dart';
 import 'shop_offline_staff_lease.dart';
 import 'shop_staff_authorization.dart';
 
+/// Source-owned historical verification only; never grants feed writes.
+/// Product issuer material must be reviewed into this private registry. It is
+/// intentionally empty while enrollment/custody and restore remain unapproved.
+final class ShopCloudFeedHistoricalTrustSource {
+  const ShopCloudFeedHistoricalTrustSource._(this._trust);
+
+  static const ShopCloudFeedV41FirstPageTrust? _reviewedProductTrust = null;
+
+  factory ShopCloudFeedHistoricalTrustSource.production() =>
+      const ShopCloudFeedHistoricalTrustSource._(_reviewedProductTrust);
+
+  factory ShopCloudFeedHistoricalTrustSource.testOnly(
+    ShopCloudFeedV41FirstPageTrust trust,
+  ) {
+    if (const bool.fromEnvironment('dart.vm.product')) {
+      throw UnsupportedError('Fixture historical issuer pins are unavailable.');
+    }
+    return ShopCloudFeedHistoricalTrustSource._(trust.immutableCopy());
+  }
+
+  final ShopCloudFeedV41FirstPageTrust? _trust;
+
+  ShopCloudFeedV41FirstPageTrust? get verifiedHistory =>
+      _trust?.immutableCopy();
+}
+
 /// Unfiltered tables required by the single-page historical fixture. Readers
 /// must collect every row from every table under one database snapshot.
 const shopCloudFeedV41HistoricalTables = <String>[

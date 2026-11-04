@@ -2162,12 +2162,76 @@ void main() {
       expect(await pageCount(), 1);
       expect(await cursor(), 1, reason: 'revoked replay keeps its cursor');
       await pageGateDatabase.close();
-      final historical = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+      final unavailable = ShopDatabase(NativeDatabase(pageGateFile));
+      await expectLater(unavailable.verifyReadyForUse(), throwsStateError);
+      await unavailable.close();
+      final source = ShopCloudFeedHistoricalTrustSource.testOnly(trust);
+      expect(
+        ShopCloudFeedHistoricalTrustSource.production().verifiedHistory,
+        equals(null),
+        reason: 'product issuer registry remains empty',
+      );
+      expect(
+        () => ShopDatabase.withCorrectionReceiptVerifier(
+          executor: NativeDatabase(pageGateFile),
+          correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+          historicalCloudFeedTrustSource: source,
+          testOnlyCloudFeedV41Trust: trust,
+        ),
+        throwsArgumentError,
+        reason: 'source authority cannot mix caller fixture pins',
+      );
+      expect(
+        () =>
+            ShopBackup.verifySnapshot(pageGateFile, expectedSchemaVersion: 41),
+        throwsFormatException,
+      );
+      expect(
+        () => ShopBackup.verifySnapshot(
+          pageGateFile,
+          expectedSchemaVersion: 41,
+          historicalCloudFeedTrustSource: source,
+        ),
+        returnsNormally,
+      );
+      final historical = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase(pageGateFile),
-        trust: trust,
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+        historicalCloudFeedTrustSource: source,
       );
       await historical.verifyReadyForUse();
+      final archive = File('${root.path}/gated-feed.shopbackup');
+      await ShopBackup.exportEncrypted(
+        database: historical,
+        archive: archive,
+        password: 'fixture-password-v41',
+        scratchRoot: root,
+        historicalCloudFeedTrustSource: source,
+      );
       await historical.close();
+      final restoredFile = File('${root.path}/gated-feed-restored.sqlite');
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: restoredFile,
+        password: 'fixture-password-v41',
+        historicalCloudFeedTrustSource: source,
+      );
+      final restored = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(restoredFile),
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+        historicalCloudFeedTrustSource: source,
+      );
+      await restored.verifyReadyForUse();
+      expect(
+        (await restored
+                .customSelect(
+                  'SELECT restore_paused FROM shop_connected_cloud_feed_heads',
+                )
+                .getSingle())
+            .read<int>('restore_paused'),
+        1,
+      );
+      await restored.close();
       return;
     }
     final rollbackFile = await preRevocationFile.copy(

@@ -6589,6 +6589,7 @@ class ShopDatabase extends _$ShopDatabase {
     ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
   }) async {
     final database = ShopDatabase.withCorrectionReceiptVerifier(
       executor: NativeDatabase(
@@ -6600,6 +6601,7 @@ class ShopDatabase extends _$ShopDatabase {
           ShopCorrectionReceiptVerifier.production(),
       testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
       testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+      historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
       testOnlyLegacyCloudFeedV40:
           testOnlyCloudFeedPinnedKeys.isNotEmpty &&
           _testMutationBypassAvailable,
@@ -6700,6 +6702,7 @@ class ShopDatabase extends _$ShopDatabase {
     DateTime Function()? testOnlySaleAndCashShiftClock,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
     bool testOnlyLegacyCloudFeedV40 = false,
   }) : assert(
          !testOnlyAllowUnconsumedAuthorization || _testMutationBypassAvailable,
@@ -6729,6 +6732,12 @@ class ShopDatabase extends _$ShopDatabase {
          testOnlyCloudFeedV41Trust,
          testOnlyCloudFeedPinnedKeys,
        ),
+       _historicalCloudFeedTrust = _checkedHistoricalTrust(
+         historicalCloudFeedTrustSource,
+         testOnlyCloudFeedV41Trust,
+         testOnlyCloudFeedPinnedKeys,
+       ),
+       _historicalCloudFeedTrustSource = historicalCloudFeedTrustSource,
        super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   static ShopCloudFeedV41FirstPageTrust? _checkedTestCloudFeedV41Trust(
@@ -6744,9 +6753,23 @@ class ShopDatabase extends _$ShopDatabase {
     return trust?.immutableCopy();
   }
 
+  static ShopCloudFeedV41FirstPageTrust? _checkedHistoricalTrust(
+    ShopCloudFeedHistoricalTrustSource? source,
+    ShopCloudFeedV41FirstPageTrust? fixtureTrust,
+    Map<String, List<int>> legacyPins,
+  ) {
+    if (source != null && (fixtureTrust != null || legacyPins.isNotEmpty)) {
+      throw ArgumentError('Historical source trust cannot mix fixture pins.');
+    }
+    return (source ?? ShopCloudFeedHistoricalTrustSource.production())
+        .verifiedHistory;
+  }
+
   final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
   final Map<String, List<int>> _testOnlyCloudFeedPinnedKeys;
   final ShopCloudFeedV41FirstPageTrust? _testOnlyCloudFeedV41Trust;
+  final ShopCloudFeedV41FirstPageTrust? _historicalCloudFeedTrust;
+  final ShopCloudFeedHistoricalTrustSource? _historicalCloudFeedTrustSource;
   final bool _testOnlyLegacyCloudFeedV40;
   final bool testOnlyAllowUnconsumedAuthorization;
   final DateTime Function() _saleAndCashShiftClock;
@@ -7296,7 +7319,8 @@ class ShopDatabase extends _$ShopDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
       if (_testOnlyLegacyCloudFeedV40) {
         await _requireUnifiedV40Schema();
-      } else if (_testOnlyCloudFeedV41Trust != null) {
+      } else if (_testOnlyCloudFeedV41Trust != null ||
+          _historicalCloudFeedTrust != null) {
         await transaction(_requireUnifiedV41Schema);
       } else {
         await _requireUnifiedV41Schema();
@@ -7306,7 +7330,7 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> verifyReadyForUse() => _testOnlyLegacyCloudFeedV40
       ? _requireUnifiedV40Schema()
-      : _testOnlyCloudFeedV41Trust != null
+      : _testOnlyCloudFeedV41Trust != null || _historicalCloudFeedTrust != null
       ? transaction(_requireUnifiedV41Schema)
       : _requireUnifiedV41Schema();
 
@@ -10988,10 +11012,11 @@ class ShopDatabase extends _$ShopDatabase {
       pages: pageRows,
       evidence: evidenceRows,
     );
-    final historicalTrust = _testOnlyCloudFeedV41Trust;
+    final historicalTrust =
+        _historicalCloudFeedTrust ?? _testOnlyCloudFeedV41Trust;
     final historicalValid = historicalTrust == null
         ? false
-        : await _testOnlyV41HistoricalRowsValid(historicalTrust);
+        : await _v41HistoricalRowsValid(historicalTrust);
     if (historicalTrust == null) await _requireEmptyCloudFeedBeforeV41();
     if (!definitionsValid ||
         !coverageValid ||
@@ -11019,10 +11044,9 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<bool> _testOnlyV41HistoricalRowsValid(
+  Future<bool> _v41HistoricalRowsValid(
     ShopCloudFeedV41FirstPageTrust trust,
   ) async {
-    if (!_testMutationBypassAvailable) return false;
     try {
       return shopCloudFeedFirstPageHistoricalRowsValidV41(
         trust: trust,
@@ -11125,7 +11149,9 @@ class ShopDatabase extends _$ShopDatabase {
         restoreBarriers: await rows(
           'shop_connected_cloud_feed_restore_barriers',
         ),
-        trustedIssuerKeys: _testOnlyCloudFeedPinnedKeys,
+        trustedIssuerKeys:
+            _historicalCloudFeedTrust?.feedIssuerKeys ??
+            _testOnlyCloudFeedPinnedKeys,
       );
     } on Object {
       return false;
@@ -14160,10 +14186,13 @@ class ShopDatabase extends _$ShopDatabase {
       final snapshot = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase(target),
         correctionReceiptVerifier: correctionReceiptVerifier,
-        testOnlyCloudFeedPinnedKeys: _testOnlyCloudFeedV41Trust == null
+        testOnlyCloudFeedPinnedKeys:
+            _historicalCloudFeedTrustSource == null &&
+                _testOnlyCloudFeedV41Trust == null
             ? _testOnlyCloudFeedPinnedKeys
             : const {},
         testOnlyCloudFeedV41Trust: _testOnlyCloudFeedV41Trust,
+        historicalCloudFeedTrustSource: _historicalCloudFeedTrustSource,
         testOnlyLegacyCloudFeedV40: _testOnlyLegacyCloudFeedV40,
       );
       try {

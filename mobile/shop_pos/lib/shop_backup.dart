@@ -218,6 +218,7 @@ abstract final class ShopBackup {
     required Directory scratchRoot,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
   }) async {
     if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
@@ -256,6 +257,7 @@ abstract final class ShopBackup {
           expectedSchemaVersion: database.schemaVersion,
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
           testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+          historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
         );
         if (await snapshot.length() > maxSnapshotBytes) {
           throw StateError(
@@ -329,6 +331,7 @@ abstract final class ShopBackup {
     Future<void> Function()? afterPublishForTest,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
   }) async {
     if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
@@ -377,12 +380,14 @@ abstract final class ShopBackup {
           expectedSchemaVersion: archiveBytes[5],
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
           testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+          historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
         );
         await ShopDatabase.migrateAndVerifyRestoreFile(
           stagedFile,
           correctionReceiptVerifier: correctionReceiptVerifier,
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
           testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+          historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
         );
         await _requireNoSidecars(stagedFile);
         if (await stagedFile.length() > maxSnapshotBytes) {
@@ -920,6 +925,7 @@ abstract final class ShopBackup {
     bool allowRuntimeUnboundCorrectionHistory = false,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
   }) => _verifySnapshot(
     file,
     minimumSchemaVersion: oldestSupportedSchemaVersion,
@@ -927,6 +933,7 @@ abstract final class ShopBackup {
     allowRuntimeUnboundCorrectionHistory: allowRuntimeUnboundCorrectionHistory,
     testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
     testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+    historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
   );
 
   /// Verifies an already-installed Shop store before Drift may migrate it.
@@ -946,11 +953,22 @@ abstract final class ShopBackup {
     required bool allowRuntimeUnboundCorrectionHistory,
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
   }) {
     if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
       throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
     }
+    if (historicalCloudFeedTrustSource != null &&
+        (testOnlyCloudFeedV41Trust != null ||
+            testOnlyCloudFeedPinnedKeys.isNotEmpty)) {
+      throw ArgumentError('Historical source trust cannot mix fixture pins.');
+    }
+    final verifiedV41Trust =
+        (historicalCloudFeedTrustSource ??
+                ShopCloudFeedHistoricalTrustSource.production())
+            .verifiedHistory ??
+        testOnlyCloudFeedV41Trust;
     if (const bool.fromEnvironment('dart.vm.product') &&
         (testOnlyCloudFeedPinnedKeys.isNotEmpty ||
             testOnlyCloudFeedV41Trust != null)) {
@@ -980,7 +998,7 @@ abstract final class ShopBackup {
         allowRuntimeUnboundCorrectionHistory:
             allowRuntimeUnboundCorrectionHistory,
         testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
-        testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+        testOnlyCloudFeedV41Trust: verifiedV41Trust,
       );
       final hasCorrectionSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
