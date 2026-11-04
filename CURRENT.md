@@ -7,6 +7,27 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PRIVATE SIGNED-DEVICE FENCE PASS / PRODUCT ACTIVATION BLOCKED:**
+  implementation `e8d4bddd965ff9749dd326ab8f6a6702fd37aabf`, tree
+  `a2eb33530dbba5905750df5898dd129a62a4a96d`, extends the default-off
+  current gate to check the materialized enrolled device fingerprint, session,
+  active state and latest owner approval digest inside the same SQLite writer
+  transaction as mutation or replay. Its opt-in v41 fixture uses real pinned
+  Ed25519 owner enrollment, authority checkpoint and manager lease: a valid
+  mutation passes; lease expiry, a signed in-transaction revocation and a
+  committed signed revocation reject without advancing probe data. Focused
+  signed fixture **1/1 PASS**, existing gate **2/2 PASS**, neighboring v41
+  historical open/backup fixture **1/1 PASS**, targeted Dart analysis PASS,
+  `git diff --check` PASS. An independent read-only security reviewer ACCEPTED
+  the change **only as default-off source improvement**. The in-transaction
+  revocation is not a competing-connection revocation race; the quick gate
+  fixture still uses stub authority. Protected live-time provenance, current
+  signed-evidence revalidation at mutation, nonempty product restore, real
+  issuer custody, hosted successor CI and installed two-device proof remain
+  **NOT RUN/BLOCKED**. Public PR #752 remains at `7103418c801f3fa95ae9ffa5797ac361cbab21c5`;
+  Native `41762841148` still has Android shards IN_PROGRESS while its other
+  five jobs passed. No successor publication or production activation.
+
 - **PRIVATE SOURCE PASS / PRODUCTION FENCE NOT VERIFIED:** implementation
   `8bcacdd8885c5bec1a6c28ea324d755ef4f47956`, tree
   `741e896ee7f058da6c114c9c2ca6e1dc1e74489e`, adds a default-off
@@ -34,8 +55,9 @@
   real-PG route/replay fixture and two synthetic native stores; Kernel
   `41762841209` SUCCESS. This is not the authoritative Windows rehearsal or
   installed two-device acceptance. Dependency Security `41762841232` FAILED;
-  push App `41762834413` and Native `41762841148` were IN_PROGRESS at this
-  ledger update. PR-event App `41762841134` SKIPPED intentionally and is not
+  push App `41762834413` FAILED at stale Windows PostgreSQL rehearsal evidence;
+  Native `41762841148` remains IN_PROGRESS in Android shards with its other
+  five jobs successful. PR-event App `41762841134` SKIPPED intentionally and is not
   coverage. Keep public head stable during useful exact-head checks. Product
   issuer pins, transaction-time current authority, nonempty restore and
   device installation remain blocked/not run.
