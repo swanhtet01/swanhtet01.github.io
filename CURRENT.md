@@ -7,6 +7,20 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PUBLISHED DRAFT / PARTIAL HOSTED EVIDENCE:** guarded non-force update of
+  PR #752 from `4161952717b549a5b1abbd4d425dfed612acf7c8` to reviewed
+  `7103418c801f3fa95ae9ffa5797ac361cbab21c5` succeeded; remote and PR
+  readback match, draft/open/unmerged. Exact-head disposable PG17-to-native
+  bridge run `41762841170` is terminal SUCCESS, including the corrected
+  real-PG route/replay fixture and two synthetic native stores; Kernel
+  `41762841209` SUCCESS. This is not the authoritative Windows rehearsal or
+  installed two-device acceptance. Dependency Security `41762841232` FAILED;
+  push App `41762834413` and Native `41762841148` were IN_PROGRESS at this
+  ledger update. PR-event App `41762841134` SKIPPED intentionally and is not
+  coverage. Keep public head stable during useful exact-head checks. Product
+  issuer pins, transaction-time current authority, nonempty restore and
+  device installation remain blocked/not run.
+
 - **PASS for predecessor only:** Native POS run `41755293925` is terminal
   SUCCESS on public `4161952717b549a5b1abbd4d425dfed612acf7c8`, all six
   jobs including Android Flutter shards, process interruption, gallery and
