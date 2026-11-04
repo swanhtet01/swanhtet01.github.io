@@ -7,6 +7,21 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PRIVATE SIGNED-GATE COMPOSITION PASS / PRODUCT STILL OFF:**
+  `0f5bcdae8d64cb42983edb40c21e6847717455a3`, tree
+  `6761f6c8f4aa64784a3aca80774fb71511645d46`, composes the signed
+  enrolled-device/current-lease/revocation/time gate directly around the
+  private first-page writer in one SQLite writer transaction. It rejects
+  incomplete or cross-database gate inputs, wrong tenant/site/device/session,
+  fingerprint, actor/role/lease digest/revocation and a different clock source
+  before any write. The signed apply/replay/rollback/revocation fixture with
+  wrong-device and wrong-clock zero-write cases **1/1 PASS** in 38 seconds;
+  three-file Dart analysis and diff check PASS. Independent security review
+  ACCEPTED this strictly test-only composition. The no-gate legacy fixture is
+  AOT-guarded; the product entry remains fail-closed and cannot invoke the
+  writer. Product issuer roots, protected key custody, current-authority
+  composition, nonempty restore and installed two-device evidence are NOT RUN.
+
 - **PUBLISHED DRAFT / EXACT-HEAD CI IN PROGRESS:** guarded plain non-force
   fast-forward moved PR #752 from `7103418c801f3fa95ae9ffa5797ac361cbab21c5`
   to reviewed `52c3f65a4c0acb8805dfd71b3418004488090214`, tree
