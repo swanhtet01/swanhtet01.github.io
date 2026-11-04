@@ -1,11 +1,27 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 (private source checkpoint; hosted successor checks NOT RUN)
+- Last verified: 2026-11-04 (published draft 52c3f65a; hosted checks in progress)
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
 
 ## 2026-11-04 predecessor native run closed
+
+- **PUBLISHED DRAFT / EXACT-HEAD CI IN PROGRESS:** guarded plain non-force
+  fast-forward moved PR #752 from `7103418c801f3fa95ae9ffa5797ac361cbab21c5`
+  to reviewed `52c3f65a4c0acb8805dfd71b3418004488090214`, tree
+  `7ac516692c73a179a5e3effb25aaf121de160788`. Remote and draft PR
+  readback agree; PR description now names this exact source and retains the
+  release holds. The final-source v41 schema/current-gate matrix **18/18
+  PASS** in 2m54s, six-file Dart analysis PASS, formatting PASS, native CI
+  contract PASS and cumulative diff check PASS. Independent cumulative review
+  ACCEPTED **draft CI only**. Automatic runs: push App `41771859570`, Native
+  `41771866482` IN_PROGRESS; disposable PG17/native bridge `41771866490` SUCCESS;
+  Kernel `41771866500` SUCCESS; Dependency Security `41771866543` FAILURE at
+  app/kernel locked-dependency audit; redundant PR App `41771866505` SKIPPED.
+  No installed-device, product-authority, Windows HQ rehearsal, merchant or
+  production acceptance follows. Keep this public head fixed while useful
+  checks run; no merge, deployment, signing or sync enablement.
 
 - **PRIVATE PRODUCT-WRITER PREREQUISITE PASS / ENTRY NOT RELEASED:**
   implementation `ae6f4359fffcb420fa54c45a0ed02e95a77e7fc5`, tree
