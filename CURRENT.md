@@ -7,6 +7,31 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PRIVATE COMPOSED FEED FIXTURE PASS / PRODUCT PATH BLOCKED:** implementation
+  `457b467fcebd00f1b2630162c90d95648b029dc3`, tree
+  `d19be01362fc0de0d7dcdd4b379183ef004f4f19`, adds one isolated
+  reader→current-authority gate→atomic v41 page/cursor test. A canonical,
+  signed fixture response passes through `ConnectedCloudFeedHttpReader`; the
+  exact receipt page/proof bytes enter the test-only database writer under the
+  same SQLite gate. An injected failure **after** page and cursor inserts
+  rolls both back. Retrying applies one page/cursor; lost-response replay adds
+  none; a later signed owner revocation blocks replay without changing the
+  cursor; pinned historical reopen remains readable. Focused journey **1/1
+  PASS** in 27 seconds; targeted Dart analysis and `git diff --check` PASS.
+  Independent adversarial review ACCEPTED **fixture-only composition and
+  rollback**, not product sync: executor response and trusted time are
+  synthetic, the writer and nonempty-open trust are debug/test-only, and no
+  cashier sale, real LAN/WAN transport, installed pair, or OS-kill occurred.
+  Exact first product blocker: `ShopDatabase.testOnlyApplyConnectedCloudFeed*
+  V41` and `testOnlyWithCloudFeedV41Trust` reject product AOT, default product
+  open rejects nonempty feed, source-pinned owner/feed registries are empty,
+  and connected-site SQL enforces `connected_enabled = false`. A separately
+  reviewed protected production trust and nonempty open/restore/writer path,
+  followed by real two-device acceptance, are required before a connected
+  pilot. November 9 pilot readiness is **NOT ESTABLISHED** and is not credible
+  as GO from the present evidence. Public PR #752 stays at `7103418c801f3fa95ae9ffa5797ac361cbab21c5`
+  while Native `41762841148` Android remains IN_PROGRESS; no new hosted run.
+
 - **PRIVATE SQLITE RACE PROOF PASS / INTEGRATED PILOT BLOCKED:** implementation
   `55226e3aade84b670bc31cd34c4ae074bddf3649`, tree
   `15be196cf8cf45219a1bc3f6d77788b49efe0387`, extends the signed v41
