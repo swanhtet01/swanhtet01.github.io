@@ -1,9 +1,22 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 00:56 UTC
+- Last verified: 2026-11-04 01:02 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 01:02 UTC private feed-route replay regression
+
+- **PASS (synthetic source test only):** private test successor
+  `3cc2f8afef31063fe048b57b0084c33054e24df2`, repository tree
+  `2956e6a232d87a4f0ff3ce9b315ef18ac064a781`, checks an identical signed
+  request replay, exact signed cursor advancement and wrong-head rejection.
+  The route file is **5/5 PASS**; the broader connected-site Python discovery
+  is **81 run: 75 pass, 6 opt-in disposable-PG17 skips**. Independent read-only
+  review **ACCEPT** with the explicit limit that this is route-level replay,
+  not an actual lost network reply, durable native cursor recovery, PostgreSQL
+  concurrency or installed two-device evidence. Public PR #752 remains at
+  `39f1c3dc8537b5647b6dfca39118da9b66daa6f2` while its Android job runs.
 
 ## 2026-11-04 00:56 UTC private unmounted authenticated feed route
 
