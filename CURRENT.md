@@ -7,6 +7,17 @@
 
 ## 2026-11-04 private Windows device-profile verifier checkpoint
 
+- **PRIVATE V2 REVOKE-AUTHENTICITY PASS / CHAIN NOT RUN:** successor
+  `23298382b4120e71b4aaaba5e0becab7346312fb`, tree
+  `d4c81959b5f555079cf8943ee16fddf0377d0ed5`, extends the historical
+  Ed25519 owner-evidence verifier to require an explicit expected signed
+  `revoke` action; the default remains `approve`. An independently signed
+  revoke cannot be substituted for approval. Enrollment suite **9/9 PASS**,
+  focused analyzer and diff check PASS; independent exact-diff review ACCEPTED
+  this narrow change. Revocation ordering/current state, cross-table v42
+  validation, guarded v2 writes, nonempty reopen/restore and installed custody
+  remain **NOT RUN**; v42 remains empty-only and connected mode stays off.
+
 - **PRIVATE V42 EMPTY-ONLY MIGRATION PASS / V2 WRITES BLOCKED:** implementation
   `0ff80d3b3b6a972e26534f02f850a490a091c41c`, tree
   `f25854e6730b7cafa086461855ffb58d9664a3aa`, adds separate v2 pending,
