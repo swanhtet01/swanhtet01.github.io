@@ -12,6 +12,7 @@ import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_proof.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_current_gate.dart';
+import 'package:supermega_shop/shop_connected_cloud_feed_http.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_production_trust.dart';
 import 'package:supermega_shop/shop_connected_platform_security.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_read_request.dart';
@@ -40,6 +41,7 @@ void main() {
     String? httpResponsePath,
     bool stopAfterRecovery = false,
     bool testCurrentGate = false,
+    bool testPageGate = false,
   }) async {
     final fixtureNowMillis =
         Platform.environment[secondary
@@ -2018,6 +2020,156 @@ void main() {
       evidence: pageEvidence,
       testOnlyBeforeCommit: beforeCommit,
     );
+    if (testPageGate) {
+      final transport = _V41FixtureHttpExecutor(
+        requestJson: requestJson,
+        responseJson: canonicalConnectedSiteJson({
+          'requestJson': requestJson,
+          'pageJson': pageJson,
+          'proofJson': proofJson,
+        }),
+      );
+      final receipt =
+          await ConnectedCloudFeedHttpReader(
+            baseUri: Uri.parse('https://fixture.test'),
+            executor: transport,
+            runtimeEnabled: true,
+          ).read(
+            signedRequestJson: requestJson,
+            expected: expected,
+            requestNonce: requestNonce,
+            actorRole: 'manager',
+            trustedNowMillis: now,
+            issuerVerifier: ConnectedCloudFeedPinnedIssuerVerifier({
+              'feed_fixture': feedPublic,
+            }),
+          );
+      expect(transport.calls, 1);
+      final pageGateFile = await preRevocationFile.copy(
+        '${root.path}/page-gate.sqlite',
+      );
+      final pageGateDatabase = ShopDatabase(NativeDatabase(pageGateFile));
+      await pageGateDatabase.verifyReadyForUse();
+      final pageGateAuthority = ShopConnectedSiteAuthorityPayloadStore(
+        database: pageGateDatabase,
+        nowMillis: () => now,
+        verifier: PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(
+          publicKeys: {'authority_fixture': authorityPublic},
+        ),
+        runtimeEnabled: true,
+      );
+      await pageGateAuthority.reverifyRetainedPayloads();
+      final pageEnrollment =
+          await ConnectedCloudFeedProductionTrustSource.testOnlyWithIssuerKeys(
+            platformSecurity: _V41GatePlatform(
+              ConnectedPlatformIdentity(
+                alias: device,
+                keyId: fingerprint,
+                algorithm: 'ed25519',
+                publicKeyBase64: base64.encode(clientKey),
+                publicKeyFingerprintSha256: fingerprint,
+                tlsCertificateFingerprintSha256: 'c' * 64,
+                sealedTlsMaterialId: 'tls-fixture',
+              ),
+              clientPair,
+            ),
+            issuerKeys: {'feed_fixture': feedPublic},
+            ownerIssuerKeys: {'owner_fixture': ownerKey},
+          ).loadEnrolled(
+            alias: device,
+            expectedSigningKeyId: fingerprint,
+            expectedFingerprintSha256: fingerprint,
+            canonicalEnrollmentJson: canonicalConnectedSiteJson(
+              approval.toJson(),
+            ),
+            enrollmentEvidenceDigest: approval.evidenceDigest,
+            tenantId: workspace,
+            siteId: site,
+            coordinatorDeviceId: coordinator,
+            deviceId: device,
+            sessionGeneration: 1,
+            trustedAtMillis: now,
+          );
+      final pageTime = _V41FixtureTime(workspace, site, [now], pageEvidence);
+      final pageGate = ShopConnectedCloudFeedCurrentGate(
+        database: pageGateDatabase,
+        authorityStore: pageGateAuthority,
+        leaseVerifier: ShopOfflineStaffLeaseVerifier(
+          signatureVerifier:
+              PinnedEd25519ShopOfflineStaffLeaseSignatureVerifier(
+                publicKeys: {
+                  'lease_fixture': (await leasePair.extractPublicKey()).bytes,
+                },
+              ),
+        ),
+        timeSource: pageTime,
+        runtimeEnabled: true,
+      );
+      Future<int> pageCount() async =>
+          (await pageGateDatabase
+                  .customSelect(
+                    'SELECT COUNT(*) AS n FROM shop_connected_cloud_feed_pages',
+                  )
+                  .getSingle())
+              .read<int>('n');
+      Future<int> headCount() async =>
+          (await pageGateDatabase
+                  .customSelect(
+                    'SELECT COUNT(*) AS n FROM shop_connected_cloud_feed_heads',
+                  )
+                  .getSingle())
+              .read<int>('n');
+      Future<int> cursor() async =>
+          (await pageGateDatabase
+                  .customSelect(
+                    'SELECT next_sequence FROM shop_connected_cloud_feed_heads',
+                  )
+                  .getSingle())
+              .read<int>('next_sequence');
+      Future<void> gatedApply({Future<void> Function()? beforeCommit}) =>
+          pageGate.run(
+            enrollment: pageEnrollment,
+            lease: lease,
+            mutation: () =>
+                pageGateDatabase.testOnlyApplyConnectedCloudFeedFirstPageV41(
+                  trust: trust,
+                  timeAuthority: pageTime,
+                  expected: expected,
+                  actorRole: 'manager',
+                  requestNonce: requestNonce,
+                  pageJson: receipt.pageJson,
+                  proofJson: receipt.proofJson,
+                  evidence: pageEvidence,
+                  testOnlyBeforeCommit: beforeCommit,
+                ),
+          );
+      await expectLater(
+        gatedApply(beforeCommit: () async => throw StateError('interrupted')),
+        throwsStateError,
+      );
+      expect(await pageCount(), 0, reason: 'interrupted page rolls back');
+      expect(await headCount(), 0, reason: 'interrupted cursor rolls back');
+      await gatedApply();
+      expect(await pageCount(), 1);
+      expect(await cursor(), 1);
+      await gatedApply();
+      expect(await pageCount(), 1, reason: 'lost reply replays one page');
+      await ShopConnectedSiteEnrollmentStore(
+        database: pageGateDatabase,
+        nowMillis: () => now + 500,
+      ).importOwnerEvidence(revocation, verifier: verifier);
+      await expectLater(gatedApply(), throwsStateError);
+      expect(await pageCount(), 1);
+      expect(await cursor(), 1, reason: 'revoked replay keeps its cursor');
+      await pageGateDatabase.close();
+      final historical = ShopDatabase.testOnlyWithCloudFeedV41Trust(
+        executor: NativeDatabase(pageGateFile),
+        trust: trust,
+      );
+      await historical.verifyReadyForUse();
+      await historical.close();
+      return;
+    }
     final rollbackFile = await preRevocationFile.copy(
       '${root.path}/rollback.sqlite',
     );
@@ -2616,6 +2768,17 @@ void main() {
       testCurrentGate: true,
     );
   });
+  test(
+    'v41 signed page and cursor survive gated replay and later revocation',
+    () async {
+      await runSignedPageFixture(
+        deviceId: 'device_v41_fixture',
+        clientSeed: 18,
+        secondary: false,
+        testPageGate: true,
+      );
+    },
+  );
   test(
     'v41 signed historical page stays closed after later revocation',
     () async {
@@ -4058,6 +4221,41 @@ final class _V41GatePlatform extends UnavailableConnectedPlatformSecurity {
     required Uint8List payload,
   }) async =>
       Uint8List.fromList((await Ed25519().sign(payload, keyPair: key)).bytes);
+}
+
+final class _V41FixtureHttpExecutor
+    implements ConnectedSiteAuthenticatedRequestExecutor {
+  _V41FixtureHttpExecutor({
+    required this.requestJson,
+    required this.responseJson,
+  });
+
+  final String requestJson;
+  final String responseJson;
+  int calls = 0;
+
+  @override
+  Future<ConnectedSiteAuthenticatedHttpResponse> execute({
+    required Uri uri,
+    required String method,
+    required Map<String, String> headers,
+    required List<int> body,
+    required int maxResponseBytes,
+  }) async {
+    calls++;
+    expect(
+      uri.toString(),
+      'https://fixture.test/api/connected-site/v1/event-feed',
+    );
+    expect(method, 'POST');
+    expect(utf8.decode(body), requestJson);
+    return ConnectedSiteAuthenticatedHttpResponse(
+      statusCode: 200,
+      contentType: 'application/json',
+      body: utf8.encode(responseJson),
+      effectiveUri: uri,
+    );
+  }
 }
 
 final class _V41GateTime implements ShopConnectedCloudFeedLiveTimeSource {
