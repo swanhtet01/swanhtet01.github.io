@@ -20,18 +20,31 @@
 - **VERIFIED locally on this exact source:** five focused Flutter reader tests
   passed, including valid signed response, wrong pin-independent page/role
   substitutions and signature-only corruption; the reader, proof and page
-  contract trio passed 16/16; Dart analysis for both new files passed; native
+  contract trio passed 17/17 on the frozen source (repeated after the final
+  tamper-case correction); Dart analysis for both new files passed; native
   CI contract 22/22 passed, inventory verifier passed, `git diff --check`
   passed. Independent read-only reviewer accepted after two findings were
-  fixed (format inventory and weak negative pin). The final combined 16-test
-  trio preceded the last test adjustment, so final-source broader regression
-  remains **NOT RUN**.
+  fixed (format inventory and weak negative pin). Full native/installed
+  regression on this successor remains **NOT RUN**.
 - **NOT RUN / BLOCKED:** no real cloud ingress is mounted, no production issuer
   or device key custody is configured, no production database writer invokes
   this reader, no installed two-device offline/reconnect test has run, and no
   hosted CI covers this private successor yet. Public PR #752 remains at
   `4161952717b549a5b1abbd4d425dfed612acf7c8` while its Native run is
   useful. App/HQ rehearsal and dependency-security gates remain FAIL/BLOCKED.
+- **ATOMIC APPLY BLOCKED (independent architecture review):** the current
+  `testOnlyApplyConnectedCloudFeed*V41` writers are guarded by
+  `_testMutationBypassAvailable`, unavailable in product AOT, and accept
+  fixture-supplied pins, trust and clock. Product constructors erase those
+  fixture pins; product open/backup rejects nonempty feed state without
+  independently provisioned trust, and restore remains suspended. Do not
+  route a verified HTTP receipt to these fixture writers or relax the guard.
+  The next implementation dependency is a separately reviewed production
+  protected issuer/device-key composition plus an enrolled-device current
+  authority, lease, revocation and trusted-time fence inside atomic apply,
+  with replay checked before return. Nonempty open, encrypted restore and
+  safe rebootstrap must share the same protected trust. Release-AOT and
+  installed two-device outage/reconnect evidence remain NOT RUN.
 
 ## 2026-11-04 02:02 UTC dependency-security compatibility check
 
