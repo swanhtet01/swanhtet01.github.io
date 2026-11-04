@@ -7,6 +7,25 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PRIVATE SOURCE PASS / PRODUCTION FENCE NOT VERIFIED:** implementation
+  `8bcacdd8885c5bec1a6c28ea324d755ef4f47956`, tree
+  `741e896ee7f058da6c114c9c2ca6e1dc1e74489e`, adds a default-off
+  transaction wrapper for an enrolled device's signed management lease,
+  current authority-store read and validated time before and after a supplied
+  mutation/replay. It starts a SQLite writer transaction before any authority
+  read, including a no-write replay; an independent-connection attempt test
+  confirms the competing writer cannot complete first. Focused gate tests
+  **2/2 PASS**, including wrong tenant/site/device/session, future lease,
+  expiry/revocation after mutation and rollback; Dart analysis PASS, native
+  inventory contract PASS. Existing real authority-store regression **22/22
+  PASS**, but the new gate's integrated test uses a stub authority store.
+  Independent security review ACCEPTED this as **default-off scaffolding
+  only**. It is not yet invoked by a production feed writer. A test with a
+  real signed authority store and independent-connection revocation, protected
+  time provenance, full atomic page/cursor apply, nonempty product restore,
+  release-AOT and installed two-device evidence remain NOT RUN. Do not wire
+  the HTTP reader or enable sync from this evidence.
+
 - **PUBLISHED DRAFT / PARTIAL HOSTED EVIDENCE:** guarded non-force update of
   PR #752 from `4161952717b549a5b1abbd4d425dfed612acf7c8` to reviewed
   `7103418c801f3fa95ae9ffa5797ac361cbab21c5` succeeded; remote and PR
