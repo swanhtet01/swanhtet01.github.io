@@ -11403,6 +11403,35 @@ class ShopDatabase extends _$ShopDatabase {
         expected.priorEventDigest != null) {
       throw UnsupportedError('Test v41 first-page authority unavailable.');
     }
+    await transaction(
+      () => _applyConnectedCloudFeedFirstPageV41InTransaction(
+        trust: trust,
+        timeAuthority: timeAuthority,
+        expected: expected,
+        actorRole: actorRole,
+        requestNonce: requestNonce,
+        pageJson: pageJson,
+        proofJson: proofJson,
+        evidence: evidence,
+        testOnlyBeforeCommit: testOnlyBeforeCommit,
+      ),
+    );
+  }
+
+  /// Reusable atomic body. Callers must already hold this database's writer
+  /// transaction and supply independently verified current authority. It is
+  /// private until a protected, source-pinned product entry is reviewed.
+  Future<void> _applyConnectedCloudFeedFirstPageV41InTransaction({
+    required ShopCloudFeedV41FirstPageTrust trust,
+    required ShopConnectedCloudFeedLiveTimeSource timeAuthority,
+    required ConnectedSiteRetailFeedExpectation expected,
+    required String actorRole,
+    required String requestNonce,
+    required String pageJson,
+    required String proofJson,
+    required ShopCloudFeedV41FirstPageEvidence evidence,
+    Future<void> Function()? testOnlyBeforeCommit,
+  }) async {
     final pinned = trust.immutableCopy();
     if (expected.workspaceId != pinned.workspaceId ||
         expected.siteId != pinned.siteId ||
@@ -11413,291 +11442,289 @@ class ShopDatabase extends _$ShopDatabase {
         !const {'owner', 'manager'}.contains(actorRole)) {
       throw StateError('Cloud-feed first-page scope changed.');
     }
-    await transaction(() async {
-      final current = await _readV41HistoricalRows();
-      final currentPages = current['shop_connected_cloud_feed_pages']!;
-      final currentHeads = current['shop_connected_cloud_feed_heads']!;
-      if (currentPages.length > 1 ||
-          currentHeads.length > 1 ||
-          current['shop_connected_cloud_feed_restore_barriers']!.isNotEmpty ||
-          currentHeads.any((row) => row['restore_paused'] != 0) ||
-          (currentPages.isNotEmpty &&
-              !shopCloudFeedFirstPageHistoricalRowsValidV41(
-                trust: pinned,
-                completeTables: current,
-              ))) {
-        throw StateError('Cloud-feed history or restore state is unsafe.');
+    final current = await _readV41HistoricalRows();
+    final currentPages = current['shop_connected_cloud_feed_pages']!;
+    final currentHeads = current['shop_connected_cloud_feed_heads']!;
+    if (currentPages.length > 1 ||
+        currentHeads.length > 1 ||
+        current['shop_connected_cloud_feed_restore_barriers']!.isNotEmpty ||
+        currentHeads.any((row) => row['restore_paused'] != 0) ||
+        (currentPages.isNotEmpty &&
+            !shopCloudFeedFirstPageHistoricalRowsValidV41(
+              trust: pinned,
+              completeTables: current,
+            ))) {
+      throw StateError('Cloud-feed history or restore state is unsafe.');
+    }
+    await _requireCurrentV41Authority(
+      current,
+      pinned,
+      expected.authorityPayloadDigest,
+    );
+    final liveTime = await timeAuthority.readLiveTime(
+      tenantId: expected.workspaceId,
+      siteId: expected.siteId,
+    );
+    void requireBoundLiveTime(ConnectedTrustedTimeLiveReading reading) {
+      if (reading.entryDigest != evidence.timeEntryDigest ||
+          reading.ackDigest != evidence.timeAckDigest ||
+          reading.bootSessionId != evidence.bootSessionId ||
+          reading.monotonicMillis < evidence.sampleMonotonicMillis ||
+          reading.effectiveTimeMillis <= 0) {
+        throw StateError('Cloud-feed live-time evidence changed.');
       }
-      await _requireCurrentV41Authority(
-        current,
-        pinned,
-        expected.authorityPayloadDigest,
-      );
-      final liveTime = await timeAuthority.readLiveTime(
+    }
+
+    requireBoundLiveTime(liveTime);
+    final now = liveTime.effectiveTimeMillis;
+    final retainedSample = currentPages.isEmpty
+        ? liveTime.monotonicMillis
+        : current['shop_connected_cloud_feed_page_evidence']!
+                  .single['sample_monotonic_millis']
+              as int;
+    final retainedNow = currentPages.isEmpty
+        ? now
+        : current['shop_connected_cloud_feed_page_evidence']!
+                  .single['trusted_now_millis']
+              as int;
+    final page = ConnectedSiteRetailFeedPageV1.parse(
+      canonicalBytes: pageJson,
+      expected: expected,
+    );
+    if (page.nextSequence <= 0) {
+      throw StateError('Cloud-feed first page did not advance.');
+    }
+    final proof = ConnectedCloudFeedProofV1.parse(
+      canonicalBytes: proofJson,
+      page: page,
+      expected: expected,
+      requestNonce: requestNonce,
+      actorRole: actorRole,
+      trustedNowMillis: now,
+    );
+    ConnectedCloudFeedPinnedIssuerVerifier(pinned.feedIssuerKeys)
+        .verifySync(proof);
+    final streamDigest = connectedSiteSha256({
+      'contract': 'supermega.connected-cloud-feed-stream.v1',
+      'workspaceId': expected.workspaceId,
+      'siteId': expected.siteId,
+      'actorId': expected.actorId,
+      'actorRole': actorRole,
+      'deviceId': expected.deviceId,
+      'authorityGeneration': expected.authorityGeneration,
+      'revocationGeneration': expected.revocationGeneration,
+      'authorityPayloadDigest': expected.authorityPayloadDigest,
+      'leaseDigest': expected.leaseDigest,
+    });
+    final streamRow = <String, Object?>{
+      'stream_digest': streamDigest,
+      'workspace_id': expected.workspaceId,
+      'site_id': expected.siteId,
+      'actor_id': expected.actorId,
+      'device_id': expected.deviceId,
+      'actor_role': actorRole,
+      'lease_digest': expected.leaseDigest,
+      'authority_payload_digest': expected.authorityPayloadDigest,
+      'authority_generation': expected.authorityGeneration,
+      'revocation_generation': expected.revocationGeneration,
+    };
+    final pageRow = <String, Object?>{
+      'page_digest': page.pageDigest,
+      'stream_digest': streamDigest,
+      'after_sequence': 0,
+      'prior_event_digest': null,
+      'next_sequence': page.nextSequence,
+      'next_event_digest': page.nextEventDigest,
+      'page_json': pageJson,
+      'request_nonce': requestNonce,
+      'authenticated_proof_json': proofJson,
+      'authenticated_proof_digest': proof.proofDigest,
+    };
+    final headRow = <String, Object?>{
+      'stream_digest': streamDigest,
+      'next_sequence': page.nextSequence,
+      'next_event_digest': page.nextEventDigest,
+      'last_page_digest': page.pageDigest,
+      'restore_paused': 0,
+    };
+    final evidenceRow = <String, Object?>{
+      'page_digest': page.pageDigest,
+      'request_json': evidence.requestJson,
+      'request_digest': connectedSiteSha256(jsonDecode(evidence.requestJson)),
+      'cloud_key_approval_json': evidence.cloudKeyApprovalJson,
+      'cloud_key_approval_digest': connectedSiteSha256(
+        jsonDecode(evidence.cloudKeyApprovalJson),
+      ),
+      'lease_digest': expected.leaseDigest,
+      'authority_payload_digest': expected.authorityPayloadDigest,
+      'enrollment_evidence_digest': evidence.enrollmentEvidenceDigest,
+      'time_entry_digest': evidence.timeEntryDigest,
+      'time_ack_digest': evidence.timeAckDigest,
+      'time_head_digest': evidence.timeHeadDigest,
+      'boot_session_id': evidence.bootSessionId,
+      'sample_monotonic_millis': retainedSample,
+      'trusted_now_millis': retainedNow,
+    };
+    final prospective = <String, List<Map<String, Object?>>>{
+      ...current,
+      'shop_connected_cloud_feed_streams': [streamRow],
+      'shop_connected_cloud_feed_pages': [pageRow],
+      'shop_connected_cloud_feed_heads': [headRow],
+      'shop_connected_cloud_feed_restore_barriers': const [],
+      'shop_connected_cloud_feed_page_evidence': [evidenceRow],
+    };
+    if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
+      trust: pinned,
+      completeTables: prospective,
+    )) {
+      throw StateError('Current signed cloud-feed authority is invalid.');
+    }
+    Future<void> requireCurrentLiveTime(
+      Map<String, List<Map<String, Object?>>> rows,
+    ) async {
+      final latest = await timeAuthority.readLiveTime(
         tenantId: expected.workspaceId,
         siteId: expected.siteId,
       );
-      void requireBoundLiveTime(ConnectedTrustedTimeLiveReading reading) {
-        if (reading.entryDigest != evidence.timeEntryDigest ||
-            reading.ackDigest != evidence.timeAckDigest ||
-            reading.bootSessionId != evidence.bootSessionId ||
-            reading.monotonicMillis < evidence.sampleMonotonicMillis ||
-            reading.effectiveTimeMillis <= 0) {
-          throw StateError('Cloud-feed live-time evidence changed.');
-        }
+      requireBoundLiveTime(latest);
+      if (latest.monotonicMillis < liveTime.monotonicMillis ||
+          latest.effectiveTimeMillis < now) {
+        throw StateError('Cloud-feed trusted time regressed before commit.');
       }
+      final retained = rows['shop_connected_cloud_feed_page_evidence']!;
+      if (retained.length != 1 ||
+          !shopCloudFeedFirstPageHistoricalRowsValidV41(
+            trust: pinned,
+            completeTables: {
+              ...rows,
+              'shop_connected_cloud_feed_page_evidence': [
+                {
+                  ...retained.single,
+                  'sample_monotonic_millis': latest.monotonicMillis,
+                  'trusted_now_millis': latest.effectiveTimeMillis,
+                },
+              ],
+            },
+          )) {
+        throw StateError('Cloud-feed trusted time changed before commit.');
+      }
+    }
 
-      requireBoundLiveTime(liveTime);
-      final now = liveTime.effectiveTimeMillis;
-      final retainedSample = currentPages.isEmpty
-          ? liveTime.monotonicMillis
-          : current['shop_connected_cloud_feed_page_evidence']!
-                    .single['sample_monotonic_millis']
-                as int;
-      final retainedNow = currentPages.isEmpty
-          ? now
-          : current['shop_connected_cloud_feed_page_evidence']!
-                    .single['trusted_now_millis']
-                as int;
-      final page = ConnectedSiteRetailFeedPageV1.parse(
-        canonicalBytes: pageJson,
-        expected: expected,
-      );
-      if (page.nextSequence <= 0) {
-        throw StateError('Cloud-feed first page did not advance.');
+    if (currentPages.isNotEmpty) {
+      bool same(Map<String, Object?> a, Map<String, Object?> b) =>
+          canonicalConnectedSiteJson(a) == canonicalConnectedSiteJson(b);
+      if (current['shop_connected_cloud_feed_streams']!.length != 1 ||
+          current['shop_connected_cloud_feed_page_evidence']!.length != 1 ||
+          !same(
+            current['shop_connected_cloud_feed_streams']!.single,
+            streamRow,
+          ) ||
+          !same(currentPages.single, pageRow) ||
+          !same(currentHeads.single, headRow) ||
+          !same(
+            current['shop_connected_cloud_feed_page_evidence']!.single,
+            evidenceRow,
+          )) {
+        throw StateError('Cloud-feed first-page replay changed bytes.');
       }
-      final proof = ConnectedCloudFeedProofV1.parse(
-        canonicalBytes: proofJson,
-        page: page,
-        expected: expected,
-        requestNonce: requestNonce,
-        actorRole: actorRole,
-        trustedNowMillis: now,
-      );
-      ConnectedCloudFeedPinnedIssuerVerifier(pinned.feedIssuerKeys)
-          .verifySync(proof);
-      final streamDigest = connectedSiteSha256({
-        'contract': 'supermega.connected-cloud-feed-stream.v1',
-        'workspaceId': expected.workspaceId,
-        'siteId': expected.siteId,
-        'actorId': expected.actorId,
-        'actorRole': actorRole,
-        'deviceId': expected.deviceId,
-        'authorityGeneration': expected.authorityGeneration,
-        'revocationGeneration': expected.revocationGeneration,
-        'authorityPayloadDigest': expected.authorityPayloadDigest,
-        'leaseDigest': expected.leaseDigest,
-      });
-      final streamRow = <String, Object?>{
-        'stream_digest': streamDigest,
-        'workspace_id': expected.workspaceId,
-        'site_id': expected.siteId,
-        'actor_id': expected.actorId,
-        'device_id': expected.deviceId,
-        'actor_role': actorRole,
-        'lease_digest': expected.leaseDigest,
-        'authority_payload_digest': expected.authorityPayloadDigest,
-        'authority_generation': expected.authorityGeneration,
-        'revocation_generation': expected.revocationGeneration,
-      };
-      final pageRow = <String, Object?>{
-        'page_digest': page.pageDigest,
-        'stream_digest': streamDigest,
-        'after_sequence': 0,
-        'prior_event_digest': null,
-        'next_sequence': page.nextSequence,
-        'next_event_digest': page.nextEventDigest,
-        'page_json': pageJson,
-        'request_nonce': requestNonce,
-        'authenticated_proof_json': proofJson,
-        'authenticated_proof_digest': proof.proofDigest,
-      };
-      final headRow = <String, Object?>{
-        'stream_digest': streamDigest,
-        'next_sequence': page.nextSequence,
-        'next_event_digest': page.nextEventDigest,
-        'last_page_digest': page.pageDigest,
-        'restore_paused': 0,
-      };
-      final evidenceRow = <String, Object?>{
-        'page_digest': page.pageDigest,
-        'request_json': evidence.requestJson,
-        'request_digest': connectedSiteSha256(jsonDecode(evidence.requestJson)),
-        'cloud_key_approval_json': evidence.cloudKeyApprovalJson,
-        'cloud_key_approval_digest': connectedSiteSha256(
-          jsonDecode(evidence.cloudKeyApprovalJson),
-        ),
-        'lease_digest': expected.leaseDigest,
-        'authority_payload_digest': expected.authorityPayloadDigest,
-        'enrollment_evidence_digest': evidence.enrollmentEvidenceDigest,
-        'time_entry_digest': evidence.timeEntryDigest,
-        'time_ack_digest': evidence.timeAckDigest,
-        'time_head_digest': evidence.timeHeadDigest,
-        'boot_session_id': evidence.bootSessionId,
-        'sample_monotonic_millis': retainedSample,
-        'trusted_now_millis': retainedNow,
-      };
-      final prospective = <String, List<Map<String, Object?>>>{
-        ...current,
-        'shop_connected_cloud_feed_streams': [streamRow],
-        'shop_connected_cloud_feed_pages': [pageRow],
-        'shop_connected_cloud_feed_heads': [headRow],
-        'shop_connected_cloud_feed_restore_barriers': const [],
-        'shop_connected_cloud_feed_page_evidence': [evidenceRow],
-      };
-      if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
-        trust: pinned,
-        completeTables: prospective,
-      )) {
-        throw StateError('Current signed cloud-feed authority is invalid.');
-      }
-      Future<void> requireCurrentLiveTime(
-        Map<String, List<Map<String, Object?>>> rows,
-      ) async {
-        final latest = await timeAuthority.readLiveTime(
-          tenantId: expected.workspaceId,
-          siteId: expected.siteId,
-        );
-        requireBoundLiveTime(latest);
-        if (latest.monotonicMillis < liveTime.monotonicMillis ||
-            latest.effectiveTimeMillis < now) {
-          throw StateError('Cloud-feed trusted time regressed before commit.');
-        }
-        final retained = rows['shop_connected_cloud_feed_page_evidence']!;
-        if (retained.length != 1 ||
-            !shopCloudFeedFirstPageHistoricalRowsValidV41(
-              trust: pinned,
-              completeTables: {
-                ...rows,
-                'shop_connected_cloud_feed_page_evidence': [
-                  {
-                    ...retained.single,
-                    'sample_monotonic_millis': latest.monotonicMillis,
-                    'trusted_now_millis': latest.effectiveTimeMillis,
-                  },
-                ],
-              },
-            )) {
-          throw StateError('Cloud-feed trusted time changed before commit.');
-        }
-      }
-
-      if (currentPages.isNotEmpty) {
-        bool same(Map<String, Object?> a, Map<String, Object?> b) =>
-            canonicalConnectedSiteJson(a) == canonicalConnectedSiteJson(b);
-        if (current['shop_connected_cloud_feed_streams']!.length != 1 ||
-            current['shop_connected_cloud_feed_page_evidence']!.length != 1 ||
-            !same(
-              current['shop_connected_cloud_feed_streams']!.single,
-              streamRow,
-            ) ||
-            !same(currentPages.single, pageRow) ||
-            !same(currentHeads.single, headRow) ||
-            !same(
-              current['shop_connected_cloud_feed_page_evidence']!.single,
-              evidenceRow,
-            )) {
-          throw StateError('Cloud-feed first-page replay changed bytes.');
-        }
-        await _requireCurrentV41Authority(
-          await _readV41HistoricalRows(),
-          pinned,
-          expected.authorityPayloadDigest,
-        );
-        await requireCurrentLiveTime(await _readV41HistoricalRows());
-        return;
-      }
-      if (current['shop_connected_cloud_feed_streams']!.isNotEmpty ||
-          currentHeads.isNotEmpty ||
-          current['shop_connected_cloud_feed_page_evidence']!.isNotEmpty) {
-        throw StateError('Cloud-feed first-page cursor is not empty.');
-      }
-      await customInsert(
-        'INSERT INTO shop_connected_cloud_feed_streams '
-        '(stream_digest, workspace_id, site_id, actor_id, device_id, '
-        'actor_role, lease_digest, authority_payload_digest, '
-        'authority_generation, revocation_generation) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        variables: [
-          Variable<String>(streamDigest),
-          Variable<String>(expected.workspaceId),
-          Variable<String>(expected.siteId),
-          Variable<String>(expected.actorId),
-          Variable<String>(expected.deviceId),
-          Variable<String>(actorRole),
-          Variable<String>(expected.leaseDigest),
-          Variable<String>(expected.authorityPayloadDigest),
-          Variable<int>(expected.authorityGeneration),
-          Variable<int>(expected.revocationGeneration),
-        ],
-      );
-      await customInsert(
-        'INSERT INTO shop_connected_cloud_feed_pages '
-        '(page_digest, stream_digest, after_sequence, prior_event_digest, '
-        'next_sequence, next_event_digest, page_json, request_nonce, '
-        'authenticated_proof_json, authenticated_proof_digest) '
-        'VALUES (?, ?, 0, NULL, ?, ?, ?, ?, ?, ?)',
-        variables: [
-          Variable<String>(page.pageDigest),
-          Variable<String>(streamDigest),
-          Variable<int>(page.nextSequence),
-          Variable<String>(page.nextEventDigest!),
-          Variable<String>(pageJson),
-          Variable<String>(requestNonce),
-          Variable<String>(proofJson),
-          Variable<String>(proof.proofDigest),
-        ],
-      );
-      await customInsert(
-        'INSERT INTO shop_connected_cloud_feed_page_evidence '
-        '(page_digest, request_json, request_digest, cloud_key_approval_json, '
-        'cloud_key_approval_digest, lease_digest, authority_payload_digest, '
-        'enrollment_evidence_digest, time_entry_digest, time_ack_digest, '
-        'time_head_digest, boot_session_id, sample_monotonic_millis, '
-        'trusted_now_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        variables: [
-          Variable<String>(page.pageDigest),
-          Variable<String>(evidence.requestJson),
-          Variable<String>(evidenceRow['request_digest'] as String),
-          Variable<String>(evidence.cloudKeyApprovalJson),
-          Variable<String>(evidenceRow['cloud_key_approval_digest'] as String),
-          Variable<String>(expected.leaseDigest),
-          Variable<String>(expected.authorityPayloadDigest),
-          Variable<String>(evidence.enrollmentEvidenceDigest),
-          Variable<String>(evidence.timeEntryDigest),
-          Variable<String>(evidence.timeAckDigest),
-          Variable<String>(evidence.timeHeadDigest),
-          Variable<String>(evidence.bootSessionId),
-          Variable<int>(retainedSample),
-          Variable<int>(retainedNow),
-        ],
-      );
-      await customInsert(
-        'INSERT INTO shop_connected_cloud_feed_heads '
-        '(stream_digest, next_sequence, next_event_digest, last_page_digest, '
-        'restore_paused) VALUES (?, ?, ?, ?, 0)',
-        variables: [
-          Variable<String>(streamDigest),
-          Variable<int>(page.nextSequence),
-          Variable<String>(page.nextEventDigest!),
-          Variable<String>(page.pageDigest),
-        ],
-      );
-      if (testOnlyBeforeCommit != null) await testOnlyBeforeCommit();
-      final finalRows = await _readV41HistoricalRows();
       await _requireCurrentV41Authority(
-        finalRows,
+        await _readV41HistoricalRows(),
         pinned,
         expected.authorityPayloadDigest,
       );
-      await requireCurrentLiveTime(finalRows);
-      if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
-        trust: pinned,
-        completeTables: finalRows,
-      )) {
-        throw StateError('Cloud-feed authority changed before commit.');
-      }
-    });
+      await requireCurrentLiveTime(await _readV41HistoricalRows());
+      return;
+    }
+    if (current['shop_connected_cloud_feed_streams']!.isNotEmpty ||
+        currentHeads.isNotEmpty ||
+        current['shop_connected_cloud_feed_page_evidence']!.isNotEmpty) {
+      throw StateError('Cloud-feed first-page cursor is not empty.');
+    }
+    await customInsert(
+      'INSERT INTO shop_connected_cloud_feed_streams '
+      '(stream_digest, workspace_id, site_id, actor_id, device_id, '
+      'actor_role, lease_digest, authority_payload_digest, '
+      'authority_generation, revocation_generation) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(streamDigest),
+        Variable<String>(expected.workspaceId),
+        Variable<String>(expected.siteId),
+        Variable<String>(expected.actorId),
+        Variable<String>(expected.deviceId),
+        Variable<String>(actorRole),
+        Variable<String>(expected.leaseDigest),
+        Variable<String>(expected.authorityPayloadDigest),
+        Variable<int>(expected.authorityGeneration),
+        Variable<int>(expected.revocationGeneration),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_connected_cloud_feed_pages '
+      '(page_digest, stream_digest, after_sequence, prior_event_digest, '
+      'next_sequence, next_event_digest, page_json, request_nonce, '
+      'authenticated_proof_json, authenticated_proof_digest) '
+      'VALUES (?, ?, 0, NULL, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(page.pageDigest),
+        Variable<String>(streamDigest),
+        Variable<int>(page.nextSequence),
+        Variable<String>(page.nextEventDigest!),
+        Variable<String>(pageJson),
+        Variable<String>(requestNonce),
+        Variable<String>(proofJson),
+        Variable<String>(proof.proofDigest),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_connected_cloud_feed_page_evidence '
+      '(page_digest, request_json, request_digest, cloud_key_approval_json, '
+      'cloud_key_approval_digest, lease_digest, authority_payload_digest, '
+      'enrollment_evidence_digest, time_entry_digest, time_ack_digest, '
+      'time_head_digest, boot_session_id, sample_monotonic_millis, '
+      'trusted_now_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(page.pageDigest),
+        Variable<String>(evidence.requestJson),
+        Variable<String>(evidenceRow['request_digest'] as String),
+        Variable<String>(evidence.cloudKeyApprovalJson),
+        Variable<String>(evidenceRow['cloud_key_approval_digest'] as String),
+        Variable<String>(expected.leaseDigest),
+        Variable<String>(expected.authorityPayloadDigest),
+        Variable<String>(evidence.enrollmentEvidenceDigest),
+        Variable<String>(evidence.timeEntryDigest),
+        Variable<String>(evidence.timeAckDigest),
+        Variable<String>(evidence.timeHeadDigest),
+        Variable<String>(evidence.bootSessionId),
+        Variable<int>(retainedSample),
+        Variable<int>(retainedNow),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_connected_cloud_feed_heads '
+      '(stream_digest, next_sequence, next_event_digest, last_page_digest, '
+      'restore_paused) VALUES (?, ?, ?, ?, 0)',
+      variables: [
+        Variable<String>(streamDigest),
+        Variable<int>(page.nextSequence),
+        Variable<String>(page.nextEventDigest!),
+        Variable<String>(page.pageDigest),
+      ],
+    );
+    if (testOnlyBeforeCommit != null) await testOnlyBeforeCommit();
+    final finalRows = await _readV41HistoricalRows();
+    await _requireCurrentV41Authority(
+      finalRows,
+      pinned,
+      expected.authorityPayloadDigest,
+    );
+    await requireCurrentLiveTime(finalRows);
+    if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
+      trust: pinned,
+      completeTables: finalRows,
+    )) {
+      throw StateError('Cloud-feed authority changed before commit.');
+    }
   }
 
   /// Synthetic second-page append only. The same pinned stream must already
