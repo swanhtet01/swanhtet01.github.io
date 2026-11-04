@@ -1,9 +1,31 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 01:52 UTC
+- Last verified: 2026-11-04 02:02 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 02:02 UTC dependency-security compatibility check
+
+- **FAIL / BLOCKED (exact public head):** Dependency Security run
+  `41755294058` on PR #752 head `41619527` failed app (10 moderate records)
+  and kernel (5), all in the minimatch `<11.0.1` development-lint chain under
+  `GHSA-g3hv-75wg-m249`; added-line credential scan, platform audit and
+  Python runtime audit passed. No audit suppression, override or dependency
+  edit was made. Live registry metadata at this checkpoint reports latest
+  `eslint@10.14.0` still requires minimatch `^10.2.6`,
+  `@eslint/config-array@0.23.5` requires `^10.2.4`,
+  `@typescript-eslint/typescript-estree@8.72.1` requires `^10.2.2`, and
+  `eslint-plugin-jsx-a11y@6.10.2` requires `^3.1.2`. The latter's official
+  cached package calls its minimatch import as a function; patched minimatch
+  11.x exposes a named function from an object. A blanket v11 override is
+  therefore not an established compatible fix. Independent read-only review
+  agrees no safe drop-in exists. Keep the audit red until all locked paths
+  have a compatible upstream update or a separately provenance-reviewed
+  adapter/fork, followed by clean app/kernel installs, audit, lint coverage,
+  accessibility rules and POSIX/Windows matcher tests. The reviewed private
+  sync candidate `a9dfb947` remains unchanged and unpushed while Native CI
+  continues.
 
 ## 2026-11-04 01:52 UTC private disposable-PG replay assertions
 
