@@ -1,9 +1,32 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 00:50 UTC
+- Last verified: 2026-11-04 00:56 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 00:56 UTC private unmounted authenticated feed route
+
+- **PASS (private source and synthetic tests only):** implementation
+  `8e2e4897f95926c4624697a6f90c352f036f2ad3`, repository tree
+  `6d3900b26cd8ab8a2328295bb2b5ede4b75c9864`, two-file patch SHA-256
+  `28dbb156af466b7467f20bf0b186354a56bbe68605ce05a00faeebc6b5cf3b9c`.
+  A new unmounted/default-off HTTP route composes request-bound authenticated
+  peer identity, current authority/lease, bounded duplicate-free JSON,
+  transaction-checked PostgreSQL retail feed and synchronous proof signing
+  against an independently pinned Ed25519 public key. The route rejects
+  signer mutation of checked request/lease bytes and digest bindings,
+  substituted identity, stale time, missing/changed pins, revoked SQL rows,
+  malformed bodies and proof mismatch. The affected synthetic Python matrix
+  **45/45 PASS**, compilation and diff check **PASS**. Independent read-only
+  adversarial review first found a mutable-signer binding gap, then **ACCEPT**
+  after its repair and exact final-diff recheck.
+- **NOT RUN / held:** this router is not imported or mounted by canonical
+  `runtime.py`; no live mTLS peer attestation, production signer/key custody,
+  real PostgreSQL concurrency through this route, installed two-device
+  reconnect or production sync has been proven. Public PR #752 remains at
+  `39f1c3dc8537b5647b6dfca39118da9b66daa6f2` while useful exact-head
+  Native `41748476173` runs. Do not publish this private successor over it.
 
 ## 2026-11-04 00:43 UTC exact-head disposable PG17-to-native bridge
 
