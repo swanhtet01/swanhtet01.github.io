@@ -32,7 +32,7 @@ from supermega_runtime.connected_site_v15 import (
     canonical_json, digest,
 )
 from tests.connected_site_signed_page_fixture import (
-    read_and_sign_test_only_page, seal_test_only_checked_page,
+    seal_test_only_checked_page,
 )
 from tests.test_connected_site_event_feed import _Connection
 from tests.test_connected_site_runtime import _Authorities
@@ -307,15 +307,74 @@ def build_pg_response(native_database: Path, *, admin_url: str,
                      command_id, command_digest, "retailCart", command_id),
                 )
                 previous_digest = event_digest
-    now = datetime.now(timezone.utc)
+    # Exercise the same checked HTTP route as the mock two-store bridge, but
+    # with a disposable real PostgreSQL 17 transaction and forced RLS. This
+    # TestClient mount is not a network listener or production ingress.
+    provider = _Authorities(authority)
     principal = ConnectedSitePrincipal(workspace, site, device.device_id, True,
                                        "test-native-v41-pg")
-    result = read_and_sign_test_only_page(
-        connection_factory=lambda: psycopg.connect(runtime_url),
-        principal=principal, authority=authority, lease=lease, request=request,
-        now=now, issuer_key_id="feed_fixture", issuer_seed=23,
-        proof_lifetime_millis=90000,
+
+    def peer(http_request: Request):
+        return GatewayPeerAttestation(
+            request=http_request, gateway_id="test-native-v41-pg",
+            workspace_id=workspace, site_id=site, device_id=device.device_id,
+            client_fingerprint=device.client_fingerprint,
+            session_generation=device.session_generation,
+            observed_at=datetime.now(timezone.utc),
+        )
+
+    resolver = ConnectedSiteGatewayPrincipalResolver(
+        gateway_id="test-native-v41-pg", load_attested_peer=peer,
+        authority_provider=provider, now=lambda: datetime.now(timezone.utc),
     )
+    seal_sample: datetime | None = None
+
+    def trusted_now() -> datetime:
+        nonlocal seal_sample
+        seal_sample = datetime.now(timezone.utc)
+        return seal_sample
+
+    def seal(page, signed_request, signed_lease):
+        # The route samples trusted time before calling this signer. Reuse
+        # that same host sample so a millisecond tick cannot make a freshly
+        # signed test proof appear to be issued in the future.
+        if seal_sample is None:
+            raise ValueError("native_v41_pg_trusted_sample_missing")
+        return seal_test_only_checked_page(
+            page, signed_request, signed_lease, principal=principal,
+            now=seal_sample, issuer_key_id="feed_fixture",
+            issuer_seed=23, proof_lifetime_millis=90000,
+        )
+
+    app = FastAPI()
+    app.include_router(create_connected_site_event_feed_router(
+        connection_factory=lambda: psycopg.connect(runtime_url),
+        authority_provider=provider, resolve_principal=resolver,
+        load_lease=lambda _principal, _request: lease,
+        seal_checked_page=seal,
+        pinned_issuer_keys={"feed_fixture": _key(23)[1]},
+        trusted_now=trusted_now, runtime_enabled=True,
+    ))
+    path = "/api/connected-site/v1/event-feed"
+    with TestClient(app) as client:
+        response = client.post(path, json=request)
+        if response.status_code != 200:
+            raise ValueError(f"native_v41_pg_route_rejected:{response.status_code}")
+        result = response.json()
+        wrong_device = client.post(path, json={**request, "deviceId": "wrong"})
+        if (wrong_device.status_code != 422
+                or wrong_device.json()["detail"]["error"] != "event_read_scope"):
+            raise ValueError("native_v41_pg_wrong_device_denial_changed")
+        with psycopg.connect(admin_url) as connection:
+            connection.execute(
+                "update app_private.connected_site_devices set status='revoked' "
+                "where workspace_id=%s and site_id=%s and device_id=%s",
+                (workspace, site, device.device_id),
+            )
+        revoked = client.post(path, json=request)
+        if (revoked.status_code != 403
+                or revoked.json()["detail"]["error"] != "event_page_device_changed"):
+            raise ValueError("native_v41_pg_revocation_denial_changed")
     page = json.loads(result["pageJson"])
     if (
         page["afterSequence"] != 1 or page["priorEventDigest"] != first_digest
