@@ -7,6 +7,31 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PRIVATE DEFAULT-OFF SERVER SIGNER COMPOSITION PASS:** implementation
+  `f4197aa0336ee4952ba702f6258b87a622c6619e`, tree
+  `458aca6d653ae49c8b065e28c6dc844abf3d1f27`, adds a purpose-limited
+  `ProtectedFeedSigner` interface and checked-page sealer to the existing
+  unmounted event-feed route. It signs the typed transaction-checked page,
+  binds request/lease digests and nonce, uses the route's exact checked time
+  sample, and caps proof expiry at the signed lease expiry. The route still
+  independently verifies the source-pinned issuer signature and rejects
+  post-signer mutation. Related event-feed/router/gateway tests **26/26
+  PASS**, Python compile and diff check PASS; independent security review
+  ACCEPTED default-off source CI only. The signer interface does not provide
+  protected custody, issuer keys or a production route mount; real PG17 and
+  installed devices did not run on this private successor.
+
+- **PRIVATE CUSTODY DESIGN REVIEWED / IMPLEMENTATION OPEN:**
+  `cb4df2fb95d08fb2111b144911bf39ad78c46ce5` records a default-off
+  technical direction: purpose-separated Ed25519 cloud issuers through the
+  configured (not verified live) Vercel Python API target, existing Android
+  Keystore Ed25519 pending installed proof, and a versioned Windows CNG/TPM
+  P-256 device-signing profile instead of mislabeling DPAPI-wrapped software
+  keys as non-exportable. Independent review ACCEPTED the design only. Windows
+  v2 contracts, CNG implementation, provider signer custody, public-key
+  registry, deployment, Android/Windows installed proof and mixed-device
+  recovery remain NOT RUN. Production keys and access were not created.
+
 - **PRIVATE SIGNED-GATE COMPOSITION PASS / PRODUCT STILL OFF:**
   `0f5bcdae8d64cb42983edb40c21e6847717455a3`, tree
   `6761f6c8f4aa64784a3aca80774fb71511645d46`, composes the signed
