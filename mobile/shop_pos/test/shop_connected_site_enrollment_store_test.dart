@@ -22,6 +22,104 @@ const _device = 'device-enrollment';
 const _nonce = 'pairing_nonce_enrollment_0001';
 
 void main() {
+  test('v2 owner signature binds P-256 profile, key and tenant', () async {
+    const pointHex =
+        '046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2'
+        '964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5';
+    final point = [
+      for (var i = 0; i < pointHex.length; i += 2)
+        int.parse(pointHex.substring(i, i + 2), radix: 16),
+    ];
+    final publicKey = base64Url.encode(point).replaceAll('=', '');
+    final fingerprint = sha256.convert(point).toString();
+    final owner = await Ed25519().newKeyPairFromSeed(List<int>.filled(32, 14));
+    final ownerPublic = (await owner.extractPublicKey()).bytes;
+    ShopOwnerEnrollmentEvidenceV2 evidence(String signature) {
+      final payload = <String, Object>{
+        'schema': 'supermega.shop.owner-enrollment-evidence.v2',
+        'action': 'approve',
+        'tenantId': _tenant,
+        'siteId': _site,
+        'coordinatorDeviceId': _coordinator,
+        'deviceId': _device,
+        'signingProfile': 'p256-sha256-v2',
+        'signingKeyId': 'key-v2',
+        'publicKeyBase64Url': publicKey,
+        'clientFingerprint': fingerprint,
+        'sessionGeneration': 1,
+        'observedAtMillis': _now - 100,
+        'authorityKeyId': 'owner-key-1',
+      };
+      return ShopOwnerEnrollmentEvidenceV2(
+        action: ShopOwnerEnrollmentAction.approve,
+        tenantId: _tenant,
+        siteId: _site,
+        coordinatorDeviceId: _coordinator,
+        deviceId: _device,
+        signingKeyId: 'key-v2',
+        publicKeyBase64Url: publicKey,
+        clientFingerprint: fingerprint,
+        sessionGeneration: 1,
+        observedAtMillis: _now - 100,
+        authorityKeyId: 'owner-key-1',
+        signature: signature,
+        evidenceDigest: connectedSiteSha256(payload),
+      );
+    }
+
+    final unsigned = evidence('A' * 86);
+    final signature = base64Url
+        .encode(
+          (await Ed25519().sign(
+            utf8.encode(canonicalConnectedSiteJson(unsigned.signingPayload)),
+            keyPair: owner,
+          )).bytes,
+        )
+        .replaceAll('=', '');
+    final signed = evidence(signature);
+    final bytes = canonicalConnectedSiteJson(signed.toJson());
+    ShopOwnerEnrollmentEvidenceV2 verify({
+      String? json,
+      String tenant = _tenant,
+      String keyId = 'key-v2',
+      String? expectedPoint,
+      String? expectedFingerprint,
+      Map<String, List<int>>? pins,
+    }) => verifyRetainedOwnerEnrollmentV2Sync(
+      canonicalEvidenceJson: json ?? bytes,
+      expectedEvidenceDigest: signed.evidenceDigest,
+      tenantId: tenant,
+      siteId: _site,
+      coordinatorDeviceId: _coordinator,
+      deviceId: _device,
+      signingKeyId: keyId,
+      publicKeyBase64Url: expectedPoint ?? publicKey,
+      clientFingerprint: expectedFingerprint ?? fingerprint,
+      sessionGeneration: 1,
+      trustedAtMillis: _now,
+      pinnedOwnerIssuerKeys: pins ?? {'owner-key-1': ownerPublic},
+    );
+    expect(verify().signingKeyId, 'key-v2');
+    expect(() => verify(tenant: 'other'), throwsFormatException);
+    expect(() => verify(keyId: 'other'), throwsFormatException);
+    expect(
+      () => verify(expectedPoint: 'A' * publicKey.length),
+      throwsFormatException,
+    );
+    expect(() => verify(expectedFingerprint: '0' * 64), throwsFormatException);
+    expect(() => verify(pins: const {}), throwsFormatException);
+    for (final altered in [
+      {...signed.toJson(), 'signingProfile': 'ed25519'},
+      {...signed.toJson(), 'signature': 'A' * 86},
+      {...signed.toJson(), 'action': 'revoke'},
+    ]) {
+      expect(
+        () => verify(json: canonicalConnectedSiteJson(altered)),
+        throwsFormatException,
+      );
+    }
+  });
+
   test('retained owner enrollment requires signed exact approval', () async {
     final ownerPair = await Ed25519().newKeyPairFromSeed(
       List<int>.filled(32, 14),

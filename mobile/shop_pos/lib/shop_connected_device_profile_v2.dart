@@ -43,20 +43,15 @@ Uint8List _decodeCanonical(String value, int length) {
   }
 }
 
-/// SEC1 uncompressed P-256 point plus fixed P1363 low-S signature.
-/// The signer must hash the exact canonical message once with SHA-256.
-bool verifyConnectedP256DeviceSignatureV2({
+/// Validate the public half of a proposed enrolled identity without a signer.
+Uint8List requireConnectedP256DevicePublicKeyV2({
   required String publicKeyBase64Url,
   required String fingerprintSha256,
-  required String signatureBase64Url,
-  required List<int> canonicalMessageBytes,
 }) {
   final point = _decodeCanonical(publicKeyBase64Url, 65);
-  final signature = _decodeCanonical(signatureBase64Url, 64);
   if (point.first != 4 ||
       !RegExp(r'^[0-9a-f]{64}$').hasMatch(fingerprintSha256) ||
-      crypto.sha256.convert(point).toString() != fingerprintSha256 ||
-      canonicalMessageBytes.any((value) => value < 0 || value > 255)) {
+      crypto.sha256.convert(point).toString() != fingerprintSha256) {
     throw const FormatException('connected_device_v2_key_binding');
   }
   // PointyCastle decodes SEC1 bytes but does not check the curve equation.
@@ -68,6 +63,25 @@ bool verifyConnectedP256DeviceSignatureV2({
       (y * y - x * x * x + BigInt.from(3) * x - _p256B) % _p256Prime !=
           BigInt.zero) {
     throw const FormatException('connected_device_v2_public_key_invalid');
+  }
+  return point;
+}
+
+/// SEC1 uncompressed P-256 point plus fixed P1363 low-S signature.
+/// The signer must hash the exact canonical message once with SHA-256.
+bool verifyConnectedP256DeviceSignatureV2({
+  required String publicKeyBase64Url,
+  required String fingerprintSha256,
+  required String signatureBase64Url,
+  required List<int> canonicalMessageBytes,
+}) {
+  final point = requireConnectedP256DevicePublicKeyV2(
+    publicKeyBase64Url: publicKeyBase64Url,
+    fingerprintSha256: fingerprintSha256,
+  );
+  final signature = _decodeCanonical(signatureBase64Url, 64);
+  if (canonicalMessageBytes.any((value) => value < 0 || value > 255)) {
+    throw const FormatException('connected_device_v2_message_invalid');
   }
   final r = BigInt.parse(
     signature

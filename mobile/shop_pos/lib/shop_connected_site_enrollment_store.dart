@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:drift/drift.dart';
 
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_device_profile_v2.dart';
 import 'shop_connected_retained_signature_verifier.dart';
 import 'shop_database.dart';
 import 'shop_site_coordinator.dart';
@@ -160,6 +161,152 @@ ShopOwnerEnrollmentEvidenceV1 verifyRetainedEnrollmentApprovalSync({
 
 abstract interface class ShopOwnerEnrollmentEvidenceVerifier {
   Future<bool> verify(ShopOwnerEnrollmentEvidenceV1 evidence);
+}
+
+/// Explicit owner-signed Windows approval. It is not accepted by the v1 store
+/// or coordinator until an additive, verified schema and CNG custody exist.
+/// In particular a v1 fingerprint-only approval cannot be promoted to v2.
+class ShopOwnerEnrollmentEvidenceV2 {
+  ShopOwnerEnrollmentEvidenceV2({
+    required this.action,
+    required this.tenantId,
+    required this.siteId,
+    required this.coordinatorDeviceId,
+    required this.deviceId,
+    required this.signingKeyId,
+    required this.publicKeyBase64Url,
+    required this.clientFingerprint,
+    required this.sessionGeneration,
+    required this.observedAtMillis,
+    required this.authorityKeyId,
+    required this.signature,
+    required this.evidenceDigest,
+  }) {
+    if (!ShopOwnerEnrollmentEvidenceV1._id.hasMatch(tenantId) ||
+        !ShopOwnerEnrollmentEvidenceV1._id.hasMatch(siteId) ||
+        !ShopOwnerEnrollmentEvidenceV1._id.hasMatch(coordinatorDeviceId) ||
+        !ShopOwnerEnrollmentEvidenceV1._id.hasMatch(deviceId) ||
+        !ShopOwnerEnrollmentEvidenceV1._id.hasMatch(signingKeyId) ||
+        !ShopOwnerEnrollmentEvidenceV1._id.hasMatch(authorityKeyId) ||
+        sessionGeneration < 0 ||
+        observedAtMillis <= 0 ||
+        !ShopOwnerEnrollmentEvidenceV1._digest.hasMatch(evidenceDigest) ||
+        !RegExp(r'^[A-Za-z0-9_-]{86}$').hasMatch(signature) ||
+        connectedSiteSha256(signingPayload) != evidenceDigest) {
+      throw const FormatException('owner_enrollment_v2_invalid');
+    }
+    requireConnectedP256DevicePublicKeyV2(
+      publicKeyBase64Url: publicKeyBase64Url,
+      fingerprintSha256: clientFingerprint,
+    );
+  }
+
+  final ShopOwnerEnrollmentAction action;
+  final String tenantId;
+  final String siteId;
+  final String coordinatorDeviceId;
+  final String deviceId;
+  final String signingKeyId;
+  final String publicKeyBase64Url;
+  final String clientFingerprint;
+  final int sessionGeneration;
+  final int observedAtMillis;
+  final String authorityKeyId;
+  final String signature;
+  final String evidenceDigest;
+
+  Map<String, Object> get signingPayload => {
+    'schema': 'supermega.shop.owner-enrollment-evidence.v2',
+    'action': action.name,
+    'tenantId': tenantId,
+    'siteId': siteId,
+    'coordinatorDeviceId': coordinatorDeviceId,
+    'deviceId': deviceId,
+    'signingProfile': connectedP256DeviceProfileV2,
+    'signingKeyId': signingKeyId,
+    'publicKeyBase64Url': publicKeyBase64Url,
+    'clientFingerprint': clientFingerprint,
+    'sessionGeneration': sessionGeneration,
+    'observedAtMillis': observedAtMillis,
+    'authorityKeyId': authorityKeyId,
+  };
+
+  Map<String, Object> toJson() => {
+    ...signingPayload,
+    'signature': signature,
+    'evidenceDigest': evidenceDigest,
+  };
+}
+
+/// Historical authenticity only; current revocation must be checked again at
+/// admission. Issuer keys remain Ed25519 and must be pinned independently.
+ShopOwnerEnrollmentEvidenceV2 verifyRetainedOwnerEnrollmentV2Sync({
+  required String canonicalEvidenceJson,
+  required String expectedEvidenceDigest,
+  required String tenantId,
+  required String siteId,
+  required String coordinatorDeviceId,
+  required String deviceId,
+  required String signingKeyId,
+  required String publicKeyBase64Url,
+  required String clientFingerprint,
+  required int sessionGeneration,
+  required int trustedAtMillis,
+  required Map<String, List<int>> pinnedOwnerIssuerKeys,
+}) {
+  Never invalid() =>
+      throw const FormatException('retained_owner_enrollment_v2_invalid');
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(canonicalEvidenceJson);
+  } on FormatException {
+    invalid();
+  }
+  if (decoded is! Map<String, dynamic> ||
+      canonicalConnectedSiteJson(decoded) != canonicalEvidenceJson ||
+      decoded.length != 15 ||
+      decoded['schema'] != 'supermega.shop.owner-enrollment-evidence.v2' ||
+      decoded['action'] != 'approve' ||
+      decoded['signingProfile'] != connectedP256DeviceProfileV2 ||
+      decoded['tenantId'] != tenantId ||
+      decoded['siteId'] != siteId ||
+      decoded['coordinatorDeviceId'] != coordinatorDeviceId ||
+      decoded['deviceId'] != deviceId ||
+      decoded['signingKeyId'] != signingKeyId ||
+      decoded['publicKeyBase64Url'] != publicKeyBase64Url ||
+      decoded['clientFingerprint'] != clientFingerprint ||
+      decoded['sessionGeneration'] != sessionGeneration ||
+      decoded['observedAtMillis'] is! int ||
+      (decoded['observedAtMillis'] as int) > trustedAtMillis ||
+      decoded['authorityKeyId'] is! String ||
+      decoded['signature'] is! String ||
+      decoded['evidenceDigest'] != expectedEvidenceDigest) {
+    invalid();
+  }
+  final evidence = ShopOwnerEnrollmentEvidenceV2(
+    action: ShopOwnerEnrollmentAction.approve,
+    tenantId: tenantId,
+    siteId: siteId,
+    coordinatorDeviceId: coordinatorDeviceId,
+    deviceId: deviceId,
+    signingKeyId: signingKeyId,
+    publicKeyBase64Url: publicKeyBase64Url,
+    clientFingerprint: clientFingerprint,
+    sessionGeneration: sessionGeneration,
+    observedAtMillis: decoded['observedAtMillis'] as int,
+    authorityKeyId: decoded['authorityKeyId'] as String,
+    signature: decoded['signature'] as String,
+    evidenceDigest: expectedEvidenceDigest,
+  );
+  if (!verifyPinnedRetainedEd25519Sync(
+    canonicalSigningBytes: canonicalConnectedSiteJson(evidence.signingPayload),
+    signature: evidence.signature,
+    keyId: evidence.authorityKeyId,
+    pinnedKeys: pinnedOwnerIssuerKeys,
+  )) {
+    invalid();
+  }
+  return evidence;
 }
 
 class ShopConnectedSiteEnrollmentStore
