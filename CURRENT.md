@@ -7,6 +7,24 @@
 
 ## 2026-11-04 private Windows device-profile verifier checkpoint
 
+- **PRIVATE SIGNED V42 ENROLLMENT SOURCE PASS / PRODUCTION BLOCKED:**
+  implementation `7aa0e5f8d4c9ae4c0f7be0e5c9aaafbb6110401d`, tree
+  `9402e246697696328db0d0d053feb978e7077d94`, binds a retained canonical
+  P-256 possession claim, one-time pairing nonce, separately pinned Ed25519
+  owner approval/revocation, device profile and current local device state in
+  one shared DB-open/backup validator. Test-only transactional pending,
+  approval and revocation writes reject replay, wrong scope and expired nonce;
+  a two-connection lock-wait expiry test proves rollback leaves zero writes.
+  Signed rows reopen and survive encrypted fresh-target restore with test-only
+  pins; product pins remain empty and fixture pins are unavailable in AOT.
+  Final-source enrollment/backup/cloud-feed **134/134 PASS** (8m38s),
+  foundation **81/81 PASS** (4m49s), five-file Flutter analysis, formatting,
+  native CI contract and diff check PASS. Independent cumulative security
+  review ACCEPTED this default-off source candidate for draft CI only.
+  Protected current issuer/time/revocation authority, v2 native command
+  admission, Windows CNG/TPM custody and installed two-device proof remain
+  **NOT RUN/BLOCKED**. No production enrollment or connected activation.
+
 - **PRIVATE V2 REVOKE-AUTHENTICITY PASS / CHAIN NOT RUN:** successor
   `23298382b4120e71b4aaaba5e0becab7346312fb`, tree
   `d4c81959b5f555079cf8943ee16fddf0377d0ed5`, extends the historical
