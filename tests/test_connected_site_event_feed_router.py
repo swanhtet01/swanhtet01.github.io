@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import base64
 import json
 import unittest
 
@@ -12,6 +13,7 @@ from fastapi.testclient import TestClient
 from supermega_runtime.connected_site_event_feed_router import (
     create_connected_site_event_feed_router,
 )
+from supermega_runtime.connected_site_feed_signer import ConnectedSiteFeedSealer
 from supermega_runtime.connected_site_gateway import (
     ConnectedSiteGatewayPrincipalResolver, GatewayPeerAttestation,
 )
@@ -20,7 +22,7 @@ from tests.connected_site_signed_page_fixture import _signature
 from tests.test_connected_site_event_feed import _Script
 from tests.test_connected_site_event_read import _fixture, _resign
 from tests.test_connected_site_runtime import _Authorities
-from tests.test_connected_site_v15 import NOW
+from tests.test_connected_site_v15 import ISSUER, NOW
 from tests.v41_native_http_bridge_fixture import _key
 
 
@@ -28,12 +30,26 @@ PATH = "/api/connected-site/v1/event-feed"
 
 
 def _app(*, enabled=True, signer_mode="valid", peer_active=True,
-         pin_seed=23, clock_rollback=False):
+         pin_seed=23, clock_rollback=False, protected_sealer=False,
+         clock_advancing=False, lease_expiry_ms=None, seal_delay_ms=0):
     authority, lease, signed_request = _fixture()
+    if lease_expiry_ms is not None:
+        lease_unsigned = {key: value for key, value in lease.items()
+                          if key not in {"payloadDigest", "signature"}}
+        lease_unsigned["expiresAt"] = (
+            NOW + timedelta(milliseconds=lease_expiry_ms)
+        ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        lease = {**lease_unsigned, "payloadDigest": digest(lease_unsigned),
+                 "signature": ISSUER.sign(lease_unsigned)}
+        signed_request = _resign(signed_request, leaseDigest=lease["payloadDigest"])
     event = {"synthetic": "private-event", "privateRemark": "must-not-leak"}
     script = _Script(authority, lease, events=[
         (1, digest(event), None, canonical_json(event)),
     ])
+    if lease_expiry_ms is not None:
+        script.lease = (
+            *script.lease[:-1], NOW + timedelta(milliseconds=lease_expiry_ms),
+        )
     provider = _Authorities(authority)
 
     def peer(request):
@@ -56,6 +72,10 @@ def _app(*, enabled=True, signer_mode="valid", peer_active=True,
     def trusted_now():
         nonlocal clock_reads
         clock_reads += 1
+        if clock_advancing:
+            return NOW + timedelta(milliseconds=clock_reads)
+        if seal_delay_ms and clock_reads > 1:
+            return NOW + timedelta(milliseconds=seal_delay_ms)
         return NOW - timedelta(seconds=1) if clock_rollback and clock_reads > 1 else NOW
 
     def sign(page, request, retained_lease):
@@ -103,12 +123,24 @@ def _app(*, enabled=True, signer_mode="valid", peer_active=True,
             sealed["proofJson"] = canonical_json(changed)
         return sealed
 
+    class _SyntheticProtectedSigner:
+        key_id = "feed_fixture"
+
+        def sign(self, payload: bytes) -> str:
+            signature = _key(23)[0].sign(payload)
+            return base64.urlsafe_b64encode(signature).decode().rstrip("=")
+
     app = FastAPI()
     app.include_router(create_connected_site_event_feed_router(
         connection_factory=script.connect, authority_provider=provider,
         resolve_principal=resolver,
         load_lease=lambda principal, request: lease,
-        seal_checked_page=sign,
+        seal_checked_page=(
+            ConnectedSiteFeedSealer(
+                signer=_SyntheticProtectedSigner(), trusted_now=trusted_now,
+                enabled=signer_mode != "disabled",
+            ) if protected_sealer else sign
+        ),
         pinned_issuer_keys={"feed_fixture": _key(pin_seed)[1]},
         trusted_now=trusted_now, runtime_enabled=enabled,
     ))
@@ -116,6 +148,36 @@ def _app(*, enabled=True, signer_mode="valid", peer_active=True,
 
 
 class EventFeedRouterTests(unittest.TestCase):
+    def test_protected_sealer_composes_with_checked_route_and_pinned_verifier(self):
+        app, request, _ = _app(protected_sealer=True)
+        response = TestClient(app).post(PATH, json=request)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.json()), {"requestJson", "pageJson", "proofJson"})
+        for mode, pin in (("disabled", 23), ("valid", 24)):
+            denied, signed_request, _ = _app(
+                protected_sealer=True, signer_mode=mode, pin_seed=pin,
+            )
+            self.assertNotEqual(TestClient(denied).post(PATH, json=signed_request).status_code, 200)
+
+    def test_protected_sealer_uses_the_transaction_checked_time_sample(self):
+        app, request, _ = _app(protected_sealer=True, clock_advancing=True)
+        self.assertEqual(TestClient(app).post(PATH, json=request).status_code, 200)
+
+    def test_protected_sealer_never_outlives_signed_lease(self):
+        capped, request, _ = _app(
+            protected_sealer=True, lease_expiry_ms=10000,
+        )
+        response = TestClient(capped).post(PATH, json=request)
+        self.assertEqual(response.status_code, 200)
+        proof = json.loads(response.json()["proofJson"])
+        self.assertEqual(
+            proof["expiresAtMillis"], int((NOW + timedelta(milliseconds=10000)).timestamp() * 1000),
+        )
+        expired, request, _ = _app(
+            protected_sealer=True, lease_expiry_ms=10000, seal_delay_ms=20000,
+        )
+        self.assertNotEqual(TestClient(expired).post(PATH, json=request).status_code, 200)
+
     def test_disabled_and_unpaired_peer_never_read_sql(self):
         for enabled, peer_active, expected in ((False, True, 503), (True, False, 401)):
             app, request, script = _app(enabled=enabled, peer_active=peer_active)

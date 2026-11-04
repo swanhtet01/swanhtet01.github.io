@@ -16,6 +16,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
 from .connected_site_event_feed import RetailReservationPage, read_retail_reservation_page
+from .connected_site_feed_signer import ConnectedSiteFeedSealer
 from .connected_site_runtime import (
     ConnectedSiteAuthorityProvider, ConnectedSitePrincipal, PrincipalResolver,
     _canonical_response, _contains_sensitive_key, _error, _http_error,
@@ -162,7 +163,14 @@ def create_connected_site_event_feed_router(
                     raise ConnectedSiteV15Error("connected_site_feed_clock_rollback")
                 request_bytes = canonical_json(checked_request)
                 lease_bytes = canonical_json(checked_lease)
-                sealed = seal_checked_page(page, checked_request, checked_lease)
+                sealed = (
+                    seal_checked_page.seal_at(
+                        page, checked_request, checked_lease,
+                        checked_at=seal_now,
+                    )
+                    if isinstance(seal_checked_page, ConnectedSiteFeedSealer)
+                    else seal_checked_page(page, checked_request, checked_lease)
+                )
                 if (canonical_json(checked_request) != request_bytes
                         or canonical_json(checked_lease) != lease_bytes):
                     raise ConnectedSiteV15Error("connected_site_feed_input_mutated")
