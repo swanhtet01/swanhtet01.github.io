@@ -14,6 +14,9 @@ import re
 from typing import Any, Mapping
 
 from .connected_site_runtime import ConnectedSitePrincipal
+from .connected_site_device_profile_v2 import (
+    DeviceProfileV2Error, P256_DEVICE_PROFILE, verify_p256_device_signature,
+)
 from .connected_site_v15 import (
     ConnectedSiteV15Error, SiteAuthority, _verify, canonical_json, digest,
     verify_connected_site_lease,
@@ -21,6 +24,7 @@ from .connected_site_v15 import (
 
 
 READ_REQUEST_CONTRACT = "supermega.connected-site-event-read-request.v1"
+READ_REQUEST_CONTRACT_V2 = "supermega.connected-site-event-read-request.v2"
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$")
 _DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _REQUEST_KEYS = {
@@ -68,8 +72,6 @@ def authorize_event_read(
         _deny("disabled")
     if not isinstance(request, dict) or set(request) != _REQUEST_KEYS:
         _deny("request_shape")
-    if request["contract"] != READ_REQUEST_CONTRACT:
-        _deny("disabled")
     for field in ("workspaceId", "siteId", "actorId", "deviceId", "signingKeyId"):
         value = request[field]
         if not isinstance(value, str) or not _IDENTIFIER.fullmatch(value):
@@ -86,11 +88,17 @@ def authorize_event_read(
     device = authority.devices.get(request["deviceId"])
     if device is None or not device.active:
         _deny("device_revoked")
+    expected_contract = (READ_REQUEST_CONTRACT_V2 if device.signing_profile == P256_DEVICE_PROFILE
+                         else READ_REQUEST_CONTRACT)
+    if request["contract"] != expected_contract:
+        _deny("disabled")
     if (
         request["signingKeyId"] != device.signing_key_id
         or request["clientFingerprint"] != device.client_fingerprint
         or request["enrollmentEvidenceDigest"] != device.enrollment_evidence_digest
-        or request["signatureAlgorithm"] != "ed25519"
+        or request["signatureAlgorithm"] != (
+            P256_DEVICE_PROFILE if device.signing_profile == P256_DEVICE_PROFILE else "ed25519"
+        )
     ):
         _deny("device_binding")
     for field, expected in (
@@ -140,8 +148,19 @@ def authorize_event_read(
     ):
         _deny("actor_lease_denied")
     unsigned = {key: request[key] for key in _REQUEST_KEYS - {"signature"}}
-    _verify(device.public_key, request["signature"],
-            canonical_json(unsigned).encode(), "event_read_signature")
+    signing_bytes = canonical_json(unsigned).encode()
+    if device.signing_profile == P256_DEVICE_PROFILE:
+        try:
+            verify_p256_device_signature(
+                public_key=device.public_key,
+                fingerprint_sha256=device.client_fingerprint,
+                signature=request["signature"], message=signing_bytes,
+            )
+        except DeviceProfileV2Error:
+            _deny("signature")
+    else:
+        _verify(device.public_key, request["signature"],
+                signing_bytes, "event_read_signature")
     return AuthorizedEventRead(
         workspace_id=authority.workspace_id, site_id=authority.site_id,
         actor_id=member.actor_id, device_id=device.device_id,

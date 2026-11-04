@@ -5,12 +5,17 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 import unittest
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, utils
 
 from supermega_runtime.connected_site_event_read import (
-    READ_REQUEST_CONTRACT, authorize_event_read as _authorize_event_read,
+    READ_REQUEST_CONTRACT, READ_REQUEST_CONTRACT_V2,
+    authorize_event_read as _authorize_event_read,
 )
+from supermega_runtime.connected_site_device_profile_v2 import P256_DEVICE_PROFILE
 from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
-from supermega_runtime.connected_site_v15 import ConnectedSiteV15Error, digest
+from supermega_runtime.connected_site_v15 import ConnectedSiteV15Error, canonical_json, digest
+from tests.test_connected_site_device_profile_v2 import POINT, FINGERPRINT, ORDER, encoded
 from tests.test_connected_site_v15 import DEVICE_A, ISSUER, NOW, _authority
 
 
@@ -73,6 +78,52 @@ def authorize_event_read(*, authority, lease, request, now, principal=None):
 
 
 class EventReadPolicyTests(unittest.TestCase):
+    def test_p256_read_is_profile_bound_and_legacy_android_remains_valid(self) -> None:
+        authority, lease, legacy_request = _fixture()
+        self.assertEqual(authorize_event_read(
+            authority=authority, lease=lease, request=legacy_request, now=NOW,
+        ).device_id, "device-a")
+        old = authority.devices["device-a"]
+        device = replace(old, public_key=encoded(POINT), client_fingerprint=FINGERPRINT,
+                         signing_profile=P256_DEVICE_PROFILE)
+        authority = replace(authority, devices={device.device_id: device})
+        private = ec.derive_private_key(1, ec.SECP256R1())
+
+        def sign(changes):
+            unsigned = {**{key: value for key, value in legacy_request.items()
+                           if key != "signature"}, **changes}
+            der = private.sign(canonical_json(unsigned).encode(), ec.ECDSA(hashes.SHA256()))
+            r, s = utils.decode_dss_signature(der)
+            return {**unsigned, "signature": encoded(
+                r.to_bytes(32, "big") + min(s, ORDER - s).to_bytes(32, "big"))}
+
+        request = sign({"contract": READ_REQUEST_CONTRACT_V2,
+                        "clientFingerprint": FINGERPRINT,
+                        "signatureAlgorithm": P256_DEVICE_PROFILE})
+        self.assertEqual(authorize_event_read(
+            authority=authority, lease=lease, request=request, now=NOW,
+        ).device_id, device.device_id)
+        for change in ({"contract": READ_REQUEST_CONTRACT},
+                       {"signatureAlgorithm": "ed25519"},
+                       {"clientFingerprint": old.client_fingerprint},
+                       {"deviceId": "other"}, {"actorId": "other"}):
+            with self.subTest(change=change), self.assertRaises(ConnectedSiteV15Error):
+                authorize_event_read(authority=authority, lease=lease,
+                                     request=sign(change), now=NOW)
+        with self.assertRaises(ConnectedSiteV15Error):
+            authorize_event_read(authority=authority, lease=lease,
+                                 request={**request, "signature": encoded(bytes(64))}, now=NOW)
+        with self.assertRaises(ConnectedSiteV15Error):
+            authorize_event_read(
+                authority=replace(authority, devices={device.device_id: replace(device, active=False)}),
+                lease=lease, request=request, now=NOW,
+            )
+        with self.assertRaises(ConnectedSiteV15Error):
+            authorize_event_read(
+                authority=authority, lease=lease, request=request,
+                now=NOW + timedelta(days=2),
+            )
+
     def test_current_manager_lease_and_device_signature_bind_exact_cursor(self) -> None:
         authority, lease, request = _fixture()
         grant = authorize_event_read(
