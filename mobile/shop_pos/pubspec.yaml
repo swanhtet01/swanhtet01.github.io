@@ -45,6 +45,9 @@ dependencies:
   ffi: 2.2.0
   crypto: 3.0.7
   cryptography: 2.9.0
+  # Pure-Dart, pinned P-256 verification for the default-off Windows v2
+  # device-profile proof; no private signing key is handled in Dart.
+  pointycastle: 4.0.0
   # The locked EdDSA algorithm exposes synchronous raw-signature verification
   # for the fail-closed SQLite backup verifier; no JWT or secret key is used.
   dart_jsonwebtoken: 3.4.1

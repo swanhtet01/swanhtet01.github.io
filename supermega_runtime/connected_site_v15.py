@@ -22,6 +22,11 @@ from typing import Any, Mapping, Sequence
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from .connected_site_device_profile_v2 import (
+    P256_DEVICE_PROFILE, DeviceProfileV2Error,
+    verify_p256_device_public_binding, verify_p256_device_signature,
+)
+
 
 PROOF_CONTRACT = "supermega.shop.connected-site-cloud-proof.v1"
 PROTOCOL_VERSION = 1
@@ -149,11 +154,22 @@ class DeviceAuthority:
     coordinator_binding_digest: str
     session_generation: int
     active: bool = True
+    signing_profile: str = "ed25519-v1"
 
     def __post_init__(self) -> None:
         _identifier(self.device_id, "authority_device")
         _identifier(self.signing_key_id, "authority_device_key")
-        _decode(self.public_key, 32, "authority_device_key")
+        if self.signing_profile == "ed25519-v1":
+            _decode(self.public_key, 32, "authority_device_key")
+        elif self.signing_profile == P256_DEVICE_PROFILE:
+            try:
+                verify_p256_device_public_binding(
+                    self.public_key, self.client_fingerprint,
+                )
+            except DeviceProfileV2Error:
+                _fail("authority_device_key")
+        else:
+            _fail("authority_device_profile")
         for value in (self.client_fingerprint, self.enrollment_evidence_digest, self.coordinator_binding_digest):
             _digest(value, "authority_device_digest")
         if type(self.session_generation) is not int or self.session_generation < 1:
@@ -1101,7 +1117,8 @@ class ConnectedSiteV15Adapter:
             "signingKeyId", "signatureAlgorithm", "signature",
         }
         command = _exact(value, keys, "command_shape")
-        if command["protocolVersion"] != PROTOCOL_VERSION:
+        command_version = 2 if device.signing_profile == P256_DEVICE_PROFILE else PROTOCOL_VERSION
+        if type(command["protocolVersion"]) is not int or command["protocolVersion"] != command_version:
             _fail("protocol_version")
         for field in ("commandId", "workspaceId", "siteId", "actorId", "deviceId", "aggregateType", "aggregateId", "commandType", "signingKeyId"):
             _identifier(command[field], f"command_{field}")
@@ -1109,10 +1126,24 @@ class ConnectedSiteV15Adapter:
             _fail("command_version")
         if not isinstance(command["payload"], dict) or digest(command["payload"]) != command["payloadDigest"]:
             _fail("command_payload")
-        if command["signingKeyId"] != device.signing_key_id or command["signatureAlgorithm"] != "ed25519":
+        algorithm = P256_DEVICE_PROFILE if command_version == 2 else "ed25519"
+        if (command["deviceId"] != device.device_id
+                or command["signingKeyId"] != device.signing_key_id
+                or command["signatureAlgorithm"] != algorithm):
             _fail("command_key")
         signing = {key: command[key] for key in keys - {"payload", "signature"}}
-        _verify(device.public_key, command["signature"], canonical_json(signing).encode(), "command_signature")
+        signing_bytes = canonical_json(signing).encode()
+        if command_version == 2:
+            try:
+                verify_p256_device_signature(
+                    public_key=device.public_key,
+                    fingerprint_sha256=device.client_fingerprint,
+                    signature=command["signature"], message=signing_bytes,
+                )
+            except DeviceProfileV2Error:
+                _fail("command_signature")
+        else:
+            _verify(device.public_key, command["signature"], signing_bytes, "command_signature")
         return command
 
     def _validate_lease(

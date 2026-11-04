@@ -73,6 +73,7 @@ jobs:
             lib/shop_connected_cloud_feed_schema.dart \
             lib/shop_connected_composition.dart \
             lib/shop_connected_coordinator_health.dart \
+            lib/shop_connected_device_profile_v2.dart \
             lib/shop_connected_site_client_composition.dart \
             lib/shop_connected_site_cloud_feed_contract.dart \
             lib/shop_connected_site_device_signer.dart \

@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supermega_shop/shop_connected_device_profile_v2.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 
 const _digest =
@@ -402,5 +404,88 @@ void main() {
       }),
       throwsFormatException,
     );
+  });
+
+  test('Windows P-256 v2 fixed signature vector verifies in Dart', () async {
+    List<int> hexBytes(String value) => [
+      for (var index = 0; index < value.length; index += 2)
+        int.parse(value.substring(index, index + 2), radix: 16),
+    ];
+    const publicPoint =
+        '046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2'
+        '964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5';
+    const signature =
+        '6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2'
+        '9678403372a627ed4ce6fe19b7f7431ad21b93b03aff4d1efcc362ee16949b297f';
+    final message = utf8.encode('supermega-p256-v2-known-answer');
+    final point = base64Url.encode(hexBytes(publicPoint)).replaceAll('=', '');
+    final fixedSignature = base64Url
+        .encode(hexBytes(signature))
+        .replaceAll('=', '');
+    expect(
+      verifyConnectedP256DeviceSignatureV2(
+        publicKeyBase64Url: point,
+        fingerprintSha256:
+            '698bea63dc44a344663ff1429aea10842df27b6b991ef25866b2c6c02cdcc5be',
+        signatureBase64Url: fixedSignature,
+        canonicalMessageBytes: message,
+      ),
+      isTrue,
+    );
+    expect(
+      verifyConnectedP256DeviceSignatureV2(
+        publicKeyBase64Url: point,
+        fingerprintSha256:
+            '698bea63dc44a344663ff1429aea10842df27b6b991ef25866b2c6c02cdcc5be',
+        signatureBase64Url: fixedSignature,
+        canonicalMessageBytes: utf8.encode('changed'),
+      ),
+      isFalse,
+    );
+    expect(
+      () => verifyConnectedP256DeviceSignatureV2(
+        publicKeyBase64Url: point,
+        fingerprintSha256: '0' * 64,
+        signatureBase64Url: fixedSignature,
+        canonicalMessageBytes: message,
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => verifyConnectedP256DeviceSignatureV2(
+        publicKeyBase64Url: point,
+        fingerprintSha256:
+            '698bea63dc44a344663ff1429aea10842df27b6b991ef25866b2c6c02cdcc5be',
+        signatureBase64Url: base64Url
+            .encode([
+              ...hexBytes(signature).sublist(0, 32),
+              ...List<int>.filled(32, 0),
+            ])
+            .replaceAll('=', ''),
+        canonicalMessageBytes: message,
+      ),
+      throwsFormatException,
+    );
+    final offCurve = hexBytes(publicPoint)..[64] ^= 1;
+    final outOfField = [
+      4,
+      ...hexBytes(
+        'ffffffff00000001000000000000000000000000ffffffffffffffffffffffff',
+      ),
+      ...hexBytes(publicPoint).sublist(33),
+    ];
+    for (final invalidPoint in [offCurve, outOfField]) {
+      expect(
+        () => verifyConnectedP256DeviceSignatureV2(
+          publicKeyBase64Url: base64Url
+              .encode(invalidPoint)
+              .replaceAll('=', ''),
+          fingerprintSha256: crypto.sha256.convert(invalidPoint).toString(),
+          signatureBase64Url: fixedSignature,
+          canonicalMessageBytes: message,
+        ),
+        throwsFormatException,
+      );
+    }
   });
 }
