@@ -11,6 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_proof.dart';
+import 'package:supermega_shop/shop_connected_cloud_feed_current_gate.dart';
+import 'package:supermega_shop/shop_connected_cloud_feed_production_trust.dart';
+import 'package:supermega_shop/shop_connected_platform_security.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_read_request.dart';
 import 'package:supermega_shop/shop_connected_cloud_feed_v41_verifier.dart';
 import 'package:supermega_shop/shop_database.dart';
@@ -36,6 +39,7 @@ void main() {
     required bool secondary,
     String? httpResponsePath,
     bool stopAfterRecovery = false,
+    bool testCurrentGate = false,
   }) async {
     final fixtureNowMillis =
         Platform.environment[secondary
@@ -283,14 +287,15 @@ void main() {
       ...checkpointUnsigned,
       'checkpointDigest': connectedSiteSha256(checkpointUnsigned),
     });
-    await ShopConnectedSiteAuthorityPayloadStore(
+    final authorityStore = ShopConnectedSiteAuthorityPayloadStore(
       database: database,
       nowMillis: () => clock,
       verifier: PinnedEd25519ConnectedSiteAuthorityPayloadVerifier(
         publicKeys: {'authority_fixture': authorityPublic},
       ),
       runtimeEnabled: true,
-    ).applyCheckpoint(
+    );
+    await authorityStore.applyCheckpoint(
       ConnectedSiteScope(
         workspaceId: workspace,
         siteId: site,
@@ -474,6 +479,133 @@ void main() {
       ),
       isTrue,
     );
+    if (testCurrentGate) {
+      final platformIdentity = ConnectedPlatformIdentity(
+        alias: device,
+        keyId: fingerprint,
+        algorithm: 'ed25519',
+        publicKeyBase64: base64.encode(clientKey),
+        publicKeyFingerprintSha256: fingerprint,
+        tlsCertificateFingerprintSha256: 'c' * 64,
+        sealedTlsMaterialId: 'tls-fixture',
+      );
+      final enrollment =
+          await ConnectedCloudFeedProductionTrustSource.testOnlyWithIssuerKeys(
+            platformSecurity: _V41GatePlatform(platformIdentity, clientPair),
+            issuerKeys: {'feed_fixture': List<int>.filled(32, 23)},
+            ownerIssuerKeys: {'owner_fixture': ownerKey},
+          ).loadEnrolled(
+            alias: device,
+            expectedSigningKeyId: fingerprint,
+            expectedFingerprintSha256: fingerprint,
+            canonicalEnrollmentJson: canonicalConnectedSiteJson(
+              approval.toJson(),
+            ),
+            enrollmentEvidenceDigest: approval.evidenceDigest,
+            tenantId: workspace,
+            siteId: site,
+            coordinatorDeviceId: coordinator,
+            deviceId: device,
+            sessionGeneration: 1,
+            trustedAtMillis: now,
+          );
+      final leaseKey = (await leasePair.extractPublicKey()).bytes;
+      final liveTime = _V41GateTime(
+        workspace,
+        site,
+        signedTime,
+        signedAck,
+        now,
+      );
+      final gate = ShopConnectedCloudFeedCurrentGate(
+        database: database,
+        authorityStore: authorityStore,
+        leaseVerifier: ShopOfflineStaffLeaseVerifier(
+          signatureVerifier:
+              PinnedEd25519ShopOfflineStaffLeaseSignatureVerifier(
+                publicKeys: {'lease_fixture': leaseKey},
+              ),
+        ),
+        timeSource: liveTime,
+        runtimeEnabled: true,
+      );
+      await database.customStatement(
+        'CREATE TABLE gate_probe (id INTEGER NOT NULL)',
+      );
+      Future<int> count() async =>
+          (await database
+                  .customSelect('SELECT COUNT(*) AS n FROM gate_probe')
+                  .getSingle())
+              .read<int>('n');
+      await gate.run(
+        enrollment: enrollment,
+        lease: lease,
+        mutation: () =>
+            database.customStatement('INSERT INTO gate_probe VALUES (1)'),
+      );
+      expect(await count(), 1);
+      liveTime.now = lease.expiresAtMillis;
+      await expectLater(
+        gate.run(
+          enrollment: enrollment,
+          lease: lease,
+          mutation: () =>
+              database.customStatement('INSERT INTO gate_probe VALUES (2)'),
+        ),
+        throwsA(anything),
+      );
+      expect(await count(), 1, reason: 'expired lease cannot advance data');
+      liveTime.now = now + 2;
+      final signedRevocation = await signedEvidence(
+        action: ShopOwnerEnrollmentAction.revoke,
+        generation: 2,
+        observedAt: now + 1,
+      );
+      await expectLater(
+        gate.run(
+          enrollment: enrollment,
+          lease: lease,
+          mutation: () async {
+            await database.customStatement('INSERT INTO gate_probe VALUES (4)');
+            await store.importOwnerEvidence(
+              signedRevocation,
+              verifier: verifier,
+            );
+          },
+        ),
+        throwsStateError,
+      );
+      expect(await count(), 1, reason: 'in-flight revocation rolls back data');
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT state FROM shop_site_devices WHERE device_id = ?',
+                  variables: [Variable(device)],
+                )
+                .getSingle())
+            .read<String>('state'),
+        'active',
+        reason: 'the rejected transaction also rolls back its revocation',
+      );
+      await store.importOwnerEvidence(signedRevocation, verifier: verifier);
+      await expectLater(
+        gate.run(
+          enrollment: enrollment,
+          lease: lease,
+          mutation: () =>
+              database.customStatement('INSERT INTO gate_probe VALUES (3)'),
+        ),
+        throwsStateError,
+      );
+      expect(
+        await count(),
+        1,
+        reason: 'signed device revocation blocks replay',
+      );
+      await database.customStatement('DROP TABLE gate_probe');
+      await database.close();
+      return;
+    }
     await database.verifyReadyForUse();
     await database.close();
     database = ShopDatabase(NativeDatabase(file));
@@ -2413,6 +2545,17 @@ void main() {
   }
 
   test(
+    'signed retained authority and lease fence reject expired mutation',
+    () async {
+      await runSignedPageFixture(
+        deviceId: 'device_v41_fixture',
+        clientSeed: 18,
+        secondary: false,
+        testCurrentGate: true,
+      );
+    },
+  );
+  test(
     'v41 signed historical page stays closed after later revocation',
     () async {
       await runSignedPageFixture(
@@ -3778,6 +3921,48 @@ final class _PinnedV41OwnerVerifier
         base64Url.decode('${evidence.signature}=='),
         publicKey: SimplePublicKey(ownerKey, type: KeyPairType.ed25519),
       ),
+    );
+  }
+}
+
+final class _V41GatePlatform extends UnavailableConnectedPlatformSecurity {
+  _V41GatePlatform(this.identity, this.key);
+  final ConnectedPlatformIdentity identity;
+  final SimpleKeyPair key;
+
+  @override
+  Future<ConnectedPlatformIdentity> loadIdentity({
+    required String alias,
+  }) async => identity;
+
+  @override
+  Future<Uint8List> sign({
+    required String alias,
+    required Uint8List payload,
+  }) async =>
+      Uint8List.fromList((await Ed25519().sign(payload, keyPair: key)).bytes);
+}
+
+final class _V41GateTime implements ShopConnectedCloudFeedLiveTimeSource {
+  _V41GateTime(this.workspace, this.site, this.entry, this.ack, this.now);
+  final String workspace;
+  final String site;
+  final ConnectedTrustedTimeStreamEntryV2 entry;
+  final ConnectedTrustedTimeStreamAckV1 ack;
+  int now;
+
+  @override
+  Future<ConnectedTrustedTimeLiveReading> readLiveTime({
+    required String tenantId,
+    required String siteId,
+  }) async {
+    if (tenantId != workspace || siteId != site) throw StateError('scope');
+    return ConnectedTrustedTimeLiveReading(
+      entryDigest: entry.entryDigest,
+      ackDigest: ack.ackDigest,
+      bootSessionId: 'b' * 64,
+      monotonicMillis: 8000 + now - entry.observedAtMillis,
+      effectiveTimeMillis: now,
     );
   }
 }

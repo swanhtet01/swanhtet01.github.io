@@ -139,6 +139,38 @@ Future<ConnectedCloudFeedEnrolledDeviceTrust> _enrollment() async {
   );
 }
 
+Future<void> _seedCurrentEnrollment(
+  ShopDatabase db,
+  ConnectedCloudFeedEnrolledDeviceTrust enrollment,
+) async {
+  await db.customStatement(
+    'INSERT INTO shop_site_devices '
+    '(device_id, tenant_id, site_id, public_key_fingerprint, '
+    'session_generation, state, enrolled_at_millis) '
+    "VALUES (?, ?, ?, ?, 1, 'active', 1000)",
+    [
+      enrollment.deviceId,
+      enrollment.tenantId,
+      enrollment.siteId,
+      enrollment.deviceTrust.publicKeyFingerprintSha256,
+    ],
+  );
+  await db.customStatement(
+    'INSERT INTO shop_site_enrollment_evidence '
+    '(evidence_digest, action, tenant_id, site_id, coordinator_device_id, '
+    'device_id, client_fingerprint, session_generation, observed_at_millis, '
+    'authority_key_id, evidence_json) '
+    "VALUES (?, 'approve', ?, ?, 'coordinator-1', ?, ?, 1, 1000, 'owner-1', '{}')",
+    [
+      enrollment.enrollmentEvidenceDigest,
+      enrollment.tenantId,
+      enrollment.siteId,
+      enrollment.deviceId,
+      enrollment.deviceTrust.publicKeyFingerprintSha256,
+    ],
+  );
+}
+
 Future<OfflineStaffLeaseV1> _lease(
   SimpleKeyPair key, {
   String site = 'site-1',
@@ -199,6 +231,7 @@ void main() {
           'CREATE TABLE gate_probe (id INTEGER NOT NULL)',
         );
         final enrolled = await _enrollment();
+        await _seedCurrentEnrollment(db, enrolled);
         final key = await Ed25519().newKeyPairFromSeed(List.filled(32, 4));
         final public = await key.extractPublicKey();
         final verifier = ShopOfflineStaffLeaseVerifier(
@@ -331,6 +364,7 @@ void main() {
           'CREATE TABLE gate_probe (id INTEGER NOT NULL)',
         );
         final enrolled = await _enrollment();
+        await _seedCurrentEnrollment(first, enrolled);
         final key = await Ed25519().newKeyPairFromSeed(List.filled(32, 4));
         final public = await key.extractPublicKey();
         final gate = ShopConnectedCloudFeedCurrentGate(
