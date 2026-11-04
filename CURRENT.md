@@ -7,6 +7,18 @@
 
 ## 2026-11-04 private Windows device-profile verifier checkpoint
 
+- **PRIVATE ISSUER CUSTODY DESIGN PASS / ADAPTER NOT RUN:**
+  `43dade03a748a41c54c64883ba36b2b94742a915`, tree
+  `b1546217d72f64919e28db13fae88a7cf446c497`, records default-off
+  Google Cloud KMS pure Ed25519 signing with request-scoped Vercel OIDC as
+  the recommended existing-protocol route. The key is software-protected in
+  Google KMS, not HSM; no project, federation, key or public pin was created.
+  The checked-in authority-checkpoint fixture has 4,542 ASCII bytes, above
+  AWS KMS's reported 4,096-byte raw-input limit. Independent review ACCEPTED
+  the design with numeric API-limit and SPKI/CRC adapter verification still
+  required. The protected KMS adapter, installed issuer and deployment are
+  **NOT RUN**; existing feed signer remains injected and disabled.
+
 - **PRIVATE V2 EVENT-READ ADMISSION PARTIAL PASS:** implementation
   `f8361cbd24051d6bdbdd5a0a307abd4909034eba`, tree
   `045ffd5b61ef7ac6796d6434e3e7dbc531ddee4c`, adds profile-selected
