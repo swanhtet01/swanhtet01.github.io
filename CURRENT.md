@@ -7,6 +7,29 @@
 
 ## 2026-11-04 predecessor native run closed
 
+- **PRIVATE SQLITE RACE PROOF PASS / INTEGRATED PILOT BLOCKED:** implementation
+  `55226e3aade84b670bc31cd34c4ae074bddf3649`, tree
+  `15be196cf8cf45219a1bc3f6d77788b49efe0387`, extends the signed v41
+  fixture with a second SQLite connection in a separate isolate. It opens
+  before the test-only probe table, verifies a signed owner revocation via
+  `ShopConnectedSiteEnrollmentStore`, and must receive `database is locked`
+  while a gate replay holds the writer fence. After release, identical signed
+  evidence imports successfully; the next replay is denied and probe data
+  remains unchanged. The attempted import, lock result and retry are ordered
+  by bounded messages; test teardown releases its worker. Focused race
+  **1/1 PASS**, neighboring gate **2/2 PASS**, targeted Dart analysis PASS,
+  `git diff --check` PASS. An independent adversarial reviewer ACCEPTED the
+  source-level serialization proof after a vacuous-startup finding was fixed.
+  This is not an installed two-device test or a protected production clock.
+  The first end-to-end blocker remains architectural: the Python feed route
+  and native reader exist, but `ShopConnectedCloudFeedCurrentGate` is not
+  invoked by a product page/cursor writer, product issuer registries are empty,
+  and the private database migration enforces `connected_enabled = false`.
+  Cashier local selling/recovery has predecessor native CI evidence, but a
+  protected cashier-to-second-device offline/reconnect journey is **NOT RUN**.
+  Public PR #752 remains frozen at `7103418c801f3fa95ae9ffa5797ac361cbab21c5`
+  while Native `41762841148` Android is IN_PROGRESS; no successor hosted CI.
+
 - **PRIVATE SIGNED-DEVICE FENCE PASS / PRODUCT ACTIVATION BLOCKED:**
   implementation `e8d4bddd965ff9749dd326ab8f6a6702fd37aabf`, tree
   `a2eb33530dbba5905750df5898dd129a62a4a96d`, extends the default-off
