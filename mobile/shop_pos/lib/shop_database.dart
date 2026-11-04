@@ -13,6 +13,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'shop_models.dart';
 import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_v42_enrollment_verifier.dart';
 import 'shop_connected_cloud_feed_schema.dart';
 import 'shop_connected_cloud_feed_proof.dart';
 import 'shop_connected_cloud_feed_http.dart';
@@ -2182,6 +2183,8 @@ const shopSiteV2PendingEnrollmentsV42Sql = '''
     signing_profile TEXT NOT NULL CHECK (signing_profile = 'p256-sha256-v2'),
     signing_key_id TEXT NOT NULL CHECK (length(signing_key_id) BETWEEN 1 AND 128),
     public_key BLOB NOT NULL CHECK (length(public_key) = 65 AND hex(substr(public_key, 1, 1)) = '04'),
+    claim_json TEXT NOT NULL CHECK (json_valid(claim_json)),
+    possession_signature TEXT NOT NULL CHECK (length(possession_signature) = 86),
     observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
   )
 ''';
@@ -6664,6 +6667,7 @@ class ShopDatabase extends _$ShopDatabase {
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
     ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) async {
     final database = ShopDatabase.withCorrectionReceiptVerifier(
       executor: NativeDatabase(
@@ -6676,6 +6680,7 @@ class ShopDatabase extends _$ShopDatabase {
       testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
       testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
       historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+      v42EnrollmentTrustSource: v42EnrollmentTrustSource,
       testOnlyLegacyCloudFeedV40:
           testOnlyCloudFeedPinnedKeys.isNotEmpty &&
           _testMutationBypassAvailable,
@@ -6712,11 +6717,14 @@ class ShopDatabase extends _$ShopDatabase {
         correctionReceiptVerifier ?? ShopCorrectionReceiptVerifier.production(),
   );
 
-  ShopDatabase([QueryExecutor? executor])
-    : this.withCorrectionReceiptVerifier(
-        executor: executor,
-        correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
-      );
+  ShopDatabase([
+    QueryExecutor? executor,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
+  ]) : this.withCorrectionReceiptVerifier(
+         executor: executor,
+         correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+         v42EnrollmentTrustSource: v42EnrollmentTrustSource,
+       );
 
   /// Only fixture keys may open retained nonempty cloud-feed rows. Product
   /// builds have no issuer pin until a separately reviewed authority exists.
@@ -6777,6 +6785,7 @@ class ShopDatabase extends _$ShopDatabase {
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
     ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
     bool testOnlyLegacyCloudFeedV40 = false,
   }) : assert(
          !testOnlyAllowUnconsumedAuthorization || _testMutationBypassAvailable,
@@ -6812,6 +6821,9 @@ class ShopDatabase extends _$ShopDatabase {
          testOnlyCloudFeedPinnedKeys,
        ),
        _historicalCloudFeedTrustSource = historicalCloudFeedTrustSource,
+       _v42EnrollmentTrustSource =
+           v42EnrollmentTrustSource ??
+           ShopV42EnrollmentTrustSource.production(),
        super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   static ShopCloudFeedV41FirstPageTrust? _checkedTestCloudFeedV41Trust(
@@ -6844,6 +6856,7 @@ class ShopDatabase extends _$ShopDatabase {
   final ShopCloudFeedV41FirstPageTrust? _testOnlyCloudFeedV41Trust;
   final ShopCloudFeedV41FirstPageTrust? _historicalCloudFeedTrust;
   final ShopCloudFeedHistoricalTrustSource? _historicalCloudFeedTrustSource;
+  final ShopV42EnrollmentTrustSource _v42EnrollmentTrustSource;
   final bool _testOnlyLegacyCloudFeedV40;
   final bool testOnlyAllowUnconsumedAuthorization;
   final DateTime Function() _saleAndCashShiftClock;
@@ -11174,7 +11187,7 @@ class ShopDatabase extends _$ShopDatabase {
     // The first migration milestone is deliberately empty-only. No v2
     // enrollment may become usable before its signed cross-table verifier,
     // current revocation and fresh-target restore rules are installed.
-    final rowsValid = await _v42DeviceProfileRowsEmpty();
+    final rowsValid = await _v42DeviceProfileRowsValid();
     if (!definitionsValid || !rowsValid) {
       final mismatches = definitions.entries
           .where((entry) {
@@ -11193,17 +11206,29 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<bool> _v42DeviceProfileRowsEmpty() async {
-    for (final table in const [
-      'shop_site_v2_pending_enrollments',
-      'shop_site_v2_enrollment_evidence',
-      'shop_site_device_profiles_v42',
-    ]) {
-      final row = await customSelect('SELECT 1 FROM $table LIMIT 1')
-          .getSingleOrNull();
-      if (row != null) return false;
+  Future<bool> _v42DeviceProfileRowsValid() async {
+    Future<List<Map<String, Object?>>> rows(String table) async =>
+        (await customSelect('SELECT * FROM $table').get())
+            .map((row) => Map<String, Object?>.from(row.data))
+            .toList(growable: false);
+    return shopConnectedEnrollmentRowsValidV42(
+      pairingNonces: await rows('shop_site_pairing_nonces'),
+      v1Pending: await rows('shop_site_pending_enrollments'),
+      v1Evidence: await rows('shop_site_enrollment_evidence'),
+      v2Pending: await rows('shop_site_v2_pending_enrollments'),
+      v2Evidence: await rows('shop_site_v2_enrollment_evidence'),
+      deviceProfiles: await rows('shop_site_device_profiles_v42'),
+      devices: await rows('shop_site_devices'),
+      pinnedOwnerIssuerKeys: _v42EnrollmentTrustSource.ownerIssuerKeys,
+    );
+  }
+
+  /// Called only from an enrollment write transaction. Historical row
+  /// authenticity is not current lease/revocation authority for a feed write.
+  Future<void> requireV42EnrollmentRowsInCurrentTransaction() async {
+    if (!await _v42DeviceProfileRowsValid()) {
+      throw StateError('connected_v42_enrollment_rows_invalid');
     }
-    return true;
   }
 
   Future<bool> _v41HistoricalRowsValid(
@@ -14445,6 +14470,7 @@ class ShopDatabase extends _$ShopDatabase {
             : const {},
         testOnlyCloudFeedV41Trust: _testOnlyCloudFeedV41Trust,
         historicalCloudFeedTrustSource: _historicalCloudFeedTrustSource,
+        v42EnrollmentTrustSource: _v42EnrollmentTrustSource,
         testOnlyLegacyCloudFeedV40: _testOnlyLegacyCloudFeedV40,
       );
       try {

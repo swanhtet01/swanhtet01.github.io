@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -7,10 +8,12 @@ import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pointycastle/pointycastle.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_enrollment_store.dart';
+import 'package:supermega_shop/shop_connected_site_v42_enrollment_verifier.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_site_coordinator.dart';
 
@@ -22,6 +25,29 @@ const _site = 'site-enrollment';
 const _coordinator = 'counter-enrollment';
 const _device = 'device-enrollment';
 const _nonce = 'pairing_nonce_enrollment_0001';
+
+String _signV2PairingClaim(String claim) {
+  final domain = ECDomainParameters('secp256r1');
+  final signer = Signer('SHA-256/DET-ECDSA')
+    ..init(true, PrivateKeyParameter(ECPrivateKey(BigInt.one, domain)));
+  final signature = signer.generateSignature(
+    Uint8List.fromList(utf8.encode(claim)),
+  ) as ECSignature;
+  final lowS = signature.s > domain.n ~/ BigInt.two
+      ? domain.n - signature.s
+      : signature.s;
+  List<int> fixed(BigInt value) {
+    final hex = value.toRadixString(16).padLeft(64, '0');
+    return [
+      for (var i = 0; i < 64; i += 2)
+        int.parse(hex.substring(i, i + 2), radix: 16),
+    ];
+  }
+
+  return base64Url
+      .encode([...fixed(signature.r), ...fixed(lowS)])
+      .replaceAll('=', '');
+}
 
 void main() {
   test('v2 owner signature binds P-256 profile, key and tenant', () async {
@@ -39,6 +65,8 @@ void main() {
     ShopOwnerEnrollmentEvidenceV2 evidence(
       String signature, {
       ShopOwnerEnrollmentAction action = ShopOwnerEnrollmentAction.approve,
+      int generation = 1,
+      int observedAtMillis = _now - 100,
     }) {
       final payload = <String, Object>{
         'schema': 'supermega.shop.owner-enrollment-evidence.v2',
@@ -51,8 +79,8 @@ void main() {
         'signingKeyId': 'key-v2',
         'publicKeyBase64Url': publicKey,
         'clientFingerprint': fingerprint,
-        'sessionGeneration': 1,
-        'observedAtMillis': _now - 100,
+        'sessionGeneration': generation,
+        'observedAtMillis': observedAtMillis,
         'authorityKeyId': 'owner-key-1',
       };
       return ShopOwnerEnrollmentEvidenceV2(
@@ -64,8 +92,8 @@ void main() {
         signingKeyId: 'key-v2',
         publicKeyBase64Url: publicKey,
         clientFingerprint: fingerprint,
-        sessionGeneration: 1,
-        observedAtMillis: _now - 100,
+        sessionGeneration: generation,
+        observedAtMillis: observedAtMillis,
         authorityKeyId: 'owner-key-1',
         signature: signature,
         evidenceDigest: connectedSiteSha256(payload),
@@ -85,6 +113,8 @@ void main() {
     final unsignedRevoke = evidence(
       'A' * 86,
       action: ShopOwnerEnrollmentAction.revoke,
+      generation: 2,
+      observedAtMillis: _now - 50,
     );
     final revokeSignature = base64Url
         .encode(
@@ -99,6 +129,8 @@ void main() {
     final signedRevoke = evidence(
       revokeSignature,
       action: ShopOwnerEnrollmentAction.revoke,
+      generation: 2,
+      observedAtMillis: _now - 50,
     );
     final bytes = canonicalConnectedSiteJson(signed.toJson());
     ShopOwnerEnrollmentEvidenceV2 verify({
@@ -122,7 +154,7 @@ void main() {
       signingKeyId: keyId,
       publicKeyBase64Url: expectedPoint ?? publicKey,
       clientFingerprint: expectedFingerprint ?? fingerprint,
-      sessionGeneration: 1,
+      sessionGeneration: action == ShopOwnerEnrollmentAction.approve ? 1 : 2,
       trustedAtMillis: _now,
       pinnedOwnerIssuerKeys: pins ?? {'owner-key-1': ownerPublic},
     );
@@ -138,6 +170,134 @@ void main() {
       () => verify(json: canonicalConnectedSiteJson(signedRevoke.toJson())),
       throwsFormatException,
     );
+    final pairing = <String, Object?>{
+      'nonce': _nonce,
+      'tenant_id': _tenant,
+      'site_id': _site,
+      'coordinator_device_id': _coordinator,
+      'consumed_at_millis': _now - 200,
+      'expires_at_millis': _now + 1000,
+    };
+    final pairingClaim = canonicalConnectedSiteJson({
+      'schema': 'supermega.shop.pairing-claim.v2',
+      'tenantId': _tenant,
+      'siteId': _site,
+      'coordinatorDeviceId': _coordinator,
+      'nonce': _nonce,
+      'expiresAtMillis': _now + 1000,
+      'observedAtMillis': _now - 200,
+      'signingProfile': 'p256-sha256-v2',
+      'signingKeyId': 'key-v2',
+      'publicKeyBase64Url': publicKey,
+      'clientFingerprint': fingerprint,
+    });
+    final pending = <String, Object?>{
+      'client_fingerprint': fingerprint,
+      'nonce': _nonce,
+      'tenant_id': _tenant,
+      'site_id': _site,
+      'coordinator_device_id': _coordinator,
+      'signing_profile': 'p256-sha256-v2',
+      'signing_key_id': 'key-v2',
+      'public_key': Uint8List.fromList(point),
+      'claim_json': pairingClaim,
+      'possession_signature': _signV2PairingClaim(pairingClaim),
+      'observed_at_millis': _now - 200,
+    };
+    final approval = <String, Object?>{
+      'evidence_digest': signed.evidenceDigest,
+      'action': 'approve',
+      'tenant_id': _tenant,
+      'site_id': _site,
+      'coordinator_device_id': _coordinator,
+      'device_id': _device,
+      'client_fingerprint': fingerprint,
+      'signing_profile': 'p256-sha256-v2',
+      'signing_key_id': 'key-v2',
+      'public_key': Uint8List.fromList(point),
+      'session_generation': 1,
+      'observed_at_millis': _now - 100,
+      'authority_key_id': 'owner-key-1',
+      'evidence_json': canonicalConnectedSiteJson(signed.toJson()),
+    };
+    final profile = <String, Object?>{
+      'device_id': _device,
+      'tenant_id': _tenant,
+      'site_id': _site,
+      'client_fingerprint': fingerprint,
+      'signing_profile': 'p256-sha256-v2',
+      'signing_key_id': 'key-v2',
+      'public_key': Uint8List.fromList(point),
+      'approval_digest': signed.evidenceDigest,
+    };
+    final device = <String, Object?>{
+      'device_id': _device,
+      'tenant_id': _tenant,
+      'site_id': _site,
+      'public_key_fingerprint': fingerprint,
+      'session_generation': 1,
+      'state': 'active',
+      'enrolled_at_millis': _now - 100,
+      'revoked_at_millis': null,
+    };
+    final revoke = <String, Object?>{
+      ...approval,
+      'evidence_digest': signedRevoke.evidenceDigest,
+      'action': 'revoke',
+      'session_generation': 2,
+      'observed_at_millis': _now - 50,
+      'evidence_json': canonicalConnectedSiteJson(signedRevoke.toJson()),
+    };
+    bool rowsValid({
+      Map<String, Object?>? changedPending,
+      Map<String, Object?>? changedApproval,
+      Map<String, Object?>? changedProfile,
+      Map<String, Object?>? changedDevice,
+      Map<String, Object?>? changedRevoke,
+      Map<String, List<int>>? pins,
+    }) => shopConnectedEnrollmentRowsValidV42(
+      pairingNonces: [pairing],
+      v1Pending: const [],
+      v1Evidence: const [],
+      v2Pending: [changedPending ?? pending],
+      v2Evidence: [changedApproval ?? approval, ?changedRevoke],
+      deviceProfiles: [changedProfile ?? profile],
+      devices: [changedDevice ?? device],
+      pinnedOwnerIssuerKeys: pins ?? {'owner-key-1': ownerPublic},
+    );
+    expect(rowsValid(), isTrue);
+    expect(rowsValid(pins: const {}), isFalse);
+    expect(
+      rowsValid(changedPending: {...pending, 'site_id': 'other'}),
+      isFalse,
+    );
+    expect(
+      rowsValid(changedProfile: {...profile, 'signing_key_id': 'other'}),
+      isFalse,
+    );
+    expect(
+      rowsValid(changedApproval: {...approval, 'evidence_json': '{}'}),
+      isFalse,
+    );
+    expect(rowsValid(changedDevice: {...device, 'state': 'revoked'}), isFalse);
+    final revokedDevice = {
+      ...device,
+      'state': 'revoked',
+      'session_generation': 2,
+      'revoked_at_millis': _now - 50,
+    };
+    expect(
+      rowsValid(changedRevoke: revoke, changedDevice: revokedDevice),
+      isTrue,
+    );
+    expect(
+      rowsValid(
+        changedRevoke: {...revoke, 'session_generation': 1},
+        changedDevice: revokedDevice,
+      ),
+      isFalse,
+    );
+    expect(rowsValid(changedRevoke: revoke, changedDevice: device), isFalse);
     expect(() => verify(tenant: 'other'), throwsFormatException);
     expect(() => verify(keyId: 'other'), throwsFormatException);
     expect(
@@ -155,6 +315,607 @@ void main() {
         () => verify(json: canonicalConnectedSiteJson(altered)),
         throwsFormatException,
       );
+    }
+  });
+
+  test('signed v2 rows reopen and restore only with pinned owner', () async {
+    const pointHex =
+        '046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2'
+        '964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5';
+    final point = Uint8List.fromList([
+      for (var i = 0; i < pointHex.length; i += 2)
+        int.parse(pointHex.substring(i, i + 2), radix: 16),
+    ]);
+    final fingerprint = sha256.convert(point).toString();
+    final owner = await Ed25519().newKeyPairFromSeed(List<int>.filled(32, 14));
+    final trust = ShopV42EnrollmentTrustSource.testOnly({
+      'owner-key-1': (await owner.extractPublicKey()).bytes,
+    });
+    final payload = <String, Object>{
+      'schema': 'supermega.shop.owner-enrollment-evidence.v2',
+      'action': 'approve',
+      'tenantId': _tenant,
+      'siteId': _site,
+      'coordinatorDeviceId': _coordinator,
+      'deviceId': _device,
+      'signingProfile': 'p256-sha256-v2',
+      'signingKeyId': 'key-v2',
+      'publicKeyBase64Url': base64Url.encode(point).replaceAll('=', ''),
+      'clientFingerprint': fingerprint,
+      'sessionGeneration': 1,
+      'observedAtMillis': _now - 100,
+      'authorityKeyId': 'owner-key-1',
+    };
+    final digest = connectedSiteSha256(payload);
+    final signature = base64Url
+        .encode(
+          (await Ed25519().sign(
+            utf8.encode(canonicalConnectedSiteJson(payload)),
+            keyPair: owner,
+          )).bytes,
+        )
+        .replaceAll('=', '');
+    final evidenceJson = canonicalConnectedSiteJson({
+      ...payload,
+      'signature': signature,
+      'evidenceDigest': digest,
+    });
+    final pairingClaim = canonicalConnectedSiteJson({
+      'schema': 'supermega.shop.pairing-claim.v2',
+      'tenantId': _tenant,
+      'siteId': _site,
+      'coordinatorDeviceId': _coordinator,
+      'nonce': _nonce,
+      'expiresAtMillis': _now + 1000,
+      'observedAtMillis': _now - 200,
+      'signingProfile': 'p256-sha256-v2',
+      'signingKeyId': 'key-v2',
+      'publicKeyBase64Url': base64Url.encode(point).replaceAll('=', ''),
+      'clientFingerprint': fingerprint,
+    });
+    final root = await Directory.systemTemp.createTemp('shop-v42-signed-');
+    final source = File('${root.path}/source.sqlite');
+    final archive = File('${root.path}/source.smbackup');
+    final restored = File('${root.path}/fresh/shop.sqlite');
+    var database = ShopDatabase(NativeDatabase(source), trust);
+    try {
+      await database.verifyReadyForUse();
+      await database.transaction(() async {
+        await database.customStatement(
+          'INSERT INTO shop_site_pairing_nonces '
+          '(nonce, tenant_id, site_id, coordinator_device_id, '
+          'issued_at_millis, expires_at_millis, consumed_at_millis) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [
+            _nonce,
+            _tenant,
+            _site,
+            _coordinator,
+            _now - 1000,
+            _now + 1000,
+            _now - 200,
+          ],
+        );
+        await database.customStatement(
+          'INSERT INTO shop_site_v2_pending_enrollments '
+          '(client_fingerprint, nonce, tenant_id, site_id, '
+          'coordinator_device_id, signing_profile, signing_key_id, '
+          'public_key, claim_json, possession_signature, observed_at_millis) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            fingerprint,
+            _nonce,
+            _tenant,
+            _site,
+            _coordinator,
+            'p256-sha256-v2',
+            'key-v2',
+            point,
+            pairingClaim,
+            _signV2PairingClaim(pairingClaim),
+            _now - 200,
+          ],
+        );
+        await database.customStatement(
+          'INSERT INTO shop_site_devices '
+          '(device_id, tenant_id, site_id, public_key_fingerprint, '
+          'session_generation, state, enrolled_at_millis) '
+          "VALUES (?, ?, ?, ?, 1, 'active', ?)",
+          [_device, _tenant, _site, fingerprint, _now - 100],
+        );
+        await database.customStatement(
+          'INSERT INTO shop_site_v2_enrollment_evidence '
+          '(evidence_digest, action, tenant_id, site_id, '
+          'coordinator_device_id, device_id, client_fingerprint, '
+          'signing_profile, signing_key_id, public_key, session_generation, '
+          'observed_at_millis, authority_key_id, evidence_json) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            digest,
+            'approve',
+            _tenant,
+            _site,
+            _coordinator,
+            _device,
+            fingerprint,
+            'p256-sha256-v2',
+            'key-v2',
+            point,
+            1,
+            _now - 100,
+            'owner-key-1',
+            evidenceJson,
+          ],
+        );
+        await database.customStatement(
+          'INSERT INTO shop_site_device_profiles_v42 '
+          '(device_id, tenant_id, site_id, client_fingerprint, '
+          'signing_profile, signing_key_id, public_key, approval_digest) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            _device,
+            _tenant,
+            _site,
+            fingerprint,
+            'p256-sha256-v2',
+            'key-v2',
+            point,
+            digest,
+          ],
+        );
+      });
+      await database.verifyReadyForUse();
+      expect(
+        () => ShopBackup.verifySnapshot(source, expectedSchemaVersion: 42),
+        throwsFormatException,
+      );
+      ShopBackup.verifySnapshot(
+        source,
+        expectedSchemaVersion: 42,
+        v42EnrollmentTrustSource: trust,
+      );
+      await ShopBackup.exportEncrypted(
+        database: database,
+        archive: archive,
+        password: 'signed-v42-source',
+        scratchRoot: root,
+        v42EnrollmentTrustSource: trust,
+      );
+      await database.close();
+      database = ShopDatabase(NativeDatabase(source), trust);
+      await database.verifyReadyForUse();
+      await database.close();
+      await restored.parent.create(recursive: true);
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: restored,
+        password: 'signed-v42-source',
+        v42EnrollmentTrustSource: trust,
+      );
+      database = ShopDatabase(NativeDatabase(restored), trust);
+      await database.verifyReadyForUse();
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('v2 possession and owner approval commit without partial replay', () async {
+    const pointHex =
+        '046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2'
+        '964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5';
+    final point = Uint8List.fromList([
+      for (var i = 0; i < pointHex.length; i += 2)
+        int.parse(pointHex.substring(i, i + 2), radix: 16),
+    ]);
+    final publicKey = base64Url.encode(point).replaceAll('=', '');
+    final fingerprint = sha256.convert(point).toString();
+    final owner = await Ed25519().newKeyPairFromSeed(List<int>.filled(32, 14));
+    final trust = ShopV42EnrollmentTrustSource.testOnly({
+      'owner-key-1': (await owner.extractPublicKey()).bytes,
+    });
+    final root = await Directory.systemTemp.createTemp('shop-v42-writer-');
+    final file = File('${root.path}/shop.sqlite');
+    final database = ShopDatabase(NativeDatabase(file), trust);
+    try {
+      await database.verifyReadyForUse();
+      final store = ShopConnectedSiteEnrollmentStore(
+        database: database,
+        nowMillis: () => _now,
+      );
+      await store.registerPairingNonce(
+        tenantId: _tenant,
+        siteId: _site,
+        coordinatorDeviceId: _coordinator,
+        nonce: _nonce,
+        issuedAtMillis: _now - 1000,
+        expiresAtMillis: _now + 1000,
+      );
+      final claim = canonicalConnectedSiteJson({
+        'schema': 'supermega.shop.pairing-claim.v2',
+        'tenantId': _tenant,
+        'siteId': _site,
+        'coordinatorDeviceId': _coordinator,
+        'nonce': _nonce,
+        'expiresAtMillis': _now + 1000,
+        'observedAtMillis': _now - 100,
+        'signingProfile': 'p256-sha256-v2',
+        'signingKeyId': 'key-v2',
+        'publicKeyBase64Url': publicKey,
+        'clientFingerprint': fingerprint,
+      });
+      final domain = ECDomainParameters('secp256r1');
+      final signer = Signer('SHA-256/DET-ECDSA')
+        ..init(true, PrivateKeyParameter(ECPrivateKey(BigInt.one, domain)));
+      final signature = signer.generateSignature(
+        Uint8List.fromList(utf8.encode(claim)),
+      ) as ECSignature;
+      final order = domain.n;
+      final lowS = signature.s > order ~/ BigInt.two
+          ? order - signature.s
+          : signature.s;
+      List<int> fixed(BigInt value) {
+        final hex = value.toRadixString(16).padLeft(64, '0');
+        return [
+          for (var i = 0; i < 64; i += 2)
+            int.parse(hex.substring(i, i + 2), radix: 16),
+        ];
+      }
+
+      final possession = base64Url
+          .encode([...fixed(signature.r), ...fixed(lowS)])
+          .replaceAll('=', '');
+      Future<bool> pair({String site = _site}) =>
+          store.consumeAndCreatePendingV2(
+            tenantId: _tenant,
+            siteId: site,
+            coordinatorDeviceId: _coordinator,
+            nonce: _nonce,
+            expiresAtMillis: _now + 1000,
+            observedAtMillis: _now - 100,
+            signingKeyId: 'key-v2',
+            publicKeyBase64Url: publicKey,
+            clientFingerprint: fingerprint,
+            possessionSignatureBase64Url: possession,
+          );
+      expect(await pair(site: 'wrong-site'), isFalse);
+      expect(await pair(), isTrue);
+      expect(await pair(), isFalse);
+      final payload = <String, Object>{
+        'schema': 'supermega.shop.owner-enrollment-evidence.v2',
+        'action': 'approve',
+        'tenantId': _tenant,
+        'siteId': _site,
+        'coordinatorDeviceId': _coordinator,
+        'deviceId': _device,
+        'signingProfile': 'p256-sha256-v2',
+        'signingKeyId': 'key-v2',
+        'publicKeyBase64Url': publicKey,
+        'clientFingerprint': fingerprint,
+        'sessionGeneration': 1,
+        'observedAtMillis': _now - 50,
+        'authorityKeyId': 'owner-key-1',
+      };
+      final ownerSignature = base64Url
+          .encode(
+            (await Ed25519().sign(
+              utf8.encode(canonicalConnectedSiteJson(payload)),
+              keyPair: owner,
+            )).bytes,
+          )
+          .replaceAll('=', '');
+      final approval = ShopOwnerEnrollmentEvidenceV2(
+        action: ShopOwnerEnrollmentAction.approve,
+        tenantId: _tenant,
+        siteId: _site,
+        coordinatorDeviceId: _coordinator,
+        deviceId: _device,
+        signingKeyId: 'key-v2',
+        publicKeyBase64Url: publicKey,
+        clientFingerprint: fingerprint,
+        sessionGeneration: 1,
+        observedAtMillis: _now - 50,
+        authorityKeyId: 'owner-key-1',
+        signature: ownerSignature,
+        evidenceDigest: connectedSiteSha256(payload),
+      );
+      await store.importOwnerEvidenceV2(approval, trust: trust);
+      await database.verifyReadyForUse();
+      await expectLater(
+        store.importOwnerEvidenceV2(approval, trust: trust),
+        throwsStateError,
+      );
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS n FROM shop_site_v2_enrollment_evidence',
+                )
+                .getSingle())
+            .read<int>('n'),
+        1,
+      );
+      Future<ShopOwnerEnrollmentEvidenceV2> signedRevoke({
+        String site = _site,
+        int generation = 2,
+      }) async {
+        final revokePayload = <String, Object>{
+          ...payload,
+          'action': 'revoke',
+          'siteId': site,
+          'sessionGeneration': generation,
+          'observedAtMillis': _now - 25,
+        };
+        final revokeSignature = base64Url
+            .encode(
+              (await Ed25519().sign(
+                utf8.encode(canonicalConnectedSiteJson(revokePayload)),
+                keyPair: owner,
+              )).bytes,
+            )
+            .replaceAll('=', '');
+        return ShopOwnerEnrollmentEvidenceV2(
+          action: ShopOwnerEnrollmentAction.revoke,
+          tenantId: _tenant,
+          siteId: site,
+          coordinatorDeviceId: _coordinator,
+          deviceId: _device,
+          signingKeyId: 'key-v2',
+          publicKeyBase64Url: publicKey,
+          clientFingerprint: fingerprint,
+          sessionGeneration: generation,
+          observedAtMillis: _now - 25,
+          authorityKeyId: 'owner-key-1',
+          signature: revokeSignature,
+          evidenceDigest: connectedSiteSha256(revokePayload),
+        );
+      }
+
+      await expectLater(
+        store.importOwnerEvidenceV2(
+          await signedRevoke(site: 'other'),
+          trust: trust,
+        ),
+        throwsStateError,
+      );
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS n FROM shop_site_v2_enrollment_evidence',
+                )
+                .getSingle())
+            .read<int>('n'),
+        1,
+      );
+      await store.importOwnerEvidenceV2(await signedRevoke(), trust: trust);
+      await database.verifyReadyForUse();
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT state FROM shop_site_devices WHERE device_id = ?',
+                  variables: [const Variable<String>(_device)],
+                )
+                .getSingle())
+            .read<String>('state'),
+        'revoked',
+      );
+      await expectLater(
+        store.importOwnerEvidenceV2(approval, trust: trust),
+        throwsStateError,
+      );
+      ShopBackup.verifySnapshot(
+        file,
+        expectedSchemaVersion: 42,
+        v42EnrollmentTrustSource: trust,
+      );
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('v2 nonce expired at transaction entry leaves zero writes', () async {
+    const pointHex =
+        '046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2'
+        '964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5';
+    final point = Uint8List.fromList([
+      for (var i = 0; i < pointHex.length; i += 2)
+        int.parse(pointHex.substring(i, i + 2), radix: 16),
+    ]);
+    final publicKey = base64Url.encode(point).replaceAll('=', '');
+    final fingerprint = sha256.convert(point).toString();
+    final root = await Directory.systemTemp.createTemp('shop-v42-expiry-');
+    final database = ShopDatabase(
+      NativeDatabase(File('${root.path}/shop.sqlite')),
+    );
+    try {
+      await database.verifyReadyForUse();
+      var clockReads = 0;
+      final store = ShopConnectedSiteEnrollmentStore(
+        database: database,
+        nowMillis: () => ++clockReads == 1 ? _now : _now + 1000,
+      );
+      await store.registerPairingNonce(
+        tenantId: _tenant,
+        siteId: _site,
+        coordinatorDeviceId: _coordinator,
+        nonce: _nonce,
+        issuedAtMillis: _now - 1000,
+        expiresAtMillis: _now + 1000,
+      );
+      final claim = canonicalConnectedSiteJson({
+        'schema': 'supermega.shop.pairing-claim.v2',
+        'tenantId': _tenant,
+        'siteId': _site,
+        'coordinatorDeviceId': _coordinator,
+        'nonce': _nonce,
+        'expiresAtMillis': _now + 1000,
+        'observedAtMillis': _now,
+        'signingProfile': 'p256-sha256-v2',
+        'signingKeyId': 'key-v2',
+        'publicKeyBase64Url': publicKey,
+        'clientFingerprint': fingerprint,
+      });
+      expect(
+        await store.consumeAndCreatePendingV2(
+          tenantId: _tenant,
+          siteId: _site,
+          coordinatorDeviceId: _coordinator,
+          nonce: _nonce,
+          expiresAtMillis: _now + 1000,
+          observedAtMillis: _now,
+          signingKeyId: 'key-v2',
+          publicKeyBase64Url: publicKey,
+          clientFingerprint: fingerprint,
+          possessionSignatureBase64Url: _signV2PairingClaim(claim),
+        ),
+        isFalse,
+      );
+      expect(clockReads, 2);
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT consumed_at_millis FROM shop_site_pairing_nonces '
+                  'WHERE nonce = ?',
+                  variables: [const Variable<String>(_nonce)],
+                )
+                .getSingle())
+            .readNullable<int>('consumed_at_millis'),
+        isNull,
+      );
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS n FROM shop_site_v2_pending_enrollments',
+                )
+                .getSingle())
+            .read<int>('n'),
+        0,
+      );
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('second SQLite writer delay cannot consume expired v2 nonce', () async {
+    const pointHex =
+        '046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2'
+        '964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5';
+    final point = Uint8List.fromList([
+      for (var i = 0; i < pointHex.length; i += 2)
+        int.parse(pointHex.substring(i, i + 2), radix: 16),
+    ]);
+    final publicKey = base64Url.encode(point).replaceAll('=', '');
+    final fingerprint = sha256.convert(point).toString();
+    final root = await Directory.systemTemp.createTemp('shop-v42-lock-');
+    final file = File('${root.path}/shop.sqlite');
+    final holder = ShopDatabase(NativeDatabase.createInBackground(file));
+    final contender = ShopDatabase(
+      NativeDatabase.createInBackground(
+        file,
+        setup: (raw) => raw.execute('PRAGMA busy_timeout = 5000'),
+      ),
+    );
+    final locked = Completer<void>();
+    final release = Completer<void>();
+    final preflightRead = Completer<void>();
+    try {
+      await holder.verifyReadyForUse();
+      await contender.verifyReadyForUse();
+      var reads = 0;
+      final store = ShopConnectedSiteEnrollmentStore(
+        database: contender,
+        nowMillis: () {
+          reads += 1;
+          if (reads == 1) preflightRead.complete();
+          return reads == 1 ? _now : _now + 1000;
+        },
+      );
+      await store.registerPairingNonce(
+        tenantId: _tenant,
+        siteId: _site,
+        coordinatorDeviceId: _coordinator,
+        nonce: _nonce,
+        issuedAtMillis: _now - 1000,
+        expiresAtMillis: _now + 1000,
+      );
+      final claim = canonicalConnectedSiteJson({
+        'schema': 'supermega.shop.pairing-claim.v2',
+        'tenantId': _tenant,
+        'siteId': _site,
+        'coordinatorDeviceId': _coordinator,
+        'nonce': _nonce,
+        'expiresAtMillis': _now + 1000,
+        'observedAtMillis': _now,
+        'signingProfile': 'p256-sha256-v2',
+        'signingKeyId': 'key-v2',
+        'publicKeyBase64Url': publicKey,
+        'clientFingerprint': fingerprint,
+      });
+      final holding = holder.transaction(() async {
+        await holder.customStatement(
+          'INSERT INTO shop_site_pairing_nonces '
+          '(nonce, tenant_id, site_id, coordinator_device_id, '
+          'issued_at_millis, expires_at_millis) VALUES (?, ?, ?, ?, ?, ?)',
+          [
+            'other_pairing_nonce_000000001',
+            _tenant,
+            _site,
+            _coordinator,
+            _now - 1000,
+            _now + 1000,
+          ],
+        );
+        locked.complete();
+        await release.future;
+      });
+      await locked.future.timeout(const Duration(seconds: 10));
+      final pending = store.consumeAndCreatePendingV2(
+        tenantId: _tenant,
+        siteId: _site,
+        coordinatorDeviceId: _coordinator,
+        nonce: _nonce,
+        expiresAtMillis: _now + 1000,
+        observedAtMillis: _now,
+        signingKeyId: 'key-v2',
+        publicKeyBase64Url: publicKey,
+        clientFingerprint: fingerprint,
+        possessionSignatureBase64Url: _signV2PairingClaim(claim),
+      );
+      try {
+        await preflightRead.future.timeout(const Duration(seconds: 10));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      } finally {
+        release.complete();
+        await holding;
+      }
+      expect(await pending.timeout(const Duration(seconds: 10)), isFalse);
+      expect(reads, 2);
+      expect(
+        (await contender
+                .customSelect(
+                  'SELECT consumed_at_millis FROM shop_site_pairing_nonces '
+                  'WHERE nonce = ?',
+                  variables: [const Variable<String>(_nonce)],
+                )
+                .getSingle())
+            .readNullable<int>('consumed_at_millis'),
+        isNull,
+      );
+      expect(
+        (await contender
+                .customSelect(
+                  'SELECT COUNT(*) AS n FROM shop_site_v2_pending_enrollments',
+                )
+                .getSingle())
+            .read<int>('n'),
+        0,
+      );
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await contender.close();
+      await holder.close();
+      await root.delete(recursive: true);
     }
   });
 
@@ -214,6 +975,42 @@ void main() {
       }
     },
   );
+
+  test('legacy bare device survives genuine v41 to v42 upgrade', () async {
+    final root = await Directory.systemTemp.createTemp('shop-v42-legacy-');
+    final file = File('${root.path}/legacy.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      await database.verifyReadyForUse();
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedDeviceProfileSchemaDefinitionsV42(),
+      );
+      await database.customStatement(
+        'INSERT INTO shop_site_devices '
+        '(device_id, tenant_id, site_id, public_key_fingerprint, '
+        'session_generation, state, enrolled_at_millis) '
+        "VALUES (?, ?, ?, ?, 1, 'active', ?)",
+        [_device, _tenant, _site, 'a' * 64, _now - 1000],
+      );
+      await database.customStatement('PRAGMA user_version = 41');
+      await database.close();
+      database = ShopDatabase(NativeDatabase(file));
+      await database.verifyReadyForUse();
+      expect(database.schemaVersion, 42);
+      expect(
+        (await database
+                .customSelect('SELECT COUNT(*) AS n FROM shop_site_devices')
+                .getSingle())
+            .read<int>('n'),
+        1,
+      );
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42);
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
 
   test('v42 rejects orphan v2 enrollment evidence at open and backup', () async {
     final root = await Directory.systemTemp.createTemp('shop-v42-orphan-');

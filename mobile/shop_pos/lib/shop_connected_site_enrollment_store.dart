@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_device_profile_v2.dart';
 import 'shop_connected_retained_signature_verifier.dart';
+import 'shop_connected_site_v42_enrollment_verifier.dart';
 import 'shop_database.dart';
 import 'shop_site_coordinator.dart';
 
@@ -325,6 +326,149 @@ class ShopConnectedSiteEnrollmentStore
   final ShopDatabase database;
   final int Function() nowMillis;
 
+  /// Versioned pairing claim for a P-256 signing handle. The signature proves
+  /// possession of the proposed key over this exact nonce and scope. The
+  /// product trust registry is empty, so this cannot create a usable product
+  /// enrollment until independently pinned owner authority is installed.
+  Future<bool> consumeAndCreatePendingV2({
+    required String tenantId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required String nonce,
+    required int expiresAtMillis,
+    required int observedAtMillis,
+    required String signingKeyId,
+    required String publicKeyBase64Url,
+    required String clientFingerprint,
+    required String possessionSignatureBase64Url,
+  }) async {
+    try {
+      final now = nowMillis();
+      if (now <= 0 || (now - observedAtMillis).abs() > 1000) return false;
+      final point = requireConnectedP256DevicePublicKeyV2(
+        publicKeyBase64Url: publicKeyBase64Url,
+        fingerprintSha256: clientFingerprint,
+      );
+      final claim = canonicalConnectedSiteJson({
+        'schema': 'supermega.shop.pairing-claim.v2',
+        'tenantId': tenantId,
+        'siteId': siteId,
+        'coordinatorDeviceId': coordinatorDeviceId,
+        'nonce': nonce,
+        'expiresAtMillis': expiresAtMillis,
+        'observedAtMillis': observedAtMillis,
+        'signingProfile': connectedP256DeviceProfileV2,
+        'signingKeyId': signingKeyId,
+        'publicKeyBase64Url': publicKeyBase64Url,
+        'clientFingerprint': clientFingerprint,
+      });
+      if (!verifyConnectedP256DeviceSignatureV2(
+        publicKeyBase64Url: publicKeyBase64Url,
+        fingerprintSha256: clientFingerprint,
+        signatureBase64Url: possessionSignatureBase64Url,
+        canonicalMessageBytes: utf8.encode(claim),
+      )) {
+        return false;
+      }
+      return await database.transaction(() async {
+        // A queued writer can enter after a signed nonce has expired.
+        final transactionNow = nowMillis();
+        if (transactionNow <= 0 ||
+            transactionNow >= expiresAtMillis ||
+            (transactionNow - observedAtMillis).abs() > 1000) {
+          return false;
+        }
+        final registered = await database
+            .customSelect(
+              'SELECT 1 FROM shop_site_pairing_nonces WHERE nonce = ? '
+              'AND tenant_id = ? AND site_id = ? AND coordinator_device_id = ? '
+              'AND expires_at_millis = ? AND issued_at_millis <= ? '
+              'AND expires_at_millis > ? AND consumed_at_millis IS NULL',
+              variables: [
+                Variable<String>(nonce),
+                Variable<String>(tenantId),
+                Variable<String>(siteId),
+                Variable<String>(coordinatorDeviceId),
+                Variable<int>(expiresAtMillis),
+                Variable<int>(observedAtMillis),
+                Variable<int>(transactionNow),
+              ],
+            )
+            .getSingleOrNull();
+        if (registered == null ||
+            await database
+                    .customSelect(
+                      'SELECT 1 FROM shop_site_pending_enrollments '
+                      'WHERE nonce = ? OR client_fingerprint = ? LIMIT 1',
+                      variables: [
+                        Variable<String>(nonce),
+                        Variable<String>(clientFingerprint),
+                      ],
+                    )
+                    .getSingleOrNull() !=
+                null ||
+            await database
+                    .customSelect(
+                      'SELECT 1 FROM shop_site_v2_pending_enrollments '
+                      'WHERE nonce = ? OR client_fingerprint = ? OR signing_key_id = ? '
+                      'LIMIT 1',
+                      variables: [
+                        Variable<String>(nonce),
+                        Variable<String>(clientFingerprint),
+                        Variable<String>(signingKeyId),
+                      ],
+                    )
+                    .getSingleOrNull() !=
+                null) {
+          return false;
+        }
+        final changed = await database.customUpdate(
+          'UPDATE shop_site_pairing_nonces SET consumed_at_millis = ? '
+          'WHERE nonce = ? AND consumed_at_millis IS NULL '
+          'AND expires_at_millis > ?',
+          variables: [
+            Variable<int>(observedAtMillis),
+            Variable<String>(nonce),
+            Variable<int>(transactionNow),
+          ],
+        );
+        if (changed != 1) return false;
+        // UPDATE may itself have waited for another SQLite writer. Roll back
+        // its nonce consumption if time expired while acquiring that lock.
+        final commitNow = nowMillis();
+        if (commitNow <= 0 ||
+            commitNow >= expiresAtMillis ||
+            (commitNow - observedAtMillis).abs() > 1000) {
+          throw StateError('pairing_v2_nonce_expired_during_write');
+        }
+        await database.customInsert(
+          'INSERT INTO shop_site_v2_pending_enrollments '
+          '(client_fingerprint, nonce, tenant_id, site_id, '
+          'coordinator_device_id, signing_profile, signing_key_id, '
+          'public_key, claim_json, possession_signature, observed_at_millis) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(clientFingerprint),
+            Variable<String>(nonce),
+            Variable<String>(tenantId),
+            Variable<String>(siteId),
+            Variable<String>(coordinatorDeviceId),
+            const Variable<String>(connectedP256DeviceProfileV2),
+            Variable<String>(signingKeyId),
+            Variable<Uint8List>(point),
+            Variable<String>(claim),
+            Variable<String>(possessionSignatureBase64Url),
+            Variable<int>(observedAtMillis),
+          ],
+        );
+        await database.requireV42EnrollmentRowsInCurrentTransaction();
+        return true;
+      });
+    } on Object {
+      return false;
+    }
+  }
+
   Future<void> registerPairingNonce({
     required String tenantId,
     required String siteId,
@@ -474,6 +618,178 @@ class ShopConnectedSiteEnrollmentStore
       difference |= left[index] ^ right[index];
     }
     return difference == 0;
+  }
+
+  /// Persist one owner-signed v2 approval or revocation atomically with its
+  /// device/profile state. The independent database row verifier must accept
+  /// the complete resulting history before the transaction commits. This is
+  /// not a feed/command authorization; that boundary rechecks current trust.
+  Future<void> importOwnerEvidenceV2(
+    ShopOwnerEnrollmentEvidenceV2 evidence, {
+    required ShopV42EnrollmentTrustSource trust,
+  }) async {
+    final now = nowMillis();
+    if (now <= 0 ||
+        evidence.observedAtMillis > now ||
+        trust.ownerIssuerKeys.isEmpty) {
+      throw StateError('owner_enrollment_v2_authority_unavailable');
+    }
+    final encoded = canonicalConnectedSiteJson(evidence.toJson());
+    verifyRetainedOwnerEnrollmentV2Sync(
+      expectedAction: evidence.action,
+      canonicalEvidenceJson: encoded,
+      expectedEvidenceDigest: evidence.evidenceDigest,
+      tenantId: evidence.tenantId,
+      siteId: evidence.siteId,
+      coordinatorDeviceId: evidence.coordinatorDeviceId,
+      deviceId: evidence.deviceId,
+      signingKeyId: evidence.signingKeyId,
+      publicKeyBase64Url: evidence.publicKeyBase64Url,
+      clientFingerprint: evidence.clientFingerprint,
+      sessionGeneration: evidence.sessionGeneration,
+      trustedAtMillis: now,
+      pinnedOwnerIssuerKeys: trust.ownerIssuerKeys,
+    );
+    final point = requireConnectedP256DevicePublicKeyV2(
+      publicKeyBase64Url: evidence.publicKeyBase64Url,
+      fingerprintSha256: evidence.clientFingerprint,
+    );
+    await database.transaction(() async {
+      final transactionNow = nowMillis();
+      if (transactionNow <= 0 || evidence.observedAtMillis > transactionNow) {
+        throw StateError('owner_enrollment_v2_time_stale');
+      }
+      verifyRetainedOwnerEnrollmentV2Sync(
+        expectedAction: evidence.action,
+        canonicalEvidenceJson: encoded,
+        expectedEvidenceDigest: evidence.evidenceDigest,
+        tenantId: evidence.tenantId,
+        siteId: evidence.siteId,
+        coordinatorDeviceId: evidence.coordinatorDeviceId,
+        deviceId: evidence.deviceId,
+        signingKeyId: evidence.signingKeyId,
+        publicKeyBase64Url: evidence.publicKeyBase64Url,
+        clientFingerprint: evidence.clientFingerprint,
+        sessionGeneration: evidence.sessionGeneration,
+        trustedAtMillis: transactionNow,
+        pinnedOwnerIssuerKeys: trust.ownerIssuerKeys,
+      );
+      final pending = await database
+          .customSelect(
+            'SELECT * FROM shop_site_v2_pending_enrollments '
+            'WHERE client_fingerprint = ? AND tenant_id = ? AND site_id = ? '
+            'AND coordinator_device_id = ? AND signing_key_id = ?',
+            variables: [
+              Variable<String>(evidence.clientFingerprint),
+              Variable<String>(evidence.tenantId),
+              Variable<String>(evidence.siteId),
+              Variable<String>(evidence.coordinatorDeviceId),
+              Variable<String>(evidence.signingKeyId),
+            ],
+          )
+          .getSingleOrNull();
+      if (pending == null ||
+          !_bytesEqual(pending.read<Uint8List>('public_key'), point) ||
+          evidence.observedAtMillis < pending.read<int>('observed_at_millis')) {
+        throw StateError('pending_v2_enrollment_missing');
+      }
+      final existing = await database
+          .customSelect(
+            'SELECT 1 FROM shop_site_v2_enrollment_evidence '
+            'WHERE evidence_digest = ? LIMIT 1',
+            variables: [Variable<String>(evidence.evidenceDigest)],
+          )
+          .getSingleOrNull();
+      if (existing != null) throw StateError('owner_enrollment_v2_replay');
+      if (evidence.action == ShopOwnerEnrollmentAction.approve) {
+        final bound = await database
+            .customSelect(
+              'SELECT 1 FROM shop_site_devices WHERE device_id = ? '
+              'OR public_key_fingerprint = ? LIMIT 1',
+              variables: [
+                Variable<String>(evidence.deviceId),
+                Variable<String>(evidence.clientFingerprint),
+              ],
+            )
+            .getSingleOrNull();
+        if (bound != null) throw StateError('enrollment_v2_key_already_bound');
+        await database.customInsert(
+          'INSERT INTO shop_site_devices '
+          '(device_id, tenant_id, site_id, public_key_fingerprint, '
+          'session_generation, state, enrolled_at_millis) '
+          "VALUES (?, ?, ?, ?, ?, 'active', ?)",
+          variables: [
+            Variable<String>(evidence.deviceId),
+            Variable<String>(evidence.tenantId),
+            Variable<String>(evidence.siteId),
+            Variable<String>(evidence.clientFingerprint),
+            Variable<int>(evidence.sessionGeneration),
+            Variable<int>(evidence.observedAtMillis),
+          ],
+        );
+      } else {
+        final changed = await database.customUpdate(
+          'UPDATE shop_site_devices SET state = ?, revoked_at_millis = ?, '
+          'session_generation = ? WHERE device_id = ? AND tenant_id = ? '
+          'AND site_id = ? AND public_key_fingerprint = ? AND state = ? '
+          'AND session_generation < ?',
+          variables: [
+            const Variable<String>('revoked'),
+            Variable<int>(evidence.observedAtMillis),
+            Variable<int>(evidence.sessionGeneration),
+            Variable<String>(evidence.deviceId),
+            Variable<String>(evidence.tenantId),
+            Variable<String>(evidence.siteId),
+            Variable<String>(evidence.clientFingerprint),
+            const Variable<String>('active'),
+            Variable<int>(evidence.sessionGeneration),
+          ],
+        );
+        if (changed != 1) throw StateError('active_v2_enrollment_missing');
+      }
+      await database.customInsert(
+        'INSERT INTO shop_site_v2_enrollment_evidence '
+        '(evidence_digest, action, tenant_id, site_id, coordinator_device_id, '
+        'device_id, client_fingerprint, signing_profile, signing_key_id, '
+        'public_key, session_generation, observed_at_millis, authority_key_id, '
+        'evidence_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(evidence.evidenceDigest),
+          Variable<String>(evidence.action.name),
+          Variable<String>(evidence.tenantId),
+          Variable<String>(evidence.siteId),
+          Variable<String>(evidence.coordinatorDeviceId),
+          Variable<String>(evidence.deviceId),
+          Variable<String>(evidence.clientFingerprint),
+          const Variable<String>(connectedP256DeviceProfileV2),
+          Variable<String>(evidence.signingKeyId),
+          Variable<Uint8List>(point),
+          Variable<int>(evidence.sessionGeneration),
+          Variable<int>(evidence.observedAtMillis),
+          Variable<String>(evidence.authorityKeyId),
+          Variable<String>(encoded),
+        ],
+      );
+      if (evidence.action == ShopOwnerEnrollmentAction.approve) {
+        await database.customInsert(
+          'INSERT INTO shop_site_device_profiles_v42 '
+          '(device_id, tenant_id, site_id, client_fingerprint, '
+          'signing_profile, signing_key_id, public_key, approval_digest) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(evidence.deviceId),
+            Variable<String>(evidence.tenantId),
+            Variable<String>(evidence.siteId),
+            Variable<String>(evidence.clientFingerprint),
+            const Variable<String>(connectedP256DeviceProfileV2),
+            Variable<String>(evidence.signingKeyId),
+            Variable<Uint8List>(point),
+            Variable<String>(evidence.evidenceDigest),
+          ],
+        );
+      }
+      await database.requireV42EnrollmentRowsInCurrentTransaction();
+    });
   }
 
   Future<void> importOwnerEvidence(

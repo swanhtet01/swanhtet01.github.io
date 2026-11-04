@@ -13,6 +13,7 @@ import 'shop_database.dart';
 import 'shop_connected_cloud_feed_v41_verifier.dart';
 import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_v42_enrollment_verifier.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
 import 'shop_connected_trusted_time_stream.dart';
@@ -219,6 +220,7 @@ abstract final class ShopBackup {
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
     ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) async {
     if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
@@ -258,6 +260,7 @@ abstract final class ShopBackup {
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
           testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
           historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+          v42EnrollmentTrustSource: v42EnrollmentTrustSource,
         );
         if (await snapshot.length() > maxSnapshotBytes) {
           throw StateError(
@@ -332,6 +335,7 @@ abstract final class ShopBackup {
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
     ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) async {
     if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
@@ -381,6 +385,7 @@ abstract final class ShopBackup {
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
           testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
           historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+          v42EnrollmentTrustSource: v42EnrollmentTrustSource,
         );
         await ShopDatabase.migrateAndVerifyRestoreFile(
           stagedFile,
@@ -388,6 +393,7 @@ abstract final class ShopBackup {
           testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
           testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
           historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+          v42EnrollmentTrustSource: v42EnrollmentTrustSource,
         );
         await _requireNoSidecars(stagedFile);
         if (await stagedFile.length() > maxSnapshotBytes) {
@@ -926,6 +932,7 @@ abstract final class ShopBackup {
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
     ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) => _verifySnapshot(
     file,
     minimumSchemaVersion: oldestSupportedSchemaVersion,
@@ -934,6 +941,7 @@ abstract final class ShopBackup {
     testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
     testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
     historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+    v42EnrollmentTrustSource: v42EnrollmentTrustSource,
   );
 
   /// Verifies an already-installed Shop store before Drift may migrate it.
@@ -954,6 +962,7 @@ abstract final class ShopBackup {
     Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
     ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) {
     if (testOnlyCloudFeedV41Trust != null &&
         testOnlyCloudFeedPinnedKeys.isNotEmpty) {
@@ -999,6 +1008,7 @@ abstract final class ShopBackup {
             allowRuntimeUnboundCorrectionHistory,
         testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
         testOnlyCloudFeedV41Trust: verifiedV41Trust,
+        v42EnrollmentTrustSource: v42EnrollmentTrustSource,
       );
       final hasCorrectionSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
@@ -1488,6 +1498,7 @@ abstract final class ShopBackup {
     required bool allowRuntimeUnboundCorrectionHistory,
     required Map<String, List<int>> testOnlyCloudFeedPinnedKeys,
     ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) {
     if (schemaVersion < minimumSchemaVersion ||
         schemaVersion > supportedSchemaVersion) {
@@ -2170,7 +2181,11 @@ abstract final class ShopBackup {
                   cloudFeedEvidenceDefinitions.keys.toSet(),
                 ))) &&
         (schemaVersion < 42 ||
-            (_v42DeviceProfileRowsEmpty(connection) &&
+            (_v42DeviceProfileRowsValid(
+                  connection,
+                  v42EnrollmentTrustSource ??
+                      ShopV42EnrollmentTrustSource.production(),
+                ) &&
                 _snapshotDefinitionGroupExact(
                   objects,
                   deviceProfileDefinitions,
@@ -3698,18 +3713,25 @@ abstract final class ShopBackup {
     }
   }
 
-  static bool _v42DeviceProfileRowsEmpty(Database connection) {
+  static bool _v42DeviceProfileRowsValid(
+    Database connection,
+    ShopV42EnrollmentTrustSource trust,
+  ) {
     try {
-      for (final table in const [
-        'shop_site_v2_pending_enrollments',
-        'shop_site_v2_enrollment_evidence',
-        'shop_site_device_profiles_v42',
-      ]) {
-        if (connection.select('SELECT 1 FROM $table LIMIT 1').isNotEmpty) {
-          return false;
-        }
-      }
-      return true;
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedEnrollmentRowsValidV42(
+        pairingNonces: rows('shop_site_pairing_nonces'),
+        v1Pending: rows('shop_site_pending_enrollments'),
+        v1Evidence: rows('shop_site_enrollment_evidence'),
+        v2Pending: rows('shop_site_v2_pending_enrollments'),
+        v2Evidence: rows('shop_site_v2_enrollment_evidence'),
+        deviceProfiles: rows('shop_site_device_profiles_v42'),
+        devices: rows('shop_site_devices'),
+        pinnedOwnerIssuerKeys: trust.ownerIssuerKeys,
+      );
     } on Object {
       return false;
     }
