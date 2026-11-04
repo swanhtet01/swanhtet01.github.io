@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 00:43 UTC
+- Last verified: 2026-11-04 00:50 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
@@ -16,9 +16,12 @@
   device B passed in 11.884s/15.136s. The test uses distinct synthetic
   device keys/leases and checked SQL/RLS, with exact original signed bytes,
   but no installed networked devices, production ingress or key custody.
-- **IN PROGRESS / BLOCKED:** exact-head Native `41748476173` and the
-  push-triggered App run `41748468202` are still running. The same-repository
-  PR App run `41748476117` is **SKIPPED** and is not App coverage. Kernel
+- **IN PROGRESS / BLOCKED:** exact-head Native `41748476173` is still
+  running. The push-triggered App run `41748468202` is terminal **FAILURE**:
+  canonical verification passed steps 1–637, then `hq:verify` step 638/668
+  rejected `database_rehearsal_evidence_stale`; later steps were **NOT RUN**.
+  The same-repository PR App run `41748476117` is **SKIPPED** and is not App
+  coverage. Kernel
   `41748476161` **PASS**; Dependency Security `41748476214` **FAIL** on the
   unresolved advisory. Keep this head fixed while useful checks run. The
   Windows HQ rehearsal, full security disposition, production signing,
