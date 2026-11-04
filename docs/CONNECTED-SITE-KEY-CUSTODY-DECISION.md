@@ -14,13 +14,31 @@ only delivery-status ledger.
   Supabase bearer token is sent over shop LAN or included in a native build.
 - The configured Vercel Python API target is the shortest repository-defined
   server target (`vercel.json` includes `api/app.py`), but a selected live
-  deployment has not been verified and Git deployment is disabled
-  and the feed route is unmounted. For a controlled pilot, use separately
-  scoped, founder-controlled encrypted environment secrets for the server
-  signer only after a deployment/security review. This is software custody:
-  the signing key exists in server memory during a request. Do not describe
-  it as HSM custody. A later dedicated signing service can implement the same
-  interface without changing the feed proof bytes.
+  deployment has not been verified, Git deployment is disabled, and the feed
+  route is unmounted. The recommended default-off signer adapter is Google
+  Cloud KMS `EC_SIGN_ED25519` over the existing exact canonical message bytes,
+  with request-scoped Vercel OIDC workload federation to a narrowly scoped
+  signing identity. Google documents this Ed25519 algorithm as **SOFTWARE**
+  protection, not HSM; key bytes are not exportable to the API worker. This
+  replaces the earlier proposal to place an encrypted Ed25519 seed in Vercel
+  environment variables, which would expose plaintext in worker memory.
+  Actual project, region, federation, key versions, IAM and public pins remain
+  unselected and unprovisioned. Do not describe this as HSM custody or
+  silently weaken any stronger custody requirement.
+- A KMS adapter must map each purpose and environment to an immutable full
+  CryptoKeyVersion plus independently pinned raw Ed25519 public key. It must
+  send exact protocol bytes as `data` (never a prehash), supply and verify
+  CRC32C, check returned version/protection/signature length, and locally
+  verify the returned signature against the pin. Reject requests over the
+  provider's 65,536-byte raw-input limit before network access; the current
+  4,542-byte checkpoint fixture fits, but checkpoint growth needs a bound.
+  Keep root/admin signing unavailable to online workers, and retain old
+  public versions only for historical verification. No mutable `latest` key
+  alias or response-supplied trust root may authorize a signature.
+- AWS KMS HSM Ed25519 is not a drop-in alternative for the current protocol:
+  its 4,096-byte raw-sign limit is smaller than that existing 4,542-byte
+  authority-checkpoint fixture. Do not hash, use Ed25519ph, or silently split
+  issuers to work around the limit; such a change needs a versioned review.
 - Android retains its existing Ed25519 Android Keystore signing identity.
   Support is conditional on a named API-33+ installed device successfully
   creating, reopening, signing and denying private export across app/OS
@@ -49,8 +67,9 @@ closed on missing or contradictory profile evidence.
 
 ## Approval and acceptance boundary
 
-Swan must later approve the exact private server/Vercel project, signer-secret
-scope and rotation ceremony, named pilot devices, and a source-reviewed public
+Swan must later approve the exact Vercel project and Google Cloud project,
+region, OIDC trust boundary, purpose-limited IAM/key versions and rotation
+ceremony, named pilot devices, and a source-reviewed public
 issuer registry before any provisioning. Each purpose has a current and
 next-key overlap period; revoked or expired keys cannot authorize new actions,
 while authentic historical records remain readable. Provisioning, route mount,
