@@ -17,18 +17,23 @@ from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from supermega_runtime.connected_site_runtime import ConnectedSitePrincipal
 
 from supermega_runtime.connected_site_gateway import (
     ConnectedSiteGatewayPrincipalResolver, GatewayPeerAttestation,
 )
+from supermega_runtime.connected_site_event_feed_router import (
+    create_connected_site_event_feed_router,
+)
 from supermega_runtime.connected_site_v15 import (
-    ConnectedSiteV15Error, CurrentMember, DeviceAuthority, SiteAuthority,
+    CurrentMember, DeviceAuthority, SiteAuthority,
     canonical_json, digest,
 )
-from tests.connected_site_signed_page_fixture import read_and_sign_test_only_page
+from tests.connected_site_signed_page_fixture import (
+    read_and_sign_test_only_page, seal_test_only_checked_page,
+)
 from tests.test_connected_site_event_feed import _Connection
 from tests.test_connected_site_runtime import _Authorities
 
@@ -155,32 +160,37 @@ def build_response(native_database: Path, *, now: datetime | None = None,
         authority_provider=provider, now=lambda: now,
     )
     app = FastAPI()
-
-    @app.post("/test-only/native-v41-feed")
-    async def feed(http_request: Request):
-        principal = resolver(http_request)
-        if principal is None:
-            raise HTTPException(status_code=401)
-        try:
-            return read_and_sign_test_only_page(
-                connection_factory=script.connect, principal=principal,
-                authority=authority, lease=lease, request=await http_request.json(),
+    principal = ConnectedSitePrincipal(
+        authority.workspace_id, authority.site_id, device.device_id, True,
+        "test-native-v41",
+    )
+    app.include_router(create_connected_site_event_feed_router(
+        connection_factory=script.connect, authority_provider=provider,
+        resolve_principal=resolver,
+        load_lease=lambda _principal, _request: lease,
+        seal_checked_page=lambda page, signed_request, signed_lease:
+            seal_test_only_checked_page(
+                page, signed_request, signed_lease, principal=principal,
                 now=now, issuer_key_id="feed_fixture", issuer_seed=23,
-            )
-        except ConnectedSiteV15Error:
-            raise HTTPException(status_code=403) from None
+            ),
+        pinned_issuer_keys={"feed_fixture": _key(23)[1]},
+        trusted_now=lambda: now, runtime_enabled=True,
+    ))
+    path = "/api/connected-site/v1/event-feed"
 
     with TestClient(app) as client:
-        response = client.post("/test-only/native-v41-feed", json=request)
+        response = client.post(path, json=request)
         if response.status_code != 200:
             raise ValueError(f"native_v41_http_rejected:{response.status_code}")
         sealed = response.json()
         if set(sealed) != {"requestJson", "pageJson", "proofJson"}:
             raise ValueError("native_v41_http_response_shape")
-        if client.post("/test-only/native-v41-feed", json={**request, "deviceId": "wrong"}).status_code != 403:
-            raise ValueError("native_v41_wrong_device_accepted")
+        wrong_device = client.post(path, json={**request, "deviceId": "wrong"})
+        if (wrong_device.status_code != 422
+                or wrong_device.json()["detail"]["error"] != "event_read_scope"):
+            raise ValueError(f"native_v41_wrong_device_denial_changed:{wrong_device.status_code}")
         active = False
-        if client.post("/test-only/native-v41-feed", json=request).status_code != 401:
+        if client.post(path, json=request).status_code != 401:
             raise ValueError("native_v41_revoked_peer_accepted")
     return sealed
 

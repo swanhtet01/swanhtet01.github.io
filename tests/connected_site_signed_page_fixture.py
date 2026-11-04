@@ -30,6 +30,66 @@ def _signature(seed: int, fields: dict) -> str:
     return base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
 
 
+def seal_test_only_checked_page(
+    checked_page: RetailReservationPage,
+    checked_request: Mapping[str, Any], checked_lease: Mapping[str, Any],
+    *, principal: Any, now: datetime, issuer_key_id: str, issuer_seed: int,
+    proof_lifetime_millis: int = 30000,
+) -> dict[str, str]:
+    """Seal a checked page with a fixed synthetic key, never production custody."""
+    page = checked_page.to_wire()
+    if (
+        not isinstance(now, datetime) or now.tzinfo is None
+        or not isinstance(issuer_key_id, str)
+        or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", issuer_key_id)
+        or type(proof_lifetime_millis) is not int
+        or proof_lifetime_millis not in (30000, 90000)
+        or page["requestDigest"] != digest(checked_request)
+        or page["leaseDigest"] != checked_lease.get("payloadDigest")
+        or page["workspaceId"] != principal.workspace_id
+        or page["siteId"] != principal.site_id
+        or page["deviceId"] != principal.device_id
+        or checked_page.request_nonce != checked_request.get("requestNonce")
+    ):
+        raise ConnectedSiteV15Error("connected_site_test_page_binding_invalid")
+    issued = int(now.astimezone(timezone.utc).timestamp() * 1000)
+    lease_expiry = datetime.fromisoformat(
+        checked_lease["expiresAt"].replace("Z", "+00:00")
+    )
+    expires = min(issued + proof_lifetime_millis,
+                  int(lease_expiry.timestamp() * 1000))
+    if issued <= 0 or expires <= issued:
+        raise ConnectedSiteV15Error("connected_site_test_page_expired")
+    proof = {
+        "contract": "supermega.connected-cloud-feed-proof.v1",
+        "protocolVersion": 1,
+        "issuerKeyId": issuer_key_id,
+        "issuedAtMillis": issued,
+        "expiresAtMillis": expires,
+        "workspaceId": page["workspaceId"],
+        "siteId": page["siteId"],
+        "actorId": page["actorId"],
+        "actorRole": checked_lease["role"],
+        "deviceId": page["deviceId"],
+        "authorityGeneration": page["authorityGeneration"],
+        "revocationGeneration": page["revocationGeneration"],
+        "authorityPayloadDigest": page["authorityPayloadDigest"],
+        "leaseDigest": page["leaseDigest"],
+        "requestDigest": page["requestDigest"],
+        "requestNonce": checked_page.request_nonce,
+        "afterSequence": page["afterSequence"],
+        "priorEventDigest": page["priorEventDigest"],
+        "nextSequence": page["nextSequence"],
+        "nextEventDigest": page["nextEventDigest"],
+        "pageDigest": page["pageDigest"],
+    }
+    return {
+        "requestJson": canonical_json(checked_request),
+        "pageJson": canonical_json(page),
+        "proofJson": canonical_json({**proof, "signature": _signature(issuer_seed, proof)}),
+    }
+
+
 def read_and_sign_test_only_page(
     *, connection_factory: Any, principal: Any, authority: Any,
     lease: Mapping[str, Any], request: Mapping[str, Any], now: datetime,
@@ -40,66 +100,15 @@ def read_and_sign_test_only_page(
     This is not a mounted route or production signer. Protected key custody,
     authenticated ingress and installed-device evidence remain release gates.
     """
-    def seal(
-        checked_page: RetailReservationPage,
-        checked_request: Mapping[str, Any], checked_lease: Mapping[str, Any],
-    ) -> dict[str, str]:
-        page = checked_page.to_wire()
-        if (
-            not isinstance(now, datetime) or now.tzinfo is None
-            or not isinstance(issuer_key_id, str)
-            or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", issuer_key_id)
-            or type(proof_lifetime_millis) is not int
-            or proof_lifetime_millis not in (30000, 90000)
-            or page["requestDigest"] != digest(checked_request)
-            or page["leaseDigest"] != checked_lease.get("payloadDigest")
-            or page["workspaceId"] != principal.workspace_id
-            or page["siteId"] != principal.site_id
-            or page["deviceId"] != principal.device_id
-            or checked_page.request_nonce != checked_request.get("requestNonce")
-        ):
-            raise ConnectedSiteV15Error("connected_site_test_page_binding_invalid")
-        issued = int(now.astimezone(timezone.utc).timestamp() * 1000)
-        lease_expiry = datetime.fromisoformat(
-            checked_lease["expiresAt"].replace("Z", "+00:00")
-        )
-        expires = min(issued + proof_lifetime_millis,
-                      int(lease_expiry.timestamp() * 1000))
-        if issued <= 0 or expires <= issued:
-            raise ConnectedSiteV15Error("connected_site_test_page_expired")
-        proof = {
-            "contract": "supermega.connected-cloud-feed-proof.v1",
-            "protocolVersion": 1,
-            "issuerKeyId": issuer_key_id,
-            "issuedAtMillis": issued,
-            "expiresAtMillis": expires,
-            "workspaceId": page["workspaceId"],
-            "siteId": page["siteId"],
-            "actorId": page["actorId"],
-            "actorRole": checked_lease["role"],
-            "deviceId": page["deviceId"],
-            "authorityGeneration": page["authorityGeneration"],
-            "revocationGeneration": page["revocationGeneration"],
-            "authorityPayloadDigest": page["authorityPayloadDigest"],
-            "leaseDigest": page["leaseDigest"],
-            "requestDigest": page["requestDigest"],
-            "requestNonce": checked_page.request_nonce,
-            "afterSequence": page["afterSequence"],
-            "priorEventDigest": page["priorEventDigest"],
-            "nextSequence": page["nextSequence"],
-            "nextEventDigest": page["nextEventDigest"],
-            "pageDigest": page["pageDigest"],
-        }
-        return {
-            "requestJson": canonical_json(checked_request),
-            "pageJson": canonical_json(page),
-            "proofJson": canonical_json({**proof, "signature": _signature(issuer_seed, proof)}),
-        }
-
     return read_retail_reservation_page(
         connection_factory=connection_factory, principal=principal,
         authority=authority, lease=lease, request=request, now=now,
-        seal_checked_page=seal,
+        seal_checked_page=lambda page, signed_request, signed_lease:
+            seal_test_only_checked_page(
+                page, signed_request, signed_lease, principal=principal,
+                now=now, issuer_key_id=issuer_key_id, issuer_seed=issuer_seed,
+                proof_lifetime_millis=proof_lifetime_millis,
+            ),
     )
 
 
