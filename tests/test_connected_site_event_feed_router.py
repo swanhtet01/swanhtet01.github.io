@@ -137,6 +137,31 @@ class EventFeedRouterTests(unittest.TestCase):
         self.assertTrue(any("for share" in sql for sql, _ in script.queries))
         self.assertEqual(script.clock_reads, 3)
 
+    def test_identical_request_replay_then_signed_cursor_advance(self):
+        app, request, script = _app()
+        with TestClient(app) as client:
+            first = client.post(PATH, json=request)
+            replay = client.post(PATH, json=request)
+            self.assertEqual(first.status_code, 200, first.text)
+            self.assertEqual(replay.status_code, 200, replay.text)
+            self.assertEqual(replay.json(), first.json())
+            first_page = json.loads(first.json()["pageJson"])
+            self.assertEqual(first_page["nextSequence"], 1)
+            event_digest = first_page["nextEventDigest"]
+            # A signed cursor can advance only with the exact retained head.
+            script.prior = (event_digest,)
+            script.events = []
+            continued = _resign(
+                request, afterSequence=1, priorEventDigest=event_digest,
+            )
+            next_page = client.post(PATH, json=continued)
+            self.assertEqual(next_page.status_code, 200, next_page.text)
+            self.assertEqual(json.loads(next_page.json()["pageJson"])["nextSequence"], 1)
+            wrong_head = _resign(
+                request, afterSequence=1, priorEventDigest="f" * 64,
+            )
+            self.assertNotEqual(client.post(PATH, json=wrong_head).status_code, 200)
+
     def test_ambient_duplicate_oversize_and_substituted_identity_fail(self):
         app, request, _ = _app()
         with TestClient(app) as client:
