@@ -2169,6 +2169,77 @@ Map<String, String> shopConnectedSiteSchemaDefinitionsV25() => {
   ...shopConnectedEnrollmentSchemaDefinitionsV25(),
 };
 
+// Additive v42 objects keep every v1 Ed25519 enrollment byte unchanged.
+// Product enrollment remains disabled until the signed v2 cross-table row
+// verifier and protected Windows signing custody are independently reviewed.
+const shopSiteV2PendingEnrollmentsV42Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_v2_pending_enrollments (
+    client_fingerprint TEXT PRIMARY KEY NOT NULL CHECK (length(client_fingerprint) = 64),
+    nonce TEXT NOT NULL UNIQUE REFERENCES shop_site_pairing_nonces(nonce),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    signing_profile TEXT NOT NULL CHECK (signing_profile = 'p256-sha256-v2'),
+    signing_key_id TEXT NOT NULL CHECK (length(signing_key_id) BETWEEN 1 AND 128),
+    public_key BLOB NOT NULL CHECK (length(public_key) = 65 AND hex(substr(public_key, 1, 1)) = '04'),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+const shopSiteV2EnrollmentEvidenceV42Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_v2_enrollment_evidence (
+    evidence_digest TEXT PRIMARY KEY NOT NULL CHECK (length(evidence_digest) = 64),
+    action TEXT NOT NULL CHECK (action IN ('approve', 'revoke')),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    signing_profile TEXT NOT NULL CHECK (signing_profile = 'p256-sha256-v2'),
+    signing_key_id TEXT NOT NULL CHECK (length(signing_key_id) BETWEEN 1 AND 128),
+    public_key BLOB NOT NULL CHECK (length(public_key) = 65 AND hex(substr(public_key, 1, 1)) = '04'),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    authority_key_id TEXT NOT NULL CHECK (length(authority_key_id) BETWEEN 1 AND 128),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json))
+  )
+''';
+
+const shopSiteDeviceProfilesV42Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_device_profiles_v42 (
+    device_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_devices(device_id),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    client_fingerprint TEXT NOT NULL UNIQUE CHECK (length(client_fingerprint) = 64),
+    signing_profile TEXT NOT NULL CHECK (signing_profile = 'p256-sha256-v2'),
+    signing_key_id TEXT NOT NULL UNIQUE CHECK (length(signing_key_id) BETWEEN 1 AND 128),
+    public_key BLOB NOT NULL CHECK (length(public_key) = 65 AND hex(substr(public_key, 1, 1)) = '04'),
+    approval_digest TEXT NOT NULL REFERENCES shop_site_v2_enrollment_evidence(evidence_digest)
+  )
+''';
+
+Map<String, String> shopConnectedDeviceProfileSchemaDefinitionsV42() => {
+  'shop_site_v2_pending_enrollments': shopSiteV2PendingEnrollmentsV42Sql,
+  'shop_site_v2_enrollment_evidence': shopSiteV2EnrollmentEvidenceV42Sql,
+  'shop_site_device_profiles_v42': shopSiteDeviceProfilesV42Sql,
+  for (final table in const [
+    'shop_site_v2_pending_enrollments',
+    'shop_site_v2_enrollment_evidence',
+    'shop_site_device_profiles_v42',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected v2 enrollment history is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected v2 enrollment history is immutable',
+    ),
+  },
+};
+
 const shopSiteCloudDispositionsV26Sql = '''
   CREATE TABLE IF NOT EXISTS shop_site_cloud_dispositions (
     event_row_id INTEGER PRIMARY KEY NOT NULL REFERENCES shop_site_events(event_row_id),
@@ -5550,7 +5621,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 41) return const {};
+  if (schemaVersion < 5 || schemaVersion > 42) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -6781,7 +6852,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => _testOnlyLegacyCloudFeedV40 ? 40 : 41;
+  int get schemaVersion => _testOnlyLegacyCloudFeedV40 ? 40 : 42;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6841,18 +6912,30 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV39Schema();
       await _createConnectedCloudFeedSchemaV40();
       await _requireUnifiedV40Schema();
-      if (!_testOnlyLegacyCloudFeedV40) await _requireUnifiedV41Schema();
+      if (!_testOnlyLegacyCloudFeedV40) {
+        await _createConnectedDeviceProfileSchemaV42();
+        await _requireUnifiedV42Schema();
+      }
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 41 && !_testOnlyLegacyCloudFeedV40) {
+        await _requireNoDeviceProfileSchemaBeforeV42();
+        await _requireUnifiedV41Schema();
+        await _createConnectedDeviceProfileSchemaV42();
+        await _requireUnifiedV42Schema();
+        return;
+      }
+      await _requireNoDeviceProfileSchemaBeforeV42();
       if (from == 40) {
         await _requireNoCloudFeedSchemaBeforeV41();
         await _requireUnifiedV40Schema();
         await _requireEmptyCloudFeedBeforeV41();
         await _createConnectedCloudFeedSchemaV41();
-        await _requireUnifiedV41Schema();
+        await _createConnectedDeviceProfileSchemaV42();
+        await _requireUnifiedV42Schema();
         return;
       }
       await _requireNoCloudFeedSchemaBeforeV40();
@@ -7317,6 +7400,10 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV39Schema();
       await _createConnectedCloudFeedSchemaV40();
       await _requireUnifiedV40Schema();
+      if (!_testOnlyLegacyCloudFeedV40) {
+        await _createConnectedDeviceProfileSchemaV42();
+        await _requireUnifiedV42Schema();
+      }
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -7324,9 +7411,9 @@ class ShopDatabase extends _$ShopDatabase {
         await _requireUnifiedV40Schema();
       } else if (_testOnlyCloudFeedV41Trust != null ||
           _historicalCloudFeedTrust != null) {
-        await transaction(_requireUnifiedV41Schema);
+        await transaction(_requireUnifiedV42Schema);
       } else {
-        await _requireUnifiedV41Schema();
+        await _requireUnifiedV42Schema();
       }
     },
   );
@@ -7334,8 +7421,8 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> verifyReadyForUse() => _testOnlyLegacyCloudFeedV40
       ? _requireUnifiedV40Schema()
       : _testOnlyCloudFeedV41Trust != null || _historicalCloudFeedTrust != null
-      ? transaction(_requireUnifiedV41Schema)
-      : _requireUnifiedV41Schema();
+      ? transaction(_requireUnifiedV42Schema)
+      : _requireUnifiedV42Schema();
 
   Future<void> verifyConnectedReplicaEvidence() async {
     if (!await _v32ConnectedReplicaRowsValid() ||
@@ -7953,6 +8040,7 @@ class ShopDatabase extends _$ShopDatabase {
     // evidence objects in the same transaction before the v41 beforeOpen.
     if (!_testOnlyLegacyCloudFeedV40) {
       await _createConnectedCloudFeedSchemaV41();
+      await _createConnectedDeviceProfileSchemaV42();
     }
   }
 
@@ -7960,6 +8048,27 @@ class ShopDatabase extends _$ShopDatabase {
     for (final definition
         in shopConnectedCloudFeedSchemaDefinitionsV41().values) {
       await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedDeviceProfileSchemaV42() async {
+    for (final definition
+        in shopConnectedDeviceProfileSchemaDefinitionsV42().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _requireNoDeviceProfileSchemaBeforeV42() async {
+    final names = shopConnectedDeviceProfileSchemaDefinitionsV42().keys
+        .toList();
+    final rows = await customSelect(
+      'SELECT name FROM sqlite_master WHERE name IN (${List.filled(names.length, '?').join(',')})',
+      variables: names.map(Variable<String>.new).toList(),
+    ).get();
+    if (rows.isNotEmpty) {
+      throw StateError(
+        'A pre-v42 Shop database contains device-profile schema.',
+      );
     }
   }
 
@@ -10951,6 +11060,7 @@ class ShopDatabase extends _$ShopDatabase {
       zoneValues: const {
         #shopAllowV40NestedSchemaVerification: true,
         #shopAllowV41NestedSchemaVerification: true,
+        #shopAllowV42NestedSchemaVerification: true,
       },
     );
     final objects = await runZoned(
@@ -10958,6 +11068,7 @@ class ShopDatabase extends _$ShopDatabase {
       zoneValues: const {
         #shopAllowV40NestedSchemaVerification: false,
         #shopAllowV41NestedSchemaVerification: true,
+        #shopAllowV42NestedSchemaVerification: true,
       },
     );
     final definitions = shopConnectedCloudFeedSchemaDefinitionsV40();
@@ -10994,6 +11105,7 @@ class ShopDatabase extends _$ShopDatabase {
       zoneValues: const {
         #shopAllowV40NestedSchemaVerification: false,
         #shopAllowV41NestedSchemaVerification: false,
+        #shopAllowV42NestedSchemaVerification: true,
       },
     );
     final definitions = shopConnectedCloudFeedSchemaDefinitionsV41();
@@ -11045,6 +11157,53 @@ class ShopDatabase extends _$ShopDatabase {
         'mismatches=$mismatches).',
       );
     }
+  }
+
+  Future<void> _requireUnifiedV42Schema() async {
+    await _requireUnifiedV41Schema();
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {#shopAllowV42NestedSchemaVerification: false},
+    );
+    final definitions = shopConnectedDeviceProfileSchemaDefinitionsV42();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    // The first migration milestone is deliberately empty-only. No v2
+    // enrollment may become usable before its signed cross-table verifier,
+    // current revocation and fresh-target restore rules are installed.
+    final rowsValid = await _v42DeviceProfileRowsEmpty();
+    if (!definitionsValid || !rowsValid) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map((entry) => entry.key)
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v42 device profile failed verification '
+        '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<bool> _v42DeviceProfileRowsEmpty() async {
+    for (final table in const [
+      'shop_site_v2_pending_enrollments',
+      'shop_site_v2_enrollment_evidence',
+      'shop_site_device_profiles_v42',
+    ]) {
+      final row = await customSelect('SELECT 1 FROM $table LIMIT 1')
+          .getSingleOrNull();
+      if (row != null) return false;
+    }
+    return true;
   }
 
   Future<bool> _v41HistoricalRowsValid(
@@ -13893,6 +14052,10 @@ class ShopDatabase extends _$ShopDatabase {
       if ((Zone.current[#shopAllowV40NestedSchemaVerification] == true ||
               Zone.current[#shopAllowV41NestedSchemaVerification] == true) &&
           shopConnectedCloudFeedSchemaDefinitionsV41().containsKey(name)) {
+        continue;
+      }
+      if (Zone.current[#shopAllowV42NestedSchemaVerification] == true &&
+          shopConnectedDeviceProfileSchemaDefinitionsV42().containsKey(name)) {
         continue;
       }
       if (objects.containsKey(name)) {

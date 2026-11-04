@@ -4,8 +4,10 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_connected_site_contracts.dart';
 import 'package:supermega_shop/shop_connected_site_enrollment_store.dart';
@@ -117,6 +119,137 @@ void main() {
         () => verify(json: canonicalConnectedSiteJson(altered)),
         throwsFormatException,
       );
+    }
+  });
+
+  test(
+    'empty v41 upgrades to verified v42 and restores on a fresh target',
+    () async {
+      final root = await Directory.systemTemp.createTemp('shop-v42-profile-');
+      final file = File('${root.path}/source.sqlite');
+      final archive = File('${root.path}/verified.smbackup');
+      final restored = File('${root.path}/fresh/shop.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await database.verifyReadyForUse();
+        await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+          database,
+          shopConnectedDeviceProfileSchemaDefinitionsV42(),
+        );
+        await database.customStatement('PRAGMA user_version = 41');
+        await database.close();
+
+        database = ShopDatabase(NativeDatabase(file));
+        await database.verifyReadyForUse();
+        expect(database.schemaVersion, 42);
+        for (final table in const [
+          'shop_site_v2_pending_enrollments',
+          'shop_site_v2_enrollment_evidence',
+          'shop_site_device_profiles_v42',
+        ]) {
+          expect(
+            (await database
+                    .customSelect('SELECT COUNT(*) AS total FROM $table')
+                    .getSingle())
+                .read<int>('total'),
+            0,
+          );
+        }
+        await ShopBackup.exportEncrypted(
+          database: database,
+          archive: archive,
+          password: 'v42-profile-fresh-target',
+          scratchRoot: root,
+        );
+        await database.close();
+        await restored.parent.create(recursive: true);
+        await ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: restored,
+          password: 'v42-profile-fresh-target',
+        );
+        database = ShopDatabase(NativeDatabase(restored));
+        await database.verifyReadyForUse();
+        expect(database.schemaVersion, 42);
+        ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 42);
+      } finally {
+        await database.close();
+        await root.delete(recursive: true);
+      }
+    },
+  );
+
+  test('v42 rejects orphan v2 enrollment evidence at open and backup', () async {
+    final root = await Directory.systemTemp.createTemp('shop-v42-orphan-');
+    final file = File('${root.path}/source.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      await database.verifyReadyForUse();
+      await database.customInsert(
+        'INSERT INTO shop_site_v2_enrollment_evidence '
+        '(evidence_digest, action, tenant_id, site_id, coordinator_device_id, '
+        'device_id, client_fingerprint, signing_profile, signing_key_id, '
+        'public_key, session_generation, observed_at_millis, authority_key_id, '
+        'evidence_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>('a' * 64),
+          const Variable<String>('approve'),
+          const Variable<String>(_tenant),
+          const Variable<String>(_site),
+          const Variable<String>(_coordinator),
+          const Variable<String>(_device),
+          Variable<String>('b' * 64),
+          const Variable<String>('p256-sha256-v2'),
+          const Variable<String>('key-v2'),
+          Variable<Uint8List>(
+            Uint8List.fromList([4, ...List<int>.filled(64, 0)]),
+          ),
+          const Variable<int>(1),
+          const Variable<int>(_now),
+          const Variable<String>('owner-key-1'),
+          const Variable<String>('{}'),
+        ],
+      );
+      await expectLater(database.verifyReadyForUse(), throwsStateError);
+      expect(
+        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42),
+        throwsFormatException,
+      );
+      await database.close();
+      database = ShopDatabase(NativeDatabase(file));
+      await expectLater(database.verifyReadyForUse(), throwsStateError);
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('partial pre-v42 schema rejects upgrade without relabeling source', () async {
+    final root = await Directory.systemTemp.createTemp('shop-v42-partial-');
+    final file = File('${root.path}/source.sqlite');
+    var database = ShopDatabase(NativeDatabase(file));
+    try {
+      await database.verifyReadyForUse();
+      await dropHistoricalShopSchemaDefinitionGroupInDatabase(
+        database,
+        shopConnectedDeviceProfileSchemaDefinitionsV42(),
+      );
+      await database.customStatement(
+        shopConnectedDeviceProfileSchemaDefinitionsV42()['shop_site_v2_pending_enrollments']!,
+      );
+      await database.customStatement('PRAGMA user_version = 41');
+      await database.close();
+      database = ShopDatabase(NativeDatabase(file));
+      await expectLater(database.verifyReadyForUse(), throwsStateError);
+      final raw = sqlite.sqlite3.open(file.path);
+      try {
+        expect(raw.userVersion, 41);
+      } finally {
+        raw.close();
+      }
+    } finally {
+      await database.close();
+      await root.delete(recursive: true);
     }
   });
 
@@ -331,7 +464,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 41);
+      expect(database.schemaVersion, 42);
       for (final table in const [
         'shop_site_pairing_nonces',
         'shop_site_pending_enrollments',

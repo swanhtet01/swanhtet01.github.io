@@ -449,6 +449,7 @@ void _downgradeEmptyV18ToV17(File store) {
   final connection = sqlite3.open(store.path);
   try {
     for (final definitions in [
+      shopConnectedDeviceProfileSchemaDefinitionsV42(),
       shopConnectedCloudFeedSchemaDefinitionsV41(),
       shopConnectedCloudFeedSchemaDefinitionsV40(),
       shopConnectedTrustedTimeClientSchemaDefinitionsV39(),

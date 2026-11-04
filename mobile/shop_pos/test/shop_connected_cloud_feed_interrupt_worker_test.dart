@@ -201,7 +201,7 @@ Future<void> _runSignedV41Phase(String phase, File file, File marker) async {
   if (phase.startsWith('v41_verify_')) {
     ShopBackup.verifySnapshot(
       file,
-      expectedSchemaVersion: 41,
+      expectedSchemaVersion: 42,
       testOnlyCloudFeedV41Trust: trust,
     );
   }
@@ -391,7 +391,7 @@ Future<void> _runSignedV41Phase(String phase, File file, File marker) async {
   }
   ShopBackup.verifySnapshot(
     file,
-    expectedSchemaVersion: 41,
+    expectedSchemaVersion: 42,
     testOnlyCloudFeedV41Trust: trust,
   );
 }

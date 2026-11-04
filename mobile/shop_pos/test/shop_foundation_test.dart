@@ -5087,6 +5087,7 @@ void main() {
 
 Future<void> _dropV16MemberSchema(ShopDatabase database) async {
   for (final definitions in [
+    shopConnectedDeviceProfileSchemaDefinitionsV42(),
     shopConnectedCloudFeedSchemaDefinitionsV41(),
     shopConnectedCloudFeedSchemaDefinitionsV40(),
     shopConnectedTrustedTimeClientSchemaDefinitionsV39(),

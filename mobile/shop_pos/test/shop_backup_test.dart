@@ -334,7 +334,7 @@ void main() {
       final upgraded = ShopDatabase(NativeDatabase(snapshot));
       try {
         await upgraded.verifyReadyForUse();
-        expect(upgraded.schemaVersion, 41);
+        expect(upgraded.schemaVersion, ShopBackup.supportedSchemaVersion);
         expect(await upgraded.countSales(), salesBefore);
         expect(await upgraded.countStockMovements(), stockBefore);
         expect(await upgraded.countOutboxOperations(), outboxBefore);
@@ -5173,6 +5173,7 @@ void _removeV14AuthorizationProofsForLegacyFixture(Database connection) {
 
 void _removeV17CorrectionConsumptionObjects(Database connection) {
   for (final definitions in [
+    shopConnectedDeviceProfileSchemaDefinitionsV42(),
     shopConnectedCloudFeedSchemaDefinitionsV41(),
     shopConnectedCloudFeedSchemaDefinitionsV40(),
     shopConnectedTrustedTimeClientSchemaDefinitionsV39(),

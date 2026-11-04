@@ -687,7 +687,7 @@ void main() {
       approval.observedAtMillis,
     );
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42),
       returnsNormally,
     );
     final preRevocationFile = File('${root.path}/pre-revocation.sqlite');
@@ -706,7 +706,7 @@ void main() {
     await database.verifyReadyForUse();
     await database.close();
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42),
       returnsNormally,
     );
     database = ShopDatabase(NativeDatabase(file));
@@ -1335,7 +1335,7 @@ void main() {
       await twoPageFile.copy(destination.path);
       ShopBackup.verifySnapshot(
         destination,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       );
       return;
@@ -1525,7 +1525,7 @@ void main() {
     for (final clientFile in [onlineFile, offlineFile]) {
       ShopBackup.verifySnapshot(
         clientFile,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       );
     }
@@ -1703,7 +1703,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         contendedFile,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       returnsNormally,
@@ -1779,7 +1779,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         twoPageFile,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       returnsNormally,
@@ -1955,7 +1955,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         twoPageRestoredFile,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       returnsNormally,
@@ -2211,13 +2211,13 @@ void main() {
       );
       expect(
         () =>
-            ShopBackup.verifySnapshot(pageGateFile, expectedSchemaVersion: 41),
+            ShopBackup.verifySnapshot(pageGateFile, expectedSchemaVersion: 42),
         throwsFormatException,
       );
       expect(
         () => ShopBackup.verifySnapshot(
           pageGateFile,
-          expectedSchemaVersion: 41,
+          expectedSchemaVersion: 42,
           historicalCloudFeedTrustSource: source,
         ),
         returnsNormally,
@@ -2354,7 +2354,7 @@ void main() {
     }
     await rollbackDatabase.close();
     expect(
-      () => ShopBackup.verifySnapshot(rollbackFile, expectedSchemaVersion: 41),
+      () => ShopBackup.verifySnapshot(rollbackFile, expectedSchemaVersion: 42),
       returnsNormally,
     );
     final raceFile = await preRevocationFile.copy('${root.path}/race.sqlite');
@@ -2455,7 +2455,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         raceFile,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       returnsNormally,
@@ -2473,7 +2473,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         advancingFile,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       returnsNormally,
@@ -2542,7 +2542,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         delayedFile,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       returnsNormally,
@@ -2640,7 +2640,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         preRevocationFile,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       returnsNormally,
@@ -2768,7 +2768,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         file,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedPinnedKeys: {'feed_fixture': feedPublic},
       ),
       throwsFormatException,
@@ -2789,7 +2789,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         file,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       returnsNormally,
@@ -2821,7 +2821,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         missingHistory,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       throwsFormatException,
@@ -2844,7 +2844,7 @@ void main() {
     expect(
       () => ShopBackup.verifySnapshot(
         file,
-        expectedSchemaVersion: 41,
+        expectedSchemaVersion: 42,
         testOnlyCloudFeedV41Trust: trust,
       ),
       throwsFormatException,
@@ -3921,7 +3921,7 @@ void main() {
       final file = File('${directory.path}/shop.sqlite');
       final database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 41);
+      expect(database.schemaVersion, 42);
       final evidenceColumns = await database
           .customSelect(
             'PRAGMA table_info(shop_connected_cloud_feed_page_evidence)',
@@ -3941,7 +3941,7 @@ void main() {
         }),
       );
       await database.close();
-      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42);
     },
   );
 
@@ -3965,7 +3965,7 @@ void main() {
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 41);
+      expect(database.schemaVersion, 42);
       final rows = await database
           .customSelect(
             'SELECT COUNT(*) AS total FROM shop_connected_cloud_feed_streams',
@@ -3973,7 +3973,7 @@ void main() {
           .getSingle();
       expect(rows.read<int>('total'), 0);
       await database.close();
-      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42);
     },
   );
 
@@ -3994,7 +3994,7 @@ void main() {
 
     final database = ShopDatabase(NativeDatabase(file));
     await database.verifyReadyForUse();
-    expect(database.schemaVersion, 41);
+    expect(database.schemaVersion, 42);
     final evidence = await database
         .customSelect(
           'SELECT COUNT(*) AS total FROM shop_connected_cloud_feed_page_evidence',
@@ -4009,14 +4009,14 @@ void main() {
       scratchRoot: directory,
     );
     await database.close();
-    ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
+    ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42);
     final restored = File('${directory.path}/restored.sqlite');
     await ShopBackup.restoreIntoEmptyDatabase(
       archive: archive,
       target: restored,
       password: 'synthetic-v41-restore-only',
     );
-    ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 41);
+    ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 42);
     final reopened = ShopDatabase(NativeDatabase(restored));
     await reopened.verifyReadyForUse();
     await reopened.close();
@@ -4138,7 +4138,7 @@ void main() {
       raw.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42),
       throwsFormatException,
     );
     database = ShopDatabase(NativeDatabase(file));

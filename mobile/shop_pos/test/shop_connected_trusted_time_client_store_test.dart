@@ -44,7 +44,7 @@ void main() {
 
     database = ShopDatabase(NativeDatabase(file));
     await database.verifyReadyForUse();
-    expect(database.schemaVersion, 41);
+    expect(database.schemaVersion, 42);
     final rows = await database
         .customSelect(
           'SELECT COUNT(*) AS total FROM shop_connected_time_client_heads',
@@ -162,7 +162,7 @@ void main() {
       );
       await database.close();
 
-      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
+      ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42);
       await ShopDatabase.migrateAndVerifyRestoreFile(file);
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
@@ -209,7 +209,7 @@ void main() {
       enabled: true,
     ).persist(entry: entry, acknowledgement: _ack(entry));
     await database.close();
-    ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
+    ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42);
     final raw = sqlite.sqlite3.open(file.path);
     try {
       raw.execute('DROP TRIGGER shop_connected_time_client_entries_no_update');
@@ -220,7 +220,7 @@ void main() {
       raw.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42),
       throwsFormatException,
     );
     await directory.delete(recursive: true);
@@ -279,7 +279,7 @@ void main() {
         raw.close();
       }
       expect(
-        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42),
         throwsFormatException,
       );
       await directory.delete(recursive: true);

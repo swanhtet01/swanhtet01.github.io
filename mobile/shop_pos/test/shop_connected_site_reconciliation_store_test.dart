@@ -515,7 +515,7 @@ void main() {
       await expectLater(database.verifyReadyForUse(), throwsStateError);
       await database.close();
       expect(
-        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+        () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42),
         throwsA(anything),
       );
     } finally {
@@ -912,7 +912,7 @@ void main() {
         await database.verifyReadyForUse();
         final snapshot = File('${root.path}/revoked-snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
-        ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 41);
+        ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 42);
         await expectLater(
           ShopConnectedSiteReconciliationStore(
             database: database,

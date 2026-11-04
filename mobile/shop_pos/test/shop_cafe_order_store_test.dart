@@ -1969,7 +1969,7 @@ void main() {
           } on Object catch (error, stack) {
             fail('v$origin migration failed: $error\n$stack');
           }
-          expect(database.schemaVersion, 41);
+          expect(database.schemaVersion, 42);
           expect(await database.countSales(), origin == 18 ? 1 : 0);
           final products = await database.readActiveProducts();
           expect(products, origin == 18 ? hasLength(1) : isEmpty);

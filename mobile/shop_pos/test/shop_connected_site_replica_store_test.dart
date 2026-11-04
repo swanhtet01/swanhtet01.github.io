@@ -870,7 +870,7 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final file = File('${directory.path}/tampered.sqlite');
     await database.exportVerifiedLocalSnapshot(file);
-    ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41);
+    ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42);
     final raw = sqlite.sqlite3.open(file.path);
     try {
       raw.execute('DROP TRIGGER shop_connected_replica_deliveries_no_update');
@@ -881,7 +881,7 @@ void main() {
       raw.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 41),
+      () => ShopBackup.verifySnapshot(file, expectedSchemaVersion: 42),
       throwsFormatException,
     );
   });
@@ -1101,7 +1101,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 41);
+    expect(migrated.schemaVersion, 42);
     await migrated.verifyConnectedReplicaEvidence();
   });
 
@@ -1235,7 +1235,7 @@ void main() {
     final migrated = ShopDatabase(NativeDatabase(file));
     addTearDown(migrated.close);
     await migrated.verifyReadyForUse();
-    expect(migrated.schemaVersion, 41);
+    expect(migrated.schemaVersion, 42);
     expect(
       await migrated
           .customSelect(

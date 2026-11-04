@@ -66,7 +66,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 41;
+  static const supportedSchemaVersion = 42;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -2039,6 +2039,9 @@ abstract final class ShopBackup {
     final cloudFeedEvidenceDefinitions = schemaVersion >= 41
         ? shopConnectedCloudFeedSchemaDefinitionsV41()
         : const <String, String>{};
+    final deviceProfileDefinitions = schemaVersion >= 42
+        ? shopConnectedDeviceProfileSchemaDefinitionsV42()
+        : const <String, String>{};
     final connectedSiteExact =
         schemaVersion < 23 ||
         _snapshotDefinitionGroupExact(
@@ -2066,7 +2069,8 @@ abstract final class ShopBackup {
             schemaVersion == 38 ||
             schemaVersion == 39 ||
             schemaVersion == 40 ||
-            schemaVersion == 41) &&
+            schemaVersion == 41 ||
+            schemaVersion == 42) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -2165,6 +2169,13 @@ abstract final class ShopBackup {
                   cloudFeedEvidenceDefinitions,
                   cloudFeedEvidenceDefinitions.keys.toSet(),
                 ))) &&
+        (schemaVersion < 42 ||
+            (_v42DeviceProfileRowsEmpty(connection) &&
+                _snapshotDefinitionGroupExact(
+                  objects,
+                  deviceProfileDefinitions,
+                  deviceProfileDefinitions.keys.toSet(),
+                ))) &&
         (schemaVersion < 31 ||
             _snapshotDefinitionGroupExact(
               objects,
@@ -2225,6 +2236,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 39) trustedTimeClientDefinitions,
           if (schemaVersion >= 40) cloudFeedDefinitions,
           if (schemaVersion >= 41) cloudFeedEvidenceDefinitions,
+          if (schemaVersion >= 42) deviceProfileDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -2250,6 +2262,7 @@ abstract final class ShopBackup {
           if (schemaVersion >= 39) ...trustedTimeClientDefinitions.keys,
           if (schemaVersion >= 40) ...cloudFeedDefinitions.keys,
           if (schemaVersion >= 41) ...cloudFeedEvidenceDefinitions.keys,
+          if (schemaVersion >= 42) ...deviceProfileDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
@@ -3680,6 +3693,23 @@ abstract final class ShopBackup {
         devices: rows('shop_site_devices'),
         requestNonces: rows('shop_site_request_nonces'),
       );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v42DeviceProfileRowsEmpty(Database connection) {
+    try {
+      for (final table in const [
+        'shop_site_v2_pending_enrollments',
+        'shop_site_v2_enrollment_evidence',
+        'shop_site_device_profiles_v42',
+      ]) {
+        if (connection.select('SELECT 1 FROM $table LIMIT 1').isNotEmpty) {
+          return false;
+        }
+      }
+      return true;
     } on Object {
       return false;
     }
