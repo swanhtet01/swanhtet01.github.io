@@ -1,0 +1,16 @@
+{
+  "contract": "supermega.postgres17-official-registry-policy.v1",
+  "policyId": "postgres17-official-runtime-sources-v1-pending-review",
+  "status": "pending",
+  "testOnly": false,
+  "requiredComponents": ["python", "psycopg", "psycopg_binary", "openssl", "node", "git"],
+  "artifacts": [],
+  "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
+  "blockers": [
+    "Exact Python, pure psycopg, psycopg_binary, Node and Git artifact locations, versions, platform tags, byte sizes and digests are not yet retained; no value may be invented from a URL or version string.",
+    "Python is limited to either an exact official python.org Windows artifact with retained and freshly reproduced Authenticode evidence, or an exact actions/python-versions Windows x64 toolcache release whose GitHub release metadata, asset digest and pinned setup-python action SHA are retained and independently reviewed. Node, Git and the PostgreSQL parent bundle still require exact official Windows Authenticode artifacts; Psycopg requires parsed non-yanked PyPI release JSON with exact wheel tags.",
+    "OpenSSL must be an exact member of the one freshly authenticated primary EDB PostgreSQL bundle, with a complete traversal-safe entry manifest and exact member digest; an unused alternate bundle or unofficial standalone Windows binary is forbidden.",
+    "Retained metadata, signature/verification observations and two distinct independent approvals are not yet committed and hashed.",
+    "A URL or digest by itself is intentionally insufficient for production source authentication."
+  ]
+}

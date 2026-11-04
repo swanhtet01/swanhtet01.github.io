@@ -47,6 +47,10 @@ on Windows. Do not remove that gate until one reviewed profile binds the exact
 archive to every executed PostgreSQL binary and loaded dependency, plus the
 approved Python, Psycopg, and OpenSSL artifacts. Linux remains unsupported; a
 version string or caller-provided path is not equivalent provenance.
+The legacy launcher is now only a compatibility shim into the canonical Node
+recorder. Its `--preflight` path verifies the complete source-controlled
+toolchain profile and never probes caller-selected Python or PostgreSQL binaries;
+the Python runner's direct preflight flag fails closed.
 
 The historical reviewed Windows profile expects PostgreSQL 17.10-2 with matching
 `psql`, `pg_dump`, and `pg_restore`, Psycopg 3, and OpenSSL. Its archive remains at

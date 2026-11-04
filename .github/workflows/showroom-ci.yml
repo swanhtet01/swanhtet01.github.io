@@ -78,6 +78,11 @@ jobs:
           SUPERMEGA_TEST_DISPOSABLE_PG17: '1'
         run: uv run --frozen --group test python -m unittest tests.test_self_serve_durable_budget -v
 
+      - name: Verify connected upload replay on disposable PostgreSQL
+        env:
+          SUPERMEGA_TEST_DISPOSABLE_PG17: '1'
+        run: uv run --frozen --group test python -m unittest tests.test_connected_site_postgres17 -v
+
       - name: Install migration verifier
         run: npm ci --ignore-scripts
 
@@ -86,6 +91,7 @@ jobs:
           node --test tools/prepare_release_integration_batch.test.mjs
           node --test tools/run_app_verify_annotation.test.mjs
           python tools/validate_supermega_database_url.py --self-test
+          node --test tools/verify_migration_verifier_runtime_contract.test.mjs
           node tools/verify_private_trial_migrations.mjs
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs

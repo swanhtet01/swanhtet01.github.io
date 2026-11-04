@@ -37,6 +37,7 @@ async function currentLedger() {
     recordedAt: databaseEvidence.recordedAt, implementationCommit: databaseEvidence.implementationCommit,
     implementationTree: databaseEvidence.implementationTree, implementation: databaseImplementation,
     archive: { bytes: databaseEvidence.engine.archiveBytes, sha256: databaseEvidence.engine.observedArchiveSha256 },
+    toolchain: databaseEvidence.engine.toolchain,
   })
   if (JSON.stringify(rebuilt) !== JSON.stringify(databaseEvidence)) throw new Error('managed_pilot_readiness_raw_database_mismatch')
   return buildManagedPilotReadiness({

@@ -104,6 +104,7 @@ jobs:
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           uv run --frozen --group test python -m unittest discover -s tests -p 'test_*.py' -v
           uv run --frozen --group test python tools/validate_supermega_database_url.py --self-test
+          node --test tools/verify_migration_verifier_runtime_contract.test.mjs
           node tools/verify_private_trial_migrations.mjs
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs

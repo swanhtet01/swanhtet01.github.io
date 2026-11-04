@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_database.dart';
 
+import 'historical_shop_fixture_support.dart';
 import 'managed_staff_test_support.dart';
 
 import 'package:supermega_shop/shop_models.dart';
@@ -17,6 +18,55 @@ const _testKeyId = 'shop-export-test-2026';
 const _testPublicKey = 'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
 
 void main() {
+  test('historical schema inventory rejects retained newer objects', () {
+    final raw = sqlite3.openInMemory();
+    try {
+      requireNoPostV15SchemaObjects(raw);
+      raw.execute('CREATE TABLE shop_members (id TEXT PRIMARY KEY)');
+      expect(
+        () => requireNoPostV15SchemaObjects(raw),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('table:shop_members'),
+          ),
+        ),
+      );
+      raw.execute('DROP TABLE shop_members');
+      raw.execute(
+        'CREATE VIEW unexpected_historical_view AS SELECT 1 AS value',
+      );
+      expect(
+        () => requireNoPostV15SchemaObjects(raw),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('view:unexpected_historical_view'),
+          ),
+        ),
+      );
+    } finally {
+      raw.close();
+    }
+  });
+
+  test(
+    'historical schema inventory tracks the current database version',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        expect(
+          database.schemaVersion,
+          historicalShopFixtureSupportedSchemaVersion,
+        );
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
   test('closed-shift snapshot reads linked sale, line, movement and totals without mutation', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
@@ -136,6 +186,7 @@ void main() {
       final raw = sqlite3.open(snapshotFile.path);
       try {
         _removePostV15SchemaObjects(raw);
+        requireNoPostV15SchemaObjects(raw);
         raw.execute('PRAGMA user_version = 15');
       } finally {
         raw.close();
@@ -147,7 +198,7 @@ void main() {
       final memberToken = _memberToken(17);
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 22);
+        expect(database.schemaVersion, 42);
         final storeRef = await database.readStoreRef();
         await _seedPseudonymousMember(
           database,
@@ -492,6 +543,55 @@ Future<ShopCorrectionAuthorization> _authorization({
 }
 
 void _removePostV15SchemaObjects(Database connection) {
+  for (final definitions in [
+    shopConnectedDeviceProfileSchemaDefinitionsV42(),
+    shopConnectedCloudFeedSchemaDefinitionsV41(),
+    shopConnectedCloudFeedSchemaDefinitionsV40(),
+    shopConnectedTrustedTimeClientSchemaDefinitionsV39(),
+    shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+    shopConnectedTrustedTimeSchemaDefinitionsV37(),
+    shopConnectedAuthorityCheckpointSchemaDefinitionsV36(),
+    shopConnectedCloudProofSchemaDefinitionsV35(),
+    shopConnectedReplicaSchemaDefinitionsV33(),
+    shopConnectedReplicaSchemaDefinitionsV32(),
+    shopConnectedReservationSessionSchemaDefinitionsV31(),
+    shopConnectedAuthorityPayloadSchemaDefinitionsV30(),
+  ]) {
+    for (final definition in definitions.entries.toList().reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      connection.execute(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
+  }
+  for (final definition
+      in shopConnectedEnvelopeSchemaDefinitionsV29().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedSiteSchemaDefinitionsV28().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
   for (final definition
       in shopPendingCashCheckoutSchemaDefinitionsV21().entries

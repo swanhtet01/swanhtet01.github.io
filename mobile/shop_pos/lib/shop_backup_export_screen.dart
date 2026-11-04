@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import 'shop_backup.dart';
 import 'shop_copy.dart';
+import 'shop_installed_qa_selectors.dart';
 import 'shop_database.dart';
 import 'shop_qa_evidence_store.dart';
 import 'shop_runtime_scope.dart';
@@ -138,8 +139,23 @@ class ShopBackupExportScreen extends StatefulWidget {
 class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
+  final _scroll = ScrollController();
   bool _busy = false;
   String? _message;
+
+  void _showValidationMessage(String message) {
+    setState(() => _message = message);
+    // The message follows the Save As button in a lazy ListView. On a short
+    // window it otherwise exists below the viewport with no visible feedback.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   Future<String?> _saveAs(File archive, String suggestedName) {
     final runtimeScope = widget.runtimeScope;
@@ -162,34 +178,34 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   Future<void> _export() async {
     if (_busy) return;
     if (!widget.backupSavingAllowed) {
-      setState(() {
-        _message = shopCopy(
+      _showValidationMessage(
+        shopCopy(
           widget.myanmar,
           'External backup files are unavailable in this synthetic preview.',
           'ဤစမ်းသပ်မြင်ကွင်းတွင် ပြင်ပအရန်ကူးဖိုင်များ အသုံးပြု၍မရပါ။',
-        );
-      });
+        ),
+      );
       return;
     }
     final password = _password.text;
     if (password.runes.length < 12) {
-      setState(() {
-        _message = shopCopy(
+      _showValidationMessage(
+        shopCopy(
           widget.myanmar,
           'Use a password of at least 12 characters.',
           'စကားဝှက်ကို အနည်းဆုံး စာလုံး ၁၂ လုံး သုံးပါ။',
-        );
-      });
+        ),
+      );
       return;
     }
     if (password != _confirmation.text) {
-      setState(() {
-        _message = shopCopy(
+      _showValidationMessage(
+        shopCopy(
           widget.myanmar,
           'The passwords do not match.',
           'စကားဝှက်နှစ်ခု မတူပါ။',
-        );
-      });
+        ),
+      );
       return;
     }
 
@@ -264,6 +280,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   void dispose() {
     _password.dispose();
     _confirmation.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -280,6 +297,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
           child: ListView(
+            controller: _scroll,
             padding: const EdgeInsets.all(20),
             children: [
               Text(
@@ -291,11 +309,59 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
+              Semantics(
+                header: true,
+                child: Text(
+                  shopCopy(widget.myanmar, 'What is saved', 'သိမ်းဆည်းမည့်အရာ'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 4),
               Text(
                 shopCopy(
                   widget.myanmar,
-                  'Includes sales, photos and payment settings. Keep the file and password safe. Online backup is not available. Restore this encrypted file from the start screen when this device has no local Shop yet.',
-                  'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။ ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။ ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။',
+                  'Includes sales, photos and payment settings.',
+                  'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။',
+                ),
+              ),
+              const SizedBox(height: 16),
+              Semantics(
+                header: true,
+                child: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Keep it safe',
+                    'လုံခြုံစွာ သိမ်းပါ',
+                  ),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Keep the file and password safe. Online backup is not available.',
+                  'ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။',
+                ),
+              ),
+              const SizedBox(height: 16),
+              Semantics(
+                header: true,
+                child: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Restore boundary',
+                    'ပြန်လည်ရယူနိုင်သည့် အခြေအနေ',
+                  ),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Restore this encrypted file from the start screen when this device has no local Shop yet.',
+                  'ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။',
                 ),
               ),
               const SizedBox(height: 24),
@@ -312,7 +378,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                     'အရန်ကူးစကားဝှက်',
                   ),
                 ),
-              ),
+              ).withInstalledQaIdentifier('shop.backup.password'),
               const SizedBox(height: 12),
               TextField(
                 controller: _confirmation,
@@ -327,7 +393,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                     'စကားဝှက်ကို ထပ်မံရိုက်ထည့်ပါ',
                   ),
                 ),
-              ),
+              ).withInstalledQaIdentifier('shop.backup.password-confirm'),
               const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: !widget.backupSavingAllowed || _busy
@@ -353,7 +419,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                               : 'သိမ်းမည့်နေရာ ရွေးပါ',
                         ),
                 ),
-              ),
+              ).withInstalledQaIdentifier('shop.backup.export'),
               if (_message != null) ...[
                 const SizedBox(height: 16),
                 Semantics(liveRegion: true, child: Text(_message!)),

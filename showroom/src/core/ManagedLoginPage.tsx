@@ -72,6 +72,7 @@ export function ManagedLoginPage() {
   const managedReady = runtime.status === 'enterprise' && managedTrialAuthConfigured()
   const signupPolicy = runtime.status !== 'checking' && managedTrialAuthConfigured() ? runtime.signupPolicy : null
   const [creatingAccount, setCreatingAccount] = useState(false)
+  const accountCreationActive = creatingAccount && !reviewReturnPath && !publicPortalEntry
   const [confirmation, setConfirmation] = useState('')
   const [acceptedTermsVersion, setAcceptedTermsVersion] = useState('')
   const [sentRequest, setSentRequest] = useState<{ email: string; termsVersion: string } | null>(null)
@@ -132,7 +133,7 @@ export function ManagedLoginPage() {
 
   async function requestAccount(event?: FormEvent) {
     event?.preventDefault()
-    if (!signupPolicy || reviewReturnPath || busy || accountRequestPending.current || Date.now() < cooldownUntil) return
+    if (!signupPolicy || reviewReturnPath || publicPortalEntry || busy || accountRequestPending.current || Date.now() < cooldownUntil) return
     const termsVersion = sentRequest?.termsVersion ?? acceptedTermsVersion
     if (termsVersion !== signupPolicy.termsVersion) {
       setNoticeTone('error')
@@ -335,8 +336,8 @@ export function ManagedLoginPage() {
   }
 
   return (
-    <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
-      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? publicPortalEntry && shopAccessIntent ? 'For existing assigned pilot accounts. Native Shop is installed separately during assisted setup.' : 'Sign in to your workspace.' : ''} />
+    <div className={`workspace-screen managed-login-screen${accountCreationActive ? ' signup-entry-screen' : ''}`}>
+      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : accountCreationActive ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : accountCreationActive ? 'Confirm your email first. Company access is a separate step.' : managedReady ? publicPortalEntry && shopAccessIntent ? 'For existing assigned pilot accounts. Native Shop is installed separately during assisted setup.' : 'Sign in to your workspace.' : ''} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
@@ -345,7 +346,7 @@ export function ManagedLoginPage() {
           <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
         </div>
         {notice ? <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p> : null}
-      </section> : creatingAccount && !reviewReturnPath ? <form aria-label="Create company account" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void requestAccount(event)}>
+      </section> : accountCreationActive ? <form aria-label="Create company account" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void requestAccount(event)}>
         {!signupPolicy ? <p role="status">New account creation is not open. Sign in or request assisted setup.</p> : <>
           <h2>{sentRequest ? 'Check your email.' : 'Your work account'}</h2>
           {sentRequest ? null : <>

@@ -271,7 +271,7 @@ function workflowDefaultRunShells(workflow) {
 
 const workflowTuples = Object.freeze([
   { platform: 'android', profile: 'production', build: 'flutter build apk --debug --no-pub --flavor production' },
-  { platform: 'android', profile: 'synthetic_qa_v1', build: 'flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'app-qa-debug.apk', inspection: ['android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"', 'test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"', 'analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"', 'test -x "$analyzer"', 'manifest application-id app-qa-debug.apk', 'dev.supermega.supermega_shop.qa', 'manifest print app-qa-debug.apk', 'xml.etree.ElementTree', 'findall("application")', 'android + "label"', 'Shop QA', '"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1"', '"dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1"', '"dev.supermega.shop.qa.scopedEncryptedRestore": "true"', '"dev.supermega.shop.qa.scopedSyntheticExport": "true"', '"dev.supermega.shop.qa.generalExternalFileAccess": "false"', 'len(metadata) == len(items)', 'all(metadata.get(key) == value for key, value in expected.items())', 'shop_android_qa_identity_or_capability_mismatch'] },
+  { platform: 'android', profile: 'synthetic_qa_v1', build: 'flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'app-qa-debug.apk', inspection: ['android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"', 'test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"', 'analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"', 'test -x "$analyzer"', 'manifest application-id app-qa-debug.apk', 'dev.supermega.supermega_shop.qa', 'manifest print app-qa-debug.apk', 'xml.etree.ElementTree', 'findall("application")', 'android + "label"', 'Shop QA', '"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1"', '"dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1"', '"dev.supermega.shop.qa.scopedEncryptedRestore": "true"', '"dev.supermega.shop.qa.scopedSyntheticExport": "true"', '"dev.supermega.shop.qa.generalExternalFileAccess": "false"', 'len(metadata) == len(items)', 'all(metadata.get(key) == value for key, value in expected.items())', 'shop_android_qa_identity_or_capability_mismatch', 'app-qa-debug.apk.identity.json'], signingInspection: ['apksigner" verify --verbose --print-certs app-qa-debug.apk', 'certificate SHA-256 digest:', 'app-qa-debug.apk.signing.json'], toolchain: 'flutter --version --machine > app-qa-debug.apk.toolchain.json' },
   { platform: 'ios', profile: 'production', build: 'flutter build ios --debug --no-codesign --no-pub' },
   { platform: 'ios', profile: 'synthetic_qa_v1', build: 'flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'Runner.app.zip', inspection: ["info='build/ios/iphoneos/Runner.app/Info.plist'", 'Print :CFBundleIdentifier', 'dev.supermega.supermegaShop.qa', 'Print :CFBundleDisplayName', 'Print :CFBundleName', 'Shop QA'], signingInspection: ['codesign -dv --verbose=4', 'code object is not signed at all', 'shop_ios_qa_unexpected_signature', 'Runner.app.zip.signing.json'], package: 'ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "${{ github.workspace }}/Runner.app.zip"', toolchain: 'flutter --version --machine > Runner.app.zip.toolchain.json' },
   { platform: 'windows', profile: 'production', build: 'flutter build windows --release --no-pub' },
@@ -357,22 +357,15 @@ function qaWorkflowBlockers(workflow) {
     const inspectedBeforeChecksum = Boolean(inspectionStep && packageStep && checksumStep
       && signingInspectionStep
       && inspectionStep.index <= packageStep.index
-      && signingInspectionStep.index <= packageStep.index
-      && packageStep.index < checksumStep.index)
+      && packageStep.index < checksumStep.index
+      && signingInspectionStep.index < checksumStep.index)
     const windowsCanonicalChecksum = tuple.platform !== 'windows' || laterSteps.some(step => requiredStepIsUnconditional(step)
       && step.run.includes(`$artifact = '${tuple.artifact}'`)
       && step.run.includes('"$digest  $artifact"')
       && step.run.includes('if ($recorded -cne $expected)'))
-    const manifestCommand = `node tools/write_shop_qa_artifact_manifest.mjs --platform ${tuple.platform} --artifact ${tuple.artifact} --checksum ${tuple.artifact}.sha256 --toolchain ${tuple.artifact}.toolchain.json --signing ${tuple.artifact}.signing.json --output ${tuple.artifact}.manifest`
-    const metadataStep = tuple.platform === 'android'
-      ? laterSteps.find(step => requiredStepIsUnconditional(step) && executableCommands(step.run).some(command => (
-        command.includes('source-sha=${{ github.sha }}')
-          && /promotion-ineligible/i.test(command)
-          && new RegExp(`(?:cat|Get-Content)\\s+${artifact}\\.sha256`, 'i').test(command)
-          && new RegExp(`(?:>\\s*|Out-File\\s+)${artifact}\\.manifest$`, 'i').test(command)
-      )))
-      : laterSteps.find(step => requiredStepIsUnconditional(step)
-        && executableCommands(step.run).some(command => command === manifestCommand))
+    const manifestCommand = `node tools/write_shop_qa_artifact_manifest.mjs --platform ${tuple.platform} --artifact ${tuple.artifact} --checksum ${tuple.artifact}.sha256 --toolchain ${tuple.artifact}.toolchain.json --signing ${tuple.artifact}.signing.json${tuple.platform === 'android' ? ` --identity ${tuple.artifact}.identity.json` : ''} --output ${tuple.artifact}.manifest`
+    const metadataStep = laterSteps.find(step => requiredStepIsUnconditional(step)
+      && executableCommands(step.run).some(command => command === manifestCommand))
     const metadata = Boolean(metadataStep)
     const upload = laterSteps.find(step => /^actions\/upload-artifact@(?:v4(?:\.\d+\.\d+)?|[0-9a-f]{40})$/.test(step.uses)
       && requiredStepIsUnconditional(step)
@@ -383,11 +376,11 @@ function qaWorkflowBlockers(workflow) {
       && exactArtifactEntries(step.artifactPath).has(tuple.artifact)
       && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.sha256`)
       && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.manifest`)
-      && (tuple.platform === 'android' || (
-        exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.toolchain.json`)
-        && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.signing.json`)
-      )))
-    const orderedBinding = tuple.platform === 'android' || Boolean(
+      && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.toolchain.json`)
+      && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.signing.json`)
+      && (tuple.platform !== 'android'
+        || exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.identity.json`)))
+    const orderedBinding = Boolean(
       checksumStep && toolchainStep && metadataStep && upload
       && checksumStep.index < toolchainStep.index
       && toolchainStep.index < metadataStep.index
@@ -663,6 +656,7 @@ export function assessShopQaIsolationContract({ sources }) {
     'HEAD:mobile/shop_pos',
     'shop_qa_manifest_checksum_invalid',
     'shop_qa_manifest_github_sha_mismatch',
+    'android_debug',
     'ios_no_codesign',
     'windows_unsigned',
     'signingEvidence.productionSigned !== false',

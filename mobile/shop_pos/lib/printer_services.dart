@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/painting.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -224,6 +226,293 @@ typedef ReceiptPrintSender = Future<void> Function(
   bool myanmar,
 );
 
+/// A redacted receipt-capture receipt for the isolated synthetic QA profile.
+///
+/// It contains only digests and a repeat count. Product, member, payment and
+/// receipt values never leave the private application storage through this
+/// contract. It is evidence that the same immutable receipt was rendered
+/// again, not evidence that paper was printed.
+class ShopQaLoopbackReceiptCapture {
+  const ShopQaLoopbackReceiptCapture({
+    required this.receiptBindingSha256,
+    required this.renderedReceiptSha256,
+    required this.language,
+    required this.captureCount,
+  });
+
+  final String receiptBindingSha256;
+  final String renderedReceiptSha256;
+  final String language;
+  final int captureCount;
+}
+
+class ShopQaLoopbackReceiptCaptureStore {
+  ShopQaLoopbackReceiptCaptureStore._(this._scope);
+
+  static const contract = 'supermega.shop.qa-loopback-receipt.v1';
+  static const _maximumReceipts = 16;
+  static final Map<String, Future<void>> _captureTails = {};
+
+  final ShopRuntimeScope _scope;
+
+  /// Private Android debug-QA evidence path, readable only through the
+  /// existing `run-as dev.supermega.supermega_shop.qa` test boundary:
+  /// `files/synthetic-qa-v1/synthetic-evidence/`
+  /// `SuperMega-Shop-SYNTHETIC-QA-RECEIPTS-v1.json`.
+  File get evidenceFile => File(
+    '${_scope.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
+    '$shopQaLoopbackReceiptEvidenceFileName',
+  );
+
+  factory ShopQaLoopbackReceiptCaptureStore.forRuntime(ShopRuntimeScope scope) {
+    _requireSyntheticLoopbackScope(scope);
+    return ShopQaLoopbackReceiptCaptureStore._(scope);
+  }
+
+  void requireBoundTo(ShopRuntimeScope scope) {
+    if (!identical(scope, _scope) ||
+        scope.configuration.profileId != _scope.configuration.profileId ||
+        scope.configuration.platformIdentity !=
+            _scope.configuration.platformIdentity ||
+        scope.syntheticEvidenceRoot?.absolute.path !=
+            _scope.syntheticEvidenceRoot?.absolute.path) {
+      throw StateError('shop_qa_loopback_receipt_scope_mismatch');
+    }
+    _requireSyntheticLoopbackScope(scope);
+  }
+
+  Future<ShopQaLoopbackReceiptCapture> capture(
+    ShopSaleReceipt receipt, {
+    required bool myanmar,
+  }) async {
+    requireBoundTo(_scope);
+    final lockKey = evidenceFile.absolute.path;
+    final previous = _captureTails[lockKey] ?? Future<void>.value();
+    final released = Completer<void>();
+    final tail = previous.then((_) => released.future);
+    _captureTails[lockKey] = tail;
+    await previous;
+    try {
+      return await _captureExclusive(receipt, myanmar: myanmar);
+    } finally {
+      released.complete();
+      if (identical(_captureTails[lockKey], tail)) {
+        _captureTails.remove(lockKey);
+      }
+    }
+  }
+
+  Future<ShopQaLoopbackReceiptCapture> _captureExclusive(
+    ShopSaleReceipt receipt, {
+    required bool myanmar,
+  }) async {
+    if (receipt.reversal != null) {
+      throw StateError('shop_qa_loopback_reversed_receipt_unavailable');
+    }
+    final receiptDigest = _receiptBindingDigest(receipt);
+    final renderedDigest = crypto.sha256
+        .convert(
+          utf8.encode(
+            jsonEncode(shopReceiptTextLines(receipt, myanmar: myanmar)),
+          ),
+        )
+        .toString();
+    final records = await _readRecords();
+    final language = myanmar ? 'my' : 'en';
+    final existingIndex = records.indexWhere(
+      (record) =>
+          record.receiptBindingSha256 == receiptDigest &&
+          record.language == language,
+    );
+    final next = ShopQaLoopbackReceiptCapture(
+      receiptBindingSha256: receiptDigest,
+      renderedReceiptSha256: renderedDigest,
+      language: language,
+      captureCount: existingIndex < 0
+          ? 1
+          : records[existingIndex].captureCount + 1,
+    );
+    if (existingIndex < 0) {
+      if (records.length >= _maximumReceipts) {
+        throw StateError('shop_qa_loopback_receipt_limit_reached');
+      }
+      records.add(next);
+    } else {
+      if (records[existingIndex].renderedReceiptSha256 != renderedDigest) {
+        throw StateError('shop_qa_loopback_receipt_render_changed');
+      }
+      records[existingIndex] = next;
+    }
+    await _writeRecords(records);
+    return next;
+  }
+
+  Future<List<ShopQaLoopbackReceiptCapture>> read() async {
+    requireBoundTo(_scope);
+    return List.unmodifiable(await _readRecords());
+  }
+
+  Future<List<ShopQaLoopbackReceiptCapture>> _readRecords() async {
+    final file = evidenceFile;
+    final type = await FileSystemEntity.type(file.path, followLinks: false);
+    if (type == FileSystemEntityType.notFound) return [];
+    if (type != FileSystemEntityType.file) {
+      throw StateError('shop_qa_loopback_receipt_inventory_invalid');
+    }
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(await file.readAsString());
+    } catch (_) {
+      throw StateError('shop_qa_loopback_receipt_inventory_invalid');
+    }
+    if (decoded is! Map<String, dynamic> ||
+        decoded.length != 5 ||
+        decoded['contract'] != contract ||
+        decoded['profileId'] != _scope.configuration.profileId ||
+        decoded['platformIdentity'] != _scope.configuration.platformIdentity ||
+        decoded['captures'] is! List<dynamic> ||
+        decoded['inventorySha256'] is! String) {
+      throw StateError('shop_qa_loopback_receipt_inventory_invalid');
+    }
+    final captures = decoded['captures'] as List<dynamic>;
+    final expectedDigest = _inventoryDigest(captures);
+    if (decoded['inventorySha256'] != expectedDigest ||
+        captures.length > _maximumReceipts) {
+      throw StateError('shop_qa_loopback_receipt_inventory_invalid');
+    }
+    final records = captures
+        .map((record) => _decodeRecord(jsonEncode(record)))
+        .toList(growable: true);
+    final unique = records
+        .map((record) => '${record.receiptBindingSha256}:${record.language}')
+        .toSet();
+    if (unique.length != records.length) {
+      throw StateError('shop_qa_loopback_receipt_inventory_invalid');
+    }
+    return records;
+  }
+
+  Future<void> _writeRecords(List<ShopQaLoopbackReceiptCapture> records) async {
+    final captures = records.map(_recordJson).toList(growable: false);
+    final encoded = jsonEncode(<String, Object>{
+      'contract': contract,
+      'profileId': _scope.configuration.profileId,
+      'platformIdentity': _scope.configuration.platformIdentity,
+      'captures': captures,
+      'inventorySha256': _inventoryDigest(captures),
+    });
+    final file = evidenceFile;
+    final temporary = File('${file.path}.tmp');
+    for (final candidate in [file, temporary]) {
+      final type = await FileSystemEntity.type(
+        candidate.path,
+        followLinks: false,
+      );
+      if (type != FileSystemEntityType.notFound &&
+          type != FileSystemEntityType.file) {
+        throw StateError('shop_qa_loopback_receipt_inventory_invalid');
+      }
+    }
+    if (await temporary.exists()) await temporary.delete();
+    await temporary.writeAsString(encoded, flush: true);
+    await temporary.rename(file.path);
+  }
+
+  static String _inventoryDigest(List<dynamic> captures) =>
+      crypto.sha256.convert(utf8.encode(jsonEncode(captures))).toString();
+
+  static void _requireSyntheticLoopbackScope(ShopRuntimeScope scope) {
+    final capabilities = scope.capabilities;
+    if (!scope.configuration.isSyntheticQa ||
+        !capabilities.syntheticEvidence ||
+        !capabilities.loopbackPrinter ||
+        capabilities.networkPrinter) {
+      throw StateError('shop_qa_loopback_receipt_scope_required');
+    }
+  }
+
+  static String _receiptBindingDigest(ShopSaleReceipt receipt) => crypto.sha256
+      .convert(
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            'contract': contract,
+            'id': receipt.id,
+            'operationId': receipt.operationId,
+            'totalMmk': receipt.totalMmk,
+            'createdAtMillis': receipt.createdAtMillis,
+            'paymentMethod': receipt.paymentMethod,
+            'cashTenderedMmk': receipt.cashTenderedMmk,
+            'lines': [
+              for (final line in receipt.lines)
+                <String, Object?>{
+                  'id': line.id,
+                  'productId': line.productId,
+                  'productName': line.productName,
+                  'unitPriceMmk': line.unitPriceMmk,
+                  'quantity': line.quantity,
+                  'lineTotalMmk': line.lineTotalMmk,
+                },
+            ],
+            'member': switch (receipt.member) {
+              null => null,
+              final member => <String, Object>{
+                'memberId': member.memberId,
+                'displayCode': member.displayCode,
+                'cardRevision': member.cardRevision,
+                'associatedAtMillis': member.associatedAtMillis,
+              },
+            },
+          }),
+        ),
+      )
+      .toString();
+
+  static Map<String, Object> _recordJson(ShopQaLoopbackReceiptCapture record) =>
+      <String, Object>{
+        'contract': contract,
+        'receiptBindingSha256': record.receiptBindingSha256,
+        'renderedReceiptSha256': record.renderedReceiptSha256,
+        'language': record.language,
+        'captureCount': record.captureCount,
+      };
+
+  static ShopQaLoopbackReceiptCapture _decodeRecord(String encoded) {
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(encoded);
+    } catch (_) {
+      throw StateError('shop_qa_loopback_receipt_record_invalid');
+    }
+    if (decoded is! Map<String, dynamic> ||
+        decoded.keys.toSet().difference(const {
+          'contract',
+          'receiptBindingSha256',
+          'renderedReceiptSha256',
+          'language',
+          'captureCount',
+        }).isNotEmpty ||
+        decoded.length != 5 ||
+        decoded['contract'] != contract ||
+        decoded['receiptBindingSha256'] is! String ||
+        decoded['renderedReceiptSha256'] is! String ||
+        !const {'en', 'my'}.contains(decoded['language']) ||
+        decoded['captureCount'] is! int ||
+        !(RegExp(r'^[a-f0-9]{64}$')
+            .hasMatch(decoded['receiptBindingSha256'] as String)) ||
+        !(RegExp(r'^[a-f0-9]{64}$')
+            .hasMatch(decoded['renderedReceiptSha256'] as String)) ||
+        (decoded['captureCount'] as int) < 1) {
+      throw StateError('shop_qa_loopback_receipt_record_invalid');
+    }
+    return ShopQaLoopbackReceiptCapture(
+      receiptBindingSha256: decoded['receiptBindingSha256'] as String,
+      renderedReceiptSha256: decoded['renderedReceiptSha256'] as String,
+      language: decoded['language'] as String,
+      captureCount: decoded['captureCount'] as int,
+    );
+  }
+}
+
 /// A saved address alone never authorizes a reprint after Shop restarts.
 /// The cashier must test and confirm that printer in the current session.
 class ReceiptReprintService {
@@ -232,8 +521,12 @@ class ReceiptReprintService {
     ReceiptPrintSender? send,
     ShopRuntimeScope? runtimeScope,
     bool testOnlyAllowMissingRuntimeScope = false,
+    ShopQaLoopbackReceiptCaptureStore? qaLoopbackCaptureStore,
   }) : _settings =
-           settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope),
+           settings ??
+           (runtimeScope?.capabilities.loopbackPrinter == true
+               ? null
+               : ReceiptPrinterSettings(runtimeScope: runtimeScope)),
        _send =
            send ??
            ((host, receipt, myanmar) => ShopReceiptPrinter(
@@ -244,24 +537,41 @@ class ReceiptReprintService {
        _runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
          testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
-       );
+       ),
+       _qaLoopbackCaptureStore =
+           qaLoopbackCaptureStore ??
+           (runtimeScope?.capabilities.loopbackPrinter == true
+               ? ShopQaLoopbackReceiptCaptureStore.forRuntime(runtimeScope!)
+               : null);
 
   final ShopRuntimeScope? _runtimeScope;
-  final ReceiptPrinterSettings _settings;
+  final ReceiptPrinterSettings? _settings;
   final ReceiptPrintSender _send;
+  final ShopQaLoopbackReceiptCaptureStore? _qaLoopbackCaptureStore;
 
   /// Returns false when setup/retest is required; it never sends to a saved,
-  /// unverified host. A true result means the print request was sent, not that
-  /// paper output or payment status was confirmed.
+  /// unverified host. In production a true result means the print request was
+  /// sent, not that paper output or payment status was confirmed. In the exact
+  /// synthetic QA profile it means a redacted loopback capture was persisted;
+  /// no physical printer is used.
   Future<bool> printIfTrusted(
     ShopSaleReceipt receipt, {
     required bool myanmar,
   }) async {
     final scope = _runtimeScope;
+    if (scope?.capabilities.loopbackPrinter == true) {
+      final captureStore = _qaLoopbackCaptureStore;
+      if (captureStore == null) {
+        throw StateError('shop_qa_loopback_receipt_store_unavailable');
+      }
+      captureStore.requireBoundTo(scope!);
+      await captureStore.capture(receipt, myanmar: myanmar);
+      return true;
+    }
     if (scope != null && !scope.capabilities.networkPrinter) {
       throw StateError('shop_network_printer_unavailable');
     }
-    final host = await _settings.readHost();
+    final host = await _settings!.readHost();
     if (host == null) return false;
     await _send(host, receipt, myanmar);
     return true;

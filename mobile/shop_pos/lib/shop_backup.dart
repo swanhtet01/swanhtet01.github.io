@@ -10,7 +10,13 @@ import 'package:ffi/ffi.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'shop_database.dart';
+import 'shop_connected_cloud_feed_v41_verifier.dart';
 import 'shop_cafe_order_contract.dart';
+import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_v42_enrollment_verifier.dart';
+import 'shop_connected_site_reconciliation.dart';
+import 'shop_connected_stock_reservation.dart';
+import 'shop_connected_trusted_time_stream.dart';
 
 enum ShopStorePresence { empty, existing, interrupted, unsafe }
 
@@ -30,6 +36,13 @@ enum _ShopSnapshotSchemaKind {
   unifiedV20,
   unifiedV21,
   unifiedV22,
+  unifiedV23,
+  unifiedV24,
+  unifiedV25,
+  unifiedV26,
+  unifiedV27,
+  unifiedV28,
+  unifiedV29,
 }
 
 enum _SnapshotColumnGroupState { none, partial, exact }
@@ -54,7 +67,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 22;
+  static const supportedSchemaVersion = 42;
   static const oldestSupportedSchemaVersion = 6;
   static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
@@ -204,9 +217,29 @@ abstract final class ShopBackup {
     required File archive,
     required String password,
     required Directory scratchRoot,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) async {
+    if (testOnlyCloudFeedV41Trust != null &&
+        testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
+    }
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        (testOnlyCloudFeedPinnedKeys.isNotEmpty ||
+            testOnlyCloudFeedV41Trust != null)) {
+      throw UnsupportedError(
+        'Test cloud-feed pins are unavailable in product builds.',
+      );
+    }
     _checkPassword(password);
-    if (database.schemaVersion != supportedSchemaVersion) {
+    final testOnlyHistoricalV40 =
+        !const bool.fromEnvironment('dart.vm.product') &&
+        database.schemaVersion == 40 &&
+        testOnlyCloudFeedPinnedKeys.isNotEmpty;
+    if (database.schemaVersion != supportedSchemaVersion &&
+        !testOnlyHistoricalV40) {
       throw StateError('This Shop schema is not supported for backup.');
     }
     if (await archive.exists()) {
@@ -221,7 +254,14 @@ abstract final class ShopBackup {
           '${scratch.path}${Platform.pathSeparator}shop.sqlite',
         );
         await database.exportVerifiedLocalSnapshot(snapshot);
-        verifySnapshot(snapshot, expectedSchemaVersion: database.schemaVersion);
+        verifySnapshot(
+          snapshot,
+          expectedSchemaVersion: database.schemaVersion,
+          testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+          testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+          historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+          v42EnrollmentTrustSource: v42EnrollmentTrustSource,
+        );
         if (await snapshot.length() > maxSnapshotBytes) {
           throw StateError(
             'The local Shop database exceeds the backup size limit.',
@@ -283,6 +323,8 @@ abstract final class ShopBackup {
   /// created by another process after the empty-path check. Startup must call
   /// [cleanupInterruptedStaging] and honor [restoreMarkerFor] before opening
   /// the database. A marker left after publication blocks a mixed DB/sidecar.
+  /// Nonempty v41 fixture history requires independently pinned test trust;
+  /// product builds have no such trust and continue to reject its restore.
   static Future<void> restoreIntoEmptyDatabase({
     required File archive,
     required File target,
@@ -290,7 +332,22 @@ abstract final class ShopBackup {
     ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
     Future<void> Function()? beforePublishForTest,
     Future<void> Function()? afterPublishForTest,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) async {
+    if (testOnlyCloudFeedV41Trust != null &&
+        testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
+    }
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        (testOnlyCloudFeedPinnedKeys.isNotEmpty ||
+            testOnlyCloudFeedV41Trust != null)) {
+      throw UnsupportedError(
+        'Test cloud-feed pins are unavailable in product builds.',
+      );
+    }
     _checkPassword(password);
     await _requireEmptyRestoreDestination(target);
     if (await archive.length() >
@@ -322,10 +379,21 @@ abstract final class ShopBackup {
           '${staging.path}${Platform.pathSeparator}shop.sqlite',
         );
         await stagedFile.writeAsBytes(cleartext, flush: true);
-        verifySnapshot(stagedFile, expectedSchemaVersion: archiveBytes[5]);
+        verifySnapshot(
+          stagedFile,
+          expectedSchemaVersion: archiveBytes[5],
+          testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+          testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+          historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+          v42EnrollmentTrustSource: v42EnrollmentTrustSource,
+        );
         await ShopDatabase.migrateAndVerifyRestoreFile(
           stagedFile,
           correctionReceiptVerifier: correctionReceiptVerifier,
+          testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+          testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+          historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+          v42EnrollmentTrustSource: v42EnrollmentTrustSource,
         );
         await _requireNoSidecars(stagedFile);
         if (await stagedFile.length() > maxSnapshotBytes) {
@@ -861,11 +929,19 @@ abstract final class ShopBackup {
     File file, {
     int? expectedSchemaVersion,
     bool allowRuntimeUnboundCorrectionHistory = false,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) => _verifySnapshot(
     file,
     minimumSchemaVersion: oldestSupportedSchemaVersion,
     expectedSchemaVersion: expectedSchemaVersion,
     allowRuntimeUnboundCorrectionHistory: allowRuntimeUnboundCorrectionHistory,
+    testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+    testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+    historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+    v42EnrollmentTrustSource: v42EnrollmentTrustSource,
   );
 
   /// Verifies an already-installed Shop store before Drift may migrate it.
@@ -883,9 +959,37 @@ abstract final class ShopBackup {
     required int minimumSchemaVersion,
     int? expectedSchemaVersion,
     required bool allowRuntimeUnboundCorrectionHistory,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) {
+    if (testOnlyCloudFeedV41Trust != null &&
+        testOnlyCloudFeedPinnedKeys.isNotEmpty) {
+      throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
+    }
+    if (historicalCloudFeedTrustSource != null &&
+        (testOnlyCloudFeedV41Trust != null ||
+            testOnlyCloudFeedPinnedKeys.isNotEmpty)) {
+      throw ArgumentError('Historical source trust cannot mix fixture pins.');
+    }
+    final verifiedV41Trust =
+        (historicalCloudFeedTrustSource ??
+                ShopCloudFeedHistoricalTrustSource.production())
+            .verifiedHistory ??
+        testOnlyCloudFeedV41Trust;
+    if (const bool.fromEnvironment('dart.vm.product') &&
+        (testOnlyCloudFeedPinnedKeys.isNotEmpty ||
+            testOnlyCloudFeedV41Trust != null)) {
+      throw UnsupportedError(
+        'Test cloud-feed pins are unavailable in product builds.',
+      );
+    }
     final connection = sqlite3.open(file.path, mode: OpenMode.readOnly);
+    var snapshotStarted = false;
     try {
+      connection.execute('BEGIN DEFERRED');
+      snapshotStarted = true;
       final version = connection.select('PRAGMA user_version');
       final integrity = connection.select('PRAGMA integrity_check');
       final brokenReferences = connection.select('PRAGMA foreign_key_check');
@@ -902,6 +1006,9 @@ abstract final class ShopBackup {
         minimumSchemaVersion: minimumSchemaVersion,
         allowRuntimeUnboundCorrectionHistory:
             allowRuntimeUnboundCorrectionHistory,
+        testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+        testOnlyCloudFeedV41Trust: verifiedV41Trust,
+        v42EnrollmentTrustSource: v42EnrollmentTrustSource,
       );
       final hasCorrectionSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
@@ -915,7 +1022,14 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasWorkspaceSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
@@ -928,7 +1042,14 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasProfileSchema =
           schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
@@ -941,7 +1062,14 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasAuthorizationProofSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
@@ -951,7 +1079,14 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasMemberSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
@@ -959,32 +1094,82 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasConsumptionSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV17 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasCashMovementSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV18 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasCafeOrderSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV19 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasCafeCancellationSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV20 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final hasPendingCashCheckoutSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV21 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV22;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV22 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
+      final hasConnectedSiteSchema =
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV23 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV24 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV25 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV26 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV27 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV28 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV29;
       final objects = _readSnapshotSchemaObjects(connection);
       final baseSchemaValid =
           objects != null &&
@@ -1058,7 +1243,8 @@ abstract final class ShopBackup {
               _v20CafeCancellationRowsValid(connection)) &&
           (!hasPendingCashCheckoutSchema ||
               _v21PendingCashCheckoutRowsValid(connection)) &&
-          (schemaVersion < 22 || _v22CashTenderRowsValid(connection));
+          (schemaVersion < 22 || _v22CashTenderRowsValid(connection)) &&
+          (!hasConnectedSiteSchema || _v23ConnectedSiteRowsValid(connection));
       final walletIntents = schemaValid
           ? connection.select(
               'SELECT operation_id, payment_method, request_fingerprint, '
@@ -1207,7 +1393,11 @@ abstract final class ShopBackup {
         );
       }
     } finally {
-      connection.close();
+      try {
+        if (snapshotStarted) connection.execute('ROLLBACK');
+      } finally {
+        connection.close();
+      }
     }
   }
 
@@ -1306,6 +1496,9 @@ abstract final class ShopBackup {
     int schemaVersion, {
     required int minimumSchemaVersion,
     required bool allowRuntimeUnboundCorrectionHistory,
+    required Map<String, List<int>> testOnlyCloudFeedPinnedKeys,
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) {
     if (schemaVersion < minimumSchemaVersion ||
         schemaVersion > supportedSchemaVersion) {
@@ -1808,7 +2001,87 @@ abstract final class ShopBackup {
         })) {
       return _ShopSnapshotSchemaKind.unifiedV20;
     }
-    if ((schemaVersion == 21 || schemaVersion == 22) &&
+    final connectedSiteDefinitions = schemaVersion >= 28
+        ? shopConnectedSiteSchemaDefinitionsV28()
+        : schemaVersion >= 27
+        ? shopConnectedSiteSchemaDefinitionsV27()
+        : schemaVersion >= 26
+        ? shopConnectedSiteSchemaDefinitionsV26()
+        : schemaVersion >= 25
+        ? shopConnectedSiteSchemaDefinitionsV25()
+        : schemaVersion >= 24
+        ? shopConnectedSiteSchemaDefinitionsV24()
+        : shopConnectedSiteSchemaDefinitionsV23();
+    final envelopeDefinitions = schemaVersion >= 29
+        ? shopConnectedEnvelopeSchemaDefinitionsV29()
+        : const <String, String>{};
+    final authorityPayloadDefinitions = schemaVersion >= 30
+        ? shopConnectedAuthorityPayloadSchemaDefinitionsV30()
+        : const <String, String>{};
+    final reservationSessionDefinitions = schemaVersion >= 31
+        ? shopConnectedReservationSessionSchemaDefinitionsV31()
+        : const <String, String>{};
+    final replicaDefinitions = schemaVersion >= 32
+        ? shopConnectedReplicaSchemaDefinitionsV32()
+        : const <String, String>{};
+    final replicaDeliveryDefinitions = schemaVersion >= 33
+        ? shopConnectedReplicaSchemaDefinitionsV33()
+        : const <String, String>{};
+    final cloudProofDefinitions = schemaVersion >= 35
+        ? shopConnectedCloudProofSchemaDefinitionsV35()
+        : schemaVersion >= 34
+        ? shopConnectedCloudProofSchemaDefinitionsV34()
+        : const <String, String>{};
+    final authorityCheckpointDefinitions = schemaVersion >= 36
+        ? shopConnectedAuthorityCheckpointSchemaDefinitionsV36()
+        : const <String, String>{};
+    final trustedTimeDefinitions = schemaVersion >= 37
+        ? shopConnectedTrustedTimeSchemaDefinitionsV37()
+        : const <String, String>{};
+    final trustedTimeIssuerDefinitions = schemaVersion >= 38
+        ? shopConnectedTrustedTimeIssuerSchemaDefinitionsV38()
+        : const <String, String>{};
+    final trustedTimeClientDefinitions = schemaVersion >= 39
+        ? shopConnectedTrustedTimeClientSchemaDefinitionsV39()
+        : const <String, String>{};
+    final cloudFeedDefinitions = schemaVersion >= 40
+        ? shopConnectedCloudFeedSchemaDefinitionsV40()
+        : const <String, String>{};
+    final cloudFeedEvidenceDefinitions = schemaVersion >= 41
+        ? shopConnectedCloudFeedSchemaDefinitionsV41()
+        : const <String, String>{};
+    final deviceProfileDefinitions = schemaVersion >= 42
+        ? shopConnectedDeviceProfileSchemaDefinitionsV42()
+        : const <String, String>{};
+    final connectedSiteExact =
+        schemaVersion < 23 ||
+        _snapshotDefinitionGroupExact(
+          objects,
+          connectedSiteDefinitions,
+          connectedSiteDefinitions.keys.toSet(),
+        );
+    if ((schemaVersion == 21 ||
+            schemaVersion == 22 ||
+            schemaVersion == 23 ||
+            schemaVersion == 24 ||
+            schemaVersion == 25 ||
+            schemaVersion == 26 ||
+            schemaVersion == 27 ||
+            schemaVersion == 28 ||
+            schemaVersion == 29 ||
+            schemaVersion == 30 ||
+            schemaVersion == 31 ||
+            schemaVersion == 32 ||
+            schemaVersion == 33 ||
+            schemaVersion == 34 ||
+            schemaVersion == 35 ||
+            schemaVersion == 36 ||
+            schemaVersion == 37 ||
+            schemaVersion == 38 ||
+            schemaVersion == 39 ||
+            schemaVersion == 40 ||
+            schemaVersion == 41 ||
+            schemaVersion == 42) &&
         auditExact &&
         workspaceExact &&
         profileExact &&
@@ -1828,6 +2101,120 @@ abstract final class ShopBackup {
         _v20CafeCancellationRowsValid(connection) &&
         _v21PendingCashCheckoutRowsValid(connection) &&
         (schemaVersion < 22 || _v22CashTenderRowsValid(connection)) &&
+        connectedSiteExact &&
+        (schemaVersion < 29 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              envelopeDefinitions,
+              envelopeDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 23 || _v23ConnectedSiteRowsValid(connection)) &&
+        (schemaVersion < 24 ||
+            _v24ConnectedStockReservationRowsValid(connection)) &&
+        (schemaVersion < 25 || _v25ConnectedEnrollmentRowsValid(connection)) &&
+        (schemaVersion < 26 ||
+            _v26ConnectedCloudDispositionRowsValid(connection)) &&
+        (schemaVersion < 27 || _v27ConnectedAuthorityRowsValid(connection)) &&
+        (schemaVersion < 28 || _v28ConnectedAttemptRowsValid(connection)) &&
+        (schemaVersion < 29 || _v29ConnectedEnvelopeRowsValid(connection)) &&
+        (schemaVersion < 30 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              authorityPayloadDefinitions,
+              authorityPayloadDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 30 ||
+            _v30ConnectedAuthorityPayloadRowsValid(connection)) &&
+        (schemaVersion < 36 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              authorityCheckpointDefinitions,
+              authorityCheckpointDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 36 ||
+            _v36ConnectedAuthorityCheckpointRowsValid(connection)) &&
+        (schemaVersion < 37 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              trustedTimeDefinitions,
+              trustedTimeDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 37 || _v37ConnectedTrustedTimeRowsValid(connection)) &&
+        (schemaVersion < 38 ||
+            _v38ConnectedTrustedTimeIssuerRowsValid(connection)) &&
+        (schemaVersion < 38 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              trustedTimeIssuerDefinitions,
+              trustedTimeIssuerDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 39 ||
+            _v39ConnectedTrustedTimeClientRowsValid(connection)) &&
+        (schemaVersion < 39 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              trustedTimeClientDefinitions,
+              trustedTimeClientDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 40 ||
+            _v40ConnectedCloudFeedRowsValid(
+              connection,
+              testOnlyCloudFeedV41Trust?.feedIssuerKeys ??
+                  testOnlyCloudFeedPinnedKeys,
+            )) &&
+        (schemaVersion < 40 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              cloudFeedDefinitions,
+              cloudFeedDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 41 ||
+            ((testOnlyCloudFeedV41Trust == null
+                    ? _v41ConnectedCloudFeedRowsEmpty(connection)
+                    : _v41FirstPageHistoryValid(
+                        connection,
+                        testOnlyCloudFeedV41Trust.immutableCopy(),
+                      )) &&
+                _snapshotDefinitionGroupExact(
+                  objects,
+                  cloudFeedEvidenceDefinitions,
+                  cloudFeedEvidenceDefinitions.keys.toSet(),
+                ))) &&
+        (schemaVersion < 42 ||
+            (_v42DeviceProfileRowsValid(
+                  connection,
+                  v42EnrollmentTrustSource ??
+                      ShopV42EnrollmentTrustSource.production(),
+                ) &&
+                _snapshotDefinitionGroupExact(
+                  objects,
+                  deviceProfileDefinitions,
+                  deviceProfileDefinitions.keys.toSet(),
+                ))) &&
+        (schemaVersion < 31 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              reservationSessionDefinitions,
+              reservationSessionDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 31 ||
+            _v31ConnectedReservationSessionRowsValid(connection)) &&
+        (schemaVersion < 32 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              replicaDefinitions,
+              replicaDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 32 || _v32ConnectedReplicaRowsValid(connection)) &&
+        (schemaVersion < 33 ||
+            _snapshotDefinitionGroupExact(
+              objects,
+              replicaDeliveryDefinitions,
+              replicaDeliveryDefinitions.keys.toSet(),
+            )) &&
+        (schemaVersion < 33 ||
+            _v33ConnectedReplicaDeliveryRowsValid(connection)) &&
+        (schemaVersion < 34 || _v34ConnectedCloudProofRowsValid(connection)) &&
         _snapshotDefinitionGroupExact(
           objects,
           const {
@@ -1851,6 +2238,20 @@ abstract final class ShopBackup {
           cafeOrderDefinitions,
           cafeCancellationDefinitions,
           pendingCashCheckoutDefinitions,
+          if (schemaVersion >= 23) connectedSiteDefinitions,
+          if (schemaVersion >= 29) envelopeDefinitions,
+          if (schemaVersion >= 30) authorityPayloadDefinitions,
+          if (schemaVersion >= 31) reservationSessionDefinitions,
+          if (schemaVersion >= 32) replicaDefinitions,
+          if (schemaVersion >= 33) replicaDeliveryDefinitions,
+          if (schemaVersion >= 34) cloudProofDefinitions,
+          if (schemaVersion >= 36) authorityCheckpointDefinitions,
+          if (schemaVersion >= 37) trustedTimeDefinitions,
+          if (schemaVersion >= 38) trustedTimeIssuerDefinitions,
+          if (schemaVersion >= 39) trustedTimeClientDefinitions,
+          if (schemaVersion >= 40) cloudFeedDefinitions,
+          if (schemaVersion >= 41) cloudFeedEvidenceDefinitions,
+          if (schemaVersion >= 42) deviceProfileDefinitions,
         ]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -1863,10 +2264,38 @@ abstract final class ShopBackup {
           ...cafeOrderDefinitions.keys,
           ...cafeCancellationDefinitions.keys,
           ...pendingCashCheckoutDefinitions.keys,
+          if (schemaVersion >= 23) ...connectedSiteDefinitions.keys,
+          if (schemaVersion >= 29) ...envelopeDefinitions.keys,
+          if (schemaVersion >= 30) ...authorityPayloadDefinitions.keys,
+          if (schemaVersion >= 31) ...reservationSessionDefinitions.keys,
+          if (schemaVersion >= 32) ...replicaDefinitions.keys,
+          if (schemaVersion >= 33) ...replicaDeliveryDefinitions.keys,
+          if (schemaVersion >= 34) ...cloudProofDefinitions.keys,
+          if (schemaVersion >= 36) ...authorityCheckpointDefinitions.keys,
+          if (schemaVersion >= 37) ...trustedTimeDefinitions.keys,
+          if (schemaVersion >= 38) ...trustedTimeIssuerDefinitions.keys,
+          if (schemaVersion >= 39) ...trustedTimeClientDefinitions.keys,
+          if (schemaVersion >= 40) ...cloudFeedDefinitions.keys,
+          if (schemaVersion >= 41) ...cloudFeedEvidenceDefinitions.keys,
+          if (schemaVersion >= 42) ...deviceProfileDefinitions.keys,
           'shop_business_profile',
           'shop_v13_migration_provenance',
         })) {
-      return schemaVersion == 22
+      return schemaVersion >= 29
+          ? _ShopSnapshotSchemaKind.unifiedV29
+          : schemaVersion == 28
+          ? _ShopSnapshotSchemaKind.unifiedV28
+          : schemaVersion == 27
+          ? _ShopSnapshotSchemaKind.unifiedV27
+          : schemaVersion == 26
+          ? _ShopSnapshotSchemaKind.unifiedV26
+          : schemaVersion == 25
+          ? _ShopSnapshotSchemaKind.unifiedV25
+          : schemaVersion == 24
+          ? _ShopSnapshotSchemaKind.unifiedV24
+          : schemaVersion == 23
+          ? _ShopSnapshotSchemaKind.unifiedV23
+          : schemaVersion == 22
           ? _ShopSnapshotSchemaKind.unifiedV22
           : _ShopSnapshotSchemaKind.unifiedV21;
     }
@@ -3136,6 +3565,1111 @@ abstract final class ShopBackup {
                 : tender is! int ||
                       payload['cashTenderedMmk'] != tender ||
                       payload['cashChangeMmk'] != tender - total)) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v23ConnectedSiteRowsValid(Database connection) {
+    try {
+      if (connection.select('''
+            SELECT 1 FROM shop_site_commands command
+            LEFT JOIN shop_site_events event
+              ON event.command_id = command.command_id
+            LEFT JOIN shop_site_command_acks ack
+              ON ack.command_id = command.command_id
+            LEFT JOIN shop_site_audit audit
+              ON audit.command_id = command.command_id
+            WHERE command.state = 'accepted' AND (
+              event.command_id IS NULL OR ack.status != 'accepted' OR
+              ack.event_row_id != event.event_row_id OR
+              ack.site_sequence != event.site_sequence OR
+              ack.canonical_version != event.aggregate_version OR
+              audit.command_id IS NULL OR
+              event.tenant_id != command.tenant_id OR
+              event.site_id != command.site_id OR
+              event.aggregate_type != command.aggregate_type OR
+              event.aggregate_id != command.aggregate_id
+            ) LIMIT 1
+          ''').isNotEmpty) {
+        return false;
+      }
+      if (connection.select('''
+            SELECT 1 FROM shop_site_commands command
+            LEFT JOIN shop_site_events event
+              ON event.command_id = command.command_id
+            LEFT JOIN shop_site_command_acks ack
+              ON ack.command_id = command.command_id
+            LEFT JOIN shop_site_conflicts conflict
+              ON conflict.command_id = command.command_id
+            WHERE command.state = 'conflict' AND (
+              event.command_id IS NOT NULL OR ack.status != 'conflict' OR
+              ack.event_row_id IS NOT NULL OR ack.site_sequence IS NOT NULL OR
+              conflict.command_id IS NULL
+            ) LIMIT 1
+          ''').isNotEmpty) {
+        return false;
+      }
+      if (connection.select('''
+            SELECT 1 FROM shop_site_aggregate_versions aggregate_row
+            LEFT JOIN shop_site_events event
+              ON event.event_row_id = aggregate_row.last_event_row_id
+            WHERE event.event_row_id IS NULL OR
+              event.tenant_id != aggregate_row.tenant_id OR
+              event.site_id != aggregate_row.site_id OR
+              event.aggregate_type != aggregate_row.aggregate_type OR
+              event.aggregate_id != aggregate_row.aggregate_id OR
+              event.aggregate_version != aggregate_row.version OR
+              event.site_sequence != aggregate_row.last_site_sequence OR
+              aggregate_row.version != (
+                SELECT MAX(candidate.aggregate_version)
+                FROM shop_site_events candidate
+                WHERE candidate.tenant_id = aggregate_row.tenant_id
+                  AND candidate.site_id = aggregate_row.site_id
+                  AND candidate.aggregate_type = aggregate_row.aggregate_type
+                  AND candidate.aggregate_id = aggregate_row.aggregate_id
+              ) LIMIT 1
+          ''').isNotEmpty) {
+        return false;
+      }
+      if (connection.select('''
+            SELECT 1 FROM shop_site_events event
+            LEFT JOIN shop_site_aggregate_versions aggregate_row
+              ON aggregate_row.tenant_id = event.tenant_id
+              AND aggregate_row.site_id = event.site_id
+              AND aggregate_row.aggregate_type = event.aggregate_type
+              AND aggregate_row.aggregate_id = event.aggregate_id
+            WHERE aggregate_row.aggregate_id IS NULL LIMIT 1
+          ''').isNotEmpty) {
+        return false;
+      }
+      return connection.select('''
+            SELECT 1 FROM shop_site_events event
+            WHERE event.site_sequence != (
+              SELECT COUNT(*) FROM shop_site_events candidate
+              WHERE candidate.tenant_id = event.tenant_id
+                AND candidate.site_id = event.site_id
+                AND candidate.site_sequence <= event.site_sequence
+            ) LIMIT 1
+          ''').isEmpty;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v24ConnectedStockReservationRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String sql) => connection
+          .select(sql)
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedStockReservationRowsValidV24(
+        commands: rows('SELECT * FROM shop_site_commands'),
+        events: rows('SELECT * FROM shop_site_events'),
+        headers: rows('SELECT * FROM shop_connected_stock_reservation_headers'),
+        lines: rows('SELECT * FROM shop_connected_stock_reservation_lines'),
+        transitions: rows(
+          'SELECT * FROM shop_connected_stock_reservation_transitions',
+        ),
+        sales: rows(
+          'SELECT id, operation_id, request_fingerprint FROM shop_sales',
+        ),
+        trustedTimes: rows('SELECT * FROM shop_connected_trusted_time'),
+        scopeBindings: rows('SELECT * FROM shop_connected_scope_binding'),
+        tenderBindings: rows(
+          'SELECT * FROM shop_connected_tender_reservation_bindings',
+        ),
+        pendingCashCheckouts: rows(
+          'SELECT operation_id FROM shop_pending_cash_checkouts',
+        ),
+        walletCheckoutIntents: rows(
+          'SELECT operation_id, state FROM shop_wallet_checkout_intents',
+        ),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v25ConnectedEnrollmentRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedEnrollmentRowsValidV25(
+        pairingNonces: rows('shop_site_pairing_nonces'),
+        pendingEnrollments: rows('shop_site_pending_enrollments'),
+        enrollmentEvidence: rows('shop_site_enrollment_evidence'),
+        devices: rows('shop_site_devices'),
+        requestNonces: rows('shop_site_request_nonces'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v42DeviceProfileRowsValid(
+    Database connection,
+    ShopV42EnrollmentTrustSource trust,
+  ) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedEnrollmentRowsValidV42(
+        pairingNonces: rows('shop_site_pairing_nonces'),
+        v1Pending: rows('shop_site_pending_enrollments'),
+        v1Evidence: rows('shop_site_enrollment_evidence'),
+        v2Pending: rows('shop_site_v2_pending_enrollments'),
+        v2Evidence: rows('shop_site_v2_enrollment_evidence'),
+        deviceProfiles: rows('shop_site_device_profiles_v42'),
+        devices: rows('shop_site_devices'),
+        pinnedOwnerIssuerKeys: trust.ownerIssuerKeys,
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v26ConnectedCloudDispositionRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedCloudDispositionRowsValidV26(
+        commands: rows('shop_site_commands'),
+        events: rows('shop_site_events'),
+        cloudAcks: rows('shop_site_cloud_acks'),
+        conflicts: rows('shop_site_conflicts'),
+        dispositions: rows('shop_site_cloud_dispositions'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v27ConnectedAuthorityRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedAuthorityRowsValidV27(
+        deltas: rows('shop_site_authority_deltas'),
+        revocations: rows('shop_site_revocation_observations'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v28ConnectedAttemptRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedAttemptRowsValidV28(
+        bindings: rows('shop_site_coordinator_bindings'),
+        revocations: rows('shop_site_coordinator_binding_revocations'),
+        attempts: rows('shop_site_command_attempts'),
+        transmissions: rows('shop_site_command_transmissions'),
+        results: rows('shop_site_command_results'),
+        enrollmentEvidence: rows('shop_site_enrollment_evidence'),
+        devices: rows('shop_site_devices'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v29ConnectedEnvelopeRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedEnvelopeRowsValidV29(
+        envelopes: rows('shop_site_request_envelopes'),
+        transmissions: rows('shop_site_command_transmissions'),
+        attempts: rows('shop_site_command_attempts'),
+        bindings: rows('shop_site_coordinator_bindings'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v30ConnectedAuthorityPayloadRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedAuthorityPayloadRowsValidV30(
+        payloads: rows('shop_site_authority_payloads'),
+        members: rows('shop_site_authority_members'),
+        configurations: rows('shop_site_configuration_snapshots'),
+        deltas: rows('shop_site_authority_deltas'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v36ConnectedAuthorityCheckpointRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedAuthorityCheckpointRowsValidV36(
+        checkpoints: rows('shop_site_authority_checkpoints'),
+        bootstrapProvenance: rows('shop_site_authority_bootstrap_provenance'),
+        payloads: rows('shop_site_authority_payloads'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v38ConnectedTrustedTimeIssuerRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      final states = rows('shop_connected_time_issuer_state');
+      if (states.length != 1 || states.single['singleton_id'] != 1) {
+        return false;
+      }
+      final streams = rows('shop_connected_time_issuer_streams');
+      final streamByDigest = <String, Map<String, Object?>>{};
+      for (final row in streams) {
+        final text = row['stream_json'];
+        if (text is! String) return false;
+        final value = jsonDecode(text);
+        if (canonicalConnectedSiteJson(value) != text ||
+            connectedSiteSha256(value) != row['stream_digest']) {
+          return false;
+        }
+        streamByDigest[row['stream_digest']! as String] = row;
+      }
+      final byStream = <String, List<Map<String, Object?>>>{};
+      for (final row in rows('shop_connected_time_issuer_allocations')) {
+        final text = row['unsigned_entry_json'];
+        if (text is! String) return false;
+        final entry = parseConnectedTrustedTimeUnsignedEntryV2(
+          utf8.encode(text),
+        );
+        if (entry.entryDigest != row['entry_digest']) {
+          return false;
+        }
+        final streamValue = <String, Object?>{
+          'workspaceId': entry.workspaceId,
+          'siteId': entry.siteId,
+          'coordinatorDeviceId': entry.coordinatorDeviceId,
+          'clientDeviceId': entry.clientDeviceId,
+          'clientFingerprint': entry.clientFingerprint,
+          'sessionGeneration': entry.sessionGeneration,
+          'coordinatorBindingDigest': entry.coordinatorBindingDigest,
+          'coordinatorBindingGeneration': entry.coordinatorBindingGeneration,
+          'authorityKeyId': entry.authorityKeyId,
+          'authorityKeyFingerprint': entry.authorityKeyFingerprint,
+          'authorityKeyGeneration': entry.authorityKeyGeneration,
+          'authorityEpoch': entry.authorityEpoch,
+        };
+        if (connectedSiteSha256(streamValue) != row['stream_digest'] ||
+            entry.authoritySequence != row['authority_sequence'] ||
+            entry.previousEntryDigest != row['previous_entry_digest']) {
+          return false;
+        }
+        byStream
+            .putIfAbsent(row['stream_digest']! as String, () => [])
+            .add(row);
+      }
+      final signed = <String, ConnectedTrustedTimeStreamEntryV2>{};
+      for (final row in rows('shop_connected_time_issuer_signed_entries')) {
+        final text = row['signed_entry_json']! as String;
+        final entry = ConnectedTrustedTimeStreamEntryV2.fromCanonicalBytes(
+          utf8.encode(text),
+        );
+        if (entry.entryDigest != row['entry_digest'] ||
+            crypto.sha256.convert(utf8.encode(text)).toString() !=
+                row['signed_entry_digest']) {
+          return false;
+        }
+        signed[entry.entryDigest] = entry;
+      }
+      final acks = <String, ConnectedTrustedTimeStreamAckV1>{};
+      for (final row in rows('shop_connected_time_issuer_acks')) {
+        final text = row['ack_json']! as String;
+        final ack = ConnectedTrustedTimeStreamAckV1.fromCanonicalBytes(
+          utf8.encode(text),
+        );
+        if (ack.ackDigest != row['ack_digest'] ||
+            ack.entryDigest != row['entry_digest'] ||
+            crypto.sha256.convert(utf8.encode(text)).toString() !=
+                row['ack_bytes_digest']) {
+          return false;
+        }
+        acks[ack.entryDigest] = ack;
+      }
+      for (final streamEntry in streamByDigest.entries) {
+        final stream = streamEntry.value;
+        final allocations = byStream[streamEntry.key] ?? [];
+        allocations.sort(
+          (a, b) => (a['authority_sequence']! as int).compareTo(
+            b['authority_sequence']! as int,
+          ),
+        );
+        String? predecessor;
+        for (var index = 0; index < allocations.length; index++) {
+          final row = allocations[index];
+          final sequence = index + 1;
+          final digest = row['entry_digest']! as String;
+          if (row['authority_sequence'] != sequence ||
+              row['previous_entry_digest'] != predecessor) {
+            return false;
+          }
+          if (sequence <= (stream['acknowledged_sequence']! as int)) {
+            final entry = signed[digest];
+            final ack = acks[digest];
+            if (entry == null ||
+                ack == null ||
+                ack.authoritySequence != sequence ||
+                ack.clientDeviceId != entry.clientDeviceId ||
+                ack.coordinatorBindingDigest !=
+                    entry.coordinatorBindingDigest) {
+              return false;
+            }
+          } else if (sequence ==
+              (stream['acknowledged_sequence']! as int) + 1) {
+            if (stream['pending_entry_digest'] != digest ||
+                acks.containsKey(digest)) {
+              return false;
+            }
+          } else {
+            return false;
+          }
+          predecessor = digest;
+        }
+        final head = stream['acknowledged_sequence']! as int;
+        if (head > allocations.length ||
+            (head == 0
+                ? stream['acknowledged_entry_digest'] != null
+                : stream['acknowledged_entry_digest'] !=
+                      allocations[head - 1]['entry_digest']) ||
+            (stream['pending_entry_digest'] == null
+                ? allocations.length != head
+                : allocations.length != head + 1)) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v39ConnectedTrustedTimeClientRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedTrustedTimeClientRowsValidV39(
+        entries: rows('shop_connected_time_client_entries'),
+        acks: rows('shop_connected_time_client_acks'),
+        heads: rows('shop_connected_time_client_heads'),
+        barriers: rows('shop_connected_time_client_restore_barriers'),
+        clearances: rows('shop_connected_time_client_restore_clearances'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v40ConnectedCloudFeedRowsValid(
+    Database connection,
+    Map<String, List<int>> trustedIssuerKeys,
+  ) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedCloudFeedRowsValidV40(
+        streams: rows('shop_connected_cloud_feed_streams'),
+        pages: rows('shop_connected_cloud_feed_pages'),
+        heads: rows('shop_connected_cloud_feed_heads'),
+        restoreBarriers: rows('shop_connected_cloud_feed_restore_barriers'),
+        trustedIssuerKeys: trustedIssuerKeys,
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v41ConnectedCloudFeedRowsEmpty(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table LIMIT 2049')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      if (!shopConnectedCloudFeedEvidenceCoverageV41(
+        pages: rows('shop_connected_cloud_feed_pages'),
+        evidence: rows('shop_connected_cloud_feed_page_evidence'),
+      )) {
+        return false;
+      }
+      for (final table in const [
+        'shop_connected_cloud_feed_streams',
+        'shop_connected_cloud_feed_pages',
+        'shop_connected_cloud_feed_heads',
+        'shop_connected_cloud_feed_restore_barriers',
+        'shop_connected_cloud_feed_page_evidence',
+      ]) {
+        if (connection.select('SELECT 1 FROM $table LIMIT 1').isNotEmpty) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v41FirstPageHistoryValid(
+    Database connection,
+    ShopCloudFeedV41FirstPageTrust trust,
+  ) {
+    if (const bool.fromEnvironment('dart.vm.product')) return false;
+    try {
+      final complete = <String, List<Map<String, Object?>>>{};
+      for (final table in shopCloudFeedV41HistoricalTables) {
+        final values = connection.select('SELECT * FROM $table LIMIT 2049');
+        if (values.length > 2048) return false;
+        complete[table] = values
+            .map((row) => Map<String, Object?>.from(row))
+            .toList(growable: false);
+      }
+      return shopCloudFeedFirstPageHistoricalRowsValidV41(
+        trust: trust,
+        completeTables: complete,
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v37ConnectedTrustedTimeRowsValid(Database connection) {
+    try {
+      List<Map<String, Object?>> rows(String table) => connection
+          .select('SELECT * FROM $table')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+      return shopConnectedTrustedTimeRowsValidV37(
+        approvals: rows('shop_connected_time_approvals'),
+        requests: rows('shop_connected_time_requests'),
+        observations: rows('shop_connected_time_observations'),
+        acceptances: rows('shop_connected_time_acceptances'),
+        authorityHeads: rows('shop_connected_time_authority_heads'),
+        deviceHeads: rows('shop_connected_time_device_heads'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v33ConnectedReplicaDeliveryRowsValid(Database connection) {
+    try {
+      final nextSequenceByScope = <String, int>{};
+      for (final row in connection.select(
+        'SELECT * FROM shop_site_replica_event_envelopes '
+        'ORDER BY tenant_id, site_id, replica_sequence',
+      )) {
+        final envelope = jsonDecode(row['event_json'] as String);
+        final tenantId = row['tenant_id'] as String;
+        final siteId = row['site_id'] as String;
+        final sequence = row['replica_sequence'] as int;
+        final scope = '$tenantId\u0000$siteId';
+        final expectedSequence = nextSequenceByScope[scope] ?? 1;
+        if (envelope is! Map ||
+            canonicalConnectedSiteJson(envelope) != row['event_json'] ||
+            connectedSiteSha256(envelope) != row['event_digest'] ||
+            envelope['cursor'] != sequence ||
+            sequence != expectedSequence) {
+          return false;
+        }
+        SiteDeltaV1(
+          workspaceId: tenantId,
+          siteId: siteId,
+          afterCursor: sequence - 1,
+          nextCursor: sequence,
+          events: [envelope.cast<String, Object?>()],
+        );
+        nextSequenceByScope[scope] = sequence + 1;
+      }
+      for (final row in connection.select(
+        'SELECT * FROM shop_connected_replica_deliveries',
+      )) {
+        final decoded = jsonDecode(row['delta_json'] as String);
+        if (decoded is! Map ||
+            canonicalConnectedSiteJson(decoded) != row['delta_json'] ||
+            connectedSiteSha256(decoded) != row['delta_digest'] ||
+            decoded['workspaceId'] != row['workspace_id'] ||
+            decoded['siteId'] != row['site_id'] ||
+            decoded['afterCursor'] != row['after_cursor'] ||
+            decoded['nextCursor'] != row['next_cursor']) {
+          return false;
+        }
+        final delta = SiteDeltaV1.fromJson(decoded.cast<String, Object?>());
+        final retained = connection.select(
+          'SELECT cursor, event_json, event_digest FROM shop_connected_replica_events '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+          'AND cursor > ? AND cursor <= ? ORDER BY cursor',
+          [
+            row['workspace_id'],
+            row['site_id'],
+            row['client_fingerprint'],
+            row['after_cursor'],
+            row['next_cursor'],
+          ],
+        );
+        if (retained.length != delta.events.length) return false;
+        for (var index = 0; index < retained.length; index++) {
+          final expected = delta.events[index];
+          if (retained[index]['cursor'] != expected['cursor'] ||
+              retained[index]['event_json'] !=
+                  canonicalConnectedSiteJson(expected['event']) ||
+              retained[index]['event_digest'] != expected['eventDigest']) {
+            return false;
+          }
+        }
+      }
+      for (final head in connection.select(
+        'SELECT * FROM shop_connected_replica_heads',
+      )) {
+        final workspace = head['workspace_id'];
+        final site = head['site_id'];
+        final client = head['client_fingerprint'];
+        final snapshot = jsonDecode(head['snapshot_json'] as String) as Map;
+        var projections = (snapshot['projections'] as Map)
+            .cast<String, Object?>();
+        var cursor = head['snapshot_cursor'] as int;
+        final events = connection.select(
+          'SELECT cursor, event_json FROM shop_connected_replica_events '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? AND cursor > ? ORDER BY cursor',
+          [workspace, site, client, cursor],
+        );
+        for (final row in events) {
+          final event = jsonDecode(row['event_json'] as String) as Map;
+          final payload = (event['payload'] as Map).cast<String, Object?>();
+          if (payload.length != 2 ||
+              payload['contract'] !=
+                  'supermega.shop.connected-site-replica-state.v1' ||
+              payload['projections'] is! Map) {
+            return false;
+          }
+          projections = (payload['projections'] as Map).cast<String, Object?>();
+          cursor = row['cursor'] as int;
+        }
+        final expected = <String, (int, String, String)>{};
+        void add(String kind, String list, String id, String version) {
+          for (final raw in projections[list] as List) {
+            final value = (raw as Map).cast<String, Object?>();
+            final canonical = canonicalConnectedSiteJson(value);
+            expected['$kind\u0000${value[id]}'] = (
+              value[version] as int,
+              canonical,
+              connectedSiteSha256(value),
+            );
+          }
+        }
+
+        add('aggregate', 'aggregates', 'aggregateId', 'version');
+        add('cafeOrder', 'cafeOrders', 'orderId', 'ticketVersion');
+        add(
+          'stockReservation',
+          'stockReservations',
+          'reservationId',
+          'stateVersion',
+        );
+        add('conflict', 'conflicts', 'conflictId', 'actualVersion');
+        final actual = connection.select(
+          'SELECT * FROM shop_connected_replica_projections WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ?',
+          [workspace, site, client],
+        );
+        if (actual.length != expected.length) return false;
+        for (final row in actual) {
+          final value =
+              expected['${row['projection_kind']}\u0000${row['aggregate_id']}'];
+          if (value == null ||
+              row['aggregate_version'] != value.$1 ||
+              row['last_cursor'] != cursor ||
+              row['payload_json'] != value.$2 ||
+              row['payload_digest'] != value.$3) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v34ConnectedCloudProofRowsValid(Database connection) {
+    try {
+      final schemaVersion = connection.userVersion;
+      if (schemaVersion == 34) {
+        List<Map<String, Object?>> rows(String table) => connection
+            .select('SELECT * FROM $table')
+            .map((row) => Map<String, Object?>.from(row))
+            .toList(growable: false);
+        return shopHistoricalCloudProofRowsValidV34(
+          commands: rows('shop_site_commands'),
+          requirements: rows('shop_site_cloud_proof_requirements'),
+          proofs: rows('shop_site_cloud_proofs'),
+          retainedLeases: rows('shop_site_offline_lease_payloads'),
+          leases: rows('shop_site_offline_leases'),
+        );
+      }
+      final missingRequirement = connection
+          .select(
+            'SELECT COUNT(*) AS total FROM shop_site_commands command '
+            'LEFT JOIN shop_site_cloud_proof_requirements requirement '
+            'ON requirement.command_id = command.command_id '
+            'WHERE requirement.command_id IS NULL',
+          )
+          .single['total'];
+      if (missingRequirement != 0) return false;
+      for (final row in connection.select(
+        'SELECT requirement.*, command.received_at_millis, '
+        'proof.command_id AS proof_command_id FROM '
+        'shop_site_cloud_proof_requirements requirement '
+        'LEFT JOIN shop_site_commands command '
+        'ON command.command_id = requirement.command_id '
+        'LEFT JOIN shop_site_cloud_proofs proof '
+        'ON proof.command_id = requirement.command_id',
+      )) {
+        final state = row['proof_state'];
+        final receivedAt = row['received_at_millis'];
+        if (receivedAt is! int ||
+            row['recorded_at_millis'] != receivedAt ||
+            (state == 'proofRequired' && row['proof_command_id'] == null) ||
+            (state == 'legacyUnverifiable' &&
+                row['proof_command_id'] != null)) {
+          return false;
+        }
+      }
+      if (schemaVersion >= 35) {
+        for (final row in connection.select(
+          'SELECT requirement.command_id, command.command_digest, '
+          'command.received_at_millis, boundary.command_digest AS boundary_command_digest, '
+          'boundary.boundary_digest FROM shop_site_cloud_proof_requirements requirement '
+          'JOIN shop_site_commands command ON command.command_id = requirement.command_id '
+          'LEFT JOIN shop_site_cloud_proof_legacy_boundary boundary '
+          'ON boundary.command_id = requirement.command_id '
+          "WHERE requirement.proof_state = 'legacyUnverifiable'",
+        )) {
+          final expected = connectedSiteSha256({
+            'contract': 'supermega.shop.connected-cloud-legacy-boundary.v1',
+            'commandId': row['command_id'],
+            'commandDigest': row['command_digest'],
+            'receivedAtMillis': row['received_at_millis'],
+          });
+          if (row['boundary_command_digest'] != row['command_digest'] ||
+              row['boundary_digest'] != expected) {
+            return false;
+          }
+        }
+        final invalidBoundary = connection
+            .select(
+              'SELECT COUNT(*) AS total FROM shop_site_cloud_proof_legacy_boundary boundary '
+              'JOIN shop_site_cloud_proof_requirements requirement '
+              'ON requirement.command_id = boundary.command_id '
+              "WHERE requirement.proof_state != 'legacyUnverifiable'",
+            )
+            .single['total'];
+        if (invalidBoundary != 0) return false;
+      }
+      for (final row in connection.select(
+        'SELECT retained.*, lease.lease_id, lease.tenant_id, lease.site_id, '
+        'lease.actor_id, lease.actor_role, lease.capabilities_json, '
+        'lease.device_id, lease.session_generation, lease.revocation_generation, '
+        'lease.issued_at_millis, lease.expires_at_millis, lease.key_id, '
+        'lease.signature FROM shop_site_offline_lease_payloads retained '
+        'LEFT JOIN shop_site_offline_leases lease '
+        'ON lease.payload_digest = retained.payload_digest',
+      )) {
+        final decoded = jsonDecode(row['lease_json'] as String);
+        final lease = OfflineStaffLeaseV1.fromJson(decoded);
+        if (canonicalConnectedSiteJson(decoded) != row['lease_json'] ||
+            connectedSiteSha256(decoded) != row['lease_bytes_digest'] ||
+            row['issuer_evidence_digest'] is! String ||
+            !RegExp(r'^[0-9a-f]{64}$')
+                .hasMatch(row['issuer_evidence_digest']! as String) ||
+            lease.payloadDigest != row['payload_digest'] ||
+            lease.workspaceId != row['tenant_id'] ||
+            lease.siteId != row['site_id'] ||
+            lease.actorId != row['actor_id'] ||
+            lease.leaseId != row['lease_id'] ||
+            lease.role != row['actor_role'] ||
+            canonicalConnectedSiteJson(lease.capabilities) !=
+                canonicalConnectedSiteJson(
+                  jsonDecode(row['capabilities_json'] as String),
+                ) ||
+            lease.deviceId != row['device_id'] ||
+            lease.sessionGeneration != row['session_generation'] ||
+            lease.revocationGeneration != row['revocation_generation'] ||
+            lease.issuedAtMillis != row['issued_at_millis'] ||
+            lease.expiresAtMillis != row['expires_at_millis'] ||
+            lease.issuerKeyId != row['key_id'] ||
+            lease.signature != row['signature']) {
+          return false;
+        }
+      }
+      final hasIssuerEvidence = schemaVersion >= 35;
+      for (final row in connection.select(
+        'SELECT proof.*, command.command_digest, command.tenant_id, '
+        'command.site_id, command.actor_id, command.device_id, '
+        'command.aggregate_type, command.aggregate_id, command.expected_version, '
+        'command.payload_digest, command.lease_digest, command.received_at_millis, '
+        'command.capability, event.event_id, event.event_type, event.payload_json, '
+        'event.event_digest, audit.action AS audit_action, '
+        'retained.issuer_evidence_digest, '
+        '${hasIssuerEvidence ? 'issuer.evidence_json' : 'NULL'} AS issuer_evidence_json '
+        'FROM shop_site_cloud_proofs proof '
+        'LEFT JOIN shop_site_commands command ON command.command_id = proof.command_id '
+        'LEFT JOIN shop_site_events event ON event.command_id = proof.command_id '
+        'LEFT JOIN shop_site_audit audit ON audit.command_id = proof.command_id '
+        'LEFT JOIN shop_site_offline_lease_payloads retained '
+        'ON retained.payload_digest = command.lease_digest '
+        '${hasIssuerEvidence ? 'LEFT JOIN shop_site_lease_issuer_evidence issuer ON issuer.evidence_digest = retained.issuer_evidence_digest' : ''}',
+      )) {
+        final encoded = row['proof_json'] as String;
+        final decoded = jsonDecode(encoded);
+        final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
+        final signed = proof.signedCommand;
+        final eventBinding = decoded is Map ? decoded['eventBinding'] : null;
+        final eventPayload = row['payload_json'];
+        final derived = decoded is Map ? decoded['derivation'] : null;
+        if (canonicalConnectedSiteJson(decoded) != encoded ||
+            proof.proofKind != row['proof_kind'] ||
+            proof.proofDigest != row['proof_digest'] ||
+            proof.commandId != row['command_id'] ||
+            proof.commandDigest != row['command_digest'] ||
+            proof.workspaceId != row['tenant_id'] ||
+            proof.siteId != row['site_id'] ||
+            proof.deviceId != row['device_id'] ||
+            proof.leaseDigest != row['lease_digest'] ||
+            (signed != null &&
+                (signed.actorId != row['actor_id'] ||
+                    signed.aggregateType != row['aggregate_type'] ||
+                    signed.aggregateId != row['aggregate_id'] ||
+                    signed.expectedVersion != row['expected_version'] ||
+                    signed.payloadDigest != row['payload_digest'] ||
+                    DateTime.parse(signed.issuedAt).millisecondsSinceEpoch !=
+                        row['received_at_millis'] ||
+                    (eventPayload != null &&
+                        canonicalConnectedSiteJson(signed.payload) !=
+                            eventPayload) ||
+                    eventBinding is! Map ||
+                    (eventPayload != null &&
+                        (eventBinding['eventId'] != row['event_id'] ||
+                            eventBinding['eventType'] != row['event_type'] ||
+                            eventBinding['eventDigest'] !=
+                                row['event_digest'])) ||
+                    eventBinding['capability'] != row['capability'] ||
+                    (eventPayload != null &&
+                        eventBinding['auditAction'] != row['audit_action']) ||
+                    eventBinding['commandType'] != signed.commandType)) ||
+            (proof.proofKind == 'coordinatorDerived' &&
+                (eventPayload == null ||
+                    derived is! Map ||
+                    derived['eventDigest'] != row['event_digest']))) {
+          return false;
+        }
+        if (proof.proofKind == 'coordinatorDerived') {
+          final derivedMap = Map<String, Object?>.from(derived! as Map);
+          final sourceProof = ConnectedSiteCloudProofV1.fromJson(
+            (decoded as Map)['sourceProof'],
+          );
+          final sourceCommand = sourceProof.signedCommand;
+          final sourceReservation = sourceCommand?.payload['reservation'];
+          final identityDigest = connectedSiteSha256({
+            'reservationId': derivedMap['reservationId'],
+            'transitionDigest': derivedMap['transitionDigest'],
+            'state': derivedMap['state'],
+          });
+          final eventPayloadMap = Map<String, Object?>.from(
+            jsonDecode(eventPayload!) as Map,
+          );
+          final source = connection.select(
+            'SELECT COUNT(*) AS total FROM shop_site_cloud_proofs source_proof '
+            'JOIN shop_site_commands source_command '
+            'ON source_command.command_id = source_proof.command_id '
+            'JOIN shop_site_command_acks source_ack '
+            'ON source_ack.command_id = source_command.command_id '
+            'JOIN shop_connected_stock_reservation_headers header '
+            'ON header.command_id = source_command.command_id '
+            'JOIN shop_connected_stock_reservation_transitions transition '
+            'ON transition.reservation_id = header.reservation_id '
+            'WHERE source_proof.command_id = ? AND source_proof.proof_digest = ? '
+            'AND source_command.tenant_id = ? AND source_command.site_id = ? '
+            'AND source_command.device_id = ? '
+            "AND source_command.state = 'accepted' AND source_ack.status = 'accepted' "
+            'AND header.reservation_id = ? AND header.legacy_source = 0 '
+            'AND header.reservation_json = ? '
+            'AND (transition.operation_id = ? OR transition.sale_id = ?) '
+            'AND transition.transition_digest = ? AND transition.to_state = ? '
+            'AND transition.transition_json = ?',
+            [
+              sourceProof.commandId,
+              sourceProof.proofDigest,
+              proof.workspaceId,
+              proof.siteId,
+              proof.deviceId,
+              derivedMap['reservationId'],
+              canonicalConnectedSiteJson(sourceReservation),
+              derivedMap['operationId'],
+              derivedMap['operationId'],
+              derivedMap['transitionDigest'],
+              derivedMap['state'],
+              canonicalConnectedSiteJson(eventPayloadMap['transition']),
+            ],
+          ).single['total'];
+          if (source != 1 ||
+              sourceCommand == null ||
+              sourceReservation is! Map ||
+              sourceReservation['reservationId'] !=
+                  derivedMap['reservationId'] ||
+              proof.commandId != 'terminal:$identityDigest' ||
+              eventPayloadMap['transition'] is! Map ||
+              eventPayloadMap['operationId'] != derivedMap['operationId'] ||
+              eventPayloadMap['reservationId'] != derivedMap['reservationId'] ||
+              eventPayloadMap['transitionDigest'] !=
+                  derivedMap['transitionDigest'] ||
+              eventPayloadMap['state'] != derivedMap['state']) {
+            return false;
+          }
+        } else {
+          final proofMap = Map<String, Object?>.from(decoded as Map);
+          final command = signed!;
+          final authority = connection.select(
+            'SELECT COUNT(*) AS total FROM shop_site_enrollment_evidence enrollment '
+            'JOIN shop_site_devices device ON device.device_id = enrollment.device_id '
+            'JOIN shop_site_coordinator_bindings binding '
+            'ON binding.enrollment_evidence_digest = enrollment.evidence_digest '
+            'WHERE enrollment.evidence_digest = ? AND enrollment.action = ? '
+            'AND enrollment.tenant_id = ? AND enrollment.site_id = ? '
+            'AND enrollment.device_id = ? AND enrollment.client_fingerprint = ? '
+            'AND device.tenant_id = enrollment.tenant_id '
+            'AND device.site_id = enrollment.site_id '
+            'AND device.public_key_fingerprint = enrollment.client_fingerprint '
+            'AND device.session_generation = enrollment.session_generation '
+            'AND binding.binding_digest = ? '
+            'AND binding.client_signing_key_id = ? '
+            'AND binding.client_device_id = enrollment.device_id '
+            'AND binding.client_fingerprint = enrollment.client_fingerprint',
+            [
+              proofMap['enrollmentEvidenceDigest'],
+              'approve',
+              proof.workspaceId,
+              proof.siteId,
+              proof.deviceId,
+              proofMap['clientFingerprint'],
+              proofMap['coordinatorBindingDigest'],
+              command.signingKeyId,
+            ],
+          ).single['total'];
+          if (authority != 1 ||
+              proofMap['authorityPayloadDigest'] !=
+                  row['issuer_evidence_digest']) {
+            return false;
+          }
+          final issuerJson = row['issuer_evidence_json'];
+          if (hasIssuerEvidence &&
+              (issuerJson is! String ||
+                  connectedSiteSha256(jsonDecode(issuerJson)) !=
+                      proofMap['authorityPayloadDigest'])) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v32ConnectedReplicaRowsValid(Database connection) {
+    try {
+      final heads = connection.select(
+        'SELECT * FROM shop_connected_replica_heads ORDER BY workspace_id, site_id, client_fingerprint',
+      );
+      final events = connection.select(
+        'SELECT * FROM shop_connected_replica_events ORDER BY workspace_id, site_id, client_fingerprint, cursor',
+      );
+      final projections = connection.select(
+        'SELECT * FROM shop_connected_replica_projections ORDER BY workspace_id, site_id, client_fingerprint, projection_kind, aggregate_id',
+      );
+      for (final head in heads) {
+        final workspace = head['workspace_id'];
+        final site = head['site_id'];
+        final fingerprint = head['client_fingerprint'];
+        final evidenceStartCursor = head['evidence_start_cursor'] as int;
+        final snapshotCursor = head['snapshot_cursor'] as int;
+        final cursor = head['continuation_cursor'] as int;
+        final snapshot = jsonDecode(head['snapshot_json'] as String);
+        if (snapshot is! Map ||
+            canonicalConnectedSiteJson(snapshot) != head['snapshot_json'] ||
+            connectedSiteSha256(snapshot) != head['checkpoint_digest'] ||
+            snapshot['workspaceId'] != workspace ||
+            snapshot['siteId'] != site ||
+            snapshot['version'] != head['snapshot_version'] ||
+            snapshot['continuationCursor'] != snapshotCursor ||
+            evidenceStartCursor > snapshotCursor) {
+          return false;
+        }
+        var expected = evidenceStartCursor + 1;
+        for (final row in events.where(
+          (row) =>
+              row['workspace_id'] == workspace &&
+              row['site_id'] == site &&
+              row['client_fingerprint'] == fingerprint,
+        )) {
+          if (row['cursor'] != expected++) return false;
+          final decoded = jsonDecode(row['event_json'] as String);
+          if (decoded is! Map ||
+              canonicalConnectedSiteJson(decoded) != row['event_json'] ||
+              connectedSiteSha256(decoded) != row['event_digest'] ||
+              decoded['workspaceId'] != workspace ||
+              decoded['siteId'] != site) {
+            return false;
+          }
+        }
+        if (expected - 1 != cursor) return false;
+        for (final row in projections.where(
+          (row) =>
+              row['workspace_id'] == workspace &&
+              row['site_id'] == site &&
+              row['client_fingerprint'] == fingerprint,
+        )) {
+          final decoded = jsonDecode(row['payload_json'] as String);
+          if (decoded is! Map ||
+              (row['last_cursor'] as int) > cursor ||
+              canonicalConnectedSiteJson(decoded) != row['payload_json'] ||
+              connectedSiteSha256(decoded) != row['payload_digest']) {
+            return false;
+          }
+        }
+      }
+      return events.every(
+            (row) => heads.any(
+              (head) =>
+                  head['workspace_id'] == row['workspace_id'] &&
+                  head['site_id'] == row['site_id'] &&
+                  head['client_fingerprint'] == row['client_fingerprint'],
+            ),
+          ) &&
+          projections.every(
+            (row) => heads.any(
+              (head) =>
+                  head['workspace_id'] == row['workspace_id'] &&
+                  head['site_id'] == row['site_id'] &&
+                  head['client_fingerprint'] == row['client_fingerprint'],
+            ),
+          );
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v31ConnectedReservationSessionRowsValid(Database connection) {
+    try {
+      final attempts = connection.select(
+        'SELECT command_id, command_digest, command_json, prepared_at_millis '
+        'FROM shop_site_command_attempts ORDER BY command_id',
+      );
+      final bindings = connection.select(
+        'SELECT * FROM shop_connected_reservation_session_bindings '
+        'ORDER BY workspace_id, site_id, actor_id, device_id, workflow_type, subject_id',
+      );
+      final expected = <String, Map<String, Object?>>{};
+      for (final row in attempts) {
+        final command = SiteCommandV1.fromJson(
+          jsonDecode(row['command_json']! as String),
+        );
+        if (command.payload['contract'] !=
+            'supermega.shop.connected-stock-reserve.v1') {
+          continue;
+        }
+        final reservation = ConnectedStockReservationV1.fromJson(
+          command.payload['reservation'],
+        );
+        final expectedType = switch (reservation.workflowType) {
+          ConnectedStockWorkflowType.retailCart => 'retail.stock.reserve.v1',
+          ConnectedStockWorkflowType.cafeOrder => 'cafe.stock.reserve.v1',
+        };
+        if (command.commandId != row['command_id'] ||
+            command.commandDigest != row['command_digest'] ||
+            command.commandType != expectedType ||
+            command.workspaceId != reservation.workspaceId ||
+            command.siteId != reservation.siteId ||
+            command.actorId != reservation.actorId ||
+            command.deviceId != reservation.deviceId ||
+            command.aggregateType != reservation.workflowType.name ||
+            command.aggregateId != reservation.subjectId ||
+            command.payloadDigest != connectedSiteSha256(command.payload)) {
+          return false;
+        }
+        final key = [
+          reservation.workspaceId,
+          reservation.siteId,
+          reservation.actorId,
+          reservation.deviceId,
+          reservation.workflowType.name,
+          reservation.subjectId,
+        ].join('\u0000');
+        if (expected.containsKey(key)) return false;
+        expected[key] = {
+          'workspace_id': reservation.workspaceId,
+          'site_id': reservation.siteId,
+          'actor_id': reservation.actorId,
+          'device_id': reservation.deviceId,
+          'workflow_type': reservation.workflowType.name,
+          'subject_id': reservation.subjectId,
+          'reservation_id': reservation.reservationId,
+          'reservation_digest': reservation.reservationDigest,
+          'reserve_command_id': command.commandId,
+          'reserve_command_digest': command.commandDigest,
+          'bound_at_millis': row['prepared_at_millis'],
+        };
+      }
+      if (bindings.length != expected.length) return false;
+      for (final raw in bindings) {
+        final row = Map<String, Object?>.from(raw);
+        final key = [
+          row['workspace_id'],
+          row['site_id'],
+          row['actor_id'],
+          row['device_id'],
+          row['workflow_type'],
+          row['subject_id'],
+        ].join('\u0000');
+        final value = expected[key];
+        if (value == null ||
+            value.entries.any((entry) => row[entry.key] != entry.value)) {
           return false;
         }
       }

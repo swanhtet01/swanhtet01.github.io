@@ -73,6 +73,17 @@ void main() {
         isEmpty,
       );
 
+      // The debug-only run-as receipt evidence sidecar shares the private
+      // evidence envelope without becoming a restore candidate.
+      await File(
+        '${scope.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
+        '$shopQaLoopbackReceiptEvidenceFileName',
+      ).writeAsString('{}', flush: true);
+      await File(
+        '${scope.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
+        '$shopQaMetricsEvidenceFileName',
+      ).writeAsString('{}', flush: true);
+
       final staged = await store.stageLatestEncryptedBackup();
       expect(staged, isNotNull);
       expect(staged!.parent.absolute.path, scope.temporaryRoot.absolute.path);

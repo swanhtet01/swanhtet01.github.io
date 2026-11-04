@@ -8,6 +8,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_models.dart';
 
 import 'managed_staff_test_support.dart';
 
@@ -159,6 +160,198 @@ void main() {
       expect(gateway.serverCommitCount, 1);
       expect(await database.countOutboxOperations(), outboxAfterFirst);
       expect((await database.readActiveProducts()).single.onHand, 2);
+    },
+  );
+
+  test(
+    'lost cash correction reply blocks shift close until retry resolves',
+    () async {
+      final command = await database.previewFullSaleReversal(
+        operationId: 'reverse-shift-changed',
+        saleId: saleId,
+        restockItems: true,
+        reason: 'Customer returned the full sale',
+        confirmCashReturned: true,
+      );
+      final authorization = await _authorization(command.commandDigest);
+      final gateway = _LostReplyGateway(command);
+      const requestId = '30000000-0000-4000-8000-000000000012';
+
+      await expectLater(
+        database.consumeAndRecordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+          consumptionRequestId: requestId,
+          gateway: gateway,
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+      final originalShift = await database.readOpenCashShift();
+      expect(originalShift?.id, command.expectedCashShiftId);
+      final review = await database.readCashShiftReview(originalShift!.id);
+
+      await expectLater(
+        database.closeManagedTestCashShift(
+          shiftId: originalShift.id,
+          operationId: 'close-after-lost-correction-reply',
+          seenSaleCount: review.saleCount,
+          seenCashTotalMmk: review.cashSalesTotalMmk,
+          countedCashMmk: review.expectedCashMmk,
+          seenCashReversalCount: review.cashReversalCount,
+          seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
+          seenCashMovementCount: review.cashMovementCount,
+          seenCashInTotalMmk: review.cashInTotalMmk,
+          seenCashOutTotalMmk: review.cashOutTotalMmk,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Finish the pending cash return before closing this shift.',
+          ),
+        ),
+      );
+      final reversal = await database.resumePendingFullSaleReversal(
+        consumptionRequestId: requestId,
+        gateway: gateway,
+      );
+      expect(gateway.serverCommitCount, 1);
+      expect(reversal.saleId, saleId);
+      final resolvedReview = await database.readCashShiftReview(
+        originalShift.id,
+      );
+      final closed = await database.closeManagedTestCashShift(
+        shiftId: originalShift.id,
+        operationId: 'close-after-lost-correction-reply',
+        seenSaleCount: resolvedReview.saleCount,
+        seenCashTotalMmk: resolvedReview.cashSalesTotalMmk,
+        countedCashMmk: resolvedReview.expectedCashMmk,
+        seenCashReversalCount: resolvedReview.cashReversalCount,
+        seenCashDrawerOutflowMmk: resolvedReview.cashDrawerOutflowMmk,
+        seenCashMovementCount: resolvedReview.cashMovementCount,
+        seenCashInTotalMmk: resolvedReview.cashInTotalMmk,
+        seenCashOutTotalMmk: resolvedReview.cashOutTotalMmk,
+      );
+      expect(closed.state, 'closed');
+    },
+  );
+
+  test('pending wallet correction does not block cash shift close', () async {
+    await database.addProduct(
+      id: 'wallet-water',
+      name: 'Water',
+      priceMmk: 1000,
+      openingStock: 2,
+    );
+    const lines = [ShopSaleLineInput(productId: 'wallet-water', quantity: 1)];
+    await database.createWalletCheckoutIntent(
+      operationId: 'wallet-sale-unrelated-to-shift',
+      merchant: MerchantWalletSetup(
+        provider: 'KBZPay',
+        merchantPhone: null,
+        officialQrPayload: _syntheticStaticMmqr(),
+        issuerConfirmed: true,
+      ),
+      lines: lines,
+    );
+    final walletSale = await database.recordManagedTestSale(
+      operationId: 'wallet-sale-unrelated-to-shift',
+      lines: lines,
+      paymentMethod: 'kbzpay',
+      walletCheckoutOperationId: 'wallet-sale-unrelated-to-shift',
+    );
+    final command = await database.previewFullSaleReversal(
+      operationId: 'pending-wallet-correction',
+      saleId: walletSale.id,
+      restockItems: false,
+      reason: 'Provider reconciliation remains pending',
+      confirmCashReturned: false,
+    );
+    expect(command.expectedCashShiftId, isNull);
+    await database.prepareFullSaleCorrectionConsumption(
+      consumptionRequestId: '30000000-0000-4000-8000-000000000013',
+      command: command,
+      authorization: await _authorization(
+        command.commandDigest,
+        receiptId: '50000000-0000-4000-8000-000000000013',
+        finalizationRequestId: '60000000-0000-4000-8000-000000000013',
+      ),
+    );
+
+    final shift = await database.readOpenCashShift();
+    final review = await database.readCashShiftReview(shift!.id);
+    final closed = await database.closeManagedTestCashShift(
+      shiftId: shift.id,
+      operationId: 'close-with-unrelated-wallet-correction',
+      seenSaleCount: review.saleCount,
+      seenCashTotalMmk: review.cashSalesTotalMmk,
+      countedCashMmk: review.expectedCashMmk,
+      seenCashReversalCount: review.cashReversalCount,
+      seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
+      seenCashMovementCount: review.cashMovementCount,
+      seenCashInTotalMmk: review.cashInTotalMmk,
+      seenCashOutTotalMmk: review.cashOutTotalMmk,
+    );
+    expect(closed.state, 'closed');
+  });
+
+  test(
+    'pending cash correction for a prior shift does not block another shift',
+    () async {
+      final command = await database.previewFullSaleReversal(
+        operationId: 'legacy-prior-shift-correction',
+        saleId: saleId,
+        restockItems: true,
+        reason: 'Customer returned the full sale',
+        confirmCashReturned: true,
+      );
+      final authorization = await _authorization(
+        command.commandDigest,
+        receiptId: '50000000-0000-4000-8000-000000000014',
+        finalizationRequestId: '60000000-0000-4000-8000-000000000014',
+      );
+      final originalShift = await database.readOpenCashShift();
+      expect(command.expectedCashShiftId, originalShift?.id);
+      final originalReview = await database.readCashShiftReview(
+        originalShift!.id,
+      );
+      await database.closeManagedTestCashShift(
+        shiftId: originalShift.id,
+        operationId: 'close-before-legacy-intent',
+        seenSaleCount: originalReview.saleCount,
+        seenCashTotalMmk: originalReview.cashSalesTotalMmk,
+        countedCashMmk: originalReview.expectedCashMmk,
+        seenCashReversalCount: originalReview.cashReversalCount,
+        seenCashDrawerOutflowMmk: originalReview.cashDrawerOutflowMmk,
+        seenCashMovementCount: originalReview.cashMovementCount,
+        seenCashInTotalMmk: originalReview.cashInTotalMmk,
+        seenCashOutTotalMmk: originalReview.cashOutTotalMmk,
+      );
+      final currentShift = await database.openManagedTestCashShift(
+        operationId: 'shift-after-legacy-intent',
+        operatorLabel: 'May',
+        openingFloatMmk: 5000,
+      );
+      await database.prepareFullSaleCorrectionConsumption(
+        consumptionRequestId: '30000000-0000-4000-8000-000000000014',
+        command: command,
+        authorization: authorization,
+      );
+
+      final currentReview = await database.readCashShiftReview(currentShift.id);
+      final closed = await database.closeManagedTestCashShift(
+        shiftId: currentShift.id,
+        operationId: 'close-unrelated-current-shift',
+        seenSaleCount: currentReview.saleCount,
+        seenCashTotalMmk: currentReview.cashSalesTotalMmk,
+        countedCashMmk: currentReview.expectedCashMmk,
+        seenCashReversalCount: currentReview.cashReversalCount,
+        seenCashDrawerOutflowMmk: currentReview.cashDrawerOutflowMmk,
+        seenCashMovementCount: currentReview.cashMovementCount,
+        seenCashInTotalMmk: currentReview.cashInTotalMmk,
+        seenCashOutTotalMmk: currentReview.cashOutTotalMmk,
+      );
+      expect(closed.state, 'closed');
     },
   );
 
@@ -530,7 +723,7 @@ void main() {
         priceMmk: 2500,
         openingStock: 2,
       );
-      await opened.openManagedTestCashShift(
+      final shift = await opened.openManagedTestCashShift(
         operationId: 'restart-shift',
         operatorLabel: 'May',
         openingFloatMmk: 10000,
@@ -588,6 +781,28 @@ void main() {
         }),
       );
       await opened.verifyReadyForUse();
+      final pendingReview = await opened.readCashShiftReview(shift.id);
+      await expectLater(
+        opened.closeManagedTestCashShift(
+          shiftId: shift.id,
+          operationId: 'restart-close-before-retry',
+          seenSaleCount: pendingReview.saleCount,
+          seenCashTotalMmk: pendingReview.cashSalesTotalMmk,
+          countedCashMmk: pendingReview.expectedCashMmk,
+          seenCashReversalCount: pendingReview.cashReversalCount,
+          seenCashDrawerOutflowMmk: pendingReview.cashDrawerOutflowMmk,
+          seenCashMovementCount: pendingReview.cashMovementCount,
+          seenCashInTotalMmk: pendingReview.cashInTotalMmk,
+          seenCashOutTotalMmk: pendingReview.cashOutTotalMmk,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Finish the pending cash return before closing this shift.',
+          ),
+        ),
+      );
       await opened.resumePendingFullSaleReversal(
         consumptionRequestId: requestId,
         gateway: gateway,
@@ -595,6 +810,20 @@ void main() {
       expect(gateway.serverCommitCount, 1);
       expect((await opened.readActiveProducts()).single.onHand, 2);
       expect(await opened.readSaleReversalForSale(restartSale.id), isNotNull);
+      final resolvedReview = await opened.readCashShiftReview(shift.id);
+      final closed = await opened.closeManagedTestCashShift(
+        shiftId: shift.id,
+        operationId: 'restart-close-after-retry',
+        seenSaleCount: resolvedReview.saleCount,
+        seenCashTotalMmk: resolvedReview.cashSalesTotalMmk,
+        countedCashMmk: resolvedReview.expectedCashMmk,
+        seenCashReversalCount: resolvedReview.cashReversalCount,
+        seenCashDrawerOutflowMmk: resolvedReview.cashDrawerOutflowMmk,
+        seenCashMovementCount: resolvedReview.cashMovementCount,
+        seenCashInTotalMmk: resolvedReview.cashInTotalMmk,
+        seenCashOutTotalMmk: resolvedReview.cashOutTotalMmk,
+      );
+      expect(closed.state, 'closed');
     } finally {
       await opened?.close();
       await directory.delete(recursive: true);
@@ -1168,6 +1397,43 @@ Future<ShopCorrectionConsumptionProof> _proof({
     keyId: _keyId,
     signature: await _sign(digest),
   );
+}
+
+String _syntheticStaticMmqr() {
+  String field(String id, String value) =>
+      '$id${utf8.encode(value).length.toString().padLeft(2, '0')}$value';
+
+  final merchant = [
+    field('00', 'MM.COM.MMQR'),
+    field('01', '999999999999999'),
+    field('02', '000000'),
+  ].join();
+  final language = [field('00', 'my'), field('01', 'ဆိုင်')].join();
+  final body = [
+    field('00', '01'),
+    field('01', '11'),
+    field('26', merchant),
+    field('52', '5411'),
+    field('53', '104'),
+    field('58', 'MM'),
+    field('59', 'TEST STORE'),
+    field('60', 'Yangon'),
+    field('64', language),
+    '6304',
+  ].join();
+  return '$body${_testCrc16(utf8.encode(body))}';
+}
+
+String _testCrc16(List<int> bytes) {
+  var crc = 0xffff;
+  for (final byte in bytes) {
+    crc ^= byte << 8;
+    for (var bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x8000) != 0 ? ((crc << 1) ^ 0x1021) : crc << 1;
+      crc &= 0xffff;
+    }
+  }
+  return crc.toRadixString(16).toUpperCase().padLeft(4, '0');
 }
 
 Future<String> _sign(String digest) async {

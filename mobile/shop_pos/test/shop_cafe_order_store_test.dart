@@ -12,6 +12,8 @@ import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 
+import 'historical_shop_fixture_support.dart';
+
 const _soy = CafeModifierSnapshot(
   id: 'soy',
   version: 1,
@@ -1967,7 +1969,7 @@ void main() {
           } on Object catch (error, stack) {
             fail('v$origin migration failed: $error\n$stack');
           }
-          expect(database.schemaVersion, 22);
+          expect(database.schemaVersion, 42);
           expect(await database.countSales(), origin == 18 ? 1 : 0);
           final products = await database.readActiveProducts();
           expect(products, origin == 18 ? hasLength(1) : isEmpty);
@@ -2404,6 +2406,62 @@ CafeOrderCommand _command(
 void _downgradeV19(File file, int target) {
   final connection = sqlite.sqlite3.open(file.path);
   try {
+    dropHistoricalShopSchemaDefinitionGroup(
+      connection,
+      shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+    );
+    for (final definition
+        in shopConnectedTrustedTimeSchemaDefinitionsV37().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedCloudProofSchemaDefinitionsV35().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedReplicaSchemaDefinitionsV33().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedReplicaSchemaDefinitionsV32().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedReservationSessionSchemaDefinitionsV31().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedAuthorityPayloadSchemaDefinitionsV30().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedEnvelopeSchemaDefinitionsV29().entries
+            .toList()
+            .reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
+    for (final definition
+        in shopConnectedSiteSchemaDefinitionsV28().entries.toList().reversed) {
+      _dropDefinition(connection, definition.key, definition.value);
+    }
     connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
     for (final definition
         in shopPendingCashCheckoutSchemaDefinitionsV21().entries

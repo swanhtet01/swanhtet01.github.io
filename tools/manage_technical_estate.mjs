@@ -262,7 +262,7 @@ export function validateTechnicalEstate(estate) {
   if (schema?.browserRolesDenied !== true || schema?.publicBrowserQuarantine !== false
     || schema.currentStateRevalidated !== false || !Number.isFinite(Date.parse(schema.observedAt || ''))
     || !Number.isInteger(schema.liveSchemaVersion) || schema.liveSchemaVersion < 7 || schema.liveSchemaVersion > 11
-    || schema.localTargetVersion !== 13 || schema.versionDrift !== 13 - schema.liveSchemaVersion) fail('technical_estate_supabase_quarantine_invalid')
+    || schema.localTargetVersion !== 14 || schema.versionDrift !== 14 - schema.liveSchemaVersion) fail('technical_estate_supabase_quarantine_invalid')
   if (estate.ownerGates?.productionWritesAllowed !== false || estate.ownerGates?.externalEffectsAllowed !== false || estate.ownerGates?.autoMergeAllowed !== false) fail('technical_estate_owner_gates_invalid')
   for (const action of OWNER_GATED_ACTIONS) {
     if (!estate.ownerGates.requiredApprovalFor.includes(action)) fail(`technical_estate_owner_gate_missing:${action}`)

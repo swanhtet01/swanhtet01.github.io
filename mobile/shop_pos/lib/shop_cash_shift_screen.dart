@@ -23,6 +23,38 @@ bool shopOperationalExportSaveAvailable({
   required bool hasTestAction,
 }) => hasTestAction || !isSyntheticQa;
 
+@visibleForTesting
+String shopCashShiftErrorMessage({
+  required bool myanmar,
+  required Object error,
+  required String englishFallback,
+  required String burmeseFallback,
+}) {
+  final detail = error.toString();
+  if (detail.contains('pending wallet')) {
+    return shopCopy(
+      myanmar,
+      'Finish or cancel the pending wallet checkout first.',
+      'ဆိုင်းငံ့ထားသော ဖုန်းငွေပေးချေမှုအရောင်းကို အရင်ပြီးစီးစေပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
+    );
+  }
+  if (detail.contains('pending cash return')) {
+    return shopCopy(
+      myanmar,
+      'Finish the pending cash return before closing this shift.',
+      'ဆိုင်းငံ့ထားသော ငွေသားပြန်အမ်းမှုကို အရင်ပြီးစီးစေပြီးမှ ဤတာဝန်ချိန်ကို ပိတ်ပါ။',
+    );
+  }
+  if (detail.contains('Shift activity changed')) {
+    return shopCopy(
+      myanmar,
+      'Recorded cash activity changed. Review the shift again.',
+      'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက် ပြောင်းလဲသွားသောကြောင့် တာဝန်ချိန်ကို ပြန်စစ်ပါ။',
+    );
+  }
+  return shopCopy(myanmar, englishFallback, burmeseFallback);
+}
+
 class ShopCashShiftScreen extends StatefulWidget {
   const ShopCashShiftScreen({
     required this.database,
@@ -175,22 +207,14 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
 
   void _showError(Object error, String english, String burmese) {
     if (!mounted) return;
-    final detail = error.toString();
     setState(() {
       _notice = null;
-      _error = detail.contains('pending wallet')
-          ? shopCopy(
-              widget.myanmar,
-              'Finish or cancel the pending wallet checkout first.',
-              'ဆိုင်းငံ့ထားသော ဖုန်းငွေပေးချေမှုအရောင်းကို အရင်ပြီးစီးစေပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
-            )
-          : detail.contains('Shift activity changed')
-          ? shopCopy(
-              widget.myanmar,
-              'Recorded cash activity changed. Review the shift again.',
-              'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက် ပြောင်းလဲသွားသောကြောင့် တာဝန်ချိန်ကို ပြန်စစ်ပါ။',
-            )
-          : shopCopy(widget.myanmar, english, burmese);
+      _error = shopCashShiftErrorMessage(
+        myanmar: widget.myanmar,
+        error: error,
+        englishFallback: english,
+        burmeseFallback: burmese,
+      );
     });
     _focusStatus();
   }
@@ -270,7 +294,8 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
             '${shopCopy(widget.myanmar, 'Counted', 'ရေတွက်ငွေ')}: '
             '${shopMmk(counted, myanmar: widget.myanmar)}\n'
             '${shopCopy(widget.myanmar, 'Difference', 'ကွာခြားချက်')}: '
-            '${shopMmk(difference, myanmar: widget.myanmar)}',
+            '${shopMmk(difference, myanmar: widget.myanmar)}\n\n'
+            '${shopCopy(widget.myanmar, 'Recording this difference will close the shift.', 'ဤကွာခြားချက်ကို မှတ်တမ်းတင်လျှင် တာဝန်ချိန်ကို ပိတ်ပါမည်။')}',
           ),
           actions: [
             TextButton(
@@ -282,8 +307,8 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
               child: Text(
                 shopCopy(
                   widget.myanmar,
-                  'Record difference',
-                  'ကွာခြားချက် မှတ်တမ်းတင်မည်',
+                  'Record difference & close shift',
+                  'ကွာခြားချက်မှတ်တမ်းတင်ပြီး တာဝန်ချိန်ပိတ်မည်',
                 ),
               ),
             ),

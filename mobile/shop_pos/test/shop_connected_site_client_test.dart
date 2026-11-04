@@ -1,0 +1,1217 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:cryptography/cryptography.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:supermega_shop/shop_connected_site_client.dart';
+import 'package:supermega_shop/shop_connected_site_contracts.dart';
+import 'package:supermega_shop/shop_connected_site_attempt_store.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_authority.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_contract.dart';
+import 'package:supermega_shop/shop_connected_trusted_time_exchange.dart';
+import 'package:supermega_shop/shop_site_coordinator.dart';
+
+const _now = '2026-10-31T12:00:00.000Z';
+const _certificate =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _binding =
+    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
+
+void main() {
+  late _Signer signer;
+  late _Transport transport;
+  late _Attempts attempts;
+  late CoordinatorPairingV1 pairing;
+
+  setUp(() async {
+    signer = await _Signer.create();
+    transport = _Transport();
+    attempts = _Attempts();
+    pairing = CoordinatorPairingV1(
+      workspaceId: 'workspace-1',
+      siteId: 'site-1',
+      coordinatorDeviceId: 'counter-1',
+      certificateSha256: _certificate,
+      address: '192.168.10.4',
+      port: 9443,
+      nonce: 'pairing_nonce_abcdefghijklmnop',
+      issuedAt: _now,
+      expiresAt: '2026-10-31T12:05:00.000Z',
+    );
+  });
+
+  test(
+    'client is default-off and unavailable key custody fails closed',
+    () async {
+      final disabled = SiteCoordinatorClient(pairing: pairing);
+      await expectLater(disabled.readHealth(), throwsStateError);
+
+      final enabled = SiteCoordinatorClient(
+        pairing: pairing,
+        runtimeEnabled: true,
+        transport: transport,
+        now: () => DateTime.parse('2026-10-31T12:01:00.000Z'),
+      );
+      await expectLater(
+        enabled.readHealth(),
+        throwsA(isA<ConnectedSiteTransportException>()),
+      );
+    },
+  );
+
+  test('v2 trusted time sends only exact bound canonical request', () async {
+    final wire = _trustedTimeWire(signer);
+    transport.handler = (request) async {
+      expect(request.uri.path, connectedTrustedTimeV2Path);
+      expect(request.method, 'POST');
+      expect(request.certificateSha256, _certificate);
+      expect(request.headers, isNot(contains('authorization')));
+      final decoded = ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+        request.body,
+      );
+      expect(decoded.wireRequestDigest, wire.wireRequestDigest);
+      expect(decoded.request.approvalDigest, _approval().approvalDigest);
+      expect(
+        utf8.decode(request.body),
+        isNot(contains(_approval().ownerAuthoritySignature)),
+      );
+      final response = ConnectedTrustedTimeWireResponseV2(
+        request: decoded,
+        observation: _trustedTimeObservation(decoded.request.challenge),
+      );
+      return ConnectedSiteHttpResponse(
+        statusCode: 200,
+        contentType: 'application/json; charset=utf-8',
+        body: Uint8List.fromList(response.canonicalBytes),
+      );
+    };
+    final exchange = SiteCoordinatorTrustedTimeObservationExchange(
+      client: _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      ),
+    );
+
+    final observation = await exchange.observe(
+      approval: _approval(),
+      challenge: wire.request.challenge,
+    );
+
+    expect(
+      observation.challenge.requestDigest,
+      wire.request.challenge.requestDigest,
+    );
+    expect(transport.requests, hasLength(1));
+    expect(attempts.bindingResolutions, 2);
+  });
+
+  test(
+    'v2 trusted time rejects a binding revoked while response is in flight',
+    () async {
+      final wire = _trustedTimeWire(signer);
+      transport.handler = (request) async {
+        final decoded = ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+          request.body,
+        );
+        attempts.active = false;
+        return ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'application/json',
+          body: Uint8List.fromList(
+            ConnectedTrustedTimeWireResponseV2(
+              request: decoded,
+              observation: _trustedTimeObservation(decoded.request.challenge),
+            ).canonicalBytes,
+          ),
+        );
+      };
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+
+      await expectLater(
+        client.requestTrustedTime(wire),
+        throwsA(
+          isA<ConnectedSiteTransportException>().having(
+            (error) => error.code,
+            'code',
+            'coordinator_binding_unavailable',
+          ),
+        ),
+      );
+      expect(transport.requests, hasLength(1));
+      expect(attempts.bindingResolutions, 2);
+    },
+  );
+
+  test(
+    'v2 trusted time rejects binding rotation while response is in flight',
+    () async {
+      final wire = _trustedTimeWire(signer);
+      transport.handler = (request) async {
+        final decoded = ConnectedTrustedTimeWireRequestV2.fromCanonicalBytes(
+          request.body,
+        );
+        attempts.approvalGeneration = 2;
+        return ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'application/json',
+          body: Uint8List.fromList(
+            ConnectedTrustedTimeWireResponseV2(
+              request: decoded,
+              observation: _trustedTimeObservation(decoded.request.challenge),
+            ).canonicalBytes,
+          ),
+        );
+      };
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+
+      await expectLater(
+        client.requestTrustedTime(wire),
+        throwsA(
+          isA<ConnectedSiteTransportException>().having(
+            (error) => error.code,
+            'code',
+            'trusted_time_binding_rejected',
+          ),
+        ),
+      );
+      expect(transport.requests, hasLength(1));
+      expect(attempts.bindingResolutions, 2);
+    },
+  );
+
+  test(
+    'v2 trusted time client and server verify one signed loopback exchange',
+    () async {
+      final keys = _LoopbackClientKeys(signer);
+      final requestNonces = _LoopbackRequestNonces();
+      final authority = _LoopbackTimeAuthority();
+      final server = SiteCoordinatorServer(
+        runtimeEnabled: true,
+        trustedTimeV2Enabled: true,
+        trustedTimeAuthority: authority,
+        pairing: const _LoopbackPairingNonces(),
+        requestAuthenticator: Ed25519CoordinatorRequestAuthenticator(
+          clients: keys,
+          nonces: requestNonces,
+          now: () => DateTime.parse('2026-10-31T12:01:00.000Z'),
+        ),
+        commands: const _LoopbackCommands(),
+        deviceEnrollment: const _LoopbackEnrollment(),
+        replication: const _LoopbackReplication(),
+        health: const _LoopbackHealth(),
+        pairingResponse: pairing,
+        now: () => DateTime.parse('2026-10-31T12:01:00.000Z'),
+      );
+      final bridge = _LoopbackTransport(server);
+      final firstClient = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: bridge,
+        nonce: () => 'request_nonce_loopback_0001',
+      );
+      final firstWire = _trustedTimeWire(signer);
+
+      final accepted = await firstClient.requestTrustedTime(firstWire);
+
+      expect(
+        accepted.challenge.requestDigest,
+        firstWire.request.challenge.requestDigest,
+      );
+      expect(authority.calls, 1);
+      expect(bridge.requests, 1);
+      expect(requestNonces.consumed, hasLength(1));
+      await expectLater(
+        firstClient.requestTrustedTime(firstWire),
+        throwsA(
+          isA<ConnectedSiteTransportException>().having(
+            (error) => error.code,
+            'code',
+            'coordinator_http_403',
+          ),
+        ),
+      );
+      expect(authority.calls, 1);
+
+      final secondClient = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: bridge,
+        nonce: () => 'request_nonce_loopback_0002',
+      );
+      final fresh = _trustedTimeWire(
+        signer,
+        challengeNonce: 'trusted_time_client_nonce_2',
+      );
+      expect(
+        (await secondClient.requestTrustedTime(fresh)).challenge.requestDigest,
+        fresh.request.challenge.requestDigest,
+      );
+      expect(authority.calls, 2);
+      expect(requestNonces.consumed, hasLength(2));
+    },
+  );
+
+  test(
+    'v2 trusted time is default-off and rejects stale binding scope',
+    () async {
+      final disabled = SiteCoordinatorClient(
+        pairing: pairing,
+        bindingDigest: _binding,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+      await expectLater(
+        disabled.requestTrustedTime(_trustedTimeWire(signer)),
+        throwsStateError,
+      );
+      expect(transport.requests, isEmpty);
+
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+      for (final wire in [
+        _trustedTimeWire(signer, sessionGeneration: 2),
+        _trustedTimeWire(signer, bindingGeneration: 2),
+        _trustedTimeWire(signer, bindingDigest: 'e' * 64),
+      ]) {
+        await expectLater(
+          client.requestTrustedTime(wire),
+          throwsA(
+            isA<ConnectedSiteTransportException>().having(
+              (error) => error.code,
+              'code',
+              'trusted_time_binding_rejected',
+            ),
+          ),
+        );
+      }
+      expect(transport.requests, isEmpty);
+    },
+  );
+
+  test(
+    'v2 trusted time rejects malformed substituted and oversized replies',
+    () async {
+      final wire = _trustedTimeWire(signer);
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+      final valid = ConnectedTrustedTimeWireResponseV2(
+        request: wire,
+        observation: _trustedTimeObservation(wire.request.challenge),
+      );
+      final responses = <ConnectedSiteHttpResponse>[
+        ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'text/plain',
+          body: Uint8List.fromList(valid.canonicalBytes),
+        ),
+        ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'application/json',
+          body: Uint8List.fromList(
+            utf8.encode(
+              canonicalConnectedSiteJson({
+                ...valid.toJson(),
+                'wireRequestDigest': '0' * 64,
+              }),
+            ),
+          ),
+        ),
+        ConnectedSiteHttpResponse(
+          statusCode: 200,
+          contentType: 'application/json',
+          body: Uint8List(connectedTrustedTimeWireMaximumBytes + 1),
+        ),
+      ];
+      for (final response in responses) {
+        transport.handler = (_) async => response;
+        await expectLater(
+          client.requestTrustedTime(wire),
+          throwsA(
+            isA<ConnectedSiteTransportException>().having(
+              (error) => error.code,
+              'code',
+              'trusted_time_response_invalid',
+            ),
+          ),
+        );
+      }
+    },
+  );
+
+  test('v2 trusted time propagates ambiguous POST without retry', () async {
+    transport.handler = (_) async =>
+        throw const ConnectedSiteTransportException(
+          'redirect_rejected',
+          ambiguous: true,
+        );
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+    );
+
+    await expectLater(
+      client.requestTrustedTime(_trustedTimeWire(signer)),
+      throwsA(
+        isA<ConnectedSiteTransportException>()
+            .having((error) => error.code, 'code', 'redirect_rejected')
+            .having((error) => error.ambiguous, 'ambiguous', isTrue),
+      ),
+    );
+    expect(transport.requests, hasLength(1));
+  });
+
+  test(
+    'pairing binds exact pending acknowledgement and certificate pin',
+    () async {
+      transport.handler = (request) async {
+        expect(request.uri, Uri.parse('https://192.168.10.4:9443/v1/pair'));
+        expect(request.certificateSha256, _certificate);
+        expect(request.headers, isNot(contains('authorization')));
+        final body = jsonDecode(utf8.decode(request.body)) as Map;
+        expect(body['nonce'], pairing.nonce);
+        expect(body['clientFingerprint'], signer.clientFingerprint);
+        expect(body['clientPublicKey'], signer.publicKeyBase64Url);
+        return _jsonResponse({
+          'schema': 'supermega.connected-site.pair-ack.v1',
+          'protocolVersion': connectedSiteProtocolVersion,
+          'enrollmentState': 'pending',
+          'clientFingerprint': signer.clientFingerprint,
+          'coordinator': pairing.toJson(),
+        });
+      };
+      await _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      ).pair();
+      expect(transport.requests, hasLength(1));
+    },
+  );
+
+  test(
+    'signed command has canonical proof and exact acknowledgement',
+    () async {
+      final command = await _command(signer);
+      transport.handler = (request) async {
+        expect(request.uri.path, '/v1/commands');
+        expect(request.method, 'POST');
+        await _expectValidProof(request, pairing, signer);
+        return _jsonResponse(
+          SiteCommandAckV1(
+            commandId: command.commandId,
+            commandDigest: command.commandDigest,
+            state: SiteCommandAckState.accepted,
+            canonicalVersion: 1,
+            eventDigest: connectedSiteSha256({'event': 1}),
+          ).toJson(),
+        );
+      };
+      final result = await _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      ).sendCommand(command);
+      expect(result.outcome, ConnectedSiteCommandOutcome.acknowledged);
+      expect(result.acknowledgement?.commandId, command.commandId);
+    },
+  );
+
+  test('lost reply is unknown; exact retry changes outer nonce only', () async {
+    final command = await _command(signer);
+    var calls = 0;
+    transport.handler = (request) async {
+      calls += 1;
+      if (calls == 1) {
+        throw const ConnectedSiteTransportException(
+          'response_lost',
+          ambiguous: true,
+        );
+      }
+      return _jsonResponse(
+        SiteCommandAckV1(
+          commandId: command.commandId,
+          commandDigest: command.commandDigest,
+          state: SiteCommandAckState.replayed,
+          canonicalVersion: 1,
+          eventDigest: connectedSiteSha256({'event': 1}),
+        ).toJson(),
+      );
+    };
+    var nonce = 0;
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+      nonce: () => 'request_nonce_${++nonce}_abcdefghijk',
+    );
+    expect(
+      (await client.sendCommand(command)).outcome,
+      ConnectedSiteCommandOutcome.retryableUnknown,
+    );
+    expect(
+      (await client.retryCommand(command.commandId)).outcome,
+      ConnectedSiteCommandOutcome.acknowledged,
+    );
+    expect(transport.requests[0].body, transport.requests[1].body);
+    expect(
+      transport.requests[0].headers['x-supermega-request-nonce'],
+      isNot(transport.requests[1].headers['x-supermega-request-nonce']),
+    );
+
+    final changed = await _command(signer, quantity: 2);
+    await expectLater(
+      client.sendCommand(changed),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+    expect(transport.requests, hasLength(2));
+  });
+
+  test(
+    'ambiguous command responses remain retryable and 4xx is final',
+    () async {
+      final command = await _command(signer);
+      var response = 0;
+      transport.handler = (_) async {
+        response += 1;
+        return switch (response) {
+          1 => ConnectedSiteHttpResponse(
+            statusCode: 200,
+            contentType: 'application/json',
+            body: Uint8List(0),
+          ),
+          2 => _jsonResponse(
+            SiteCommandAckV1(
+              commandId: 'command-substituted',
+              commandDigest: command.commandDigest,
+              state: SiteCommandAckState.accepted,
+              canonicalVersion: 1,
+              eventDigest: connectedSiteSha256({'event': 1}),
+            ).toJson(),
+          ),
+          3 => throw const ConnectedSiteTransportException(
+            'response_too_large',
+            ambiguous: true,
+          ),
+          4 => ConnectedSiteHttpResponse(
+            statusCode: 503,
+            contentType: 'application/json',
+            body: Uint8List(0),
+          ),
+          _ => ConnectedSiteHttpResponse(
+            statusCode: 403,
+            contentType: 'application/json',
+            body: Uint8List(0),
+          ),
+        };
+      };
+      final client = _client(
+        pairing: pairing,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      );
+      for (var index = 0; index < 4; index += 1) {
+        expect(
+          (await client.sendCommand(command)).outcome,
+          ConnectedSiteCommandOutcome.retryableUnknown,
+        );
+      }
+      expect(
+        (await client.sendCommand(command)).outcome,
+        ConnectedSiteCommandOutcome.retryableUnknown,
+      );
+    },
+  );
+
+  test('valid denied acknowledgement is terminal even on HTTP 403', () async {
+    final command = await _command(signer);
+    transport.handler = (_) async => ConnectedSiteHttpResponse(
+      statusCode: 403,
+      contentType: 'application/json',
+      body: Uint8List.fromList(
+        utf8.encode(
+          canonicalConnectedSiteJson(
+            SiteCommandAckV1(
+              commandId: command.commandId,
+              commandDigest: command.commandDigest,
+              state: SiteCommandAckState.denied,
+              canonicalVersion: 0,
+              reason: 'authorization_denied',
+            ).toJson(),
+          ),
+        ),
+      ),
+    );
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+    );
+    expect(
+      (await client.sendCommand(command)).outcome,
+      ConnectedSiteCommandOutcome.rejected,
+    );
+    expect(transport.requests, hasLength(1));
+    expect(
+      (await client.sendCommand(command)).outcome,
+      ConnectedSiteCommandOutcome.rejected,
+    );
+    expect(transport.requests, hasLength(1));
+  });
+
+  test('operational requests ignore substituted QR endpoint and pin', () async {
+    final discovery = CoordinatorPairingV1(
+      workspaceId: pairing.workspaceId,
+      siteId: pairing.siteId,
+      coordinatorDeviceId: pairing.coordinatorDeviceId,
+      certificateSha256: 'b' * 64,
+      address: '192.168.10.99',
+      port: 10443,
+      nonce: pairing.nonce,
+      issuedAt: pairing.issuedAt,
+      expiresAt: pairing.expiresAt,
+    );
+    transport.handler = (request) async {
+      expect(request.uri, Uri.parse('https://192.168.10.4:9443/v1/health'));
+      expect(request.certificateSha256, _certificate);
+      return _jsonResponse({
+        'schema': 'supermega.connected-site.health.v1',
+        'protocolVersion': connectedSiteProtocolVersion,
+        'status': 'alive',
+      });
+    };
+    expect(
+      (await _client(
+        pairing: discovery,
+        signer: signer,
+        attempts: attempts,
+        transport: transport,
+      ).readHealth())['status'],
+      'alive',
+    );
+  });
+
+  test('delta and snapshot reject coordinator scope substitution', () async {
+    transport.handler = (request) async {
+      if (request.uri.path == '/v1/delta') {
+        return _jsonResponse(
+          SiteDeltaV1(
+            workspaceId: 'workspace-other',
+            siteId: pairing.siteId,
+            afterCursor: 4,
+            nextCursor: 4,
+            events: const [],
+          ).toJson(),
+        );
+      }
+      final unsigned = <String, Object?>{
+        'protocolVersion': connectedSiteProtocolVersion,
+        'workspaceId': pairing.workspaceId,
+        'siteId': 'site-other',
+        'version': 1,
+        'continuationCursor': 4,
+        'projections': <String, Object?>{},
+      };
+      return _jsonResponse({
+        ...unsigned,
+        'checkpointDigest': connectedSiteSha256(unsigned),
+      });
+    };
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+    );
+    await expectLater(
+      client.readDelta(4),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+    await expectLater(
+      client.readSnapshot(),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+  });
+
+  test('delta, snapshot and health retain exact signed targets', () async {
+    transport.handler = (request) async {
+      await _expectValidProof(request, pairing, signer);
+      if (request.uri.path == '/v1/delta') {
+        return _jsonResponse(
+          SiteDeltaV1(
+            workspaceId: pairing.workspaceId,
+            siteId: pairing.siteId,
+            afterCursor: 4,
+            nextCursor: 4,
+            events: const [],
+          ).toJson(),
+        );
+      }
+      if (request.uri.path == '/v1/snapshot') {
+        final unsigned = <String, Object?>{
+          'protocolVersion': connectedSiteProtocolVersion,
+          'workspaceId': pairing.workspaceId,
+          'siteId': pairing.siteId,
+          'version': 1,
+          'continuationCursor': 4,
+          'projections': <String, Object?>{},
+        };
+        return _jsonResponse({
+          ...unsigned,
+          'checkpointDigest': connectedSiteSha256(unsigned),
+        });
+      }
+      return _jsonResponse({
+        'schema': 'supermega.connected-site.health.v1',
+        'protocolVersion': connectedSiteProtocolVersion,
+        'status': 'alive',
+      });
+    };
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+    );
+    expect((await client.readDelta(4)).nextCursor, 4);
+    expect((await client.readSnapshot()).continuationCursor, 4);
+    expect((await client.readHealth())['status'], 'alive');
+    expect(transport.requests.map((request) => request.uri.toString()), [
+      'https://192.168.10.4:9443/v1/delta?after=4',
+      'https://192.168.10.4:9443/v1/snapshot',
+      'https://192.168.10.4:9443/v1/health',
+    ]);
+  });
+
+  test('revoked durable binding blocks every operational read', () async {
+    transport.handler = (_) async => throw StateError('must not send');
+    attempts.active = false;
+    final client = _client(
+      pairing: pairing,
+      signer: signer,
+      attempts: attempts,
+      transport: transport,
+    );
+    await expectLater(
+      client.readDelta(0),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+    await expectLater(
+      client.readSnapshot(),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+    await expectLater(
+      client.readHealth(),
+      throwsA(isA<ConnectedSiteTransportException>()),
+    );
+    expect(transport.requests, isEmpty);
+  });
+}
+
+SiteCoordinatorClient _client({
+  required CoordinatorPairingV1 pairing,
+  required _Signer signer,
+  required _Attempts attempts,
+  required ConnectedSiteHttpTransport transport,
+  String Function()? nonce,
+}) => SiteCoordinatorClient(
+  pairing: pairing,
+  bindingDigest: _binding,
+  signer: signer,
+  attempts: attempts,
+  transport: transport,
+  runtimeEnabled: true,
+  now: () => DateTime.parse('2026-10-31T12:01:00.000Z'),
+  nonce: nonce ?? () => 'request_nonce_abcdefghijklmnop',
+);
+
+Future<SiteCommandV1> _command(_Signer signer, {int quantity = 1}) async {
+  final payload = <String, Object?>{
+    'productId': 'product-1',
+    'quantity': quantity,
+  };
+  final unsigned = SiteCommandV1(
+    commandId: 'command-1',
+    workspaceId: 'workspace-1',
+    siteId: 'site-1',
+    actorId: 'actor-1',
+    deviceId: signer.deviceId,
+    aggregateType: 'stock',
+    aggregateId: 'product-1',
+    expectedVersion: 0,
+    commandType: 'reserve_stock',
+    payload: payload,
+    payloadDigest: connectedSiteSha256(payload),
+    leaseDigest: 'b' * 64,
+    issuedAt: _now,
+    signingKeyId: signer.signingKeyId,
+    signatureAlgorithm: 'ed25519',
+    signature: 'A' * 86,
+  );
+  final signature = await signer.sign(
+    utf8.encode(canonicalConnectedSiteJson(unsigned.signingPayload)),
+  );
+  return SiteCommandV1(
+    commandId: unsigned.commandId,
+    workspaceId: unsigned.workspaceId,
+    siteId: unsigned.siteId,
+    actorId: unsigned.actorId,
+    deviceId: unsigned.deviceId,
+    aggregateType: unsigned.aggregateType,
+    aggregateId: unsigned.aggregateId,
+    expectedVersion: unsigned.expectedVersion,
+    commandType: unsigned.commandType,
+    payload: unsigned.payload,
+    payloadDigest: unsigned.payloadDigest,
+    leaseDigest: unsigned.leaseDigest,
+    issuedAt: unsigned.issuedAt,
+    signingKeyId: unsigned.signingKeyId,
+    signatureAlgorithm: unsigned.signatureAlgorithm,
+    signature: signature,
+  );
+}
+
+ConnectedTrustedTimeWireRequestV2 _trustedTimeWire(
+  _Signer signer, {
+  int sessionGeneration = 1,
+  int bindingGeneration = 1,
+  String bindingDigest = _binding,
+  String challengeNonce = 'trusted_time_client_nonce_1',
+}) => ConnectedTrustedTimeWireRequestV2(
+  request: ConnectedTrustedTimeObservationRequestV1(
+    approvalDigest: _approval().approvalDigest,
+    challenge: ConnectedTrustedTimeChallengeV1(
+      workspaceId: 'workspace-1',
+      siteId: 'site-1',
+      coordinatorDeviceId: 'counter-1',
+      clientDeviceId: signer.deviceId,
+      clientFingerprint: signer.clientFingerprint,
+      sessionGeneration: sessionGeneration,
+      coordinatorBindingDigest: bindingDigest,
+      coordinatorBindingGeneration: bindingGeneration,
+      nonce: challengeNonce,
+      bootSessionId: '3' * 64,
+      startedMonotonicMillis: 5000,
+    ),
+  ),
+);
+
+ConnectedTrustedTimeAuthorityApprovalV1 _approval() =>
+    ConnectedTrustedTimeAuthorityApprovalV1(
+      workspaceId: 'workspace-1',
+      siteId: 'site-1',
+      coordinatorDeviceId: 'counter-1',
+      coordinatorBindingDigest: _binding,
+      coordinatorBindingGeneration: 1,
+      authorityKeyId: 'time-key-1',
+      authorityKeyFingerprint: '4' * 64,
+      authorityKeyGeneration: 2,
+      issuedAtMillis: 1799999999000,
+      expiresAtMillis: 1800003600000,
+      ownerAuthorityKeyId: 'owner-key-1',
+      ownerAuthoritySignature: _signature,
+    );
+
+ConnectedTrustedTimeObservationV1 _trustedTimeObservation(
+  ConnectedTrustedTimeChallengeV1 challenge,
+) => ConnectedTrustedTimeObservationV1(
+  challenge: challenge,
+  authorityKeyId: 'time-key-1',
+  authorityKeyFingerprint: '4' * 64,
+  authorityKeyGeneration: 2,
+  authorityEpoch: 5,
+  authoritySequence: 1,
+  observedAtMillis: 1800000000000,
+  validUntilMillis: 1800000060000,
+  authoritySignature: _signature,
+);
+
+final _signature = base64UrlEncode(List<int>.filled(64, 7)).replaceAll('=', '');
+
+Future<void> _expectValidProof(
+  _Request request,
+  CoordinatorPairingV1 pairing,
+  _Signer signer,
+) async {
+  final issuedAt = DateTime.parse(request.headers['x-supermega-issued-at']!);
+  final target = request.uri.hasQuery
+      ? '${request.uri.path}?${request.uri.query}'
+      : request.uri.path;
+  final proof = CoordinatorRequestProof(
+    workspaceId: pairing.workspaceId,
+    siteId: pairing.siteId,
+    coordinatorDeviceId: pairing.coordinatorDeviceId,
+    clientFingerprint: signer.clientFingerprint,
+    claimedDeviceId: signer.deviceId,
+    issuedAt: issuedAt,
+    nonce: request.headers['x-supermega-request-nonce']!,
+    method: request.method,
+    canonicalTarget: target,
+    bodySha256: crypto.sha256.convert(request.body).toString(),
+    signature: request.headers['x-supermega-request-signature']!,
+  );
+  expect(
+    await Ed25519().verify(
+      proof.signingBytes,
+      signature: Signature(
+        base64Url.decode('${proof.signature}=='),
+        publicKey: signer.publicKey,
+      ),
+    ),
+    isTrue,
+  );
+}
+
+ConnectedSiteHttpResponse _jsonResponse(Object value) =>
+    ConnectedSiteHttpResponse(
+      statusCode: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: Uint8List.fromList(utf8.encode(canonicalConnectedSiteJson(value))),
+    );
+
+class _Request {
+  const _Request({
+    required this.uri,
+    required this.method,
+    required this.headers,
+    required this.body,
+    required this.certificateSha256,
+  });
+  final Uri uri;
+  final String method;
+  final Map<String, String> headers;
+  final Uint8List body;
+  final String certificateSha256;
+}
+
+class _Transport implements ConnectedSiteHttpTransport {
+  final requests = <_Request>[];
+  late Future<ConnectedSiteHttpResponse> Function(_Request request) handler;
+
+  @override
+  Future<ConnectedSiteHttpResponse> send({
+    required Uri uri,
+    required String method,
+    required Map<String, String> headers,
+    required Uint8List body,
+    required String certificateSha256,
+  }) {
+    final request = _Request(
+      uri: uri,
+      method: method,
+      headers: Map.unmodifiable(headers),
+      body: Uint8List.fromList(body),
+      certificateSha256: certificateSha256,
+    );
+    requests.add(request);
+    return handler(request);
+  }
+}
+
+class _Attempts implements ConnectedSiteCommandAttemptStore {
+  final commands = <String, PreparedConnectedCommandV28>{};
+  final results = <String, SiteCommandAckV1>{};
+  var transmissions = 0;
+  var active = true;
+  var approvalGeneration = 1;
+  var bindingResolutions = 0;
+
+  @override
+  Future<PreparedConnectedCommandV28> prepare({
+    required SiteCommandV1 command,
+    required String bindingDigest,
+    required String clientFingerprint,
+  }) async {
+    if (bindingDigest != _binding) throw StateError('binding');
+    final raw = canonicalConnectedSiteJson(command.toJson());
+    final prepared = PreparedConnectedCommandV28(
+      commandId: command.commandId,
+      commandJson: raw,
+      bodySha256: crypto.sha256.convert(utf8.encode(raw)).toString(),
+      terminalAcknowledgement: results[command.commandId],
+    );
+    final existing = commands[command.commandId];
+    if (existing != null && existing.commandJson != raw) {
+      throw StateError('substituted');
+    }
+    commands[command.commandId] = prepared;
+    return prepared;
+  }
+
+  @override
+  Future<ConnectedSiteApprovedBinding> resolveActiveBinding({
+    required String bindingDigest,
+    required String workspaceId,
+    required String siteId,
+    required String clientDeviceId,
+    required String clientFingerprint,
+    required String clientSigningKeyId,
+  }) async {
+    bindingResolutions += 1;
+    if (!active) throw StateError('revoked');
+    return ConnectedSiteApprovedBinding(
+      bindingDigest: bindingDigest,
+      workspaceId: workspaceId,
+      siteId: siteId,
+      coordinatorDeviceId: 'counter-1',
+      clientDeviceId: clientDeviceId,
+      clientFingerprint: clientFingerprint,
+      clientSigningKeyId: clientSigningKeyId,
+      approvalGeneration: approvalGeneration,
+      sessionGeneration: 1,
+      address: '192.168.10.4',
+      port: 9443,
+      certificateSha256: _certificate,
+    );
+  }
+
+  @override
+  Future<PreparedConnectedTransmissionV29> beginTransmission({
+    required String commandId,
+    required CoordinatorRequestProof proof,
+    required String requestSignature,
+  }) async {
+    final prepared = commands[commandId]!;
+    transmissions += 1;
+    return PreparedConnectedTransmissionV29(
+      commandId: commandId,
+      transmissionSequence: transmissions,
+      uri: Uri.parse('https://192.168.10.4:9443${proof.canonicalTarget}'),
+      headers: {
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'x-supermega-client-fingerprint': proof.clientFingerprint,
+        'x-supermega-device-id': proof.claimedDeviceId,
+        'x-supermega-issued-at': proof.issuedAt.toIso8601String(),
+        'x-supermega-request-nonce': proof.nonce,
+        'x-supermega-request-signature': requestSignature,
+      },
+      body: Uint8List.fromList(utf8.encode(prepared.commandJson)),
+      certificateSha256: _certificate,
+    );
+  }
+
+  @override
+  Future<SiteCommandAckV1> recordTerminal({
+    required String commandId,
+    required int transmissionSequence,
+    required SiteCommandAckV1 acknowledgement,
+  }) async {
+    results[commandId] = acknowledgement;
+    return acknowledgement;
+  }
+
+  @override
+  Future<List<PreparedConnectedCommandV28>> recoverUnresolved({
+    required String bindingDigest,
+  }) async => commands.values
+      .where((item) => !results.containsKey(item.commandId))
+      .toList(growable: false);
+}
+
+class _Signer implements ConnectedSiteDeviceSigner {
+  _Signer._(this.keyPair, this.publicKey);
+
+  static Future<_Signer> create() async {
+    final pair = await Ed25519().newKeyPairFromSeed(
+      List<int>.generate(32, (index) => index + 1),
+    );
+    return _Signer._(pair, await pair.extractPublicKey());
+  }
+
+  final SimpleKeyPair keyPair;
+  final SimplePublicKey publicKey;
+
+  @override
+  String get clientFingerprint =>
+      crypto.sha256.convert(publicKey.bytes).toString();
+  @override
+  String get deviceId => 'device-1';
+  @override
+  String get publicKeyBase64Url =>
+      base64Url.encode(publicKey.bytes).replaceAll('=', '');
+  @override
+  String get signingKeyId => clientFingerprint;
+
+  @override
+  Future<String> sign(List<int> message) async => base64Url
+      .encode((await Ed25519().sign(message, keyPair: keyPair)).bytes)
+      .replaceAll('=', '');
+}
+
+class _LoopbackTransport implements ConnectedSiteHttpTransport {
+  _LoopbackTransport(this.server);
+
+  final SiteCoordinatorServer server;
+  int requests = 0;
+
+  @override
+  Future<ConnectedSiteHttpResponse> send({
+    required Uri uri,
+    required String method,
+    required Map<String, String> headers,
+    required Uint8List body,
+    required String certificateSha256,
+  }) async {
+    requests += 1;
+    expect(certificateSha256, _certificate);
+    final response = await server.dispatch(
+      SiteCoordinatorRequest(
+        method: method,
+        path: uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path,
+        headers: Map<String, String>.from(headers),
+        body: Uint8List.fromList(body),
+      ),
+    );
+    final responseBody = response.canonicalJson
+        ? canonicalConnectedSiteJson(response.body)
+        : jsonEncode(response.body);
+    return ConnectedSiteHttpResponse(
+      statusCode: response.statusCode,
+      contentType: 'application/json; charset=utf-8',
+      body: Uint8List.fromList(utf8.encode(responseBody)),
+    );
+  }
+}
+
+class _LoopbackClientKeys implements CoordinatorClientKeyStore {
+  const _LoopbackClientKeys(this.signer);
+
+  final _Signer signer;
+
+  @override
+  Future<EnrolledCoordinatorClientV1?> find({
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required String deviceId,
+    required String fingerprint,
+  }) async {
+    if (workspaceId != 'workspace-1' ||
+        siteId != 'site-1' ||
+        coordinatorDeviceId != 'counter-1' ||
+        deviceId != signer.deviceId ||
+        fingerprint != signer.clientFingerprint) {
+      return null;
+    }
+    return EnrolledCoordinatorClientV1(
+      workspaceId: workspaceId,
+      siteId: siteId,
+      coordinatorDeviceId: coordinatorDeviceId,
+      deviceId: deviceId,
+      fingerprint: fingerprint,
+      signingKeyId: signer.signingKeyId,
+      publicKey: signer.publicKey,
+      active: true,
+    );
+  }
+}
+
+class _LoopbackRequestNonces implements CoordinatorRequestNonceStore {
+  final consumed = <String>{};
+
+  @override
+  Future<bool> consume({
+    required String clientFingerprint,
+    required String nonce,
+    required DateTime expiresAt,
+  }) async => consumed.add('$clientFingerprint:$nonce');
+}
+
+class _LoopbackEnrollment implements CoordinatorDeviceEnrollmentAuthorizer {
+  const _LoopbackEnrollment();
+
+  @override
+  Future<CoordinatorDeviceEnrollmentState> stateFor({
+    required String workspaceId,
+    required String siteId,
+    required String coordinatorDeviceId,
+    required String deviceId,
+    required String clientFingerprint,
+  }) async => CoordinatorDeviceEnrollmentState.approved;
+}
+
+class _LoopbackTimeAuthority
+    implements ConnectedTrustedTimeCoordinatorAuthority {
+  int calls = 0;
+
+  @override
+  Future<ConnectedTrustedTimeObservationV1> observe(
+    ConnectedTrustedTimeObservationRequestV1 request,
+  ) async {
+    calls += 1;
+    return _trustedTimeObservation(request.challenge);
+  }
+}
+
+class _LoopbackPairingNonces implements PairingNonceStore {
+  const _LoopbackPairingNonces();
+
+  @override
+  Future<bool> consumeAndCreatePending(PairingNonceClaim claim) async => false;
+}
+
+class _LoopbackCommands implements SiteCommandHandler {
+  const _LoopbackCommands();
+
+  @override
+  Future<SiteCommandAckV1> handle(
+    String clientFingerprint,
+    SiteCommandV1 command,
+  ) => throw StateError('loopback_commands_unavailable');
+}
+
+class _LoopbackReplication implements SiteReplicationReader {
+  const _LoopbackReplication();
+
+  @override
+  Future<SiteDeltaV1> readDelta(String clientFingerprint, int afterCursor) =>
+      throw StateError('loopback_replication_unavailable');
+
+  @override
+  Future<SiteSnapshotV1> readSnapshot(String clientFingerprint) =>
+      throw StateError('loopback_replication_unavailable');
+}
+
+class _LoopbackHealth implements CoordinatorHealthProvider {
+  const _LoopbackHealth();
+
+  @override
+  Future<CoordinatorHealthV1> readHealth() async => const CoordinatorHealthV1(
+    sharedWritesAvailable: false,
+    internetAvailable: false,
+    cloudSyncHealthy: false,
+    backupCurrent: false,
+    pendingConflictCount: 0,
+  );
+}

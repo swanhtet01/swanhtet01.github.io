@@ -12,6 +12,7 @@ const output = resolve(root, 'hq', 'readiness', 'supabase-preview-rehearsal-prop
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const EXPECTED_MIGRATION_COUNT = 25
 const EXPECTED_PRIVATE_MIGRATION_COUNT = 24
+const EXPECTED_SOURCE_ONLY_MIGRATION_COUNT = 2
 const EXPECTED_PUBLIC_BASELINE = '20260711081300_public_legacy_baseline.sql'
 const EXPECTED_FINAL_MIGRATION = '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql'
 const EXPECTED_SCHEMA_PROFILE = 'v14-shop-correction'
@@ -42,6 +43,14 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
   EXPECTED_FINAL_MIGRATION,
+])
+const EXPECTED_SOURCE_ONLY_MIGRATIONS = Object.freeze([
+  '20261101090000_private_trial_backend_v15_connected_site.sql',
+  '20261103090000_private_trial_backend_v16_connected_upload_batches.sql',
+])
+const EXPECTED_SOURCE_INVENTORY = Object.freeze([
+  ...EXPECTED_MIGRATIONS,
+  ...EXPECTED_SOURCE_ONLY_MIGRATIONS,
 ])
 const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 14
 const MAX_PREVIEW_LIFETIME_HOURS = 24
@@ -92,20 +101,36 @@ export function validatePreviewMigrationEntries(entries) {
   return entries
 }
 
+export function validatePreviewSourceOnlyMigrationEntries(entries) {
+  if (!Array.isArray(entries)
+    || entries.length !== EXPECTED_SOURCE_ONLY_MIGRATION_COUNT
+    || entries.some((entry, index) => entry?.name !== EXPECTED_SOURCE_ONLY_MIGRATIONS[index]
+      || entry.path !== `supabase/migrations/${EXPECTED_SOURCE_ONLY_MIGRATIONS[index]}`
+      || !/^sha256:[0-9a-f]{64}$/.test(entry.digest || '')
+      || Object.keys(entry).sort().join(',') !== 'digest,name,path')) {
+    fail('supabase_preview_rehearsal_source_only_migration_inventory_invalid')
+  }
+  return entries
+}
+
 async function migrationChain() {
   const directory = resolve(root, 'supabase', 'migrations')
   const names = (await readdir(directory))
     .filter((name) => /^\d{14}_.+\.sql$/.test(name))
     .sort()
-  if (names.length !== EXPECTED_MIGRATION_COUNT) fail('supabase_preview_rehearsal_migration_count_invalid')
+  if (JSON.stringify(names) !== JSON.stringify(EXPECTED_SOURCE_INVENTORY)) {
+    fail('supabase_preview_rehearsal_migration_inventory_invalid')
+  }
   if (names[0] !== EXPECTED_PUBLIC_BASELINE) fail('supabase_preview_rehearsal_public_baseline_invalid')
-  if (names.at(-1) !== EXPECTED_FINAL_MIGRATION) fail('supabase_preview_rehearsal_final_migration_invalid')
-  const migrations = []
+  const inventory = []
   for (const name of names) {
     const path = `supabase/migrations/${name}`
-    migrations.push({ name, path, digest: digest(await readText(path)) })
+    inventory.push({ name, path, digest: digest(await readText(path)) })
   }
+  const migrations = inventory.slice(0, EXPECTED_MIGRATION_COUNT)
+  const sourceOnlyMigrations = inventory.slice(EXPECTED_MIGRATION_COUNT)
   validatePreviewMigrationEntries(migrations)
+  validatePreviewSourceOnlyMigrationEntries(sourceOnlyMigrations)
   // The reviewed private budget migration deliberately has no legacy filename prefix.
   const privateCount = migrations.filter((entry) => entry.name !== EXPECTED_PUBLIC_BASELINE).length
   if (privateCount !== EXPECTED_PRIVATE_MIGRATION_COUNT) fail('supabase_preview_rehearsal_private_migration_count_invalid')
@@ -119,6 +144,10 @@ async function migrationChain() {
     finalMigration: EXPECTED_FINAL_MIGRATION,
     chainDigest: digest(JSON.stringify(migrations)),
     migrations,
+    sourceOnlyMigrationCount: sourceOnlyMigrations.length,
+    sourceOnlyChainDigest: digest(JSON.stringify(sourceOnlyMigrations)),
+    sourceOnlyMigrations,
+    sourceInventoryDigest: digest(JSON.stringify(inventory)),
   }
 }
 
@@ -187,6 +216,7 @@ function validateProposalShape(packet) {
     || packet.migrationPlan?.databaseContract !== EXPECTED_DATABASE_CONTRACT
     || packet.migrationPlan?.migrationCount !== EXPECTED_MIGRATION_COUNT
     || packet.migrationPlan?.privateMigrationCount !== EXPECTED_PRIVATE_MIGRATION_COUNT
+    || packet.migrationPlan?.sourceOnlyMigrationCount !== EXPECTED_SOURCE_ONLY_MIGRATION_COUNT
     || packet.migrationPlan?.publicBaseline !== EXPECTED_PUBLIC_BASELINE
     || packet.migrationPlan?.finalMigration !== EXPECTED_FINAL_MIGRATION) {
     fail('supabase_preview_rehearsal_proposal_migration_plan_invalid')
@@ -195,6 +225,18 @@ function validateProposalShape(packet) {
   if (!Array.isArray(packet.migrationPlan?.migrations) || packet.migrationPlan.migrations.length !== EXPECTED_MIGRATION_COUNT) fail('supabase_preview_rehearsal_proposal_migrations_invalid')
   validatePreviewMigrationEntries(packet.migrationPlan.migrations)
   if (packet.migrationPlan.chainDigest !== digest(JSON.stringify(packet.migrationPlan.migrations))) fail('supabase_preview_rehearsal_proposal_migration_digest_invalid')
+  if (!Array.isArray(packet.migrationPlan?.sourceOnlyMigrations)
+    || packet.migrationPlan.sourceOnlyMigrations.length !== EXPECTED_SOURCE_ONLY_MIGRATION_COUNT) {
+    fail('supabase_preview_rehearsal_proposal_source_only_migrations_invalid')
+  }
+  validatePreviewSourceOnlyMigrationEntries(packet.migrationPlan.sourceOnlyMigrations)
+  if (packet.migrationPlan.sourceOnlyChainDigest !== digest(JSON.stringify(packet.migrationPlan.sourceOnlyMigrations))) {
+    fail('supabase_preview_rehearsal_proposal_source_only_migration_digest_invalid')
+  }
+  if (packet.migrationPlan.sourceInventoryDigest !== digest(JSON.stringify([
+    ...packet.migrationPlan.migrations,
+    ...packet.migrationPlan.sourceOnlyMigrations,
+  ]))) fail('supabase_preview_rehearsal_proposal_source_inventory_digest_invalid')
   if (packet.productionBaseline?.classification !== 'protected-production'
     || packet.productionBaseline?.evidenceClassification !== 'historical-audit-only'
     || packet.productionBaseline?.currentStateRevalidated !== false
@@ -443,6 +485,7 @@ async function runSelfTest() {
     proposal_valid: proposal.contract === SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT,
     clean_empty_preview_only: proposal.previewBranch.startsWithProductionData === false && proposal.previewBranch.maximumLifetimeHours === MAX_PREVIEW_LIFETIME_HOURS,
     migration_chain_bound: proposal.migrationPlan.migrationCount === EXPECTED_MIGRATION_COUNT && /^sha256:[0-9a-f]{64}$/.test(proposal.migrationPlan.chainDigest),
+    source_only_migration_bound: proposal.migrationPlan.sourceOnlyMigrationCount === EXPECTED_SOURCE_ONLY_MIGRATION_COUNT && /^sha256:[0-9a-f]{64}$/.test(proposal.migrationPlan.sourceOnlyChainDigest),
     no_supabase_mutation_authorized: proposal.controls.supabaseBranchCreationApproved === false && proposal.controls.productionProjectMutated === false,
   }
   const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name)

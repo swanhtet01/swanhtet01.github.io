@@ -29,8 +29,16 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
-
-ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = Path(__file__).resolve()
+TOOLS_ROOT = SCRIPT_PATH.parent
+ROOT = SCRIPT_PATH.parents[1]
+# Isolated Python deliberately ignores PYTHONPATH and user site-packages. Add
+# only the two roots derived from this exact tracked script so package imports
+# and the sibling role provisioner cannot be selected by caller environment.
+for _trusted_import_root in (ROOT, TOOLS_ROOT):
+    _trusted = str(_trusted_import_root)
+    if _trusted not in sys.path:
+        sys.path.insert(0, _trusted)
 MIGRATION_DIRECTORY = ROOT / "supabase" / "migrations"
 PUBLIC_BROWSER_QUARANTINE = (
     ROOT / "supabase" / "rehearsal" / "20260804_public_browser_quarantine.sql"
@@ -73,15 +81,18 @@ CURRENT_MIGRATIONS = (
     *V13_MIGRATIONS,
     "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql",
 )
+# Connected-site v15/v16 is source-verified and deliberately excluded from the
+# authoritative v14 rehearsal until its separate PostgreSQL 17 catalog review
+# is complete. It is still part of the exact source inventory and digest, so a
+# v14 receipt can never silently attest a tree that contains untracked schema.
+SOURCE_ONLY_MIGRATIONS = (
+    "20261101090000_private_trial_backend_v15_connected_site.sql",
+    "20261103090000_private_trial_backend_v16_connected_upload_batches.sql",
+)
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
-# No current source-controlled profile binds the reviewed Windows archive to
-# every executable/dependency that the rehearsal would load. Keep collection
-# disabled until that complete profile is reviewed; never infer approval from a
-# version string, a caller-provided path, or the mere presence of the old ZIP.
-TOOLCHAIN_PROVENANCE_APPROVED = False
 WINDOWS_DIRECT_START_MODE = "codex-sandbox-direct"
 REHEARSAL_TEMP_DIRECTORY_ENV = "SUPERMEGA_REHEARSAL_TEMP_DIR"
 PUBLIC_BROWSER_TABLES = (
@@ -141,6 +152,9 @@ IMPLEMENTATION_PATHS = (
 IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "kernel/database-rehearsal-evidence.mjs",
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
+    *(f"supabase/migrations/{name}" for name in SOURCE_ONLY_MIGRATIONS),
+    "supermega_runtime/connected_site_v15.py",
+    "tools/verify_connected_site_v15.mjs",
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
     "supermega_runtime/website_acceptance_schema.py",
@@ -158,7 +172,23 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "tests/test_shop_correction_postgres_store_mock.py",
     "tests/test_shop_correction_postgres_v14_contract.py",
     "tools/run_postgres17_rehearsal.mjs", "tools/record_postgres17_rehearsal.mjs",
-    "tools/record_postgres17_rehearsal.test.mjs", "tests/test_postgres17_rehearsal_contract.py",
+    "tools/record_postgres17_rehearsal.test.mjs",
+    "tools/postgres17_toolchain_profile.mjs",
+    "tools/postgres17_toolchain_profile.test.mjs",
+    "tools/postgres17_source_registry.mjs",
+    "tools/postgres17_windows_evidence_bootstrap.ps1",
+    "tools/postgres17_windows_evidence_bootstrap.test.mjs",
+    "tools/postgres17_windows_trace_observer.ps1",
+    "tools/postgres17_windows_trace_observer.test.mjs",
+    "tools/postgres17_windows_evidence_contract.mjs",
+    "tools/inspect_windows_authenticode.ps1",
+    "hq/research/postgres17-toolchain-profile.json",
+    "hq/research/postgres17-publisher-policy.json",
+    "hq/research/postgres17-official-source-policy.json",
+    "hq/research/postgres17-windows-bootstrap-policy.json",
+    "hq/research/postgres17-process-image.wprp",
+    ".github/workflows/postgres17-windows-evidence.yml",
+    "tests/test_postgres17_rehearsal_contract.py",
 ))))
 CURRENT_ACCOUNT_CHECKS = (
     "self_serve_four_product_workspaces_created", "self_serve_product_entitlements_exact",
@@ -197,8 +227,6 @@ MANAGED_SECOND_ACTOR = "f3ea98a2-9954-413c-ad4d-c6dc7ce8a23c"
 MANAGED_SECOND_SESSION = "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3"
 MANAGED_APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
 DATABASE_REJECTION_SQLSTATES = frozenset({"23514", "40001", "42501", "55000"})
-
-
 class RehearsalFailure(RuntimeError):
     """A fail-closed error with a safe, credential-free code."""
 
@@ -213,12 +241,14 @@ def _implementation_digest() -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
-def _source_identity(expected_head: str | None) -> dict[str, str]:
+def _source_identity(expected_head: str | None, git_executable: Path) -> dict[str, str]:
     if not isinstance(expected_head, str) or not re.fullmatch(r"[0-9a-f]{40}", expected_head):
         raise RehearsalFailure("expected_head_required")
+    if not git_executable.is_absolute() or not git_executable.is_file():
+        raise RehearsalFailure("verified_git_required")
     def git(*args: str) -> str:
         try:
-            result = subprocess.run(["git", "--no-optional-locks", *args], cwd=ROOT,
+            result = subprocess.run([str(git_executable), "--no-optional-locks", *args], cwd=ROOT,
                 capture_output=True, text=True, timeout=10, check=False)
         except (OSError, subprocess.SubprocessError) as exc:
             raise RehearsalFailure("source_identity_unavailable") from exc
@@ -232,7 +262,7 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
     try:
         observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
             if path.name != "20260711081300_public_legacy_baseline.sql"))
-        if observed != CURRENT_MIGRATIONS:
+        if observed != (*CURRENT_MIGRATIONS, *SOURCE_ONLY_MIGRATIONS):
             raise RehearsalFailure("private_migration_inventory_mismatch")
         return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
                 "implementation_digest": _implementation_digest()}
@@ -283,6 +313,7 @@ def _configured_path(environment_key: str, fallback: Callable[[], Path]) -> Path
 def _safe_report(error: str, *, cleanup_complete: bool) -> dict[str, Any]:
     return {
         "ok": False,
+        "authoritative": False,
         "ready": False,
         "status": "attention",
         "contract": CONTRACT,
@@ -3747,6 +3778,7 @@ def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
         return _safe_report(str(exc), cleanup_complete=True)
     return {
         "ok": True,
+        "authoritative": False,
         "ready": False,
         "status": "available",
         "contract": CONTRACT,
@@ -3759,21 +3791,50 @@ def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
     }
 
 
-def _release_preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
-    """Gate receipt/rehearsal authority without disabling local contract tests."""
+def _release_preflight(
+    postgres_bin: Path,
+    openssl: Path,
+) -> dict[str, Any]:
+    """Check selected tooling only inside the recorder-authenticated full run.
+
+    This runner emits non-authoritative behavior evidence. This helper is
+    private to ``_run_rehearsal``. The direct CLI ``--preflight``
+    branch below fails closed before calling it; the canonical Node recorder is
+    the only supported release path that can reach selected PostgreSQL tooling.
+    """
     if os.name != "nt":
         return _safe_report("postgres17_platform_unapproved", cleanup_complete=True)
-    if not TOOLCHAIN_PROVENANCE_APPROVED:
-        return _safe_report(
-            "postgres17_toolchain_provenance_unapproved",
-            cleanup_complete=True,
-        )
     return _preflight(postgres_bin, openssl)
+
+
+def _isolated_import_preflight() -> dict[str, Any]:
+    """Prove isolated mode resolves only tracked repository import roots."""
+    from provision_supermega_runtime_role import apply_runtime_role
+    from tools import rehearse_self_serve_v13
+    from supermega_runtime.trial_store import PostgresTrialStore
+
+    if not callable(apply_runtime_role) or rehearse_self_serve_v13 is None \
+            or PostgresTrialStore is None:
+        raise RehearsalFailure("isolated_import_preflight_failed")
+    return {
+        "ok": True,
+        "authoritative": False,
+        "ready": False,
+        "status": "available",
+        "contract": CONTRACT,
+        "isolated_imports": True,
+        "cleanup_complete": True,
+        "secret_values_exposed": False,
+        "production_mutated": False,
+        "supabase_mutated": False,
+        "vercel_mutated": False,
+    }
 
 
 def _run_rehearsal(
     postgres_bin: Path,
     openssl: Path,
+    git_executable: Path,
     evidence_file: Path | None,
     *,
     source_identity: dict[str, str],
@@ -4042,13 +4103,14 @@ def _run_rehearsal(
                 raise RehearsalFailure("restored_budget_bypassed")
             except TrialRateLimited:
                 pass
-            if _source_identity(source_identity["head"]) != source_identity:
+            if _source_identity(source_identity["head"], git_executable) != source_identity:
                 raise RehearsalFailure("source_changed_during_rehearsal")
 
             version = str(preflight["engine"]["version"])
             major = int(preflight["engine"]["major"])
             report = {
                 "ok": True,
+                "authoritative": False,
                 "ready": True,
                 "status": "rehearsed",
                 "contract": CONTRACT,
@@ -4186,21 +4248,52 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Verify local PostgreSQL 17 tooling without starting a server.",
     )
+    parser.add_argument(
+        "--import-preflight",
+        action="store_true",
+        help="Verify deterministic isolated repository imports without starting PostgreSQL.",
+    )
+    parser.add_argument(
+        "--git",
+        type=Path,
+        help="Exact profile-verified Git executable required for source identity.",
+    )
     parser.add_argument("--expected-head", help="Exact clean local source commit required for a full rehearsal.")
     args = parser.parse_args(argv)
 
+    if args.preflight and args.import_preflight:
+        _emit(
+            _safe_report(
+                "postgres17_verified_toolchain_required",
+                cleanup_complete=True,
+            ),
+            None,
+        )
+        return 2
     if args.evidence_file is not None and args.evidence_file.exists():
         _emit(_safe_report("evidence_output_exists", cleanup_complete=True), None)
         return 2
 
     postgres_bin = args.postgres_bin.expanduser().resolve()
     openssl = _resolve_executable(args.openssl)
+    if args.import_preflight:
+        try:
+            report = _isolated_import_preflight()
+        except Exception:
+            report = _safe_report("isolated_import_preflight_failed", cleanup_complete=True)
+        evidence_persisted = _emit(report, args.evidence_file)
+        return 0 if evidence_persisted and report.get("ok") is True else 1
     if args.preflight:
-        report = _release_preflight(postgres_bin, openssl)
+        report = _safe_report(
+            "postgres17_verified_toolchain_required",
+            cleanup_complete=True,
+        )
         evidence_persisted = _emit(report, args.evidence_file)
         return 0 if evidence_persisted and report.get("ok") is True else 1
     try:
-        source = _source_identity(args.expected_head)
+        if args.git is None:
+            raise RehearsalFailure("verified_git_required")
+        source = _source_identity(args.expected_head, args.git.expanduser().resolve())
     except RehearsalFailure as exc:
         _emit(_safe_report(str(exc), cleanup_complete=True), args.evidence_file)
         return 2
@@ -4208,6 +4301,7 @@ def main(argv: list[str] | None = None) -> int:
         return _run_rehearsal(
             postgres_bin,
             openssl,
+            args.git.expanduser().resolve(),
             args.evidence_file,
             source_identity=source,
         )

@@ -185,6 +185,11 @@ def _verify(
 
 
 def _scenario(flutter: str, kill_phase: str, verify_phase: str) -> None:
+    started_at = time.monotonic()
+    print(
+        f"process_interruption_scenario_started:{kill_phase}:{verify_phase}",
+        flush=True,
+    )
     with tempfile.TemporaryDirectory(prefix="supermega-shop-process-interrupt-") as root:
         directory = Path(root)
         database = directory / "shop.sqlite"
@@ -204,6 +209,12 @@ def _scenario(flutter: str, kill_phase: str, verify_phase: str) -> None:
             marker,
             authorization_issued_at,
         )
+    elapsed_seconds = time.monotonic() - started_at
+    print(
+        "process_interruption_scenario_passed:"
+        f"{kill_phase}:{verify_phase}:{elapsed_seconds:.3f}",
+        flush=True,
+    )
 
 
 def main() -> None:
@@ -266,7 +277,7 @@ def main() -> None:
         "kill_wallet_cancel_after_commit",
         "verify_wallet_cancel_committed",
     )
-    print("Shop process-interruption scenarios passed: 14")
+    print("Shop process-interruption scenarios passed: 14", flush=True)
 
 
 if __name__ == "__main__":

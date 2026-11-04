@@ -1,15 +1,33 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'shop_models.dart';
 import 'shop_cafe_order_contract.dart';
+import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_v42_enrollment_verifier.dart';
+import 'shop_connected_cloud_feed_schema.dart';
+import 'shop_connected_cloud_feed_proof.dart';
+import 'shop_connected_cloud_feed_http.dart';
+import 'shop_connected_cloud_feed_current_gate.dart';
+import 'shop_connected_cloud_feed_production_trust.dart';
+import 'shop_connected_cloud_feed_v41_verifier.dart';
+import 'shop_connected_site_cloud_feed_contract.dart';
+import 'shop_connected_site_reconciliation.dart';
+import 'shop_connected_stock_reservation.dart';
+import 'shop_connected_trusted_time_client_schema.dart';
+import 'shop_connected_trusted_time_contract.dart';
+import 'shop_connected_trusted_time_stream.dart';
+import 'shop_connected_trusted_time_stream_acceptance.dart';
+import 'shop_site_coordinator.dart';
 import 'shop_correction_consumption.dart';
 import 'shop_correction_receipt.dart';
 import 'shop_operational_export.dart';
@@ -17,6 +35,8 @@ import 'shop_staff_authorization.dart';
 
 export 'shop_correction_consumption.dart';
 export 'shop_correction_receipt.dart';
+export 'shop_connected_trusted_time_client_schema.dart';
+export 'shop_connected_cloud_feed_schema.dart';
 
 part 'shop_database.g.dart';
 
@@ -151,6 +171,45 @@ class ShopSaleLineInput {
   final int quantity;
 }
 
+/// Redacted, count-only SQLite snapshot for synthetic installed-QA evidence.
+///
+/// [storeIdentitySha256] binds a restored database to its immutable local
+/// store identity without exposing that identity. [snapshotSha256] binds the
+/// complete canonical state of every table underlying the six metrics. The
+/// private rows are hashed inside the transaction and never leave this API.
+class ShopQaMetricsSnapshot {
+  const ShopQaMetricsSnapshot({
+    required this.schemaVersion,
+    required this.storeIdentitySha256,
+    required this.sales,
+    required this.stockMovements,
+    required this.receipts,
+    required this.outbox,
+    required this.onHand,
+    required this.shifts,
+    required this.snapshotSha256,
+  });
+
+  final int schemaVersion;
+  final String storeIdentitySha256;
+  final int sales;
+  final int stockMovements;
+  final int receipts;
+  final int outbox;
+  final int onHand;
+  final int shifts;
+  final String snapshotSha256;
+
+  Map<String, int> get counts => <String, int>{
+    'sales': sales,
+    'stockMovements': stockMovements,
+    'receipts': receipts,
+    'outbox': outbox,
+    'onHand': onHand,
+    'shifts': shifts,
+  };
+}
+
 class ShopCashShiftChangedException implements Exception {
   const ShopCashShiftChangedException();
 }
@@ -175,6 +234,22 @@ class ShopPendingCashCheckout {
   final int? memberCardRevision;
   final String requestFingerprint;
   final int createdAtMillis;
+}
+
+/// A recoverable stock conflict that leaves every sale effect unchanged.
+///
+/// Pending cash creation and final sale commits use this shared shape so
+/// counter and cafe screens can report the exact item and usable quantity.
+class ShopStockUnavailableException implements Exception {
+  const ShopStockUnavailableException({
+    required this.productName,
+    required this.available,
+    required this.requiredQuantity,
+  });
+
+  final String productName;
+  final int available;
+  final int requiredQuantity;
 }
 
 /// A device-local counter basket. It is neither an order nor a stock hold.
@@ -1472,7 +1547,3936 @@ Map<String, String> shopPendingCashCheckoutSchemaDefinitionsV21() =>
           shopPendingCashCheckoutShiftFreezeV21Sql,
     };
 
-const shopKnownBaseObjectNames = <String>{
+const shopSiteDevicesV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_devices (
+    device_id TEXT PRIMARY KEY NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    public_key_fingerprint TEXT NOT NULL CHECK (length(public_key_fingerprint) = 64),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    state TEXT NOT NULL CHECK (state IN ('active', 'revoked')),
+    enrolled_at_millis INTEGER NOT NULL CHECK (enrolled_at_millis > 0),
+    revoked_at_millis INTEGER,
+    CHECK ((state = 'active' AND revoked_at_millis IS NULL) OR
+      (state = 'revoked' AND revoked_at_millis IS NOT NULL AND
+       revoked_at_millis >= enrolled_at_millis))
+  )
+''';
+
+const shopSiteDevicesUpdateGuardV23Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_devices_update_guard
+  BEFORE UPDATE ON shop_site_devices
+  WHEN NEW.device_id != OLD.device_id
+    OR NEW.tenant_id != OLD.tenant_id
+    OR NEW.site_id != OLD.site_id
+    OR NEW.public_key_fingerprint != OLD.public_key_fingerprint
+    OR NEW.enrolled_at_millis != OLD.enrolled_at_millis
+    OR NEW.session_generation < OLD.session_generation
+    OR (OLD.state = 'revoked' AND NEW.state != 'revoked')
+  BEGIN
+    SELECT RAISE(ABORT, 'connected_site_device_identity_immutable');
+  END
+''';
+
+const shopSiteOfflineLeasesV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_offline_leases (
+    lease_id TEXT PRIMARY KEY NOT NULL CHECK (length(lease_id) BETWEEN 1 AND 128),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    actor_role TEXT NOT NULL CHECK (actor_role IN
+      ('owner', 'manager', 'cashierCounter', 'stockStaff',
+       'cafeWaiter', 'cafeKitchenBar')),
+    capabilities_json TEXT NOT NULL CHECK (json_valid(capabilities_json)),
+    device_id TEXT NOT NULL REFERENCES shop_site_devices(device_id),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    revocation_generation INTEGER NOT NULL CHECK (revocation_generation >= 0),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (
+      expires_at_millis > issued_at_millis AND
+      expires_at_millis - issued_at_millis <= 604800000),
+    key_id TEXT NOT NULL CHECK (length(key_id) BETWEEN 1 AND 128),
+    payload_digest TEXT NOT NULL UNIQUE CHECK (length(payload_digest) = 64),
+    signature TEXT NOT NULL CHECK (length(signature) BETWEEN 32 AND 4096)
+  )
+''';
+
+const shopSiteOfflineLeaseInsertGuardV23Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_offline_leases_insert_guard
+  BEFORE INSERT ON shop_site_offline_leases
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_site_devices device
+    JOIN shop_site_revocation_observations observation
+      ON observation.tenant_id = device.tenant_id
+      AND observation.site_id = device.site_id
+    WHERE device.device_id = NEW.device_id
+      AND device.tenant_id = NEW.tenant_id
+      AND device.site_id = NEW.site_id
+      AND device.state = 'active'
+      AND device.session_generation = NEW.session_generation
+      AND observation.generation = NEW.revocation_generation
+  ) BEGIN
+    SELECT RAISE(ABORT, 'connected_site_lease_authority_mismatch');
+  END
+''';
+
+const shopSiteRevocationObservationsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_revocation_observations (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    generation INTEGER NOT NULL CHECK (generation >= 0),
+    -- Local receipt metadata only; this is not cloud-authenticated content.
+    -- It is monotonic and bound to the matching revocation observation.
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    source_digest TEXT NOT NULL CHECK (length(source_digest) = 64),
+    PRIMARY KEY (tenant_id, site_id)
+  )
+''';
+
+const shopSiteRevocationObservationUpdateGuardV23Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_revocation_observations_update_guard
+  BEFORE UPDATE ON shop_site_revocation_observations
+  WHEN NEW.tenant_id != OLD.tenant_id
+    OR NEW.site_id != OLD.site_id
+    OR NEW.generation < OLD.generation
+    OR NEW.observed_at_millis < OLD.observed_at_millis
+  BEGIN
+    SELECT RAISE(ABORT, 'connected_site_revocation_observation_regressed');
+  END
+''';
+
+const shopSiteCommandsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_commands (
+    command_id TEXT PRIMARY KEY NOT NULL CHECK (length(command_id) BETWEEN 1 AND 128),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL REFERENCES shop_site_devices(device_id)
+      CHECK (length(device_id) BETWEEN 1 AND 128),
+    aggregate_type TEXT NOT NULL CHECK (length(aggregate_type) BETWEEN 1 AND 80),
+    aggregate_id TEXT NOT NULL CHECK (length(aggregate_id) BETWEEN 1 AND 160),
+    capability TEXT NOT NULL CHECK (length(capability) BETWEEN 1 AND 160),
+    expected_version INTEGER NOT NULL CHECK (expected_version >= 0),
+    payload_digest TEXT NOT NULL CHECK (length(payload_digest) = 64),
+    lease_digest TEXT NOT NULL REFERENCES shop_site_offline_leases(payload_digest)
+      CHECK (length(lease_digest) = 64),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    state TEXT NOT NULL CHECK (state IN ('accepted', 'conflict')),
+    received_at_millis INTEGER NOT NULL CHECK (received_at_millis > 0)
+  )
+''';
+
+const shopSiteCommandsInsertGuardV23Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_commands_insert_guard
+  BEFORE INSERT ON shop_site_commands
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_site_devices device
+    JOIN shop_site_offline_leases lease
+      ON lease.device_id = device.device_id
+    JOIN shop_site_revocation_observations observation
+      ON observation.tenant_id = lease.tenant_id
+      AND observation.site_id = lease.site_id
+    WHERE device.device_id = NEW.device_id
+      AND device.tenant_id = NEW.tenant_id
+      AND device.site_id = NEW.site_id
+      AND device.state = 'active'
+      AND lease.payload_digest = NEW.lease_digest
+      AND lease.tenant_id = NEW.tenant_id
+      AND lease.site_id = NEW.site_id
+      AND lease.actor_id = NEW.actor_id
+      AND lease.device_id = NEW.device_id
+      AND lease.session_generation = device.session_generation
+      AND lease.revocation_generation = observation.generation
+      AND NEW.received_at_millis >= lease.issued_at_millis
+      AND NEW.received_at_millis < lease.expires_at_millis
+      AND EXISTS (
+        SELECT 1 FROM json_each(lease.capabilities_json)
+        WHERE json_each.value = NEW.capability
+      )
+  ) BEGIN
+    SELECT RAISE(ABORT, 'connected_site_command_authority_mismatch');
+  END
+''';
+
+const shopSiteEventsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_events (
+    event_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_sequence INTEGER NOT NULL CHECK (site_sequence > 0),
+    event_id TEXT NOT NULL UNIQUE CHECK (length(event_id) BETWEEN 1 AND 128),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    aggregate_type TEXT NOT NULL CHECK (length(aggregate_type) BETWEEN 1 AND 80),
+    aggregate_id TEXT NOT NULL CHECK (length(aggregate_id) BETWEEN 1 AND 160),
+    aggregate_version INTEGER NOT NULL CHECK (aggregate_version > 0),
+    event_type TEXT NOT NULL CHECK (length(event_type) BETWEEN 1 AND 160),
+    payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+    event_digest TEXT NOT NULL CHECK (length(event_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    UNIQUE (tenant_id, site_id, site_sequence),
+    UNIQUE (tenant_id, site_id, aggregate_type, aggregate_id, aggregate_version)
+  )
+''';
+
+const shopSiteAggregateVersionsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_aggregate_versions (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    aggregate_type TEXT NOT NULL CHECK (length(aggregate_type) BETWEEN 1 AND 80),
+    aggregate_id TEXT NOT NULL CHECK (length(aggregate_id) BETWEEN 1 AND 160),
+    version INTEGER NOT NULL CHECK (version > 0),
+    last_event_row_id INTEGER NOT NULL REFERENCES shop_site_events(event_row_id),
+    last_site_sequence INTEGER NOT NULL CHECK (last_site_sequence > 0),
+    updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, aggregate_type, aggregate_id)
+  )
+''';
+
+const shopSiteCommandAcksV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_command_acks (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_commands(command_id),
+    status TEXT NOT NULL CHECK (status IN ('accepted', 'conflict')),
+    event_row_id INTEGER REFERENCES shop_site_events(event_row_id),
+    site_sequence INTEGER,
+    canonical_version INTEGER NOT NULL CHECK (canonical_version >= 0),
+    ack_digest TEXT NOT NULL CHECK (length(ack_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    CHECK ((status = 'accepted' AND event_row_id IS NOT NULL AND
+      site_sequence IS NOT NULL AND canonical_version > 0) OR
+      (status = 'conflict' AND event_row_id IS NULL AND site_sequence IS NULL))
+  )
+''';
+
+const shopSiteClientCursorsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_client_cursors (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL REFERENCES shop_site_devices(device_id),
+    acknowledged_sequence INTEGER NOT NULL CHECK (acknowledged_sequence >= 0),
+    delivered_sequence INTEGER NOT NULL CHECK (delivered_sequence >= acknowledged_sequence),
+    updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, device_id)
+  )
+''';
+
+const shopSiteCloudAcksV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_acks (
+    event_row_id INTEGER PRIMARY KEY NOT NULL REFERENCES shop_site_events(event_row_id),
+    cloud_event_id TEXT NOT NULL UNIQUE CHECK (length(cloud_event_id) BETWEEN 1 AND 160),
+    acknowledgement_digest TEXT NOT NULL CHECK (length(acknowledgement_digest) = 64),
+    acknowledged_at_millis INTEGER NOT NULL CHECK (acknowledged_at_millis > 0)
+  )
+''';
+
+const shopSiteConflictsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_conflicts (
+    conflict_id TEXT PRIMARY KEY NOT NULL CHECK (length(conflict_id) BETWEEN 1 AND 160),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    reason_code TEXT NOT NULL CHECK (length(reason_code) BETWEEN 1 AND 80),
+    detail_digest TEXT NOT NULL CHECK (length(detail_digest) = 64),
+    state TEXT NOT NULL CHECK (state IN ('pending', 'resolved', 'quarantined')),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    resolved_at_millis INTEGER,
+    CHECK ((state = 'pending' AND resolved_at_millis IS NULL) OR
+      (state != 'pending' AND resolved_at_millis IS NOT NULL AND
+       resolved_at_millis >= created_at_millis))
+  )
+''';
+
+const shopSiteRecoveryCheckpointsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_recovery_checkpoints (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_id TEXT NOT NULL CHECK (length(coordinator_id) BETWEEN 1 AND 128),
+    event_sequence INTEGER NOT NULL CHECK (event_sequence >= 0),
+    snapshot_digest TEXT NOT NULL CHECK (length(snapshot_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id)
+  )
+''';
+
+const shopSiteStockReservationsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_stock_reservations (
+    reservation_id TEXT PRIMARY KEY NOT NULL CHECK (length(reservation_id) BETWEEN 1 AND 160),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    product_id TEXT NOT NULL REFERENCES shop_products(id),
+    quantity INTEGER NOT NULL CHECK (quantity > 0 AND quantity <= 2000000000),
+    state TEXT NOT NULL CHECK (state IN ('held', 'released', 'committed')),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > 0),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    resolved_at_millis INTEGER,
+    CHECK ((state = 'held' AND resolved_at_millis IS NULL AND
+      expires_at_millis > created_at_millis) OR
+      (state != 'held' AND resolved_at_millis IS NOT NULL AND
+       resolved_at_millis >= created_at_millis))
+  )
+''';
+
+const shopSiteAuditV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_audit (
+    audit_id TEXT PRIMARY KEY NOT NULL CHECK (length(audit_id) BETWEEN 1 AND 160),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    action TEXT NOT NULL CHECK (length(action) BETWEEN 1 AND 160),
+    metadata_digest TEXT NOT NULL CHECK (length(metadata_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0)
+  )
+''';
+
+const shopConnectedStockReservationHeadersV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_stock_reservation_headers (
+    reservation_id TEXT PRIMARY KEY NOT NULL CHECK (length(reservation_id) BETWEEN 1 AND 128),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    capability TEXT NOT NULL CHECK (length(capability) BETWEEN 1 AND 80),
+    workflow_type TEXT CHECK (workflow_type IS NULL OR workflow_type IN ('retailCart', 'cafeOrder')),
+    subject_id TEXT CHECK (subject_id IS NULL OR length(subject_id) BETWEEN 1 AND 128),
+    basket_digest TEXT NOT NULL CHECK (length(basket_digest) = 64),
+    initial_reservation_digest TEXT NOT NULL CHECK (length(initial_reservation_digest) = 64),
+    reservation_json TEXT CHECK (reservation_json IS NULL OR json_valid(reservation_json)),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > issued_at_millis),
+    legacy_source INTEGER NOT NULL DEFAULT 0 CHECK (legacy_source IN (0, 1)),
+    CHECK ((legacy_source = 0 AND reservation_json IS NOT NULL AND
+      workflow_type IS NOT NULL AND subject_id IS NOT NULL) OR
+      (legacy_source = 1 AND reservation_json IS NULL AND
+       workflow_type IS NULL AND subject_id IS NULL))
+  )
+''';
+
+const shopConnectedStockReservationLinesV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_stock_reservation_lines (
+    reservation_id TEXT NOT NULL REFERENCES shop_connected_stock_reservation_headers(reservation_id),
+    product_id TEXT NOT NULL REFERENCES shop_products(id),
+    quantity INTEGER NOT NULL CHECK (quantity > 0 AND quantity <= 1000),
+    PRIMARY KEY (reservation_id, product_id)
+  )
+''';
+
+const shopConnectedStockReservationTransitionsV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_stock_reservation_transitions (
+    transition_id TEXT PRIMARY KEY NOT NULL CHECK (length(transition_id) BETWEEN 1 AND 160),
+    operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 160),
+    reservation_id TEXT NOT NULL REFERENCES shop_connected_stock_reservation_headers(reservation_id),
+    from_state TEXT NOT NULL CHECK (from_state = 'held'),
+    to_state TEXT NOT NULL CHECK (to_state IN ('released', 'expired', 'committed')),
+    before_digest TEXT NOT NULL CHECK (length(before_digest) = 64),
+    after_digest TEXT NOT NULL CHECK (length(after_digest) = 64),
+    transition_digest TEXT NOT NULL CHECK (length(transition_digest) = 64),
+    transition_json TEXT CHECK (transition_json IS NULL OR json_valid(transition_json)),
+    sale_id TEXT,
+    occurred_at_millis INTEGER NOT NULL CHECK (occurred_at_millis > 0),
+    legacy_source INTEGER NOT NULL DEFAULT 0 CHECK (legacy_source IN (0, 1)),
+    CHECK ((to_state = 'committed' AND
+      ((legacy_source = 0 AND sale_id IS NOT NULL) OR legacy_source = 1)) OR
+      (to_state != 'committed' AND sale_id IS NULL)),
+    CHECK ((legacy_source = 0 AND transition_json IS NOT NULL) OR
+      (legacy_source = 1 AND transition_json IS NULL))
+  )
+''';
+
+const shopConnectedStockReservationTransitionInsertGuardV24Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_stock_reservation_transition_insert_guard
+  BEFORE INSERT ON shop_connected_stock_reservation_transitions
+  WHEN EXISTS (
+    SELECT 1 FROM shop_connected_stock_reservation_transitions prior
+    WHERE prior.reservation_id = NEW.reservation_id
+  ) OR NOT EXISTS (
+    SELECT 1 FROM shop_connected_stock_reservation_headers header
+    WHERE header.reservation_id = NEW.reservation_id
+      AND NEW.occurred_at_millis >= header.issued_at_millis
+      AND (NEW.to_state != 'committed' OR header.legacy_source = 1 OR
+        NEW.occurred_at_millis < header.expires_at_millis)
+      AND (NEW.to_state != 'expired' OR NEW.occurred_at_millis >= header.expires_at_millis)
+  ) BEGIN
+    SELECT RAISE(ABORT, 'connected_stock_reservation_transition_invalid');
+  END
+''';
+
+const shopConnectedTrustedTimeV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_trusted_time (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id)
+  )
+''';
+
+const shopConnectedScopeBindingV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_scope_binding (
+    singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    enrollment_evidence_digest TEXT NOT NULL CHECK (length(enrollment_evidence_digest) = 64),
+    bound_at_millis INTEGER NOT NULL CHECK (bound_at_millis > 0)
+  )
+''';
+
+const shopConnectedTenderReservationBindingsV24Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_tender_reservation_bindings (
+    operation_id TEXT NOT NULL CHECK (length(operation_id) BETWEEN 1 AND 120),
+    tender_kind TEXT NOT NULL CHECK (tender_kind IN ('cash', 'wallet')),
+    reservation_id TEXT NOT NULL REFERENCES shop_connected_stock_reservation_headers(reservation_id),
+    reservation_digest TEXT NOT NULL CHECK (length(reservation_digest) = 64),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    workflow_type TEXT NOT NULL CHECK (workflow_type IN ('retailCart', 'cafeOrder')),
+    subject_id TEXT NOT NULL CHECK (length(subject_id) BETWEEN 1 AND 128),
+    basket_digest TEXT NOT NULL CHECK (length(basket_digest) = 64),
+    binding_digest TEXT NOT NULL CHECK (length(binding_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    PRIMARY KEY (operation_id, tender_kind)
+  )
+''';
+
+const shopConnectedTrustedTimeUpdateGuardV24Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_trusted_time_update_guard
+  BEFORE UPDATE ON shop_connected_trusted_time
+  WHEN NEW.tenant_id != OLD.tenant_id OR NEW.site_id != OLD.site_id OR
+    NEW.observed_at_millis < OLD.observed_at_millis
+  BEGIN
+    SELECT RAISE(ABORT, 'connected_trusted_time_regressed');
+  END
+''';
+
+Map<String, String> shopConnectedStockReservationSchemaDefinitionsV24() => {
+  'shop_connected_stock_reservation_headers':
+      shopConnectedStockReservationHeadersV24Sql,
+  'shop_connected_stock_reservation_lines':
+      shopConnectedStockReservationLinesV24Sql,
+  'shop_connected_stock_reservation_transitions':
+      shopConnectedStockReservationTransitionsV24Sql,
+  'shop_connected_stock_reservation_transition_insert_guard':
+      shopConnectedStockReservationTransitionInsertGuardV24Sql,
+  'shop_connected_trusted_time': shopConnectedTrustedTimeV24Sql,
+  'shop_connected_scope_binding': shopConnectedScopeBindingV24Sql,
+  'shop_connected_tender_reservation_bindings':
+      shopConnectedTenderReservationBindingsV24Sql,
+  'shop_connected_trusted_time_update_guard':
+      shopConnectedTrustedTimeUpdateGuardV24Sql,
+  'shop_connected_trusted_time_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_trusted_time',
+    operation: 'delete',
+    message: 'Connected trusted time cannot be removed',
+  ),
+  'shop_connected_scope_binding_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_scope_binding',
+    operation: 'update',
+    message: 'Connected stock scope binding is immutable',
+  ),
+  'shop_connected_scope_binding_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_scope_binding',
+    operation: 'delete',
+    message: 'Connected stock scope binding is immutable',
+  ),
+  'shop_connected_tender_reservation_bindings_no_update':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_connected_tender_reservation_bindings',
+        operation: 'update',
+        message: 'Connected tender reservation binding is immutable',
+      ),
+  'shop_connected_tender_reservation_bindings_no_delete':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_connected_tender_reservation_bindings',
+        operation: 'delete',
+        message: 'Connected tender reservation binding is immutable',
+      ),
+  for (final table in const [
+    'shop_connected_stock_reservation_headers',
+    'shop_connected_stock_reservation_lines',
+    'shop_connected_stock_reservation_transitions',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected stock reservation evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected stock reservation evidence is immutable',
+    ),
+  },
+};
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV23() {
+  final definitions = <String, String>{
+    'shop_site_devices': shopSiteDevicesV23Sql,
+    'shop_site_devices_update_guard': shopSiteDevicesUpdateGuardV23Sql,
+    'shop_site_devices_no_delete': shopImmutableTriggerV11Sql(
+      table: 'shop_site_devices',
+      operation: 'delete',
+      message: 'Connected site device history is immutable',
+    ),
+    'shop_site_revocation_observations': shopSiteRevocationObservationsV23Sql,
+    'shop_site_revocation_observations_update_guard':
+        shopSiteRevocationObservationUpdateGuardV23Sql,
+    'shop_site_revocation_observations_no_delete': shopImmutableTriggerV11Sql(
+      table: 'shop_site_revocation_observations',
+      operation: 'delete',
+      message: 'Connected site revocation history is immutable',
+    ),
+    'shop_site_offline_leases': shopSiteOfflineLeasesV23Sql,
+    'shop_site_offline_leases_insert_guard':
+        shopSiteOfflineLeaseInsertGuardV23Sql,
+    'shop_site_commands': shopSiteCommandsV23Sql,
+    'shop_site_commands_insert_guard': shopSiteCommandsInsertGuardV23Sql,
+    'shop_site_events': shopSiteEventsV23Sql,
+    'shop_site_aggregate_versions': shopSiteAggregateVersionsV23Sql,
+    'shop_site_command_acks': shopSiteCommandAcksV23Sql,
+    'shop_site_client_cursors': shopSiteClientCursorsV23Sql,
+    'shop_site_cloud_acks': shopSiteCloudAcksV23Sql,
+    'shop_site_conflicts': shopSiteConflictsV23Sql,
+    'shop_site_recovery_checkpoints': shopSiteRecoveryCheckpointsV23Sql,
+    'shop_site_stock_reservations': shopSiteStockReservationsV23Sql,
+    'shop_site_audit': shopSiteAuditV23Sql,
+  };
+  for (final table in const [
+    'shop_site_offline_leases',
+    'shop_site_commands',
+    'shop_site_events',
+    'shop_site_command_acks',
+    'shop_site_cloud_acks',
+    'shop_site_audit',
+  ]) {
+    definitions['${table}_no_update'] = shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected site history is immutable',
+    );
+    definitions['${table}_no_delete'] = shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected site history is immutable',
+    );
+  }
+  return definitions;
+}
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV24() => {
+  ...shopConnectedSiteSchemaDefinitionsV23(),
+  ...shopConnectedStockReservationSchemaDefinitionsV24(),
+};
+
+const shopSitePairingNoncesV25Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_pairing_nonces (
+    nonce TEXT PRIMARY KEY NOT NULL CHECK (length(nonce) BETWEEN 22 AND 128),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > issued_at_millis),
+    consumed_at_millis INTEGER,
+    CHECK (consumed_at_millis IS NULL OR
+      (consumed_at_millis >= issued_at_millis AND consumed_at_millis < expires_at_millis))
+  )
+''';
+
+const shopSitePairingNoncesUpdateGuardV25Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_pairing_nonces_update_guard
+  BEFORE UPDATE ON shop_site_pairing_nonces
+  WHEN NEW.nonce != OLD.nonce OR NEW.tenant_id != OLD.tenant_id OR
+    NEW.site_id != OLD.site_id OR
+    NEW.coordinator_device_id != OLD.coordinator_device_id OR
+    NEW.issued_at_millis != OLD.issued_at_millis OR
+    NEW.expires_at_millis != OLD.expires_at_millis OR
+    OLD.consumed_at_millis IS NOT NULL OR NEW.consumed_at_millis IS NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'connected_pairing_nonce_immutable');
+  END
+''';
+
+const shopSitePendingEnrollmentsV25Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_pending_enrollments (
+    client_fingerprint TEXT PRIMARY KEY NOT NULL CHECK (length(client_fingerprint) = 64),
+    nonce TEXT NOT NULL UNIQUE REFERENCES shop_site_pairing_nonces(nonce),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    public_key BLOB NOT NULL CHECK (length(public_key) = 32),
+    key_algorithm TEXT NOT NULL CHECK (key_algorithm = 'ed25519'),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+const shopSiteEnrollmentEvidenceV25Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_enrollment_evidence (
+    evidence_digest TEXT PRIMARY KEY NOT NULL CHECK (length(evidence_digest) = 64),
+    action TEXT NOT NULL CHECK (action IN ('approve', 'revoke')),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    authority_key_id TEXT NOT NULL CHECK (length(authority_key_id) BETWEEN 1 AND 128),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json))
+  )
+''';
+
+const shopSiteRequestNoncesV25Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_request_nonces (
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    nonce TEXT NOT NULL CHECK (length(nonce) BETWEEN 22 AND 128),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > 0),
+    consumed_at_millis INTEGER NOT NULL CHECK (consumed_at_millis > 0),
+    PRIMARY KEY (client_fingerprint, nonce)
+  )
+''';
+
+const shopSiteDevicesFingerprintUniqueV25Sql = '''
+  CREATE UNIQUE INDEX IF NOT EXISTS shop_site_devices_fingerprint_unique
+  ON shop_site_devices(public_key_fingerprint)
+''';
+
+Map<String, String> shopConnectedEnrollmentSchemaDefinitionsV25() => {
+  'shop_site_devices_fingerprint_unique':
+      shopSiteDevicesFingerprintUniqueV25Sql,
+  'shop_site_pairing_nonces': shopSitePairingNoncesV25Sql,
+  'shop_site_pairing_nonces_update_guard':
+      shopSitePairingNoncesUpdateGuardV25Sql,
+  'shop_site_pairing_nonces_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_pairing_nonces',
+    operation: 'delete',
+    message: 'Connected pairing nonce history is immutable',
+  ),
+  'shop_site_pending_enrollments': shopSitePendingEnrollmentsV25Sql,
+  'shop_site_enrollment_evidence': shopSiteEnrollmentEvidenceV25Sql,
+  'shop_site_request_nonces': shopSiteRequestNoncesV25Sql,
+  for (final table in const [
+    'shop_site_pending_enrollments',
+    'shop_site_enrollment_evidence',
+    'shop_site_request_nonces',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected authority evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected authority evidence is immutable',
+    ),
+  },
+};
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV25() => {
+  ...shopConnectedSiteSchemaDefinitionsV24(),
+  ...shopConnectedEnrollmentSchemaDefinitionsV25(),
+};
+
+// Additive v42 objects keep every v1 Ed25519 enrollment byte unchanged.
+// Product enrollment remains disabled until the signed v2 cross-table row
+// verifier and protected Windows signing custody are independently reviewed.
+const shopSiteV2PendingEnrollmentsV42Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_v2_pending_enrollments (
+    client_fingerprint TEXT PRIMARY KEY NOT NULL CHECK (length(client_fingerprint) = 64),
+    nonce TEXT NOT NULL UNIQUE REFERENCES shop_site_pairing_nonces(nonce),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    signing_profile TEXT NOT NULL CHECK (signing_profile = 'p256-sha256-v2'),
+    signing_key_id TEXT NOT NULL CHECK (length(signing_key_id) BETWEEN 1 AND 128),
+    public_key BLOB NOT NULL CHECK (length(public_key) = 65 AND hex(substr(public_key, 1, 1)) = '04'),
+    claim_json TEXT NOT NULL CHECK (json_valid(claim_json)),
+    possession_signature TEXT NOT NULL CHECK (length(possession_signature) = 86),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+const shopSiteV2EnrollmentEvidenceV42Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_v2_enrollment_evidence (
+    evidence_digest TEXT PRIMARY KEY NOT NULL CHECK (length(evidence_digest) = 64),
+    action TEXT NOT NULL CHECK (action IN ('approve', 'revoke')),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    signing_profile TEXT NOT NULL CHECK (signing_profile = 'p256-sha256-v2'),
+    signing_key_id TEXT NOT NULL CHECK (length(signing_key_id) BETWEEN 1 AND 128),
+    public_key BLOB NOT NULL CHECK (length(public_key) = 65 AND hex(substr(public_key, 1, 1)) = '04'),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    authority_key_id TEXT NOT NULL CHECK (length(authority_key_id) BETWEEN 1 AND 128),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json))
+  )
+''';
+
+const shopSiteDeviceProfilesV42Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_device_profiles_v42 (
+    device_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_devices(device_id),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    client_fingerprint TEXT NOT NULL UNIQUE CHECK (length(client_fingerprint) = 64),
+    signing_profile TEXT NOT NULL CHECK (signing_profile = 'p256-sha256-v2'),
+    signing_key_id TEXT NOT NULL UNIQUE CHECK (length(signing_key_id) BETWEEN 1 AND 128),
+    public_key BLOB NOT NULL CHECK (length(public_key) = 65 AND hex(substr(public_key, 1, 1)) = '04'),
+    approval_digest TEXT NOT NULL REFERENCES shop_site_v2_enrollment_evidence(evidence_digest)
+  )
+''';
+
+Map<String, String> shopConnectedDeviceProfileSchemaDefinitionsV42() => {
+  'shop_site_v2_pending_enrollments': shopSiteV2PendingEnrollmentsV42Sql,
+  'shop_site_v2_enrollment_evidence': shopSiteV2EnrollmentEvidenceV42Sql,
+  'shop_site_device_profiles_v42': shopSiteDeviceProfilesV42Sql,
+  for (final table in const [
+    'shop_site_v2_pending_enrollments',
+    'shop_site_v2_enrollment_evidence',
+    'shop_site_device_profiles_v42',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected v2 enrollment history is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected v2 enrollment history is immutable',
+    ),
+  },
+};
+
+const shopSiteCloudDispositionsV26Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_dispositions (
+    event_row_id INTEGER PRIMARY KEY NOT NULL REFERENCES shop_site_events(event_row_id),
+    disposition_kind TEXT NOT NULL CHECK (disposition_kind IN ('ack', 'conflict')),
+    disposition_json TEXT NOT NULL CHECK (json_valid(disposition_json)),
+    disposition_digest TEXT NOT NULL CHECK (length(disposition_digest) = 64),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+Map<String, String> shopConnectedCloudDispositionSchemaDefinitionsV26() => {
+  'shop_site_cloud_dispositions': shopSiteCloudDispositionsV26Sql,
+  'shop_site_cloud_dispositions_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_cloud_dispositions',
+    operation: 'update',
+    message: 'Connected cloud disposition evidence is immutable',
+  ),
+  'shop_site_cloud_dispositions_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_cloud_dispositions',
+    operation: 'delete',
+    message: 'Connected cloud disposition evidence is immutable',
+  ),
+  'shop_site_conflicts_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_conflicts',
+    operation: 'update',
+    message: 'Connected conflict evidence is immutable',
+  ),
+  'shop_site_conflicts_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_conflicts',
+    operation: 'delete',
+    message: 'Connected conflict evidence is immutable',
+  ),
+};
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV26() => {
+  ...shopConnectedSiteSchemaDefinitionsV25(),
+  ...shopConnectedCloudDispositionSchemaDefinitionsV26(),
+};
+
+const shopSiteAuthorityDeltasV27Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_deltas (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    observation_sequence INTEGER NOT NULL CHECK (observation_sequence > 0),
+    revocation_generation INTEGER NOT NULL CHECK (revocation_generation >= 0),
+    membership_digest TEXT NOT NULL CHECK (length(membership_digest) = 64),
+    configuration_version INTEGER NOT NULL CHECK (configuration_version >= 0),
+    configuration_digest TEXT NOT NULL CHECK (length(configuration_digest) = 64),
+    delta_json TEXT NOT NULL CHECK (json_valid(delta_json)),
+    delta_digest TEXT NOT NULL UNIQUE CHECK (length(delta_digest) = 64),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, observation_sequence)
+  )
+''';
+
+Map<String, String> shopConnectedAuthoritySchemaDefinitionsV27() => {
+  'shop_site_authority_deltas': shopSiteAuthorityDeltasV27Sql,
+  'shop_site_authority_deltas_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_authority_deltas',
+    operation: 'update',
+    message: 'Connected authority observations are immutable',
+  ),
+  'shop_site_authority_deltas_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_authority_deltas',
+    operation: 'delete',
+    message: 'Connected authority observations are immutable',
+  ),
+};
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV27() => {
+  ...shopConnectedSiteSchemaDefinitionsV26(),
+  ...shopConnectedAuthoritySchemaDefinitionsV27(),
+};
+
+const shopSiteCoordinatorBindingsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_coordinator_bindings (
+    binding_digest TEXT PRIMARY KEY NOT NULL CHECK (length(binding_digest) = 64),
+    action TEXT NOT NULL CHECK (action = 'approve'),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    pairing_digest TEXT NOT NULL CHECK (length(pairing_digest) = 64),
+    enrollment_evidence_digest TEXT NOT NULL CHECK (length(enrollment_evidence_digest) = 64),
+    client_device_id TEXT NOT NULL CHECK (length(client_device_id) BETWEEN 1 AND 128),
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    client_signing_key_id TEXT NOT NULL CHECK (length(client_signing_key_id) BETWEEN 1 AND 128),
+    address TEXT NOT NULL CHECK (length(address) BETWEEN 1 AND 255),
+    port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+    certificate_sha256 TEXT NOT NULL CHECK (length(certificate_sha256) = 64),
+    protocol_version INTEGER NOT NULL CHECK (protocol_version = 1),
+    approval_generation INTEGER NOT NULL CHECK (approval_generation > 0),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > issued_at_millis),
+    authority_key_id TEXT NOT NULL CHECK (length(authority_key_id) BETWEEN 1 AND 128),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    evidence_digest TEXT NOT NULL UNIQUE CHECK (length(evidence_digest) = 64),
+    authority_signature TEXT NOT NULL CHECK (length(authority_signature) BETWEEN 32 AND 512),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+const shopSiteCommandAttemptsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_command_attempts (
+    command_id TEXT PRIMARY KEY NOT NULL CHECK (length(command_id) BETWEEN 1 AND 128),
+    binding_digest TEXT NOT NULL REFERENCES shop_site_coordinator_bindings(binding_digest),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    signing_key_id TEXT NOT NULL CHECK (length(signing_key_id) BETWEEN 1 AND 128),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    command_json TEXT NOT NULL CHECK (json_valid(command_json)),
+    body_sha256 TEXT NOT NULL CHECK (length(body_sha256) = 64),
+    prepared_at_millis INTEGER NOT NULL CHECK (prepared_at_millis > 0)
+  )
+''';
+
+const shopSiteCoordinatorBindingRevocationsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_coordinator_binding_revocations (
+    evidence_digest TEXT PRIMARY KEY NOT NULL CHECK (length(evidence_digest) = 64),
+    action TEXT NOT NULL CHECK (action = 'revoke'),
+    target_binding_digest TEXT NOT NULL REFERENCES shop_site_coordinator_bindings(binding_digest),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    client_device_id TEXT NOT NULL CHECK (length(client_device_id) BETWEEN 1 AND 128),
+    approval_generation INTEGER NOT NULL CHECK (approval_generation > 0),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    authority_key_id TEXT NOT NULL CHECK (length(authority_key_id) BETWEEN 1 AND 128),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    authority_signature TEXT NOT NULL CHECK (length(authority_signature) BETWEEN 32 AND 512),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+const shopSiteCommandTransmissionsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_command_transmissions (
+    command_id TEXT NOT NULL REFERENCES shop_site_command_attempts(command_id),
+    transmission_sequence INTEGER NOT NULL CHECK (transmission_sequence > 0),
+    request_nonce TEXT NOT NULL UNIQUE CHECK (length(request_nonce) BETWEEN 22 AND 128),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    method TEXT NOT NULL CHECK (method = 'POST'),
+    canonical_target TEXT NOT NULL CHECK (canonical_target = '/v1/commands'),
+    proof_json TEXT NOT NULL CHECK (json_valid(proof_json)),
+    proof_digest TEXT NOT NULL UNIQUE CHECK (length(proof_digest) = 64),
+    request_signature TEXT NOT NULL CHECK (length(request_signature) BETWEEN 32 AND 512),
+    body_sha256 TEXT NOT NULL CHECK (length(body_sha256) = 64),
+    started_at_millis INTEGER NOT NULL CHECK (started_at_millis > 0),
+    PRIMARY KEY (command_id, transmission_sequence)
+  )
+''';
+
+const shopSiteCommandResultsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_command_results (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_command_attempts(command_id),
+    transmission_sequence INTEGER NOT NULL,
+    result_kind TEXT NOT NULL CHECK (result_kind IN ('acknowledged', 'rejected')),
+    ack_state TEXT NOT NULL CHECK (ack_state IN ('accepted', 'replayed', 'conflict', 'denied')),
+    ack_json TEXT NOT NULL CHECK (json_valid(ack_json)),
+    ack_digest TEXT NOT NULL UNIQUE CHECK (length(ack_digest) = 64),
+    completed_at_millis INTEGER NOT NULL CHECK (completed_at_millis > 0),
+    FOREIGN KEY (command_id, transmission_sequence)
+      REFERENCES shop_site_command_transmissions(command_id, transmission_sequence)
+  )
+''';
+
+Map<String, String> shopConnectedAttemptSchemaDefinitionsV28() => {
+  'shop_site_coordinator_bindings': shopSiteCoordinatorBindingsV28Sql,
+  'shop_site_coordinator_binding_revocations':
+      shopSiteCoordinatorBindingRevocationsV28Sql,
+  'shop_site_command_attempts': shopSiteCommandAttemptsV28Sql,
+  'shop_site_command_transmissions': shopSiteCommandTransmissionsV28Sql,
+  'shop_site_command_results': shopSiteCommandResultsV28Sql,
+  for (final table in const [
+    'shop_site_coordinator_bindings',
+    'shop_site_coordinator_binding_revocations',
+    'shop_site_command_attempts',
+    'shop_site_command_transmissions',
+    'shop_site_command_results',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected command-attempt evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected command-attempt evidence is immutable',
+    ),
+  },
+};
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV28() => {
+  ...shopConnectedSiteSchemaDefinitionsV27(),
+  ...shopConnectedAttemptSchemaDefinitionsV28(),
+};
+
+const shopSiteRequestEnvelopesV29Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_request_envelopes (
+    command_id TEXT NOT NULL,
+    transmission_sequence INTEGER NOT NULL CHECK (transmission_sequence > 0),
+    endpoint TEXT NOT NULL CHECK (length(endpoint) BETWEEN 12 AND 2048),
+    certificate_sha256 TEXT NOT NULL CHECK (length(certificate_sha256) = 64),
+    headers_json TEXT NOT NULL CHECK (json_valid(headers_json)),
+    body_json TEXT NOT NULL CHECK (json_valid(body_json)),
+    envelope_digest TEXT NOT NULL UNIQUE CHECK (length(envelope_digest) = 64),
+    PRIMARY KEY (command_id, transmission_sequence),
+    FOREIGN KEY (command_id, transmission_sequence) REFERENCES
+      shop_site_command_transmissions(command_id, transmission_sequence)
+  )
+''';
+
+Map<String, String> shopConnectedEnvelopeSchemaDefinitionsV29() => {
+  'shop_site_request_envelopes': shopSiteRequestEnvelopesV29Sql,
+  'shop_site_request_envelopes_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_request_envelopes',
+    operation: 'update',
+    message: 'Connected request envelopes are immutable',
+  ),
+  'shop_site_request_envelopes_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_request_envelopes',
+    operation: 'delete',
+    message: 'Connected request envelopes are immutable',
+  ),
+};
+
+const shopSiteAuthorityPayloadsV30Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_payloads (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    authority_sequence INTEGER NOT NULL CHECK (authority_sequence > 0),
+    authority_event_id TEXT NOT NULL CHECK (length(authority_event_id) BETWEEN 1 AND 128),
+    previous_authority_digest TEXT CHECK (previous_authority_digest IS NULL OR length(previous_authority_digest) = 64),
+    issuer_key_id TEXT NOT NULL CHECK (length(issuer_key_id) BETWEEN 1 AND 128),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    payload_bytes TEXT NOT NULL CHECK (json_valid(payload_bytes)),
+    payload_digest TEXT NOT NULL CHECK (length(payload_digest) = 64),
+    signature TEXT NOT NULL CHECK (length(signature) BETWEEN 32 AND 4096),
+    membership_digest TEXT NOT NULL CHECK (length(membership_digest) = 64),
+    configuration_digest TEXT NOT NULL CHECK (length(configuration_digest) = 64),
+    revocation_generation INTEGER NOT NULL CHECK (revocation_generation >= 0),
+    configuration_version INTEGER NOT NULL CHECK (configuration_version >= 0),
+    observation_sequence INTEGER NOT NULL,
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, authority_sequence),
+    UNIQUE (tenant_id, site_id, authority_event_id),
+    UNIQUE (tenant_id, site_id, payload_digest),
+    UNIQUE (tenant_id, site_id, observation_sequence),
+    FOREIGN KEY (tenant_id, site_id, observation_sequence) REFERENCES
+      shop_site_authority_deltas(tenant_id, site_id, observation_sequence)
+  )
+''';
+
+const shopSiteAuthorityMembersV30Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_members (
+    tenant_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    authority_sequence INTEGER NOT NULL,
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    actor_role TEXT NOT NULL CHECK (actor_role IN
+      ('owner', 'manager', 'cashierCounter', 'stockStaff', 'cafeWaiter', 'cafeKitchenBar')),
+    capabilities_json TEXT NOT NULL CHECK (json_valid(capabilities_json)),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    PRIMARY KEY (tenant_id, site_id, authority_sequence, actor_id),
+    FOREIGN KEY (tenant_id, site_id, authority_sequence) REFERENCES
+      shop_site_authority_payloads(tenant_id, site_id, authority_sequence)
+  )
+''';
+
+const shopSiteConfigurationSnapshotsV30Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_configuration_snapshots (
+    tenant_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    authority_sequence INTEGER NOT NULL,
+    configuration_version INTEGER NOT NULL CHECK (configuration_version >= 0),
+    business_profile_json TEXT NOT NULL CHECK (json_valid(business_profile_json)),
+    catalog_reference_json TEXT NOT NULL CHECK (json_valid(catalog_reference_json)),
+    configuration_digest TEXT NOT NULL CHECK (length(configuration_digest) = 64),
+    PRIMARY KEY (tenant_id, site_id, authority_sequence),
+    FOREIGN KEY (tenant_id, site_id, authority_sequence) REFERENCES
+      shop_site_authority_payloads(tenant_id, site_id, authority_sequence)
+  )
+''';
+
+Map<String, String> shopConnectedAuthorityPayloadSchemaDefinitionsV30() => {
+  'shop_site_authority_payloads': shopSiteAuthorityPayloadsV30Sql,
+  'shop_site_authority_members': shopSiteAuthorityMembersV30Sql,
+  'shop_site_configuration_snapshots': shopSiteConfigurationSnapshotsV30Sql,
+  for (final table in const [
+    'shop_site_authority_payloads',
+    'shop_site_authority_members',
+    'shop_site_configuration_snapshots',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected authority payload evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected authority payload evidence is immutable',
+    ),
+  },
+};
+
+const shopConnectedReservationSessionBindingsV31Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_reservation_session_bindings (
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    workflow_type TEXT NOT NULL CHECK (workflow_type IN ('retailCart', 'cafeOrder')),
+    subject_id TEXT NOT NULL CHECK (length(subject_id) BETWEEN 1 AND 128),
+    reservation_id TEXT NOT NULL CHECK (length(reservation_id) BETWEEN 1 AND 128),
+    reservation_digest TEXT NOT NULL CHECK (length(reservation_digest) = 64),
+    reserve_command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_command_attempts(command_id),
+    reserve_command_digest TEXT NOT NULL CHECK (length(reserve_command_digest) = 64),
+    bound_at_millis INTEGER NOT NULL CHECK (bound_at_millis > 0),
+    PRIMARY KEY (workspace_id, site_id, actor_id, device_id, workflow_type, subject_id)
+  )
+''';
+
+Map<String, String> shopConnectedReservationSessionSchemaDefinitionsV31() => {
+  'shop_connected_reservation_session_bindings':
+      shopConnectedReservationSessionBindingsV31Sql,
+  'shop_connected_reservation_session_bindings_no_update':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_connected_reservation_session_bindings',
+        operation: 'update',
+        message: 'Connected reservation session bindings are immutable',
+      ),
+  'shop_connected_reservation_session_bindings_no_delete':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_connected_reservation_session_bindings',
+        operation: 'delete',
+        message: 'Connected reservation session bindings are immutable',
+      ),
+};
+
+const shopConnectedReplicaHeadsV32Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_replica_heads (
+    workspace_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    certificate_sha256 TEXT NOT NULL CHECK (length(certificate_sha256) = 64),
+    evidence_start_cursor INTEGER NOT NULL CHECK (evidence_start_cursor >= 0),
+    snapshot_cursor INTEGER NOT NULL CHECK (snapshot_cursor >= evidence_start_cursor),
+    continuation_cursor INTEGER NOT NULL CHECK (continuation_cursor >= 0),
+    snapshot_version INTEGER NOT NULL CHECK (snapshot_version >= 1),
+    snapshot_json TEXT NOT NULL CHECK (json_valid(snapshot_json)),
+    checkpoint_digest TEXT NOT NULL CHECK (length(checkpoint_digest) = 64),
+    writes_paused INTEGER NOT NULL CHECK (writes_paused IN (0, 1)),
+    updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis > 0),
+    PRIMARY KEY (workspace_id, site_id, client_fingerprint)
+  )
+''';
+
+const shopConnectedReplicaEventsV32Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_replica_events (
+    workspace_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL, cursor INTEGER NOT NULL CHECK (cursor > 0),
+    event_json TEXT NOT NULL CHECK (json_valid(event_json)),
+    event_digest TEXT NOT NULL CHECK (length(event_digest) = 64),
+    received_at_millis INTEGER NOT NULL CHECK (received_at_millis > 0),
+    PRIMARY KEY (workspace_id, site_id, client_fingerprint, cursor),
+    FOREIGN KEY (workspace_id, site_id, client_fingerprint) REFERENCES
+      shop_connected_replica_heads(workspace_id, site_id, client_fingerprint)
+  )
+''';
+
+const shopConnectedReplicaProjectionsV32Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_replica_projections (
+    workspace_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL,
+    projection_kind TEXT NOT NULL CHECK (projection_kind IN ('aggregate','cafeOrder','stockReservation','conflict')),
+    aggregate_id TEXT NOT NULL, aggregate_version INTEGER NOT NULL CHECK (aggregate_version >= 0),
+    last_cursor INTEGER NOT NULL CHECK (last_cursor >= 0),
+    payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+    payload_digest TEXT NOT NULL CHECK (length(payload_digest) = 64),
+    PRIMARY KEY (workspace_id, site_id, client_fingerprint, projection_kind, aggregate_id),
+    FOREIGN KEY (workspace_id, site_id, client_fingerprint) REFERENCES
+      shop_connected_replica_heads(workspace_id, site_id, client_fingerprint)
+  )
+''';
+
+Map<String, String> shopConnectedReplicaSchemaDefinitionsV32() => {
+  'shop_connected_replica_heads': shopConnectedReplicaHeadsV32Sql,
+  'shop_connected_replica_events': shopConnectedReplicaEventsV32Sql,
+  'shop_connected_replica_projections': shopConnectedReplicaProjectionsV32Sql,
+  'shop_connected_replica_events_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_replica_events',
+    operation: 'update',
+    message: 'Connected replica event evidence is immutable',
+  ),
+  'shop_connected_replica_events_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_replica_events',
+    operation: 'delete',
+    message: 'Connected replica event evidence is immutable',
+  ),
+};
+
+const shopSiteReplicaEventEnvelopesV33Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_replica_event_envelopes (
+    envelope_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_event_row_id INTEGER REFERENCES shop_site_events(event_row_id),
+    tenant_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    replica_sequence INTEGER NOT NULL CHECK (replica_sequence > 0),
+    event_json TEXT NOT NULL CHECK (json_valid(event_json)),
+    event_digest TEXT NOT NULL CHECK (length(event_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    UNIQUE (tenant_id, site_id, replica_sequence),
+    UNIQUE (source_event_row_id)
+  )
+''';
+
+const shopConnectedReplicaDeliveriesV33Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_replica_deliveries (
+    workspace_id TEXT NOT NULL, site_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL,
+    after_cursor INTEGER NOT NULL CHECK (after_cursor >= 0),
+    next_cursor INTEGER NOT NULL CHECK (next_cursor > after_cursor),
+    delta_json TEXT NOT NULL CHECK (json_valid(delta_json)),
+    delta_digest TEXT NOT NULL CHECK (length(delta_digest) = 64),
+    applied_at_millis INTEGER NOT NULL CHECK (applied_at_millis > 0),
+    PRIMARY KEY (workspace_id, site_id, client_fingerprint, after_cursor, next_cursor),
+    FOREIGN KEY (workspace_id, site_id, client_fingerprint) REFERENCES
+      shop_connected_replica_heads(workspace_id, site_id, client_fingerprint)
+  )
+''';
+
+Map<String, String> shopConnectedReplicaSchemaDefinitionsV33() => {
+  'shop_site_replica_event_envelopes': shopSiteReplicaEventEnvelopesV33Sql,
+  'shop_connected_replica_deliveries': shopConnectedReplicaDeliveriesV33Sql,
+  for (final table in const [
+    'shop_site_replica_event_envelopes',
+    'shop_connected_replica_deliveries',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected replica delivery evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected replica delivery evidence is immutable',
+    ),
+  },
+};
+
+const shopSiteCloudProofsV34Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_proofs (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_commands(command_id),
+    proof_kind TEXT NOT NULL CHECK (proof_kind IN ('signedClientCommand','coordinatorDerived')),
+    proof_json TEXT NOT NULL CHECK (json_valid(proof_json)),
+    proof_digest TEXT NOT NULL UNIQUE CHECK (length(proof_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0)
+  )
+''';
+
+const shopSiteCloudProofRequirementsV34Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_proof_requirements (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_commands(command_id),
+    proof_state TEXT NOT NULL CHECK (proof_state IN ('proofRequired','legacyUnverifiable')),
+    recorded_at_millis INTEGER NOT NULL CHECK (recorded_at_millis > 0)
+  )
+''';
+
+const shopSiteOfflineLeasePayloadsV34Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_offline_lease_payloads (
+    payload_digest TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_offline_leases(payload_digest),
+    lease_json TEXT NOT NULL CHECK (json_valid(lease_json)),
+    lease_bytes_digest TEXT NOT NULL UNIQUE CHECK (length(lease_bytes_digest) = 64),
+    issuer_evidence_digest TEXT NOT NULL CHECK (length(issuer_evidence_digest) = 64),
+    retained_at_millis INTEGER NOT NULL CHECK (retained_at_millis > 0)
+  )
+''';
+
+Map<String, String> shopConnectedCloudProofSchemaDefinitionsV34() => {
+  'shop_site_cloud_proof_requirements': shopSiteCloudProofRequirementsV34Sql,
+  'shop_site_offline_lease_payloads': shopSiteOfflineLeasePayloadsV34Sql,
+  'shop_site_cloud_proofs': shopSiteCloudProofsV34Sql,
+  for (final table in const [
+    'shop_site_cloud_proof_requirements',
+    'shop_site_offline_lease_payloads',
+    'shop_site_cloud_proofs',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected cloud authority evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected cloud authority evidence is immutable',
+    ),
+  },
+};
+
+const shopSiteCloudProofLegacyBoundaryV35Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_proof_legacy_boundary (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_commands(command_id),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    boundary_digest TEXT NOT NULL UNIQUE CHECK (length(boundary_digest) = 64),
+    migrated_at_millis INTEGER NOT NULL CHECK (migrated_at_millis > 0)
+  )
+''';
+
+const shopSiteLeaseIssuerEvidenceV35Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_lease_issuer_evidence (
+    evidence_digest TEXT PRIMARY KEY NOT NULL CHECK (length(evidence_digest) = 64),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    evidence_bytes_digest TEXT NOT NULL CHECK (length(evidence_bytes_digest) = 64),
+    retained_at_millis INTEGER NOT NULL CHECK (retained_at_millis > 0)
+  )
+''';
+
+Map<String, String> shopConnectedCloudProofSchemaDefinitionsV35() => {
+  ...shopConnectedCloudProofSchemaDefinitionsV34(),
+  'shop_site_cloud_proof_legacy_boundary':
+      shopSiteCloudProofLegacyBoundaryV35Sql,
+  'shop_site_lease_issuer_evidence': shopSiteLeaseIssuerEvidenceV35Sql,
+  'shop_site_cloud_proof_legacy_boundary_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_cloud_proof_legacy_boundary',
+    operation: 'update',
+    message: 'Connected cloud migration boundary is immutable',
+  ),
+  'shop_site_cloud_proof_legacy_boundary_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_cloud_proof_legacy_boundary',
+    operation: 'delete',
+    message: 'Connected cloud migration boundary is immutable',
+  ),
+  'shop_site_lease_issuer_evidence_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_lease_issuer_evidence',
+    operation: 'update',
+    message: 'Connected lease issuer evidence is immutable',
+  ),
+  'shop_site_lease_issuer_evidence_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_lease_issuer_evidence',
+    operation: 'delete',
+    message: 'Connected lease issuer evidence is immutable',
+  ),
+};
+
+const shopSiteAuthorityCheckpointsV36Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_checkpoints (
+    checkpoint_digest TEXT PRIMARY KEY NOT NULL CHECK (length(checkpoint_digest) = 64),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    issuer_key_id TEXT NOT NULL CHECK (length(issuer_key_id) BETWEEN 1 AND 128),
+    first_authority_sequence INTEGER NOT NULL CHECK (first_authority_sequence = 1),
+    last_authority_sequence INTEGER NOT NULL CHECK (last_authority_sequence >= first_authority_sequence),
+    chain_digest TEXT NOT NULL CHECK (length(chain_digest) = 64),
+    checkpoint_bytes TEXT NOT NULL CHECK (json_valid(checkpoint_bytes)),
+    signature TEXT NOT NULL CHECK (length(signature) BETWEEN 32 AND 4096),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis >= issued_at_millis),
+    UNIQUE (tenant_id, site_id, device_id),
+    FOREIGN KEY (tenant_id, site_id, last_authority_sequence) REFERENCES
+      shop_site_authority_payloads(tenant_id, site_id, authority_sequence)
+  )
+''';
+
+const shopSiteAuthorityBootstrapProvenanceV36Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_authority_bootstrap_provenance (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    bootstrap_mode TEXT NOT NULL CHECK (bootstrap_mode = 'checkpoint_joined'),
+    checkpoint_digest TEXT NOT NULL CHECK (length(checkpoint_digest) = 64),
+    recorded_at_millis INTEGER NOT NULL CHECK (recorded_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, device_id),
+    FOREIGN KEY (checkpoint_digest) REFERENCES shop_site_authority_checkpoints(checkpoint_digest)
+  )
+''';
+
+Map<String, String> shopConnectedAuthorityCheckpointSchemaDefinitionsV36() => {
+  'shop_site_authority_checkpoints': shopSiteAuthorityCheckpointsV36Sql,
+  'shop_site_authority_bootstrap_provenance':
+      shopSiteAuthorityBootstrapProvenanceV36Sql,
+  'shop_site_authority_checkpoints_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_site_authority_checkpoints',
+    operation: 'update',
+    message: 'Connected authority checkpoint evidence is immutable',
+  ),
+  'shop_site_authority_checkpoints_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_site_authority_checkpoints',
+    operation: 'delete',
+    message: 'Connected authority checkpoint evidence is immutable',
+  ),
+  'shop_site_authority_bootstrap_provenance_no_update':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_site_authority_bootstrap_provenance',
+        operation: 'update',
+        message: 'Connected authority bootstrap provenance is immutable',
+      ),
+  'shop_site_authority_bootstrap_provenance_no_delete':
+      shopImmutableTriggerV11Sql(
+        table: 'shop_site_authority_bootstrap_provenance',
+        operation: 'delete',
+        message: 'Connected authority bootstrap provenance is immutable',
+      ),
+};
+
+const shopConnectedTrustedTimeApprovalsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_approvals (
+    approval_digest TEXT PRIMARY KEY NOT NULL CHECK (length(approval_digest) = 64),
+    approval_json TEXT NOT NULL CHECK (json_valid(approval_json)),
+    retained_at_monotonic_millis INTEGER NOT NULL CHECK (retained_at_monotonic_millis >= 0)
+  )
+''';
+
+const shopConnectedTrustedTimeRequestsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_requests (
+    request_digest TEXT PRIMARY KEY NOT NULL CHECK (length(request_digest) = 64),
+    approval_digest TEXT NOT NULL REFERENCES shop_connected_time_approvals(approval_digest),
+    challenge_json TEXT NOT NULL CHECK (json_valid(challenge_json)),
+    capability_hash TEXT NOT NULL UNIQUE CHECK (length(capability_hash) = 64),
+    requested_at_monotonic_millis INTEGER NOT NULL CHECK (requested_at_monotonic_millis >= 0)
+  )
+''';
+
+const shopConnectedTrustedTimeObservationsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_observations (
+    observation_digest TEXT PRIMARY KEY NOT NULL CHECK (length(observation_digest) = 64),
+    request_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_requests(request_digest),
+    observation_json TEXT NOT NULL CHECK (json_valid(observation_json)),
+    received_at_monotonic_millis INTEGER NOT NULL CHECK (received_at_monotonic_millis >= 0)
+  )
+''';
+
+const shopConnectedTrustedTimeAcceptancesV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_acceptances (
+    acceptance_digest TEXT PRIMARY KEY NOT NULL CHECK (length(acceptance_digest) = 64),
+    request_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_requests(request_digest),
+    observation_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_observations(observation_digest),
+    acceptance_json TEXT NOT NULL CHECK (json_valid(acceptance_json)),
+    accepted_at_monotonic_millis INTEGER NOT NULL CHECK (accepted_at_monotonic_millis >= 0),
+    effective_at_millis INTEGER NOT NULL CHECK (effective_at_millis > 0),
+    valid_until_millis INTEGER NOT NULL CHECK (valid_until_millis >= effective_at_millis)
+  )
+''';
+
+const shopConnectedTrustedTimeAuthorityHeadsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_authority_heads (
+    workspace_id TEXT NOT NULL,
+    site_id TEXT NOT NULL,
+    coordinator_device_id TEXT NOT NULL,
+    authority_key_generation INTEGER NOT NULL CHECK (authority_key_generation > 0),
+    authority_epoch INTEGER NOT NULL CHECK (authority_epoch > 0),
+    authority_sequence INTEGER NOT NULL CHECK (authority_sequence > 0),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    acceptance_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_acceptances(acceptance_digest),
+    head_digest TEXT NOT NULL CHECK (length(head_digest) = 64),
+    PRIMARY KEY (workspace_id, site_id, coordinator_device_id)
+  )
+''';
+
+const shopConnectedTrustedTimeDeviceHeadsV37Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_device_heads (
+    workspace_id TEXT NOT NULL,
+    site_id TEXT NOT NULL,
+    client_device_id TEXT NOT NULL,
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    session_generation INTEGER NOT NULL CHECK (session_generation > 0),
+    coordinator_binding_digest TEXT NOT NULL CHECK (length(coordinator_binding_digest) = 64),
+    coordinator_binding_generation INTEGER NOT NULL CHECK (coordinator_binding_generation > 0),
+    boot_session_id TEXT NOT NULL CHECK (length(boot_session_id) = 64),
+    effective_at_millis INTEGER NOT NULL CHECK (effective_at_millis > 0),
+    valid_until_millis INTEGER NOT NULL CHECK (valid_until_millis >= effective_at_millis),
+    accepted_at_monotonic_millis INTEGER NOT NULL CHECK (accepted_at_monotonic_millis >= 0),
+    acceptance_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_acceptances(acceptance_digest),
+    head_digest TEXT NOT NULL CHECK (length(head_digest) = 64),
+    PRIMARY KEY (workspace_id, site_id, client_device_id)
+  )
+''';
+
+Map<String, String> shopConnectedTrustedTimeSchemaDefinitionsV37() => {
+  'shop_connected_time_approvals': shopConnectedTrustedTimeApprovalsV37Sql,
+  'shop_connected_time_requests': shopConnectedTrustedTimeRequestsV37Sql,
+  'shop_connected_time_observations':
+      shopConnectedTrustedTimeObservationsV37Sql,
+  'shop_connected_time_acceptances': shopConnectedTrustedTimeAcceptancesV37Sql,
+  'shop_connected_time_authority_heads':
+      shopConnectedTrustedTimeAuthorityHeadsV37Sql,
+  'shop_connected_time_device_heads': shopConnectedTrustedTimeDeviceHeadsV37Sql,
+  for (final table in const [
+    'shop_connected_time_approvals',
+    'shop_connected_time_requests',
+    'shop_connected_time_observations',
+    'shop_connected_time_acceptances',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected trusted-time evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected trusted-time evidence is immutable',
+    ),
+  },
+};
+
+const shopConnectedTrustedTimeIssuerStreamsV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_streams (
+    stream_digest TEXT PRIMARY KEY CHECK (length(stream_digest) = 64),
+    stream_json TEXT NOT NULL CHECK (json_valid(stream_json)),
+    acknowledged_sequence INTEGER NOT NULL DEFAULT 0 CHECK (acknowledged_sequence >= 0),
+    acknowledged_entry_digest TEXT CHECK (acknowledged_entry_digest IS NULL OR length(acknowledged_entry_digest) = 64),
+    pending_entry_digest TEXT UNIQUE CHECK (pending_entry_digest IS NULL OR length(pending_entry_digest) = 64),
+    CHECK ((acknowledged_sequence = 0) = (acknowledged_entry_digest IS NULL))
+  )
+''';
+
+const shopConnectedTrustedTimeIssuerStateV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_state (
+    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+    issuance_suspended INTEGER NOT NULL CHECK (issuance_suspended IN (0, 1))
+  )
+''';
+
+const shopConnectedTrustedTimeIssuerStateTransitionV38Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_time_issuer_state_guard_update
+  BEFORE UPDATE ON shop_connected_time_issuer_state
+  WHEN OLD.singleton_id != NEW.singleton_id
+    OR OLD.issuance_suspended = 1
+    OR NEW.issuance_suspended != 1
+  BEGIN
+    SELECT RAISE(ABORT, 'Trusted-time issuer lifecycle transition is invalid');
+  END
+''';
+
+const shopConnectedTrustedTimeIssuerStateInsertV38Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_time_issuer_state_guard_insert
+  BEFORE INSERT ON shop_connected_time_issuer_state
+  WHEN EXISTS (SELECT 1 FROM shop_connected_time_issuer_state)
+  BEGIN
+    SELECT RAISE(ABORT, 'Trusted-time issuer lifecycle already exists');
+  END
+''';
+
+const shopConnectedTrustedTimeIssuerStreamTransitionV38Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_connected_time_issuer_streams_guard_update
+  BEFORE UPDATE ON shop_connected_time_issuer_streams
+  WHEN NEW.stream_digest != OLD.stream_digest
+    OR NEW.stream_json != OLD.stream_json
+    OR NOT (
+      (OLD.pending_entry_digest IS NULL
+        AND NEW.pending_entry_digest IS NOT NULL
+        AND NEW.acknowledged_sequence = OLD.acknowledged_sequence
+        AND NEW.acknowledged_entry_digest IS OLD.acknowledged_entry_digest
+        AND EXISTS (
+          SELECT 1 FROM shop_connected_time_issuer_allocations allocation
+          WHERE allocation.entry_digest = NEW.pending_entry_digest
+            AND allocation.stream_digest = OLD.stream_digest
+            AND allocation.authority_sequence = OLD.acknowledged_sequence + 1
+            AND allocation.previous_entry_digest IS OLD.acknowledged_entry_digest
+        ))
+      OR
+      (OLD.pending_entry_digest IS NOT NULL
+        AND NEW.pending_entry_digest IS NULL
+        AND NEW.acknowledged_sequence = OLD.acknowledged_sequence + 1
+        AND NEW.acknowledged_entry_digest = OLD.pending_entry_digest
+        AND EXISTS (
+          SELECT 1 FROM shop_connected_time_issuer_acks ack
+          JOIN shop_connected_time_issuer_allocations allocation
+            ON allocation.entry_digest = ack.entry_digest
+          WHERE ack.entry_digest = OLD.pending_entry_digest
+            AND allocation.stream_digest = OLD.stream_digest
+            AND allocation.authority_sequence = OLD.acknowledged_sequence + 1
+        ))
+    )
+  BEGIN
+    SELECT RAISE(ABORT, 'Trusted-time issuer stream transition is invalid');
+  END
+''';
+
+const shopConnectedTrustedTimeIssuerAllocationsV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_allocations (
+    entry_digest TEXT PRIMARY KEY CHECK (length(entry_digest) = 64),
+    stream_digest TEXT NOT NULL REFERENCES shop_connected_time_issuer_streams(stream_digest),
+    authority_sequence INTEGER NOT NULL CHECK (authority_sequence > 0),
+    previous_entry_digest TEXT CHECK (previous_entry_digest IS NULL OR length(previous_entry_digest) = 64),
+    unsigned_entry_json TEXT NOT NULL CHECK (json_valid(unsigned_entry_json)),
+    UNIQUE (stream_digest, authority_sequence),
+    CHECK ((authority_sequence = 1) = (previous_entry_digest IS NULL))
+  )
+''';
+
+const shopConnectedTrustedTimeIssuerSignedEntriesV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_signed_entries (
+    entry_digest TEXT PRIMARY KEY REFERENCES shop_connected_time_issuer_allocations(entry_digest),
+    signed_entry_json TEXT NOT NULL CHECK (json_valid(signed_entry_json)),
+    signed_entry_digest TEXT NOT NULL CHECK (length(signed_entry_digest) = 64)
+  )
+''';
+
+const shopConnectedTrustedTimeIssuerAcksV38Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_connected_time_issuer_acks (
+    ack_digest TEXT PRIMARY KEY CHECK (length(ack_digest) = 64),
+    entry_digest TEXT NOT NULL UNIQUE REFERENCES shop_connected_time_issuer_signed_entries(entry_digest),
+    ack_json TEXT NOT NULL CHECK (json_valid(ack_json)),
+    ack_bytes_digest TEXT NOT NULL CHECK (length(ack_bytes_digest) = 64)
+  )
+''';
+
+Map<String, String> shopConnectedTrustedTimeIssuerSchemaDefinitionsV38() => {
+  'shop_connected_time_issuer_state': shopConnectedTrustedTimeIssuerStateV38Sql,
+  'shop_connected_time_issuer_streams':
+      shopConnectedTrustedTimeIssuerStreamsV38Sql,
+  'shop_connected_time_issuer_allocations':
+      shopConnectedTrustedTimeIssuerAllocationsV38Sql,
+  'shop_connected_time_issuer_signed_entries':
+      shopConnectedTrustedTimeIssuerSignedEntriesV38Sql,
+  'shop_connected_time_issuer_acks': shopConnectedTrustedTimeIssuerAcksV38Sql,
+  'shop_connected_time_issuer_state_guard_update':
+      shopConnectedTrustedTimeIssuerStateTransitionV38Sql,
+  'shop_connected_time_issuer_state_guard_insert':
+      shopConnectedTrustedTimeIssuerStateInsertV38Sql,
+  'shop_connected_time_issuer_streams_guard_update':
+      shopConnectedTrustedTimeIssuerStreamTransitionV38Sql,
+  'shop_connected_time_issuer_state_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_time_issuer_state',
+    operation: 'delete',
+    message: 'Connected trusted-time issuer lifecycle is retained',
+  ),
+  'shop_connected_time_issuer_streams_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_connected_time_issuer_streams',
+    operation: 'delete',
+    message: 'Connected trusted-time issuer streams are retained',
+  ),
+  for (final table in const [
+    'shop_connected_time_issuer_allocations',
+    'shop_connected_time_issuer_signed_entries',
+    'shop_connected_time_issuer_acks',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected trusted-time issuer evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected trusted-time issuer evidence is immutable',
+    ),
+  },
+};
+
+/// Verifies the exact proof shape emitted by the unreleased v34 checkpoint.
+///
+/// V34 did not retain issuer evidence bytes, coordinator-binding evidence, or
+/// event bindings. This verifier is therefore used only to authenticate the
+/// old rows structurally before v35 retires their upload eligibility. It must
+/// never be used to authorize upload or to synthesize a v35 proof.
+bool shopHistoricalCloudProofRowsValidV34({
+  required Iterable<Map<String, Object?>> commands,
+  required Iterable<Map<String, Object?>> requirements,
+  required Iterable<Map<String, Object?>> proofs,
+  required Iterable<Map<String, Object?>> retainedLeases,
+  required Iterable<Map<String, Object?>> leases,
+}) {
+  try {
+    final digest = RegExp(r'^[0-9a-f]{64}$');
+    bool exact(Map value, Set<String> keys) =>
+        value.length == keys.length && value.keys.every(keys.contains);
+    final commandById = <String, Map<String, Object?>>{
+      for (final row in commands) row['command_id']! as String: row,
+    };
+    final requirementById = <String, Map<String, Object?>>{
+      for (final row in requirements) row['command_id']! as String: row,
+    };
+    final proofById = <String, Map<String, Object?>>{
+      for (final row in proofs) row['command_id']! as String: row,
+    };
+    final retainedByDigest = <String, Map<String, Object?>>{
+      for (final row in retainedLeases) row['payload_digest']! as String: row,
+    };
+    final leaseByDigest = <String, Map<String, Object?>>{
+      for (final row in leases) row['payload_digest']! as String: row,
+    };
+    if (commandById.length != commands.length ||
+        requirementById.length != requirements.length ||
+        proofById.length != proofs.length ||
+        retainedByDigest.length != retainedLeases.length ||
+        leaseByDigest.length != leases.length ||
+        commandById.keys
+            .toSet()
+            .difference(requirementById.keys.toSet())
+            .isNotEmpty ||
+        requirementById.keys
+            .toSet()
+            .difference(commandById.keys.toSet())
+            .isNotEmpty ||
+        proofById.keys
+            .toSet()
+            .difference(commandById.keys.toSet())
+            .isNotEmpty) {
+      return false;
+    }
+    for (final command in commandById.values) {
+      final commandId = command['command_id']! as String;
+      final requirement = requirementById[commandId]!;
+      final state = requirement['proof_state'];
+      if (requirement['recorded_at_millis'] != command['received_at_millis'] ||
+          (state == 'proofRequired' && !proofById.containsKey(commandId)) ||
+          (state == 'legacyUnverifiable' && proofById.containsKey(commandId)) ||
+          (state != 'proofRequired' && state != 'legacyUnverifiable')) {
+        return false;
+      }
+    }
+    for (final retained in retainedByDigest.values) {
+      final encoded = retained['lease_json'];
+      final leaseRow = leaseByDigest[retained['payload_digest']];
+      if (encoded is! String || leaseRow == null) return false;
+      final decoded = jsonDecode(encoded);
+      final lease = OfflineStaffLeaseV1.fromJson(decoded);
+      if (canonicalConnectedSiteJson(decoded) != encoded ||
+          connectedSiteSha256(decoded) != retained['lease_bytes_digest'] ||
+          retained['issuer_evidence_digest'] is! String ||
+          !digest.hasMatch(retained['issuer_evidence_digest']! as String) ||
+          lease.payloadDigest != retained['payload_digest'] ||
+          lease.leaseId != leaseRow['lease_id'] ||
+          lease.workspaceId != leaseRow['tenant_id'] ||
+          lease.siteId != leaseRow['site_id'] ||
+          lease.actorId != leaseRow['actor_id'] ||
+          lease.role != leaseRow['actor_role'] ||
+          canonicalConnectedSiteJson(lease.capabilities) !=
+              canonicalConnectedSiteJson(
+                jsonDecode(leaseRow['capabilities_json']! as String),
+              ) ||
+          lease.deviceId != leaseRow['device_id'] ||
+          lease.sessionGeneration != leaseRow['session_generation'] ||
+          lease.revocationGeneration != leaseRow['revocation_generation'] ||
+          lease.issuedAtMillis != leaseRow['issued_at_millis'] ||
+          lease.expiresAtMillis != leaseRow['expires_at_millis'] ||
+          lease.issuerKeyId != leaseRow['key_id'] ||
+          lease.signature != leaseRow['signature']) {
+        return false;
+      }
+    }
+
+    Map<String, Object?> parseProof(Object? value) {
+      if (value is! Map) throw const FormatException('historical proof');
+      final source = Map<String, Object?>.from(value);
+      if (source['contract'] !=
+          'supermega.shop.connected-site-cloud-proof.v1') {
+        throw const FormatException('historical proof contract');
+      }
+      if (source['proofKind'] == 'signedClientCommand') {
+        if (!exact(source, const {
+          'contract',
+          'proofKind',
+          'command',
+          'commandBytesDigest',
+          'lease',
+          'leaseBytesDigest',
+          'clientFingerprint',
+          'enrollmentEvidenceDigest',
+          'authorityPayloadDigest',
+        })) {
+          throw const FormatException('historical signed proof shape');
+        }
+        final command = SiteCommandV1.fromJson(source['command']);
+        final lease = OfflineStaffLeaseV1.fromJson(source['lease']);
+        if (source['commandBytesDigest'] !=
+                connectedSiteSha256(command.toJson()) ||
+            source['leaseBytesDigest'] != connectedSiteSha256(lease.toJson()) ||
+            command.workspaceId != lease.workspaceId ||
+            command.siteId != lease.siteId ||
+            command.actorId != lease.actorId ||
+            command.deviceId != lease.deviceId ||
+            command.leaseDigest != lease.payloadDigest ||
+            source['clientFingerprint'] is! String ||
+            !digest.hasMatch(source['clientFingerprint']! as String) ||
+            source['enrollmentEvidenceDigest'] is! String ||
+            !digest.hasMatch(source['enrollmentEvidenceDigest']! as String) ||
+            source['authorityPayloadDigest'] is! String ||
+            !digest.hasMatch(source['authorityPayloadDigest']! as String)) {
+          throw const FormatException('historical signed proof binding');
+        }
+      } else if (source['proofKind'] == 'coordinatorDerived') {
+        if (!exact(source, const {
+          'contract',
+          'proofKind',
+          'commandId',
+          'commandDigest',
+          'workspaceId',
+          'siteId',
+          'deviceId',
+          'leaseDigest',
+          'sourceProof',
+          'sourceProofDigest',
+          'derivation',
+          'derivationDigest',
+        })) {
+          throw const FormatException('historical derived proof shape');
+        }
+        final sourceProof = parseProof(source['sourceProof']);
+        if (sourceProof['proofKind'] != 'signedClientCommand' ||
+            source['sourceProofDigest'] != connectedSiteSha256(sourceProof) ||
+            source['derivation'] is! Map ||
+            source['derivationDigest'] !=
+                connectedSiteSha256(source['derivation']) ||
+            source['workspaceId'] !=
+                SiteCommandV1.fromJson(sourceProof['command']).workspaceId ||
+            source['siteId'] !=
+                SiteCommandV1.fromJson(sourceProof['command']).siteId ||
+            source['deviceId'] !=
+                SiteCommandV1.fromJson(sourceProof['command']).deviceId ||
+            source['leaseDigest'] !=
+                SiteCommandV1.fromJson(sourceProof['command']).leaseDigest) {
+          throw const FormatException('historical derived proof binding');
+        }
+      } else {
+        throw const FormatException('historical proof kind');
+      }
+      return source;
+    }
+
+    String signedCommandCapability(String commandType) => switch (commandType) {
+      'retail.stock.reserve.v1' || 'retail.stock.release.v1' => 'counterSale',
+      'cafe.stock.reserve.v1' ||
+      'cafe.stock.release.v1' ||
+      'cafe.order.put.v1' ||
+      'cafe.order.state.v1' ||
+      'cafe.order.cancel.v1' => 'cafeOrderWrite',
+      'cafe.kitchen.status.v1' => 'cafeKitchenStatus',
+      _ => throw const FormatException('historical command type'),
+    };
+
+    final decodedProofById = <String, Map<String, Object?>>{};
+    for (final row in proofById.values) {
+      final encoded = row['proof_json'];
+      if (encoded is! String) return false;
+      final decoded = parseProof(jsonDecode(encoded));
+      if (canonicalConnectedSiteJson(decoded) != encoded ||
+          connectedSiteSha256(decoded) != row['proof_digest'] ||
+          decoded['proofKind'] != row['proof_kind']) {
+        return false;
+      }
+      decodedProofById[row['command_id']! as String] = decoded;
+    }
+    for (final entry in decodedProofById.entries) {
+      final commandRow = commandById[entry.key]!;
+      final proof = entry.value;
+      late final String commandId;
+      late final String commandDigest;
+      late final String workspaceId;
+      late final String siteId;
+      late final String deviceId;
+      late final String leaseDigest;
+      if (proof['proofKind'] == 'signedClientCommand') {
+        final command = SiteCommandV1.fromJson(proof['command']);
+        commandId = command.commandId;
+        commandDigest = command.commandDigest;
+        workspaceId = command.workspaceId;
+        siteId = command.siteId;
+        deviceId = command.deviceId;
+        leaseDigest = command.leaseDigest;
+        final retained = retainedByDigest[leaseDigest];
+        if (retained == null ||
+            retained['lease_json'] !=
+                canonicalConnectedSiteJson(proof['lease']) ||
+            retained['issuer_evidence_digest'] !=
+                proof['authorityPayloadDigest'] ||
+            command.actorId != commandRow['actor_id'] ||
+            command.aggregateType != commandRow['aggregate_type'] ||
+            command.aggregateId != commandRow['aggregate_id'] ||
+            command.expectedVersion != commandRow['expected_version'] ||
+            command.payloadDigest != commandRow['payload_digest'] ||
+            signedCommandCapability(command.commandType) !=
+                commandRow['capability'] ||
+            DateTime.parse(command.issuedAt).millisecondsSinceEpoch !=
+                commandRow['received_at_millis']) {
+          return false;
+        }
+      } else {
+        commandId = proof['commandId']! as String;
+        commandDigest = proof['commandDigest']! as String;
+        workspaceId = proof['workspaceId']! as String;
+        siteId = proof['siteId']! as String;
+        deviceId = proof['deviceId']! as String;
+        leaseDigest = proof['leaseDigest']! as String;
+        final source = Map<String, Object?>.from(proof['sourceProof']! as Map);
+        final sourceCommand = SiteCommandV1.fromJson(source['command']);
+        final retainedSource = decodedProofById[sourceCommand.commandId];
+        if (retainedSource == null ||
+            connectedSiteSha256(retainedSource) != proof['sourceProofDigest']) {
+          return false;
+        }
+      }
+      if (commandId != entry.key ||
+          commandDigest != commandRow['command_digest'] ||
+          workspaceId != commandRow['tenant_id'] ||
+          siteId != commandRow['site_id'] ||
+          deviceId != commandRow['device_id'] ||
+          leaseDigest != commandRow['lease_digest'] ||
+          proofById[entry.key]!['created_at_millis'] !=
+              commandRow['received_at_millis']) {
+        return false;
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+bool shopConnectedAuthorityPayloadRowsValidV30({
+  required Iterable<Map<String, Object?>> payloads,
+  required Iterable<Map<String, Object?>> members,
+  required Iterable<Map<String, Object?>> configurations,
+  required Iterable<Map<String, Object?>> deltas,
+}) {
+  try {
+    bool exactKeys(Object? value, Set<String> keys) =>
+        value is Map &&
+        value.keys.length == keys.length &&
+        value.keys.every((key) => key is String && keys.contains(key));
+    bool identifier(Object? value, {int max = 128}) =>
+        value is String &&
+        value.isNotEmpty &&
+        value.length <= max &&
+        value.trim() == value &&
+        RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:@/-]*$').hasMatch(value);
+    bool validDigest(Object? value) =>
+        value is String && RegExp(r'^[0-9a-f]{64}$').hasMatch(value);
+    final payloadList = payloads.toList(growable: false);
+    final deltaByKey = <String, Map<String, Object?>>{
+      for (final row in deltas)
+        '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['observation_sequence']}':
+            row,
+    };
+    final membersByKey = <String, List<Map<String, Object?>>>{};
+    for (final row in members) {
+      final key =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['authority_sequence']}';
+      membersByKey.putIfAbsent(key, () => []).add(row);
+    }
+    final configsByKey = <String, List<Map<String, Object?>>>{};
+    for (final row in configurations) {
+      final key =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['authority_sequence']}';
+      configsByKey.putIfAbsent(key, () => []).add(row);
+    }
+    final chains = <String, List<Map<String, Object?>>>{};
+    final payloadKeys = <String>{};
+    for (final row in payloadList) {
+      final bytes = row['payload_bytes'];
+      final payloadDigest = row['payload_digest'];
+      final signature = row['signature'];
+      if (bytes is! String ||
+          payloadDigest is! String ||
+          signature is! String ||
+          signature.length < 32 ||
+          signature.length > 4096 ||
+          canonicalConnectedSiteJson(jsonDecode(bytes)) != bytes ||
+          crypto.sha256.convert(utf8.encode(bytes)).toString() !=
+              payloadDigest) {
+        return false;
+      }
+      final decoded = jsonDecode(bytes);
+      if (!exactKeys(decoded, const {
+            'schemaId',
+            'protocolVersion',
+            'authorityEventId',
+            'authoritySequence',
+            'previousAuthorityDigest',
+            'workspaceId',
+            'siteId',
+            'issuedAtMillis',
+            'issuerKeyId',
+            'membershipSnapshot',
+            'configurationSnapshot',
+            'payloadDigest',
+          }) ||
+          decoded['schemaId'] != 'ConnectedSiteAuthorityPayloadV1' ||
+          decoded['protocolVersion'] != 1 ||
+          !identifier(decoded['authorityEventId']) ||
+          !identifier(decoded['workspaceId']) ||
+          !identifier(decoded['siteId']) ||
+          !identifier(decoded['issuerKeyId']) ||
+          !validDigest(decoded['payloadDigest']) ||
+          decoded['authoritySequence'] is! int ||
+          (decoded['authoritySequence'] as int) < 1 ||
+          decoded['issuedAtMillis'] is! int ||
+          (decoded['issuedAtMillis'] as int) < 1 ||
+          decoded['authorityEventId'] != row['authority_event_id'] ||
+          decoded['authoritySequence'] != row['authority_sequence'] ||
+          decoded['previousAuthorityDigest'] !=
+              row['previous_authority_digest'] ||
+          decoded['workspaceId'] != row['tenant_id'] ||
+          decoded['siteId'] != row['site_id'] ||
+          decoded['issuedAtMillis'] != row['issued_at_millis'] ||
+          decoded['issuerKeyId'] != row['issuer_key_id'] ||
+          decoded['membershipSnapshot'] is! Map ||
+          decoded['configurationSnapshot'] is! Map) {
+        return false;
+      }
+      final authoritySequence = decoded['authoritySequence'] as int;
+      final previousAuthorityDigest = decoded['previousAuthorityDigest'];
+      if ((authoritySequence == 1 && previousAuthorityDigest != null) ||
+          (authoritySequence > 1 && !validDigest(previousAuthorityDigest))) {
+        return false;
+      }
+      final unsigned = Map<String, Object?>.from(decoded)
+        ..remove('payloadDigest');
+      if (connectedSiteSha256(unsigned) != decoded['payloadDigest']) {
+        return false;
+      }
+      final membership = Map<String, Object?>.from(
+        decoded['membershipSnapshot'] as Map,
+      );
+      final configuration = Map<String, Object?>.from(
+        decoded['configurationSnapshot'] as Map,
+      );
+      if (!exactKeys(membership, const {'revocationGeneration', 'members'}) ||
+          !exactKeys(configuration, const {
+            'configurationVersion',
+            'businessProfile',
+            'catalogReference',
+          }) ||
+          membership['revocationGeneration'] is! int ||
+          (membership['revocationGeneration'] as int) < 0 ||
+          configuration['configurationVersion'] is! int ||
+          (configuration['configurationVersion'] as int) < 0 ||
+          connectedSiteSha256(membership) != row['membership_digest'] ||
+          connectedSiteSha256(configuration) != row['configuration_digest'] ||
+          membership['revocationGeneration'] != row['revocation_generation'] ||
+          configuration['configurationVersion'] !=
+              row['configuration_version']) {
+        return false;
+      }
+      final key =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['authority_sequence']}';
+      payloadKeys.add(key);
+      final projectedMembers = membersByKey[key] ?? const [];
+      final sourceMembers = membership['members'];
+      if (sourceMembers is! List ||
+          sourceMembers.isEmpty ||
+          sourceMembers.length > 128 ||
+          sourceMembers.length != projectedMembers.length) {
+        return false;
+      }
+      final byActor = {
+        for (final item in projectedMembers) item['actor_id']: item,
+      };
+      var previousActor = '';
+      for (final item in sourceMembers) {
+        if (!exactKeys(item, const {
+              'actorId',
+              'role',
+              'capabilities',
+              'sessionGeneration',
+            }) ||
+            !identifier(item['actorId']) ||
+            item['actorId']!.toString().compareTo(previousActor) <= 0 ||
+            item['role'] is! String ||
+            item['sessionGeneration'] is! int ||
+            (item['sessionGeneration'] as int) < 1 ||
+            item['capabilities'] is! List ||
+            (item['capabilities'] as List).isEmpty) {
+          return false;
+        }
+        previousActor = item['actorId']! as String;
+        final role = ShopStaffRole.values
+            .where((value) => value.name == item['role'])
+            .firstOrNull;
+        if (role == null) {
+          return false;
+        }
+        final sourceCapabilities = item['capabilities']! as List;
+        var previousCapability = '';
+        for (final rawCapability in sourceCapabilities) {
+          final capability = ShopStaffCapability.values
+              .where((value) => value.name == rawCapability)
+              .firstOrNull;
+          if (capability == null ||
+              capability.name.compareTo(previousCapability) <= 0 ||
+              !ShopStaffRolePolicy.allows(role, capability)) {
+            return false;
+          }
+          previousCapability = capability.name;
+        }
+        final projected = byActor[item['actorId']];
+        if (projected == null ||
+            projected['actor_role'] != item['role'] ||
+            projected['session_generation'] != item['sessionGeneration'] ||
+            projected['capabilities_json'] !=
+                canonicalConnectedSiteJson(item['capabilities'])) {
+          return false;
+        }
+      }
+      final projectedConfigs = configsByKey[key] ?? const [];
+      if (projectedConfigs.length != 1) {
+        return false;
+      }
+      final business = configuration['businessProfile'];
+      final catalog = configuration['catalogReference'];
+      if (business is! Map || catalog is! Map) {
+        return false;
+      }
+      if (!exactKeys(business, const {
+            'schemaId',
+            'templateId',
+            'templateVersion',
+          }) ||
+          !identifier(business['schemaId']) ||
+          !identifier(business['templateId']) ||
+          business['templateVersion'] is! int ||
+          (business['templateVersion'] as int) < 1 ||
+          !exactKeys(catalog, const {'catalogVersion', 'catalogDigest'}) ||
+          catalog['catalogVersion'] is! int ||
+          (catalog['catalogVersion'] as int) < 1 ||
+          !validDigest(catalog['catalogDigest'])) {
+        return false;
+      }
+      final projectedConfig = projectedConfigs.single;
+      if (projectedConfig['configuration_version'] !=
+              configuration['configurationVersion'] ||
+          projectedConfig['business_profile_json'] !=
+              canonicalConnectedSiteJson(configuration['businessProfile']) ||
+          projectedConfig['catalog_reference_json'] !=
+              canonicalConnectedSiteJson(configuration['catalogReference']) ||
+          projectedConfig['configuration_digest'] !=
+              row['configuration_digest']) {
+        return false;
+      }
+      final delta =
+          deltaByKey['${row['tenant_id']}\u0000${row['site_id']}\u0000${row['observation_sequence']}'];
+      if (delta == null ||
+          delta['membership_digest'] != row['membership_digest'] ||
+          delta['configuration_digest'] != row['configuration_digest'] ||
+          delta['revocation_generation'] != row['revocation_generation'] ||
+          delta['configuration_version'] != row['configuration_version']) {
+        return false;
+      }
+      chains
+          .putIfAbsent('${row['tenant_id']}\u0000${row['site_id']}', () => [])
+          .add(row);
+    }
+    if (membersByKey.keys.toSet().difference(payloadKeys).isNotEmpty ||
+        configsByKey.keys.toSet().difference(payloadKeys).isNotEmpty) {
+      return false;
+    }
+    for (final chain in chains.values) {
+      chain.sort(
+        (a, b) => (a['authority_sequence'] as int).compareTo(
+          b['authority_sequence'] as int,
+        ),
+      );
+      for (var i = 0; i < chain.length; i++) {
+        if (chain[i]['authority_sequence'] != i + 1 ||
+            chain[i]['previous_authority_digest'] !=
+                (i == 0 ? null : chain[i - 1]['payload_digest'])) {
+          return false;
+        }
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+bool shopConnectedAuthorityCheckpointRowsValidV36({
+  required Iterable<Map<String, Object?>> checkpoints,
+  required Iterable<Map<String, Object?>> bootstrapProvenance,
+  required Iterable<Map<String, Object?>> payloads,
+}) {
+  try {
+    final hex = RegExp(r'^[0-9a-f]{64}$');
+    bool exact(Map value, Set<String> keys) =>
+        value.length == keys.length && value.keys.every(keys.contains);
+    final payloadByKey = <String, Map<String, Object?>>{
+      for (final row in payloads)
+        '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['authority_sequence']}':
+            row,
+    };
+    final checkpointByScope = <String, Map<String, Object?>>{};
+    for (final row in checkpoints) {
+      final bytes = row['checkpoint_bytes'];
+      final signature = row['signature'];
+      final observedAt = row['observed_at_millis'];
+      if (bytes is! String ||
+          utf8.encode(bytes).length > 1024 * 1024 ||
+          signature is! String ||
+          signature.length < 32 ||
+          signature.length > 4096 ||
+          observedAt is! int ||
+          canonicalConnectedSiteJson(jsonDecode(bytes)) != bytes) {
+        return false;
+      }
+      final decoded = jsonDecode(bytes);
+      if (decoded is! Map ||
+          !exact(decoded, const {
+            'schemaId',
+            'protocolVersion',
+            'workspaceId',
+            'siteId',
+            'deviceId',
+            'issuedAtMillis',
+            'issuerKeyId',
+            'firstAuthoritySequence',
+            'lastAuthoritySequence',
+            'payloads',
+            'chainDigest',
+            'checkpointDigest',
+          }) ||
+          decoded['schemaId'] != 'ConnectedSiteAuthorityCheckpointV1' ||
+          decoded['protocolVersion'] != 1 ||
+          decoded['workspaceId'] != row['tenant_id'] ||
+          decoded['siteId'] != row['site_id'] ||
+          decoded['deviceId'] != row['device_id'] ||
+          decoded['issuedAtMillis'] != row['issued_at_millis'] ||
+          decoded['issuerKeyId'] != row['issuer_key_id'] ||
+          decoded['firstAuthoritySequence'] != 1 ||
+          decoded['firstAuthoritySequence'] !=
+              row['first_authority_sequence'] ||
+          decoded['lastAuthoritySequence'] != row['last_authority_sequence'] ||
+          decoded['chainDigest'] != row['chain_digest'] ||
+          decoded['checkpointDigest'] != row['checkpoint_digest'] ||
+          decoded['issuedAtMillis'] is! int ||
+          (decoded['issuedAtMillis'] as int) < 1 ||
+          observedAt < (decoded['issuedAtMillis'] as int) ||
+          observedAt - (decoded['issuedAtMillis'] as int) >
+              const Duration(minutes: 15).inMilliseconds ||
+          !hex.hasMatch(row['chain_digest']! as String) ||
+          !hex.hasMatch(row['checkpoint_digest']! as String)) {
+        return false;
+      }
+      final unsigned = Map<String, Object?>.from(decoded)
+        ..remove('checkpointDigest');
+      if (connectedSiteSha256(unsigned) != row['checkpoint_digest']) {
+        return false;
+      }
+      final entries = decoded['payloads'];
+      if (entries is! List ||
+          entries.isEmpty ||
+          entries.length > 256 ||
+          entries.length != decoded['lastAuthoritySequence']) {
+        return false;
+      }
+      final chainBindings = <Map<String, Object?>>[];
+      String? previous;
+      for (var index = 0; index < entries.length; index += 1) {
+        final entry = entries[index];
+        if (entry is! Map ||
+            !exact(entry, const {'canonicalPayloadBytes', 'signature'}) ||
+            entry['canonicalPayloadBytes'] is! String ||
+            entry['signature'] is! String) {
+          return false;
+        }
+        final payloadBytes = entry['canonicalPayloadBytes']! as String;
+        final payloadSignature = entry['signature']! as String;
+        final payload =
+            payloadByKey['${row['tenant_id']}\u0000${row['site_id']}\u0000${index + 1}'];
+        if (payload == null ||
+            payload['payload_bytes'] != payloadBytes ||
+            payload['signature'] != payloadSignature ||
+            payload['previous_authority_digest'] != previous) {
+          return false;
+        }
+        previous = payload['payload_digest']! as String;
+        chainBindings.add({
+          'authoritySequence': index + 1,
+          'payloadDigest': previous,
+          'signatureDigest': crypto.sha256
+              .convert(utf8.encode(payloadSignature))
+              .toString(),
+        });
+      }
+      if (connectedSiteSha256(chainBindings) != row['chain_digest']) {
+        return false;
+      }
+      final scope =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['device_id']}';
+      if (checkpointByScope.containsKey(scope)) return false;
+      checkpointByScope[scope] = row;
+    }
+    final provenanceScopes = <String>{};
+    for (final row in bootstrapProvenance) {
+      if (row.keys.toSet().difference(const {
+            'tenant_id',
+            'site_id',
+            'device_id',
+            'bootstrap_mode',
+            'checkpoint_digest',
+            'recorded_at_millis',
+          }).isNotEmpty ||
+          row['tenant_id'] is! String ||
+          row['site_id'] is! String ||
+          row['device_id'] is! String ||
+          row['bootstrap_mode'] is! String ||
+          row['recorded_at_millis'] is! int ||
+          (row['recorded_at_millis']! as int) < 1) {
+        return false;
+      }
+      final scope =
+          '${row['tenant_id']}\u0000${row['site_id']}\u0000${row['device_id']}';
+      if (!provenanceScopes.add(scope)) return false;
+      final mode = row['bootstrap_mode'];
+      final digest = row['checkpoint_digest'];
+      final checkpoint = checkpointByScope[scope];
+      if (mode != 'checkpoint_joined' ||
+          digest is! String ||
+          !hex.hasMatch(digest) ||
+          checkpoint == null ||
+          checkpoint['checkpoint_digest'] != digest) {
+        return false;
+      }
+    }
+    for (final scope in checkpointByScope.keys) {
+      if (!provenanceScopes.contains(scope)) return false;
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+bool shopConnectedTrustedTimeRowsValidV37({
+  required Iterable<Map<String, Object?>> approvals,
+  required Iterable<Map<String, Object?>> requests,
+  required Iterable<Map<String, Object?>> observations,
+  required Iterable<Map<String, Object?>> acceptances,
+  required Iterable<Map<String, Object?>> authorityHeads,
+  required Iterable<Map<String, Object?>> deviceHeads,
+}) {
+  try {
+    final approvalByDigest =
+        <String, ConnectedTrustedTimeAuthorityApprovalV1>{};
+    for (final row in approvals) {
+      final json = row['approval_json'];
+      if (json is! String ||
+          canonicalConnectedSiteJson(jsonDecode(json)) != json) {
+        return false;
+      }
+      final approval = ConnectedTrustedTimeAuthorityApprovalV1.fromJson(
+        jsonDecode(json),
+      );
+      if (approval.approvalDigest != row['approval_digest'] ||
+          row['retained_at_monotonic_millis'] is! int ||
+          (row['retained_at_monotonic_millis']! as int) < 0 ||
+          approvalByDigest.putIfAbsent(
+                approval.approvalDigest,
+                () => approval,
+              ) !=
+              approval) {
+        return false;
+      }
+    }
+    final requestByDigest = <String, ConnectedTrustedTimeChallengeV1>{};
+    final approvalByRequest =
+        <String, ConnectedTrustedTimeAuthorityApprovalV1>{};
+    for (final row in requests) {
+      final json = row['challenge_json'];
+      if (json is! String ||
+          canonicalConnectedSiteJson(jsonDecode(json)) != json) {
+        return false;
+      }
+      final challenge = ConnectedTrustedTimeChallengeV1.fromJson(
+        jsonDecode(json),
+      );
+      final approval = approvalByDigest[row['approval_digest']];
+      if (challenge.requestDigest != row['request_digest'] ||
+          approval == null ||
+          approval.workspaceId != challenge.workspaceId ||
+          approval.siteId != challenge.siteId ||
+          approval.coordinatorDeviceId != challenge.coordinatorDeviceId ||
+          approval.coordinatorBindingDigest !=
+              challenge.coordinatorBindingDigest ||
+          approval.coordinatorBindingGeneration !=
+              challenge.coordinatorBindingGeneration ||
+          row['capability_hash'] is! String ||
+          !RegExp(r'^[0-9a-f]{64}$')
+              .hasMatch(row['capability_hash']! as String) ||
+          row['requested_at_monotonic_millis'] !=
+              challenge.startedMonotonicMillis ||
+          requestByDigest.putIfAbsent(
+                challenge.requestDigest,
+                () => challenge,
+              ) !=
+              challenge) {
+        return false;
+      }
+      approvalByRequest[challenge.requestDigest] = approval;
+    }
+    final observationByDigest = <String, ConnectedTrustedTimeObservationV1>{};
+    final observationReceivedAt = <String, int>{};
+    final observationRequestDigests = <String>{};
+    for (final row in observations) {
+      final requestDigest = row['request_digest'];
+      final challenge = requestByDigest[requestDigest];
+      final json = row['observation_json'];
+      if (challenge == null ||
+          json is! String ||
+          canonicalConnectedSiteJson(jsonDecode(json)) != json ||
+          !observationRequestDigests.add(requestDigest! as String)) {
+        return false;
+      }
+      final observation = ConnectedTrustedTimeObservationV1.fromJson(
+        jsonDecode(json),
+        challenge,
+      );
+      if (observation.observationDigest != row['observation_digest'] ||
+          row['received_at_monotonic_millis'] is! int ||
+          (row['received_at_monotonic_millis']! as int) <
+              challenge.startedMonotonicMillis) {
+        return false;
+      }
+      observationByDigest[observation.observationDigest] = observation;
+      observationReceivedAt[observation.observationDigest] =
+          row['received_at_monotonic_millis']! as int;
+    }
+    final acceptanceByDigest = <String, Map<String, Object?>>{};
+    final acceptedRequests = <String>{};
+    for (final row in acceptances) {
+      final json = row['acceptance_json'];
+      if (json is! String ||
+          canonicalConnectedSiteJson(jsonDecode(json)) != json) {
+        return false;
+      }
+      final decoded = (jsonDecode(json) as Map).cast<String, Object?>();
+      if (decoded.keys.toSet().difference(const {
+            'schema',
+            'workspaceId',
+            'siteId',
+            'coordinatorDeviceId',
+            'clientDeviceId',
+            'clientFingerprint',
+            'sessionGeneration',
+            'coordinatorBindingDigest',
+            'coordinatorBindingGeneration',
+            'bootSessionId',
+            'requestDigest',
+            'observationDigest',
+            'authorityKeyGeneration',
+            'authorityEpoch',
+            'authoritySequence',
+            'observedAtMillis',
+            'effectiveAtMillis',
+            'validUntilMillis',
+            'acceptedAtMonotonicMillis',
+            'acceptanceDigest',
+          }).isNotEmpty ||
+          decoded.length != 20) {
+        return false;
+      }
+      final unsigned = Map<String, Object?>.from(decoded)
+        ..remove('acceptanceDigest');
+      final digest = connectedSiteSha256(unsigned);
+      final request = requestByDigest[row['request_digest']];
+      final observation = observationByDigest[row['observation_digest']];
+      final approval = approvalByRequest[row['request_digest']];
+      final acceptedAt = decoded['acceptedAtMonotonicMillis'];
+      final elapsed = request == null || acceptedAt is! int
+          ? -1
+          : acceptedAt - request.startedMonotonicMillis;
+      if (decoded['schema'] !=
+              'supermega.connected-trusted-time-acceptance.v1' ||
+          decoded['acceptanceDigest'] != digest ||
+          row['acceptance_digest'] != digest ||
+          decoded['requestDigest'] != row['request_digest'] ||
+          decoded['observationDigest'] != row['observation_digest'] ||
+          decoded['acceptedAtMonotonicMillis'] !=
+              row['accepted_at_monotonic_millis'] ||
+          decoded['effectiveAtMillis'] != row['effective_at_millis'] ||
+          decoded['validUntilMillis'] != row['valid_until_millis'] ||
+          request == null ||
+          observation == null ||
+          approval == null ||
+          observation.challenge.requestDigest != request.requestDigest ||
+          decoded['workspaceId'] != request.workspaceId ||
+          decoded['siteId'] != request.siteId ||
+          decoded['coordinatorDeviceId'] != request.coordinatorDeviceId ||
+          decoded['clientDeviceId'] != request.clientDeviceId ||
+          decoded['clientFingerprint'] != request.clientFingerprint ||
+          decoded['sessionGeneration'] != request.sessionGeneration ||
+          decoded['coordinatorBindingDigest'] !=
+              request.coordinatorBindingDigest ||
+          decoded['coordinatorBindingGeneration'] !=
+              request.coordinatorBindingGeneration ||
+          decoded['bootSessionId'] != request.bootSessionId ||
+          decoded['authorityKeyGeneration'] !=
+              observation.authorityKeyGeneration ||
+          decoded['authorityEpoch'] != observation.authorityEpoch ||
+          decoded['authoritySequence'] != observation.authoritySequence ||
+          decoded['observedAtMillis'] != observation.observedAtMillis ||
+          decoded['validUntilMillis'] != observation.validUntilMillis ||
+          observation.authorityKeyId != approval.authorityKeyId ||
+          observation.authorityKeyFingerprint !=
+              approval.authorityKeyFingerprint ||
+          observation.authorityKeyGeneration !=
+              approval.authorityKeyGeneration ||
+          observation.observedAtMillis < approval.issuedAtMillis ||
+          observation.validUntilMillis > approval.expiresAtMillis ||
+          decoded['effectiveAtMillis'] is! int ||
+          decoded['acceptedAtMonotonicMillis'] is! int ||
+          elapsed < 0 ||
+          elapsed > connectedTrustedTimeMaximumValidity.inMilliseconds ||
+          decoded['effectiveAtMillis'] !=
+              observation.observedAtMillis + elapsed ||
+          (decoded['effectiveAtMillis']! as int) >
+              observation.validUntilMillis ||
+          observationReceivedAt[observation.observationDigest] != acceptedAt ||
+          !acceptedRequests.add(row['request_digest']! as String)) {
+        return false;
+      }
+      acceptanceByDigest[digest] = decoded;
+    }
+    if (observationByDigest.length != acceptanceByDigest.length) return false;
+    final authorityHeadByScope = <String, Map<String, Object?>>{};
+    for (final row in authorityHeads) {
+      final acceptance = acceptanceByDigest[row['acceptance_digest']];
+      if (acceptance == null ||
+          acceptance['workspaceId'] != row['workspace_id'] ||
+          acceptance['siteId'] != row['site_id'] ||
+          acceptance['coordinatorDeviceId'] != row['coordinator_device_id'] ||
+          acceptance['authorityKeyGeneration'] !=
+              row['authority_key_generation'] ||
+          acceptance['authorityEpoch'] != row['authority_epoch'] ||
+          acceptance['authoritySequence'] != row['authority_sequence'] ||
+          acceptance['observedAtMillis'] != row['observed_at_millis'] ||
+          row['head_digest'] !=
+              connectedSiteSha256({
+                'schema': 'supermega.connected-trusted-time-authority-head.v1',
+                'workspaceId': row['workspace_id'],
+                'siteId': row['site_id'],
+                'coordinatorDeviceId': row['coordinator_device_id'],
+                'authorityKeyGeneration': row['authority_key_generation'],
+                'authorityEpoch': row['authority_epoch'],
+                'authoritySequence': row['authority_sequence'],
+                'observedAtMillis': row['observed_at_millis'],
+                'acceptanceDigest': row['acceptance_digest'],
+              })) {
+        return false;
+      }
+      final scope =
+          '${row['workspace_id']}\u0000${row['site_id']}\u0000${row['coordinator_device_id']}';
+      if (authorityHeadByScope.putIfAbsent(scope, () => row) != row) {
+        return false;
+      }
+    }
+    final deviceHeadByScope = <String, Map<String, Object?>>{};
+    for (final row in deviceHeads) {
+      final acceptance = acceptanceByDigest[row['acceptance_digest']];
+      if (acceptance == null ||
+          acceptance['workspaceId'] != row['workspace_id'] ||
+          acceptance['siteId'] != row['site_id'] ||
+          acceptance['clientDeviceId'] != row['client_device_id'] ||
+          acceptance['clientFingerprint'] != row['client_fingerprint'] ||
+          acceptance['sessionGeneration'] != row['session_generation'] ||
+          acceptance['coordinatorBindingDigest'] !=
+              row['coordinator_binding_digest'] ||
+          acceptance['coordinatorBindingGeneration'] !=
+              row['coordinator_binding_generation'] ||
+          acceptance['bootSessionId'] != row['boot_session_id'] ||
+          acceptance['effectiveAtMillis'] != row['effective_at_millis'] ||
+          acceptance['validUntilMillis'] != row['valid_until_millis'] ||
+          acceptance['acceptedAtMonotonicMillis'] !=
+              row['accepted_at_monotonic_millis'] ||
+          row['head_digest'] !=
+              connectedSiteSha256({
+                'schema': 'supermega.connected-trusted-time-device-head.v1',
+                'workspaceId': row['workspace_id'],
+                'siteId': row['site_id'],
+                'clientDeviceId': row['client_device_id'],
+                'clientFingerprint': row['client_fingerprint'],
+                'sessionGeneration': row['session_generation'],
+                'coordinatorBindingDigest': row['coordinator_binding_digest'],
+                'coordinatorBindingGeneration':
+                    row['coordinator_binding_generation'],
+                'bootSessionId': row['boot_session_id'],
+                'effectiveAtMillis': row['effective_at_millis'],
+                'validUntilMillis': row['valid_until_millis'],
+                'acceptedAtMonotonicMillis':
+                    row['accepted_at_monotonic_millis'],
+                'acceptanceDigest': row['acceptance_digest'],
+              })) {
+        return false;
+      }
+      final scope =
+          '${row['workspace_id']}\u0000${row['site_id']}\u0000${row['client_device_id']}';
+      if (deviceHeadByScope.putIfAbsent(scope, () => row) != row) return false;
+    }
+    final authorityChains = <String, List<Map<String, Object?>>>{};
+    final deviceChains = <String, List<Map<String, Object?>>>{};
+    for (final acceptance in acceptanceByDigest.values) {
+      authorityChains
+          .putIfAbsent(
+            '${acceptance['workspaceId']}\u0000${acceptance['siteId']}\u0000${acceptance['coordinatorDeviceId']}',
+            () => [],
+          )
+          .add(acceptance);
+      deviceChains
+          .putIfAbsent(
+            '${acceptance['workspaceId']}\u0000${acceptance['siteId']}\u0000${acceptance['clientDeviceId']}',
+            () => [],
+          )
+          .add(acceptance);
+    }
+    for (final entry in authorityChains.entries) {
+      final chain = entry.value
+        ..sort(
+          (a, b) =>
+              (a['authorityKeyGeneration']! as int).compareTo(
+                    b['authorityKeyGeneration']! as int,
+                  ) !=
+                  0
+              ? (a['authorityKeyGeneration']! as int).compareTo(
+                  b['authorityKeyGeneration']! as int,
+                )
+              : (a['authorityEpoch']! as int).compareTo(
+                      b['authorityEpoch']! as int,
+                    ) !=
+                    0
+              ? (a['authorityEpoch']! as int).compareTo(
+                  b['authorityEpoch']! as int,
+                )
+              : (a['authoritySequence']! as int).compareTo(
+                  b['authoritySequence']! as int,
+                ),
+        );
+      for (var i = 1; i < chain.length; i++) {
+        final previous = chain[i - 1];
+        final current = chain[i];
+        final next =
+            (current['authorityKeyGeneration'] ==
+                    previous['authorityKeyGeneration'] &&
+                current['authorityEpoch'] == previous['authorityEpoch'] &&
+                current['authoritySequence'] ==
+                    (previous['authoritySequence']! as int) + 1) ||
+            (current['authorityKeyGeneration'] ==
+                    previous['authorityKeyGeneration'] &&
+                current['authorityEpoch'] ==
+                    (previous['authorityEpoch']! as int) + 1 &&
+                current['authoritySequence'] == 1) ||
+            (current['authorityKeyGeneration'] ==
+                    (previous['authorityKeyGeneration']! as int) + 1 &&
+                current['authorityEpoch'] == 1 &&
+                current['authoritySequence'] == 1);
+        if (!next ||
+            (current['observedAtMillis']! as int) <
+                (previous['observedAtMillis']! as int)) {
+          return false;
+        }
+      }
+      final head = authorityHeadByScope[entry.key];
+      final last = chain.last;
+      if (head == null ||
+          head['acceptance_digest'] != last['acceptanceDigest']) {
+        return false;
+      }
+    }
+    for (final entry in deviceChains.entries) {
+      final chain = entry.value
+        ..sort(
+          (a, b) =>
+              (a['authorityKeyGeneration']! as int).compareTo(
+                    b['authorityKeyGeneration']! as int,
+                  ) !=
+                  0
+              ? (a['authorityKeyGeneration']! as int).compareTo(
+                  b['authorityKeyGeneration']! as int,
+                )
+              : (a['authorityEpoch']! as int).compareTo(
+                      b['authorityEpoch']! as int,
+                    ) !=
+                    0
+              ? (a['authorityEpoch']! as int).compareTo(
+                  b['authorityEpoch']! as int,
+                )
+              : (a['authoritySequence']! as int).compareTo(
+                  b['authoritySequence']! as int,
+                ),
+        );
+      for (var i = 1; i < chain.length; i++) {
+        final previous = chain[i - 1];
+        final current = chain[i];
+        if (current['clientFingerprint'] != previous['clientFingerprint'] ||
+            (current['sessionGeneration']! as int) <
+                (previous['sessionGeneration']! as int) ||
+            (current['coordinatorBindingGeneration']! as int) <
+                (previous['coordinatorBindingGeneration']! as int) ||
+            (current['coordinatorBindingGeneration'] ==
+                    previous['coordinatorBindingGeneration'] &&
+                current['coordinatorBindingDigest'] !=
+                    previous['coordinatorBindingDigest']) ||
+            (current['effectiveAtMillis']! as int) <
+                (previous['effectiveAtMillis']! as int)) {
+          return false;
+        }
+      }
+      final head = deviceHeadByScope[entry.key];
+      if (head == null ||
+          head['acceptance_digest'] != chain.last['acceptanceDigest']) {
+        return false;
+      }
+    }
+    if (authorityHeadByScope.length != authorityChains.length ||
+        deviceHeadByScope.length != deviceChains.length) {
+      return false;
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+bool shopConnectedEnvelopeRowsValidV29({
+  required Iterable<Map<String, Object?>> envelopes,
+  required Iterable<Map<String, Object?>> transmissions,
+  required Iterable<Map<String, Object?>> attempts,
+  required Iterable<Map<String, Object?>> bindings,
+}) {
+  try {
+    final transmissionByKey = <String, Map<String, Object?>>{
+      for (final row in transmissions)
+        '${row['command_id']}\u0000${row['transmission_sequence']}': row,
+    };
+    final attemptByCommand = <String, Map<String, Object?>>{
+      for (final row in attempts) row['command_id']! as String: row,
+    };
+    final bindingByDigest = <String, Map<String, Object?>>{
+      for (final row in bindings) row['binding_digest']! as String: row,
+    };
+    for (final row in envelopes) {
+      final key = '${row['command_id']}\u0000${row['transmission_sequence']}';
+      final endpoint = Uri.tryParse(row['endpoint']! as String);
+      final headersJson = row['headers_json']! as String;
+      final bodyJson = row['body_json']! as String;
+      final headers = jsonDecode(headersJson);
+      final transmission = transmissionByKey[key];
+      final attempt = attemptByCommand[row['command_id']];
+      final binding = attempt == null
+          ? null
+          : bindingByDigest[attempt['binding_digest']];
+      final proof = transmission == null
+          ? null
+          : jsonDecode(transmission['proof_json']! as String);
+      if (transmission == null ||
+          attempt == null ||
+          binding == null ||
+          proof is! Map ||
+          endpoint == null ||
+          endpoint.scheme != 'https' ||
+          endpoint.userInfo.isNotEmpty ||
+          endpoint.host.isEmpty ||
+          endpoint.host != binding['address'] ||
+          endpoint.port != binding['port'] ||
+          endpoint.path != '/v1/commands' ||
+          endpoint.hasQuery ||
+          row['certificate_sha256'] != binding['certificate_sha256'] ||
+          headers is! Map ||
+          canonicalConnectedSiteJson(headers) != headersJson ||
+          canonicalConnectedSiteJson(jsonDecode(bodyJson)) != bodyJson ||
+          bodyJson != attempt['command_json'] ||
+          headers.length != 7 ||
+          headers['accept'] != 'application/json' ||
+          headers['content-type'] != 'application/json' ||
+          headers['x-supermega-client-fingerprint'] !=
+              proof['clientFingerprint'] ||
+          headers['x-supermega-device-id'] != proof['claimedDeviceId'] ||
+          headers['x-supermega-issued-at'] != proof['issuedAt'] ||
+          headers['x-supermega-request-nonce'] != proof['nonce'] ||
+          headers['x-supermega-request-signature'] !=
+              transmission['request_signature'] ||
+          connectedSiteSha256({
+                'commandId': row['command_id'],
+                'transmissionSequence': row['transmission_sequence'],
+                'endpoint': endpoint.toString(),
+                'certificateSha256': row['certificate_sha256'],
+                'headers': headers,
+                'body': bodyJson,
+              }) !=
+              row['envelope_digest']) {
+        return false;
+      }
+    }
+    return envelopes.length == transmissionByKey.length;
+  } on Object {
+    return false;
+  }
+}
+
+bool shopConnectedAttemptRowsValidV28({
+  required Iterable<Map<String, Object?>> bindings,
+  required Iterable<Map<String, Object?>> revocations,
+  required Iterable<Map<String, Object?>> attempts,
+  required Iterable<Map<String, Object?>> transmissions,
+  required Iterable<Map<String, Object?>> results,
+  required Iterable<Map<String, Object?>> enrollmentEvidence,
+  required Iterable<Map<String, Object?>> devices,
+}) {
+  try {
+    final hex = RegExp(r'^[0-9a-f]{64}$');
+    bool privateAddress(Object? value) {
+      if (value is! String || value.contains('%')) return false;
+      final parsed = InternetAddress.tryParse(value);
+      if (parsed == null) return false;
+      final bytes = parsed.rawAddress;
+      if (bytes.length == 4) {
+        return bytes[0] == 10 ||
+            (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+            (bytes[0] == 192 && bytes[1] == 168);
+      }
+      return bytes.length == 16 && (bytes[0] & 0xfe) == 0xfc;
+    }
+
+    final enrollmentRows = enrollmentEvidence.toList(growable: false);
+    final enrollmentByDigest = <String, Map<String, Object?>>{
+      for (final row in enrollmentRows)
+        if (row['evidence_digest'] is String)
+          row['evidence_digest']! as String: row,
+    };
+    final revokedFingerprints = <String>{
+      for (final row in enrollmentRows)
+        if (row['action'] == 'revoke' && row['client_fingerprint'] is String)
+          row['client_fingerprint']! as String,
+    };
+    final deviceById = <String, Map<String, Object?>>{
+      for (final row in devices)
+        if (row['device_id'] is String) row['device_id']! as String: row,
+    };
+    final bindingsByDigest = <String, Map<String, Object?>>{};
+    for (final row in bindings) {
+      final digest = row['binding_digest'];
+      final evidenceJson = row['evidence_json'];
+      final evidenceDigest = row['evidence_digest'];
+      if (digest is! String ||
+          !hex.hasMatch(digest) ||
+          evidenceJson is! String ||
+          evidenceDigest is! String ||
+          !hex.hasMatch(evidenceDigest) ||
+          crypto.sha256.convert(utf8.encode(evidenceJson)).toString() !=
+              evidenceDigest ||
+          canonicalConnectedSiteJson(jsonDecode(evidenceJson)) !=
+              evidenceJson ||
+          row['expires_at_millis'] is! int ||
+          row['issued_at_millis'] is! int ||
+          row['observed_at_millis'] is! int ||
+          !privateAddress(row['address']) ||
+          row['port'] is! int ||
+          (row['port']! as int) < 1 ||
+          (row['port']! as int) > 65535 ||
+          (row['expires_at_millis']! as int) <=
+              (row['issued_at_millis']! as int) ||
+          (row['expires_at_millis']! as int) -
+                  (row['issued_at_millis']! as int) >
+              const Duration(days: 7).inMilliseconds ||
+          (row['observed_at_millis']! as int) <
+              (row['issued_at_millis']! as int) ||
+          (row['observed_at_millis']! as int) >
+              (row['expires_at_millis']! as int) ||
+          row['approval_generation'] is! int ||
+          (row['approval_generation']! as int) < 1 ||
+          bindingsByDigest.putIfAbsent(digest, () => row) != row) {
+        return false;
+      }
+      final decoded = jsonDecode(evidenceJson);
+      final enrollment = enrollmentByDigest[row['enrollment_evidence_digest']];
+      final device = deviceById[row['client_device_id']];
+      if (decoded is! Map ||
+          connectedSiteSha256(decoded) != digest ||
+          decoded['action'] != 'approve' ||
+          row['action'] != 'approve' ||
+          decoded['workspaceId'] != row['workspace_id'] ||
+          decoded['siteId'] != row['site_id'] ||
+          decoded['coordinatorDeviceId'] != row['coordinator_device_id'] ||
+          decoded['pairingDigest'] != row['pairing_digest'] ||
+          decoded['enrollmentEvidenceDigest'] !=
+              row['enrollment_evidence_digest'] ||
+          decoded['clientDeviceId'] != row['client_device_id'] ||
+          decoded['clientFingerprint'] != row['client_fingerprint'] ||
+          decoded['clientSigningKeyId'] != row['client_signing_key_id'] ||
+          decoded['address'] != row['address'] ||
+          decoded['port'] != row['port'] ||
+          decoded['certificateSha256'] != row['certificate_sha256'] ||
+          decoded['protocolVersion'] != row['protocol_version'] ||
+          decoded['approvalGeneration'] != row['approval_generation'] ||
+          decoded['issuedAtMillis'] != row['issued_at_millis'] ||
+          decoded['expiresAtMillis'] != row['expires_at_millis'] ||
+          decoded['authorityKeyId'] != row['authority_key_id']) {
+        return false;
+      }
+      if (enrollment == null ||
+          enrollment['action'] != 'approve' ||
+          enrollment['tenant_id'] != row['workspace_id'] ||
+          enrollment['site_id'] != row['site_id'] ||
+          enrollment['coordinator_device_id'] != row['coordinator_device_id'] ||
+          enrollment['device_id'] != row['client_device_id'] ||
+          enrollment['client_fingerprint'] != row['client_fingerprint'] ||
+          device == null ||
+          device['tenant_id'] != row['workspace_id'] ||
+          device['site_id'] != row['site_id'] ||
+          device['public_key_fingerprint'] != row['client_fingerprint'] ||
+          (device['state'] != 'active' &&
+              !(device['state'] == 'revoked' &&
+                  revokedFingerprints.contains(row['client_fingerprint'])))) {
+        return false;
+      }
+    }
+    final eventsByScope = <String, List<Map<String, Object?>>>{};
+    for (final row in bindingsByDigest.values) {
+      eventsByScope
+          .putIfAbsent(
+            '${row['workspace_id']}\u0000${row['site_id']}\u0000${row['client_device_id']}',
+            () => [],
+          )
+          .add(row);
+    }
+    for (final row in revocations) {
+      final raw = row['evidence_json'];
+      final digest = row['evidence_digest'];
+      final target = bindingsByDigest[row['target_binding_digest']];
+      if (raw is! String ||
+          digest is! String ||
+          !hex.hasMatch(digest) ||
+          canonicalConnectedSiteJson(jsonDecode(raw)) != raw ||
+          crypto.sha256.convert(utf8.encode(raw)).toString() != digest ||
+          target == null ||
+          row['action'] != 'revoke' ||
+          row['issued_at_millis'] is! int ||
+          row['observed_at_millis'] is! int ||
+          (row['issued_at_millis']! as int) <
+              (target['issued_at_millis']! as int) ||
+          (row['observed_at_millis']! as int) <
+              (row['issued_at_millis']! as int)) {
+        return false;
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map ||
+          decoded['action'] != 'revoke' ||
+          decoded['targetBindingDigest'] != row['target_binding_digest'] ||
+          decoded['workspaceId'] != row['workspace_id'] ||
+          decoded['siteId'] != row['site_id'] ||
+          decoded['clientDeviceId'] != row['client_device_id'] ||
+          decoded['approvalGeneration'] != row['approval_generation'] ||
+          decoded['issuedAtMillis'] != row['issued_at_millis'] ||
+          decoded['authorityKeyId'] != row['authority_key_id'] ||
+          target['workspace_id'] != row['workspace_id'] ||
+          target['site_id'] != row['site_id'] ||
+          target['client_device_id'] != row['client_device_id']) {
+        return false;
+      }
+      eventsByScope
+          .putIfAbsent(
+            '${row['workspace_id']}\u0000${row['site_id']}\u0000${row['client_device_id']}',
+            () => [],
+          )
+          .add(row);
+    }
+    for (final events in eventsByScope.values) {
+      events.sort(
+        (a, b) => (a['approval_generation']! as int).compareTo(
+          b['approval_generation']! as int,
+        ),
+      );
+      var active = false;
+      String? activeBinding;
+      for (var index = 0; index < events.length; index++) {
+        final event = events[index];
+        if (event['approval_generation'] != index + 1) return false;
+        if (event['action'] == 'approve') {
+          if (active) return false;
+          active = true;
+          activeBinding = event['binding_digest']! as String;
+        } else if (event['action'] == 'revoke') {
+          if (!active || event['target_binding_digest'] != activeBinding) {
+            return false;
+          }
+          active = false;
+          activeBinding = null;
+        } else {
+          return false;
+        }
+      }
+    }
+    final attemptsById = <String, Map<String, Object?>>{};
+    for (final row in attempts) {
+      final commandId = row['command_id'];
+      final commandJson = row['command_json'];
+      if (commandId is! String || commandJson is! String) return false;
+      final decoded = jsonDecode(commandJson);
+      if (decoded is! Map ||
+          canonicalConnectedSiteJson(decoded) != commandJson ||
+          crypto.sha256.convert(utf8.encode(commandJson)).toString() !=
+              row['body_sha256']) {
+        return false;
+      }
+      final command = SiteCommandV1.fromJson(decoded);
+      if (command.commandId != commandId ||
+          command.commandDigest != row['command_digest'] ||
+          command.workspaceId != row['workspace_id'] ||
+          command.siteId != row['site_id'] ||
+          command.deviceId != row['device_id'] ||
+          command.signingKeyId != row['signing_key_id']) {
+        return false;
+      }
+      final binding = bindingsByDigest[row['binding_digest']];
+      if (binding == null ||
+          binding['workspace_id'] != command.workspaceId ||
+          binding['site_id'] != command.siteId ||
+          binding['client_device_id'] != command.deviceId ||
+          binding['client_signing_key_id'] != command.signingKeyId ||
+          attemptsById.putIfAbsent(commandId, () => row) != row) {
+        return false;
+      }
+    }
+    final transmissionsByCommand = <String, List<Map<String, Object?>>>{};
+    for (final row in transmissions) {
+      final commandId = row['command_id'];
+      final proofJson = row['proof_json'];
+      if (commandId is! String ||
+          !attemptsById.containsKey(commandId) ||
+          proofJson is! String ||
+          canonicalConnectedSiteJson(jsonDecode(proofJson)) != proofJson ||
+          connectedSiteSha256(jsonDecode(proofJson)) != row['proof_digest'] ||
+          row['body_sha256'] != attemptsById[commandId]!['body_sha256']) {
+        return false;
+      }
+      final decoded = jsonDecode(proofJson);
+      if (decoded is! Map || row['request_signature'] is! String) return false;
+      final attempt = attemptsById[commandId]!;
+      final binding = bindingsByDigest[attempt['binding_digest']];
+      final issuedAtText = decoded['issuedAt'];
+      if (binding == null || issuedAtText is! String) return false;
+      final issuedAt = DateTime.tryParse(issuedAtText);
+      if (issuedAt == null || !issuedAt.isUtc) return false;
+      final proof = CoordinatorRequestProof(
+        workspaceId: decoded['workspaceId'] as String,
+        siteId: decoded['siteId'] as String,
+        coordinatorDeviceId: decoded['coordinatorDeviceId'] as String,
+        clientFingerprint: decoded['clientFingerprint'] as String,
+        claimedDeviceId: decoded['claimedDeviceId'] as String,
+        issuedAt: issuedAt,
+        nonce: decoded['nonce'] as String,
+        method: decoded['method'] as String,
+        canonicalTarget: decoded['canonicalTarget'] as String,
+        bodySha256: decoded['bodySha256'] as String,
+        signature: row['request_signature']! as String,
+      );
+      if (canonicalConnectedSiteJson(proof.signingPayload) != proofJson ||
+          proof.workspaceId != attempt['workspace_id'] ||
+          proof.siteId != attempt['site_id'] ||
+          proof.coordinatorDeviceId != binding['coordinator_device_id'] ||
+          proof.clientFingerprint != binding['client_fingerprint'] ||
+          proof.claimedDeviceId != attempt['device_id'] ||
+          proof.nonce != row['request_nonce'] ||
+          proof.issuedAt.millisecondsSinceEpoch != row['issued_at_millis'] ||
+          proof.method != row['method'] ||
+          proof.canonicalTarget != row['canonical_target'] ||
+          proof.bodySha256 != row['body_sha256']) {
+        return false;
+      }
+      transmissionsByCommand.putIfAbsent(commandId, () => []).add(row);
+    }
+    for (final rows in transmissionsByCommand.values) {
+      rows.sort(
+        (a, b) => (a['transmission_sequence']! as int).compareTo(
+          b['transmission_sequence']! as int,
+        ),
+      );
+      for (var index = 0; index < rows.length; index++) {
+        if (rows[index]['transmission_sequence'] != index + 1) return false;
+      }
+    }
+    final resultCommands = <String>{};
+    for (final row in results) {
+      final commandId = row['command_id'];
+      final ackJson = row['ack_json'];
+      if (commandId is! String ||
+          ackJson is! String ||
+          !resultCommands.add(commandId)) {
+        return false;
+      }
+      final sequence = row['transmission_sequence'];
+      final retainedTransmissions =
+          transmissionsByCommand[commandId] ?? const [];
+      if (retainedTransmissions.isEmpty ||
+          sequence != retainedTransmissions.length ||
+          !(retainedTransmissions).any(
+            (entry) => entry['transmission_sequence'] == sequence,
+          )) {
+        return false;
+      }
+      final decoded = jsonDecode(ackJson);
+      if (decoded is! Map ||
+          canonicalConnectedSiteJson(decoded) != ackJson ||
+          connectedSiteSha256(decoded) != row['ack_digest']) {
+        return false;
+      }
+      final ack = SiteCommandAckV1.fromJson(decoded);
+      final attempt = attemptsById[commandId];
+      if (attempt == null ||
+          ack.commandId != commandId ||
+          ack.commandDigest != attempt['command_digest'] ||
+          ack.state.name != row['ack_state'] ||
+          ((ack.state == SiteCommandAckState.accepted ||
+                  ack.state == SiteCommandAckState.replayed)
+              ? row['result_kind'] != 'acknowledged'
+              : row['result_kind'] != 'rejected')) {
+        return false;
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+Map<String, Object> shopConnectedAuthorityDeltaJsonV27({
+  required String tenantId,
+  required String siteId,
+  required int revocationGeneration,
+  required String membershipDigest,
+  required int configurationVersion,
+  required String configurationDigest,
+}) => {
+  'schema': 'supermega.shop.connected-site-authority-observation.v1',
+  'workspaceId': tenantId,
+  'siteId': siteId,
+  'revocationGeneration': revocationGeneration,
+  'membershipDigest': membershipDigest,
+  'configurationVersion': configurationVersion,
+  'configurationDigest': configurationDigest,
+};
+
+/// Verifies the complete append-only authority-observation chain and binds
+/// its latest generation to the lease-invalidating revocation observation.
+/// The rows contain digests only and are not membership/configuration payloads.
+bool shopConnectedAuthorityRowsValidV27({
+  required Iterable<Map<String, Object?>> deltas,
+  required Iterable<Map<String, Object?>> revocations,
+}) {
+  try {
+    final byScope = <String, List<Map<String, Object?>>>{};
+    for (final row in deltas) {
+      final tenantId = row['tenant_id'];
+      final siteId = row['site_id'];
+      final sequence = row['observation_sequence'];
+      final revocationGeneration = row['revocation_generation'];
+      final membershipDigest = row['membership_digest'];
+      final configurationVersion = row['configuration_version'];
+      final configurationDigest = row['configuration_digest'];
+      final deltaJson = row['delta_json'];
+      final deltaDigest = row['delta_digest'];
+      final observedAt = row['observed_at_millis'];
+      if (tenantId is! String ||
+          siteId is! String ||
+          sequence is! int ||
+          sequence < 1 ||
+          revocationGeneration is! int ||
+          revocationGeneration < 0 ||
+          membershipDigest is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(membershipDigest) ||
+          configurationVersion is! int ||
+          configurationVersion < 0 ||
+          configurationDigest is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(configurationDigest) ||
+          deltaJson is! String ||
+          deltaDigest is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(deltaDigest) ||
+          observedAt is! int ||
+          observedAt < 1) {
+        return false;
+      }
+      final decoded = jsonDecode(deltaJson);
+      final expected = shopConnectedAuthorityDeltaJsonV27(
+        tenantId: tenantId,
+        siteId: siteId,
+        revocationGeneration: revocationGeneration,
+        membershipDigest: membershipDigest,
+        configurationVersion: configurationVersion,
+        configurationDigest: configurationDigest,
+      );
+      if (decoded is! Map<String, dynamic> ||
+          deltaJson != canonicalConnectedSiteJson(expected) ||
+          connectedSiteSha256(expected) != deltaDigest) {
+        return false;
+      }
+      byScope.putIfAbsent('$tenantId\u0000$siteId', () => []).add(row);
+    }
+    final revocationByScope = <String, Map<String, Object?>>{};
+    for (final row in revocations) {
+      final tenantId = row['tenant_id'];
+      final siteId = row['site_id'];
+      if (tenantId is! String || siteId is! String) return false;
+      if (revocationByScope.putIfAbsent('$tenantId\u0000$siteId', () => row) !=
+          row) {
+        return false;
+      }
+    }
+    for (final entry in byScope.entries) {
+      final rows = entry.value
+        ..sort(
+          (left, right) => (left['observation_sequence']! as int).compareTo(
+            right['observation_sequence']! as int,
+          ),
+        );
+      Map<String, Object?>? previous;
+      for (var index = 0; index < rows.length; index++) {
+        final row = rows[index];
+        if (row['observation_sequence'] != index + 1) return false;
+        if (previous != null) {
+          final oldRevocation = previous['revocation_generation']! as int;
+          final newRevocation = row['revocation_generation']! as int;
+          final oldConfiguration = previous['configuration_version']! as int;
+          final newConfiguration = row['configuration_version']! as int;
+          if (newRevocation < oldRevocation ||
+              newConfiguration < oldConfiguration ||
+              (newRevocation == oldRevocation &&
+                  row['membership_digest'] != previous['membership_digest']) ||
+              (newConfiguration == oldConfiguration &&
+                  row['configuration_digest'] !=
+                      previous['configuration_digest']) ||
+              (newRevocation == oldRevocation &&
+                  newConfiguration == oldConfiguration) ||
+              (row['observed_at_millis']! as int) <=
+                  (previous['observed_at_millis']! as int)) {
+            return false;
+          }
+        }
+        previous = row;
+      }
+      final latest = rows.last;
+      final revocation = revocationByScope[entry.key];
+      if (revocation == null ||
+          revocation['generation'] != latest['revocation_generation'] ||
+          revocation['source_digest'] != latest['delta_digest'] ||
+          revocation['observed_at_millis'] != latest['observed_at_millis']) {
+        return false;
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+/// Reconstructs every retained cloud disposition from canonical bytes and
+/// binds it to the immutable local command/event plus its legacy ack/conflict
+/// index rows. Shared by live-open and encrypted-backup verification.
+bool shopConnectedCloudDispositionRowsValidV26({
+  required Iterable<Map<String, Object?>> commands,
+  required Iterable<Map<String, Object?>> events,
+  required Iterable<Map<String, Object?>> cloudAcks,
+  required Iterable<Map<String, Object?>> conflicts,
+  required Iterable<Map<String, Object?>> dispositions,
+}) {
+  try {
+    final commandById = <String, Map<String, Object?>>{
+      for (final row in commands) row['command_id']! as String: row,
+    };
+    final eventByRowId = <int, Map<String, Object?>>{
+      for (final row in events) row['event_row_id']! as int: row,
+    };
+    final cloudAckByRowId = <int, Map<String, Object?>>{
+      for (final row in cloudAcks) row['event_row_id']! as int: row,
+    };
+    final conflictByCommand = <String, Map<String, Object?>>{
+      for (final row in conflicts) row['command_id']! as String: row,
+    };
+    final seenRows = <int>{};
+    for (final row in dispositions) {
+      final eventRowId = row['event_row_id'];
+      final kind = row['disposition_kind'];
+      final encoded = row['disposition_json'];
+      final digest = row['disposition_digest'];
+      final observedAt = row['observed_at_millis'];
+      if (eventRowId is! int ||
+          !seenRows.add(eventRowId) ||
+          (kind != 'ack' && kind != 'conflict') ||
+          encoded is! String ||
+          digest is! String ||
+          observedAt is! int ||
+          observedAt <= 0) {
+        return false;
+      }
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map ||
+          canonicalConnectedSiteJson(decoded) != encoded ||
+          connectedSiteSha256(decoded) != digest) {
+        return false;
+      }
+      final event = eventByRowId[eventRowId];
+      final cloudAck = cloudAckByRowId[eventRowId];
+      if (event == null ||
+          cloudAck == null ||
+          cloudAck['cloud_event_id'] != '$kind:$digest' ||
+          cloudAck['acknowledgement_digest'] != digest ||
+          cloudAck['acknowledged_at_millis'] != observedAt) {
+        return false;
+      }
+      final commandId = event['command_id'];
+      final command = commandId is String ? commandById[commandId] : null;
+      if (command == null) return false;
+      if (kind == 'ack') {
+        final ack = SiteCommandAckV1.fromJson(decoded);
+        if ((ack.state != SiteCommandAckState.accepted &&
+                ack.state != SiteCommandAckState.replayed) ||
+            ack.commandId != commandId ||
+            ack.commandDigest != command['command_digest'] ||
+            ack.eventDigest != event['event_digest'] ||
+            ack.canonicalVersion != event['aggregate_version']) {
+          return false;
+        }
+      } else {
+        final conflict = SiteConflictV1.fromJson(decoded);
+        final retained = conflictByCommand[commandId];
+        final createdAt = DateTime.parse(conflict.createdAt)
+            .toUtc()
+            .millisecondsSinceEpoch;
+        if (conflict.state != SiteConflictState.quarantined ||
+            conflict.commandId != commandId ||
+            conflict.commandDigest != command['command_digest'] ||
+            conflict.workspaceId != event['tenant_id'] ||
+            conflict.siteId != event['site_id'] ||
+            conflict.aggregateType != event['aggregate_type'] ||
+            conflict.aggregateId != event['aggregate_id'] ||
+            conflict.expectedVersion !=
+                (event['aggregate_version'] as int) - 1 ||
+            retained == null ||
+            retained['conflict_id'] != conflict.conflictId ||
+            retained['reason_code'] != conflict.reason ||
+            retained['detail_digest'] != digest ||
+            retained['state'] != 'quarantined' ||
+            retained['created_at_millis'] != createdAt ||
+            retained['resolved_at_millis'] != createdAt) {
+          return false;
+        }
+      }
+    }
+    if (seenRows.length != cloudAckByRowId.length) return false;
+    for (final conflict in conflicts) {
+      final command = commandById[conflict['command_id']];
+      if (command?['state'] == 'accepted') {
+        final event = events
+            .where((row) => row['command_id'] == conflict['command_id'])
+            .firstOrNull;
+        if (event == null || !seenRows.contains(event['event_row_id'])) {
+          return false;
+        }
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+/// Reconstructs the complete v25 pairing -> approval -> revocation chain.
+///
+/// This is shared by live-open and backup verification so a snapshot cannot
+/// gain authority merely by satisfying SQLite's structural constraints.
+bool shopConnectedEnrollmentRowsValidV25({
+  required Iterable<Map<String, Object?>> pairingNonces,
+  required Iterable<Map<String, Object?>> pendingEnrollments,
+  required Iterable<Map<String, Object?>> enrollmentEvidence,
+  required Iterable<Map<String, Object?>> devices,
+  required Iterable<Map<String, Object?>> requestNonces,
+}) {
+  try {
+    Map<String, Map<String, Object?>> uniqueBy(
+      Iterable<Map<String, Object?>> rows,
+      String key,
+    ) {
+      final result = <String, Map<String, Object?>>{};
+      for (final row in rows) {
+        final value = row[key];
+        if (value is! String || result.containsKey(value)) {
+          throw const FormatException('connected_enrollment_duplicate');
+        }
+        result[value] = row;
+      }
+      return result;
+    }
+
+    final nonces = uniqueBy(pairingNonces, 'nonce');
+    final pending = uniqueBy(pendingEnrollments, 'client_fingerprint');
+    final evidence = enrollmentEvidence.toList(growable: false);
+    final deviceRows = devices.toList(growable: false);
+    final deviceIds = <String>{};
+    final deviceByFingerprint = <String, Map<String, Object?>>{};
+    for (final device in deviceRows) {
+      final deviceId = device['device_id'];
+      final fingerprint = device['public_key_fingerprint'];
+      if (deviceId is! String ||
+          !deviceIds.add(deviceId) ||
+          fingerprint is! String ||
+          deviceByFingerprint.containsKey(fingerprint)) {
+        return false;
+      }
+      deviceByFingerprint[fingerprint] = device;
+    }
+
+    for (final entry in pending.entries) {
+      final row = entry.value;
+      final nonce = nonces[row['nonce']];
+      final key = row['public_key'];
+      if (nonce == null || key is! List<int>) return false;
+      if (nonce['consumed_at_millis'] != row['observed_at_millis'] ||
+          nonce['tenant_id'] != row['tenant_id'] ||
+          nonce['site_id'] != row['site_id'] ||
+          nonce['coordinator_device_id'] != row['coordinator_device_id'] ||
+          row['key_algorithm'] != 'ed25519' ||
+          crypto.sha256.convert(key).toString() != entry.key) {
+        return false;
+      }
+    }
+
+    final approvals = <String, Map<String, Object?>>{};
+    final revocations = <String, Map<String, Object?>>{};
+    for (final row in evidence) {
+      final raw = row['evidence_json'];
+      if (raw is! String) return false;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic> ||
+          canonicalConnectedSiteJson(decoded) != raw) {
+        return false;
+      }
+      const columns = <String, String>{
+        'action': 'action',
+        'tenantId': 'tenant_id',
+        'siteId': 'site_id',
+        'coordinatorDeviceId': 'coordinator_device_id',
+        'deviceId': 'device_id',
+        'clientFingerprint': 'client_fingerprint',
+        'sessionGeneration': 'session_generation',
+        'observedAtMillis': 'observed_at_millis',
+        'authorityKeyId': 'authority_key_id',
+        'evidenceDigest': 'evidence_digest',
+      };
+      if (decoded.keys.toSet().difference({
+            'schema',
+            'action',
+            'tenantId',
+            'siteId',
+            'coordinatorDeviceId',
+            'deviceId',
+            'clientFingerprint',
+            'sessionGeneration',
+            'observedAtMillis',
+            'authorityKeyId',
+            'signature',
+            'evidenceDigest',
+          }).isNotEmpty ||
+          decoded.length != 12 ||
+          decoded['schema'] != 'supermega.shop.owner-enrollment-evidence.v1' ||
+          decoded['signature'] is! String) {
+        return false;
+      }
+      for (final entry in columns.entries) {
+        if (decoded[entry.key] != row[entry.value]) return false;
+      }
+      final signingPayload = Map<String, Object?>.from(decoded)
+        ..remove('signature')
+        ..remove('evidenceDigest');
+      if (connectedSiteSha256(signingPayload) != row['evidence_digest']) {
+        return false;
+      }
+      final fingerprint = row['client_fingerprint'];
+      if (fingerprint is! String) return false;
+      final paired = pending[fingerprint];
+      if (paired == null ||
+          paired['tenant_id'] != row['tenant_id'] ||
+          paired['site_id'] != row['site_id'] ||
+          paired['coordinator_device_id'] != row['coordinator_device_id'] ||
+          (row['observed_at_millis'] as int) <
+              (paired['observed_at_millis'] as int)) {
+        return false;
+      }
+      final target = row['action'] == 'approve'
+          ? approvals
+          : row['action'] == 'revoke'
+          ? revocations
+          : null;
+      if (target == null || target.containsKey(fingerprint)) return false;
+      target[fingerprint] = row;
+    }
+
+    final managedDeviceEntries = deviceByFingerprint.entries.where(
+      (entry) =>
+          pending.containsKey(entry.key) ||
+          approvals.containsKey(entry.key) ||
+          revocations.containsKey(entry.key),
+    );
+    var managedDeviceCount = 0;
+    for (final entry in managedDeviceEntries) {
+      managedDeviceCount += 1;
+      final device = entry.value;
+      final approval = approvals[entry.key];
+      final revocation = revocations[entry.key];
+      if (approval == null ||
+          approval['device_id'] != device['device_id'] ||
+          approval['tenant_id'] != device['tenant_id'] ||
+          approval['site_id'] != device['site_id'] ||
+          approval['observed_at_millis'] != device['enrolled_at_millis']) {
+        return false;
+      }
+      if (device['state'] == 'active') {
+        if (revocation != null ||
+            approval['session_generation'] != device['session_generation'] ||
+            device['revoked_at_millis'] != null) {
+          return false;
+        }
+      } else if (device['state'] == 'revoked') {
+        if (revocation == null ||
+            revocation['device_id'] != device['device_id'] ||
+            revocation['tenant_id'] != device['tenant_id'] ||
+            revocation['site_id'] != device['site_id'] ||
+            revocation['observed_at_millis'] != device['revoked_at_millis'] ||
+            revocation['session_generation'] != device['session_generation'] ||
+            (revocation['session_generation'] as int) <=
+                (approval['session_generation'] as int) ||
+            (revocation['observed_at_millis'] as int) <
+                (approval['observed_at_millis'] as int)) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
+    if (approvals.length != managedDeviceCount ||
+        revocations.keys.any(
+          (fingerprint) => !approvals.containsKey(fingerprint),
+        )) {
+      return false;
+    }
+
+    final seenRequests = <String>{};
+    for (final row in requestNonces) {
+      final fingerprint = row['client_fingerprint'];
+      final nonce = row['nonce'];
+      final consumed = row['consumed_at_millis'];
+      final expires = row['expires_at_millis'];
+      if (fingerprint is! String ||
+          nonce is! String ||
+          consumed is! int ||
+          expires is! int ||
+          consumed >= expires ||
+          !deviceByFingerprint.containsKey(fingerprint) ||
+          !seenRequests.add('$fingerprint\u0000$nonce')) {
+        return false;
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+bool shopConnectedStockReservationRowsValidV24({
+  required Iterable<Map<String, Object?>> commands,
+  required Iterable<Map<String, Object?>> events,
+  required Iterable<Map<String, Object?>> headers,
+  required Iterable<Map<String, Object?>> lines,
+  required Iterable<Map<String, Object?>> transitions,
+  required Iterable<Map<String, Object?>> sales,
+  required Iterable<Map<String, Object?>> trustedTimes,
+  required Iterable<Map<String, Object?>> scopeBindings,
+  required Iterable<Map<String, Object?>> tenderBindings,
+  required Iterable<Map<String, Object?>> pendingCashCheckouts,
+  required Iterable<Map<String, Object?>> walletCheckoutIntents,
+}) {
+  try {
+    final commandById = <String, Map<String, Object?>>{
+      for (final row in commands) row['command_id']! as String: row,
+    };
+    final eventByCommand = <String, Map<String, Object?>>{};
+    for (final row in events) {
+      final commandId = row['command_id'];
+      if (commandId is! String ||
+          eventByCommand.putIfAbsent(commandId, () => row) != row) {
+        return false;
+      }
+    }
+    bool eventMatches({
+      required Map<String, Object?> event,
+      required String commandId,
+      required String tenantId,
+      required String siteId,
+      required String aggregateType,
+      required String aggregateId,
+      required String eventType,
+      required Map<String, Object?> payload,
+    }) {
+      final createdAt = event['created_at_millis'];
+      final eventId = event['event_id'];
+      final aggregateVersion = event['aggregate_version'];
+      if (createdAt is! int ||
+          createdAt <= 0 ||
+          eventId is! String ||
+          aggregateVersion is! int ||
+          aggregateVersion <= 0 ||
+          event['command_id'] != commandId ||
+          event['tenant_id'] != tenantId ||
+          event['site_id'] != siteId ||
+          event['aggregate_type'] != aggregateType ||
+          event['aggregate_id'] != aggregateId ||
+          event['event_type'] != eventType ||
+          event['payload_json'] != canonicalConnectedSiteJson(payload)) {
+        return false;
+      }
+      final envelope = <String, Object?>{
+        'eventId': eventId,
+        'workspaceId': tenantId,
+        'siteId': siteId,
+        'aggregateType': aggregateType,
+        'aggregateId': aggregateId,
+        'aggregateVersion': aggregateVersion,
+        'eventType': eventType,
+        'occurredAt': DateTime.fromMillisecondsSinceEpoch(
+          createdAt,
+          isUtc: true,
+        ).toIso8601String(),
+        'payload': payload,
+      };
+      return event['event_digest'] == connectedSiteSha256(envelope);
+    }
+
+    final saleById = <String, Map<String, Object?>>{
+      for (final row in sales) row['id']! as String: row,
+    };
+    final trustedByScope = <String, int>{};
+    for (final row in trustedTimes) {
+      final tenantId = row['tenant_id'];
+      final siteId = row['site_id'];
+      final observed = row['observed_at_millis'];
+      if (tenantId is! String ||
+          siteId is! String ||
+          observed is! int ||
+          observed <= 0) {
+        return false;
+      }
+      trustedByScope['$tenantId\u0000$siteId'] = observed;
+    }
+    final scopeRows = scopeBindings.toList(growable: false);
+    if (scopeRows.length > 1) return false;
+    String? boundScope;
+    if (scopeRows.isNotEmpty) {
+      final row = scopeRows.single;
+      final tenantId = row['tenant_id'];
+      final siteId = row['site_id'];
+      final singleton = row['singleton'];
+      final boundAt = row['bound_at_millis'];
+      final evidenceDigest = row['enrollment_evidence_digest'];
+      if (singleton != 1 ||
+          tenantId is! String ||
+          siteId is! String ||
+          evidenceDigest is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(evidenceDigest) ||
+          boundAt is! int ||
+          boundAt <= 0) {
+        return false;
+      }
+      boundScope = '$tenantId\u0000$siteId';
+    }
+    final linesByReservation = <String, List<Map<String, Object?>>>{};
+    for (final row in lines) {
+      final reservationId = row['reservation_id'];
+      final productId = row['product_id'];
+      final quantity = row['quantity'];
+      if (reservationId is! String ||
+          productId is! String ||
+          quantity is! int ||
+          quantity < 1 ||
+          quantity > 1000) {
+        return false;
+      }
+      linesByReservation.putIfAbsent(reservationId, () => []).add(row);
+    }
+    final transitionsByReservation = <String, List<Map<String, Object?>>>{};
+    for (final row in transitions) {
+      final reservationId = row['reservation_id'];
+      if (reservationId is! String) return false;
+      transitionsByReservation.putIfAbsent(reservationId, () => []).add(row);
+    }
+    final knownReservations = <String>{};
+    final headerByReservation = <String, Map<String, Object?>>{};
+    for (final header in headers) {
+      final reservationId = header['reservation_id'];
+      final commandId = header['command_id'];
+      if (reservationId is! String || commandId is! String) return false;
+      if (!knownReservations.add(reservationId)) return false;
+      headerByReservation[reservationId] = header;
+      if (boundScope != '${header['tenant_id']}\u0000${header['site_id']}') {
+        return false;
+      }
+      final command = commandById[commandId];
+      final reserveEvent = eventByCommand[commandId];
+      if (command == null ||
+          command['tenant_id'] != header['tenant_id'] ||
+          command['site_id'] != header['site_id'] ||
+          command['actor_id'] != header['actor_id'] ||
+          command['device_id'] != header['device_id'] ||
+          command['capability'] != header['capability'] ||
+          reserveEvent == null) {
+        return false;
+      }
+      final storedLines = linesByReservation[reservationId] ?? const [];
+      if (storedLines.isEmpty) return false;
+      final terminalRows = transitionsByReservation[reservationId] ?? const [];
+      if (terminalRows.length > 1) return false;
+      final legacy = header['legacy_source'] == 1;
+      if (legacy) {
+        if (header['reservation_json'] != null ||
+            header['workflow_type'] != null ||
+            header['subject_id'] != null ||
+            terminalRows.any(
+              (row) =>
+                  row['legacy_source'] != 1 || row['transition_json'] != null,
+            )) {
+          return false;
+        }
+        continue;
+      }
+      if (header['legacy_source'] != 0 ||
+          header['reservation_json'] is! String ||
+          header['workflow_type'] is! String ||
+          header['subject_id'] is! String) {
+        return false;
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(
+        jsonDecode(header['reservation_json']! as String),
+      );
+      if (reservation.state != ConnectedStockReservationState.held ||
+          reservation.stateVersion != 1 ||
+          reservation.reservationId != reservationId ||
+          reservation.workspaceId != header['tenant_id'] ||
+          reservation.siteId != header['site_id'] ||
+          reservation.actorId != header['actor_id'] ||
+          reservation.deviceId != header['device_id'] ||
+          reservation.capability.name != header['capability'] ||
+          reservation.workflowType.name != header['workflow_type'] ||
+          reservation.subjectId != header['subject_id'] ||
+          reservation.basketDigest != header['basket_digest'] ||
+          reservation.reservationDigest !=
+              header['initial_reservation_digest'] ||
+          DateTime.parse(reservation.issuedAt).millisecondsSinceEpoch !=
+              header['issued_at_millis'] ||
+          DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch !=
+              header['expires_at_millis'] ||
+          canonicalConnectedSiteJson(reservation.toJson()) !=
+              header['reservation_json']) {
+        return false;
+      }
+      final reservePayload = <String, Object?>{
+        'contract': _shopConnectedStockReservePayloadContract,
+        'reservation': reservation.toJson(),
+      };
+      if (command['payload_digest'] != connectedSiteSha256(reservePayload) ||
+          !eventMatches(
+            event: reserveEvent,
+            commandId: commandId,
+            tenantId: reservation.workspaceId,
+            siteId: reservation.siteId,
+            aggregateType: reservation.workflowType.name,
+            aggregateId: reservation.subjectId,
+            eventType: shopConnectedStockReservedEventType,
+            payload: reservePayload,
+          )) {
+        return false;
+      }
+      final expectedLines = reservation.lines;
+      storedLines.sort(
+        (left, right) => (left['product_id']! as String).compareTo(
+          right['product_id']! as String,
+        ),
+      );
+      if (storedLines.length != expectedLines.length) return false;
+      for (var index = 0; index < expectedLines.length; index++) {
+        if (storedLines[index]['product_id'] !=
+                expectedLines[index].productId ||
+            storedLines[index]['quantity'] != expectedLines[index].quantity) {
+          return false;
+        }
+      }
+      if (terminalRows.isEmpty) continue;
+      final terminal = terminalRows.single;
+      if (terminal['legacy_source'] != 0 ||
+          terminal['transition_json'] is! String) {
+        return false;
+      }
+      final transition = ConnectedStockReservationTransitionV1.fromJson(
+        jsonDecode(terminal['transition_json']! as String),
+      );
+      if (canonicalConnectedSiteJson(transition.before.toJson()) !=
+              canonicalConnectedSiteJson(reservation.toJson()) ||
+          transition.before.state.name != terminal['from_state'] ||
+          transition.after.state.name != terminal['to_state'] ||
+          transition.before.reservationDigest != terminal['before_digest'] ||
+          transition.after.reservationDigest != terminal['after_digest'] ||
+          transition.transitionDigest != terminal['transition_digest'] ||
+          canonicalConnectedSiteJson(transition.toJson()) !=
+              terminal['transition_json'] ||
+          DateTime.parse(transition.transitionedAt).millisecondsSinceEpoch !=
+              terminal['occurred_at_millis']) {
+        return false;
+      }
+      if (transition.after.state == ConnectedStockReservationState.committed) {
+        final saleId = terminal['sale_id'];
+        final binding = transition.saleBinding;
+        final sale = saleId is String ? saleById[saleId] : null;
+        if (binding == null ||
+            sale == null ||
+            binding.saleId != saleId ||
+            binding.saleCommandId != sale['operation_id'] ||
+            binding.saleCommandDigest !=
+                connectedSiteSha256({
+                  'operationId': sale['operation_id'],
+                  'requestFingerprint': sale['request_fingerprint'],
+                })) {
+          return false;
+        }
+      } else if (terminal['sale_id'] != null) {
+        return false;
+      }
+      if (transition.after.state == ConnectedStockReservationState.released) {
+        final releaseCommandId = terminal['operation_id'];
+        if (releaseCommandId is! String) return false;
+        final releaseCommand = commandById[releaseCommandId];
+        final releaseEvent = eventByCommand[releaseCommandId];
+        final releasePayload = <String, Object?>{
+          'contract': _shopConnectedStockReleasePayloadContract,
+          'reservationId': reservation.reservationId,
+          'expectedReservationDigest': reservation.reservationDigest,
+          'targetState': ConnectedStockReservationState.released.name,
+          'reason': transition.reason,
+        };
+        final stockReleaseValid =
+            releaseCommand != null &&
+            releaseEvent != null &&
+            releaseCommand['payload_digest'] ==
+                connectedSiteSha256(releasePayload) &&
+            eventMatches(
+              event: releaseEvent,
+              commandId: releaseCommandId,
+              tenantId: reservation.workspaceId,
+              siteId: reservation.siteId,
+              aggregateType: reservation.workflowType.name,
+              aggregateId: reservation.subjectId,
+              eventType: shopConnectedStockReleasedEventType,
+              payload: releasePayload,
+            );
+        var cafeCancellationValid = false;
+        if (!stockReleaseValid &&
+            releaseCommand != null &&
+            releaseEvent != null &&
+            releaseEvent['event_type'] == 'shop.cafe_order.cancel.v1' &&
+            transition.reason == 'cafe_order_cancelled') {
+          final decoded = jsonDecode(releaseEvent['payload_json']! as String);
+          if (decoded is Map) {
+            final payload = Map<String, Object?>.from(decoded);
+            final binding = payload['reservationBinding'];
+            final expectedBinding = <String, Object?>{
+              'reservationId': reservation.reservationId,
+              'reservationDigest': reservation.reservationDigest,
+              'reservationCommandId': commandId,
+              'reservationAckDigest': commandById[commandId] == null
+                  ? null
+                  : connectedSiteSha256({
+                      'contract': 'supermega.shop.connected-site-local-ack.v1',
+                      'commandDigest':
+                          commandById[commandId]!['command_digest'],
+                    }),
+              'basketDigest': reservation.basketDigest,
+            };
+            cafeCancellationValid =
+                payload.length == 5 &&
+                payload['contract'] ==
+                    'supermega.shop.connected-cafe-order-cancel.v1' &&
+                payload['orderId'] == reservation.subjectId &&
+                payload['operationId'] == releaseCommandId &&
+                payload['expectedStateRevision'] is int &&
+                (payload['expectedStateRevision']! as int) >= 0 &&
+                canonicalConnectedSiteJson(binding) ==
+                    canonicalConnectedSiteJson(expectedBinding) &&
+                releaseCommand['payload_digest'] ==
+                    connectedSiteSha256(payload) &&
+                eventMatches(
+                  event: releaseEvent,
+                  commandId: releaseCommandId,
+                  tenantId: reservation.workspaceId,
+                  siteId: reservation.siteId,
+                  aggregateType: reservation.workflowType.name,
+                  aggregateId: reservation.subjectId,
+                  eventType: 'shop.cafe_order.cancel.v1',
+                  payload: payload,
+                );
+          }
+        }
+        if (!stockReleaseValid && !cafeCancellationValid) {
+          return false;
+        }
+      } else {
+        final identityDigest = connectedSiteSha256({
+          'reservationId': reservation.reservationId,
+          'transitionDigest': transition.transitionDigest,
+          'state': transition.after.state.name,
+        });
+        final terminalCommandId = 'terminal:$identityDigest';
+        final terminalCommand = commandById[terminalCommandId];
+        final terminalEvent = eventByCommand[terminalCommandId];
+        final terminalPayload = <String, Object?>{
+          'contract': 'supermega.shop.connected-stock-terminal.v1',
+          'operationId':
+              transition.after.state == ConnectedStockReservationState.committed
+              ? transition.saleBinding!.saleCommandId
+              : terminal['operation_id'],
+          'reservationId': reservation.reservationId,
+          'beforeDigest': reservation.reservationDigest,
+          'afterDigest': transition.after.reservationDigest,
+          'state': transition.after.state.name,
+          'transitionDigest': transition.transitionDigest,
+          'transition': transition.toJson(),
+        };
+        final terminalEventType =
+            transition.after.state == ConnectedStockReservationState.committed
+            ? shopConnectedStockCommittedEventType
+            : shopConnectedStockExpiredEventType;
+        if (terminalCommand == null ||
+            terminalEvent == null ||
+            terminalCommand['payload_digest'] !=
+                connectedSiteSha256(terminalPayload) ||
+            !eventMatches(
+              event: terminalEvent,
+              commandId: terminalCommandId,
+              tenantId: reservation.workspaceId,
+              siteId: reservation.siteId,
+              aggregateType: reservation.workflowType.name,
+              aggregateId: reservation.subjectId,
+              eventType: terminalEventType,
+              payload: terminalPayload,
+            )) {
+          return false;
+        }
+      }
+      if (transition.after.state == ConnectedStockReservationState.committed ||
+          transition.after.state == ConnectedStockReservationState.expired) {
+        final observed =
+            trustedByScope['${reservation.workspaceId}\u0000${reservation.siteId}'];
+        if (observed == null ||
+            observed < (terminal['occurred_at_millis']! as int)) {
+          return false;
+        }
+      }
+    }
+    if (pendingCashCheckouts.any((row) => row['operation_id'] is! String) ||
+        walletCheckoutIntents.any(
+          (row) =>
+              row['operation_id'] is! String ||
+              !const {
+                'pending',
+                'cancelled',
+                'completed',
+              }.contains(row['state']),
+        )) {
+      return false;
+    }
+    final seenTenderOperations = <String>{};
+    for (final row in tenderBindings) {
+      final operationId = row['operation_id'];
+      final tenderKind = row['tender_kind'];
+      final reservationId = row['reservation_id'];
+      final createdAt = row['created_at_millis'];
+      if (operationId is! String ||
+          operationId.isEmpty ||
+          tenderKind is! String ||
+          !const {'cash', 'wallet'}.contains(tenderKind) ||
+          !seenTenderOperations.add('$operationId\u0000$tenderKind') ||
+          reservationId is! String ||
+          createdAt is! int ||
+          createdAt <= 0) {
+        return false;
+      }
+      final header = headerByReservation[reservationId];
+      if (header == null ||
+          header['legacy_source'] != 0 ||
+          header['reservation_json'] is! String) {
+        return false;
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(
+        jsonDecode(header['reservation_json']! as String),
+      );
+      final payload = <String, Object>{
+        'contract': 'supermega.shop.connected-tender-reservation.v1',
+        'operationId': operationId,
+        'tenderKind': tenderKind,
+        'reservationId': reservation.reservationId,
+        'reservationDigest': reservation.reservationDigest,
+        'workspaceId': reservation.workspaceId,
+        'siteId': reservation.siteId,
+        'workflowType': reservation.workflowType.name,
+        'subjectId': reservation.subjectId,
+        'basketDigest': reservation.basketDigest,
+      };
+      if (row['reservation_digest'] != reservation.reservationDigest ||
+          row['tenant_id'] != reservation.workspaceId ||
+          row['site_id'] != reservation.siteId ||
+          row['workflow_type'] != reservation.workflowType.name ||
+          row['subject_id'] != reservation.subjectId ||
+          row['basket_digest'] != reservation.basketDigest ||
+          row['binding_digest'] != connectedSiteSha256(payload) ||
+          (tenderKind == 'wallet' &&
+              reservation.workflowType !=
+                  ConnectedStockWorkflowType.retailCart) ||
+          trustedByScope['${reservation.workspaceId}\u0000${reservation.siteId}'] ==
+              null ||
+          trustedByScope['${reservation.workspaceId}\u0000${reservation.siteId}']! <
+              createdAt) {
+        return false;
+      }
+    }
+    return (knownReservations.isEmpty
+            ? boundScope == null
+            : boundScope != null) &&
+        linesByReservation.keys.every(knownReservations.contains) &&
+        transitionsByReservation.keys.every(knownReservations.contains) &&
+        trustedByScope.keys.every((scope) {
+          return headers.any(
+            (header) =>
+                '${header['tenant_id']}\u0000${header['site_id']}' == scope,
+          );
+        });
+  } on Object {
+    return false;
+  }
+}
+
+final shopKnownBaseObjectNames = <String>{
   'menu_import_drafts',
   'merchant_wallet_profiles',
   'shop_products',
@@ -1496,6 +5500,7 @@ const shopKnownBaseObjectNames = <String>{
   'shop_pending_cash_checkouts_counter_delete_freeze',
   'shop_pending_cash_checkouts_cafe_freeze',
   'shop_pending_cash_checkouts_shift_freeze',
+  ...{for (final name in shopConnectedSiteSchemaDefinitionsV28().keys) name},
 };
 
 const shopBaseTableColumnsV6 = <String, Set<String>>{
@@ -1619,7 +5624,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 22) return const {};
+  if (schemaVersion < 5 || schemaVersion > 42) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -2386,6 +6391,226 @@ enum _ShopUpgradeOrigin {
   unifiedV19,
   unifiedV20,
   unifiedV21,
+  unifiedV22,
+  unifiedV23,
+  unifiedV24,
+  unifiedV25,
+  unifiedV26,
+  unifiedV27,
+  unifiedV28,
+  unifiedV29,
+}
+
+enum ShopConnectedSiteCommandStatus { accepted, replayed, conflict }
+
+class ShopConnectedSiteCommandResult {
+  const ShopConnectedSiteCommandResult({
+    required this.status,
+    required this.commandId,
+    required this.ackDigest,
+    required this.canonicalVersion,
+    required this.eventSequence,
+    required this.eventDigest,
+    this.conflictCode,
+  });
+
+  final ShopConnectedSiteCommandStatus status;
+  final String commandId;
+  final String ackDigest;
+  final int canonicalVersion;
+  final int? eventSequence;
+  final String? eventDigest;
+  final String? conflictCode;
+}
+
+abstract interface class ShopConnectedSiteCoordinatorTimeAuthority {
+  Future<int> readValidatedNowMillis({
+    required String tenantId,
+    required String siteId,
+  });
+}
+
+/// A same-boot, evidence-bearing time read for the test-only cloud-feed gate.
+/// A bare millisecond value cannot establish which signed sample authorized it.
+abstract interface class ShopConnectedCloudFeedLiveTimeSource {
+  Future<ConnectedTrustedTimeLiveReading> readLiveTime({
+    required String tenantId,
+    required String siteId,
+  });
+}
+
+/// Binds the volatile stream acceptance to the requested site. Retained rows
+/// alone cannot create this capability after restart or restore.
+final class ShopConnectedCloudFeedAcceptedLiveTime
+    implements ShopConnectedCloudFeedLiveTimeSource {
+  const ShopConnectedCloudFeedAcceptedLiveTime({
+    required this.tenantId,
+    required this.siteId,
+    required this.acceptance,
+  });
+
+  final String tenantId;
+  final String siteId;
+  final ConnectedTrustedTimeStreamClientAcceptance acceptance;
+
+  @override
+  Future<ConnectedTrustedTimeLiveReading> readLiveTime({
+    required String tenantId,
+    required String siteId,
+  }) {
+    if (tenantId != this.tenantId || siteId != this.siteId) {
+      throw StateError('Cloud-feed live-time scope changed.');
+    }
+    return acceptance.readLiveTime();
+  }
+}
+
+class ShopConnectedSiteTimeUnavailable
+    implements ShopConnectedSiteCoordinatorTimeAuthority {
+  const ShopConnectedSiteTimeUnavailable();
+
+  @override
+  Future<int> readValidatedNowMillis({
+    required String tenantId,
+    required String siteId,
+  }) => throw StateError('Connected-site trusted time is unavailable.');
+}
+
+enum ShopConnectedStockReservationDisposition { accepted, replayed, conflict }
+
+const shopConnectedStockReservedEventType = 'shop.connected_stock.reserved.v1';
+const shopConnectedStockReleasedEventType = 'shop.connected_stock.released.v1';
+const shopConnectedStockCommittedEventType =
+    'shop.connected_stock.committed.v1';
+const shopConnectedStockExpiredEventType = 'shop.connected_stock.expired.v1';
+const _shopConnectedStockReservePayloadContract =
+    'supermega.shop.connected-stock-reserve.v1';
+const _shopConnectedStockReleasePayloadContract =
+    'supermega.shop.connected-stock-release.v1';
+
+class ShopConnectedStockReservationResult {
+  const ShopConnectedStockReservationResult({
+    required this.disposition,
+    required this.canonicalVersion,
+    required this.eventDigest,
+    required this.ackDigest,
+    this.conflictCode,
+    this.reservation,
+    this.transition,
+  });
+
+  final ShopConnectedStockReservationDisposition disposition;
+  final int canonicalVersion;
+  final String? eventDigest;
+  final String ackDigest;
+  final String? conflictCode;
+  final ConnectedStockReservationV1? reservation;
+  final ConnectedStockReservationTransitionV1? transition;
+}
+
+class ShopConnectedStockReservationLifecycleInput {
+  const ShopConnectedStockReservationLifecycleInput.release({
+    required this.reservationId,
+    required this.expectedReservationDigest,
+    required this.reason,
+  }) : targetState = ConnectedStockReservationState.released;
+
+  final String reservationId;
+  final String expectedReservationDigest;
+  final String reason;
+  final ConnectedStockReservationState targetState;
+}
+
+class ShopConnectedStockReservationRequirement {
+  const ShopConnectedStockReservationRequirement({
+    required this.reservationId,
+    required this.reservationDigest,
+    required this.reservationCommandId,
+    required this.reservationAckDigest,
+    required this.requiredBasketDigest,
+    this.releaseOnAccepted = false,
+    this.requiredPriorEventType,
+  });
+
+  final String reservationId;
+  final String reservationDigest;
+  final String reservationCommandId;
+  final String reservationAckDigest;
+  final String requiredBasketDigest;
+  final bool releaseOnAccepted;
+  final String? requiredPriorEventType;
+}
+
+class ShopConnectedProjectionConflict implements Exception {
+  const ShopConnectedProjectionConflict(this.code);
+
+  final String code;
+}
+
+class ShopConnectedSiteCommandInput {
+  const ShopConnectedSiteCommandInput({
+    required this.commandId,
+    required this.tenantId,
+    required this.siteId,
+    required this.actorId,
+    required this.deviceId,
+    required this.aggregateType,
+    required this.aggregateId,
+    required this.capability,
+    required this.expectedVersion,
+    required this.payloadDigest,
+    required this.leaseDigest,
+    required this.commandDigest,
+    required this.cloudProofJson,
+    required this.cloudProofDigest,
+    required this.eventId,
+    required this.eventType,
+    required this.eventPayloadJson,
+    required this.eventDigest,
+    required this.ackDigest,
+    required this.auditAction,
+    required this.auditMetadataDigest,
+    required this.createdAtMillis,
+    this.reservationId,
+    this.reservationProductId,
+    this.reservationQuantity,
+    this.reservationExpiresAtMillis,
+    this.stockReservation,
+    this.stockReservationLifecycle,
+    this.stockReservationRequirement,
+    this.acceptedProjection,
+  });
+
+  final String commandId;
+  final String tenantId;
+  final String siteId;
+  final String actorId;
+  final String deviceId;
+  final String aggregateType;
+  final String aggregateId;
+  final String capability;
+  final int expectedVersion;
+  final String payloadDigest;
+  final String leaseDigest;
+  final String commandDigest;
+  final String cloudProofJson;
+  final String cloudProofDigest;
+  final String eventId;
+  final String eventType;
+  final String eventPayloadJson;
+  final String eventDigest;
+  final String ackDigest;
+  final String auditAction;
+  final String auditMetadataDigest;
+  final int createdAtMillis;
+  final String? reservationId;
+  final String? reservationProductId;
+  final int? reservationQuantity;
+  final int? reservationExpiresAtMillis;
+  final ConnectedStockReservationV1? stockReservation;
+  final ShopConnectedStockReservationLifecycleInput? stockReservationLifecycle;
+  final ShopConnectedStockReservationRequirement? stockReservationRequirement;
+  final Future<void> Function()? acceptedProjection;
 }
 
 class _ShopCorrectionReconciliationRequired implements Exception {
@@ -2439,6 +6664,10 @@ class ShopDatabase extends _$ShopDatabase {
   static Future<void> migrateAndVerifyRestoreFile(
     File file, {
     ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
   }) async {
     final database = ShopDatabase.withCorrectionReceiptVerifier(
       executor: NativeDatabase(
@@ -2448,16 +6677,26 @@ class ShopDatabase extends _$ShopDatabase {
       correctionReceiptVerifier:
           correctionReceiptVerifier ??
           ShopCorrectionReceiptVerifier.production(),
+      testOnlyCloudFeedPinnedKeys: testOnlyCloudFeedPinnedKeys,
+      testOnlyCloudFeedV41Trust: testOnlyCloudFeedV41Trust,
+      historicalCloudFeedTrustSource: historicalCloudFeedTrustSource,
+      v42EnrollmentTrustSource: v42EnrollmentTrustSource,
+      testOnlyLegacyCloudFeedV40:
+          testOnlyCloudFeedPinnedKeys.isNotEmpty &&
+          _testMutationBypassAvailable,
     );
     try {
       await database.verifyReadyForUse();
       await database.markCorrectionRestorePending();
+      await database._suspendTrustedTimeIssuerAfterRestoreV38();
+      await database._markTrustedTimeClientStreamsRestoredV39();
+      await database._suspendCloudFeedAfterRestoreV40();
       await database.verifyReadyForUse();
       final row = await database
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v17.');
+        throw StateError('The staged Shop restore did not reach schema v41.');
       }
     } finally {
       await database.close();
@@ -2478,11 +6717,49 @@ class ShopDatabase extends _$ShopDatabase {
         correctionReceiptVerifier ?? ShopCorrectionReceiptVerifier.production(),
   );
 
-  ShopDatabase([QueryExecutor? executor])
-    : this.withCorrectionReceiptVerifier(
-        executor: executor,
-        correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+  ShopDatabase([
+    QueryExecutor? executor,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
+  ]) : this.withCorrectionReceiptVerifier(
+         executor: executor,
+         correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+         v42EnrollmentTrustSource: v42EnrollmentTrustSource,
+       );
+
+  /// Only fixture keys may open retained nonempty cloud-feed rows. Product
+  /// builds have no issuer pin until a separately reviewed authority exists.
+  factory ShopDatabase.testOnlyWithCloudFeedPins({
+    required QueryExecutor executor,
+    required Map<String, List<int>> trustedIssuerKeys,
+  }) {
+    if (!_testMutationBypassAvailable) {
+      throw UnsupportedError(
+        'Test cloud-feed pins are unavailable in product builds.',
       );
+    }
+    return ShopDatabase.withCorrectionReceiptVerifier(
+      executor: executor,
+      correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+      testOnlyCloudFeedPinnedKeys: trustedIssuerKeys,
+      testOnlyLegacyCloudFeedV40: true,
+    );
+  }
+
+  /// Synthetic first-page historical verification only. This fixture trust
+  /// cannot be configured in product builds and does not grant current writes.
+  factory ShopDatabase.testOnlyWithCloudFeedV41Trust({
+    required QueryExecutor executor,
+    required ShopCloudFeedV41FirstPageTrust trust,
+  }) {
+    if (!_testMutationBypassAvailable) {
+      throw UnsupportedError('Test v41 cloud-feed trust is unavailable.');
+    }
+    return ShopDatabase.withCorrectionReceiptVerifier(
+      executor: executor,
+      correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+      testOnlyCloudFeedV41Trust: trust,
+    );
+  }
 
   factory ShopDatabase.testOnlyWithSaleAndCashShiftClock({
     QueryExecutor? executor,
@@ -2505,18 +6782,82 @@ class ShopDatabase extends _$ShopDatabase {
     required this.correctionReceiptVerifier,
     bool testOnlyAllowUnconsumedAuthorization = false,
     DateTime Function()? testOnlySaleAndCashShiftClock,
+    Map<String, List<int>> testOnlyCloudFeedPinnedKeys = const {},
+    ShopCloudFeedV41FirstPageTrust? testOnlyCloudFeedV41Trust,
+    ShopCloudFeedHistoricalTrustSource? historicalCloudFeedTrustSource,
+    ShopV42EnrollmentTrustSource? v42EnrollmentTrustSource,
+    bool testOnlyLegacyCloudFeedV40 = false,
   }) : assert(
          !testOnlyAllowUnconsumedAuthorization || _testMutationBypassAvailable,
          'Unconsumed correction authorization is unavailable in product builds.',
        ),
+       assert(
+         !testOnlyLegacyCloudFeedV40 || _testMutationBypassAvailable,
+         'Legacy v40 cloud-feed fixtures are unavailable in product builds.',
+       ),
+       _testOnlyLegacyCloudFeedV40 =
+           testOnlyLegacyCloudFeedV40 && _testMutationBypassAvailable,
        _saleAndCashShiftClock = _testMutationBypassAvailable
            ? testOnlySaleAndCashShiftClock ?? DateTime.now
            : DateTime.now,
        testOnlyAllowUnconsumedAuthorization =
            testOnlyAllowUnconsumedAuthorization && _testMutationBypassAvailable,
+       _testOnlyCloudFeedPinnedKeys = _testMutationBypassAvailable
+           ? Map<String, List<int>>.unmodifiable({
+               for (final entry
+                   in (testOnlyCloudFeedV41Trust?.feedIssuerKeys ??
+                           testOnlyCloudFeedPinnedKeys)
+                       .entries)
+                 entry.key: List<int>.unmodifiable(entry.value),
+             })
+           : const {},
+       _testOnlyCloudFeedV41Trust = _checkedTestCloudFeedV41Trust(
+         testOnlyCloudFeedV41Trust,
+         testOnlyCloudFeedPinnedKeys,
+       ),
+       _historicalCloudFeedTrust = _checkedHistoricalTrust(
+         historicalCloudFeedTrustSource,
+         testOnlyCloudFeedV41Trust,
+         testOnlyCloudFeedPinnedKeys,
+       ),
+       _historicalCloudFeedTrustSource = historicalCloudFeedTrustSource,
+       _v42EnrollmentTrustSource =
+           v42EnrollmentTrustSource ??
+           ShopV42EnrollmentTrustSource.production(),
        super(executor ?? driftDatabase(name: 'supermega_shop'));
 
+  static ShopCloudFeedV41FirstPageTrust? _checkedTestCloudFeedV41Trust(
+    ShopCloudFeedV41FirstPageTrust? trust,
+    Map<String, List<int>> legacyPins,
+  ) {
+    if (trust != null && legacyPins.isNotEmpty) {
+      throw ArgumentError('v41 fixture trust cannot mix legacy feed pins.');
+    }
+    if (!_testMutationBypassAvailable && trust != null) {
+      throw UnsupportedError('Test v41 cloud-feed trust is unavailable.');
+    }
+    return trust?.immutableCopy();
+  }
+
+  static ShopCloudFeedV41FirstPageTrust? _checkedHistoricalTrust(
+    ShopCloudFeedHistoricalTrustSource? source,
+    ShopCloudFeedV41FirstPageTrust? fixtureTrust,
+    Map<String, List<int>> legacyPins,
+  ) {
+    if (source != null && (fixtureTrust != null || legacyPins.isNotEmpty)) {
+      throw ArgumentError('Historical source trust cannot mix fixture pins.');
+    }
+    return (source ?? ShopCloudFeedHistoricalTrustSource.production())
+        .verifiedHistory;
+  }
+
   final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
+  final Map<String, List<int>> _testOnlyCloudFeedPinnedKeys;
+  final ShopCloudFeedV41FirstPageTrust? _testOnlyCloudFeedV41Trust;
+  final ShopCloudFeedV41FirstPageTrust? _historicalCloudFeedTrust;
+  final ShopCloudFeedHistoricalTrustSource? _historicalCloudFeedTrustSource;
+  final ShopV42EnrollmentTrustSource _v42EnrollmentTrustSource;
+  final bool _testOnlyLegacyCloudFeedV40;
   final bool testOnlyAllowUnconsumedAuthorization;
   final DateTime Function() _saleAndCashShiftClock;
 
@@ -2524,7 +6865,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => _testOnlyLegacyCloudFeedV40 ? 40 : 42;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2548,12 +6889,294 @@ class ShopDatabase extends _$ShopDatabase {
       await _createCafeCancellationSchemaV20();
       await _createPendingCashCheckoutSchemaV21();
       await _requireUnifiedV22Schema();
+      await _createConnectedSiteSchemaV23();
+      await _requireUnifiedV23Schema();
+      await _createConnectedStockReservationSchemaV24();
+      await _requireUnifiedV24Schema();
+      await _createConnectedEnrollmentSchemaV25();
+      await _requireUnifiedV25Schema();
+      await _createConnectedCloudDispositionSchemaV26();
+      await _requireUnifiedV26Schema();
+      await _createConnectedAuthoritySchemaV27();
+      await _requireUnifiedV27Schema();
+      await _createConnectedAttemptSchemaV28();
+      await _requireUnifiedV28Schema();
+      await _createConnectedEnvelopeSchemaV29();
+      await _requireUnifiedV29Schema();
+      await _createConnectedAuthorityPayloadSchemaV30();
+      await _requireUnifiedV30Schema();
+      await _createConnectedReservationSessionSchemaV31();
+      await _requireUnifiedV31Schema();
+      await _createConnectedReplicaSchemaV32();
+      await _requireUnifiedV32Schema();
+      await _createConnectedReplicaDeliverySchemaV33();
+      await _requireUnifiedV33Schema();
+      await _createConnectedCloudProofSchemaV34();
+      await _requireUnifiedV34Schema();
+      await _createConnectedCloudProofBoundaryV35();
+      await _requireUnifiedV35Schema();
+      await _createConnectedAuthorityCheckpointSchemaV36();
+      await _requireUnifiedV36Schema();
+      await _createConnectedTrustedTimeSchemaV37();
+      await _requireUnifiedV37Schema();
+      await _createConnectedTrustedTimeIssuerSchemaV38();
+      await _requireUnifiedV38Schema();
+      await _createConnectedTrustedTimeClientSchemaV39();
+      await _requireUnifiedV39Schema();
+      await _createConnectedCloudFeedSchemaV40();
+      await _requireUnifiedV40Schema();
+      if (!_testOnlyLegacyCloudFeedV40) {
+        await _createConnectedDeviceProfileSchemaV42();
+        await _requireUnifiedV42Schema();
+      }
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
       // schema before the first DDL statement so a branch-hop database cannot
       // be silently relabelled or partially repaired.
+      if (from == 41 && !_testOnlyLegacyCloudFeedV40) {
+        await _requireNoDeviceProfileSchemaBeforeV42();
+        await _requireUnifiedV41Schema();
+        await _createConnectedDeviceProfileSchemaV42();
+        await _requireUnifiedV42Schema();
+        return;
+      }
+      await _requireNoDeviceProfileSchemaBeforeV42();
+      if (from == 40) {
+        await _requireNoCloudFeedSchemaBeforeV41();
+        await _requireUnifiedV40Schema();
+        await _requireEmptyCloudFeedBeforeV41();
+        await _createConnectedCloudFeedSchemaV41();
+        await _createConnectedDeviceProfileSchemaV42();
+        await _requireUnifiedV42Schema();
+        return;
+      }
+      await _requireNoCloudFeedSchemaBeforeV40();
+      await _requireNoCloudFeedSchemaBeforeV41();
+      if (from == 39) {
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 38) {
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 37) {
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 36) {
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 35) {
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 34) {
+        await _requireUnifiedV34Schema(historical4d9Proofs: true);
+        await _createConnectedCloudProofBoundaryV35(
+          quarantineUnverifiableV34Proofs: true,
+        );
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 33) {
+        await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
+        await _createConnectedCloudProofBoundaryV35();
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 32) {
+        await _requireUnifiedV32Schema();
+        await _rebaseConnectedReplicaCacheForV33();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
+        await _createConnectedCloudProofBoundaryV35();
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 31) {
+        await _requireUnifiedV31Schema();
+        await _createConnectedReplicaSchemaV32();
+        await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
+        await _createConnectedCloudProofBoundaryV35();
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 30) {
+        await _requireUnifiedV30Schema();
+        await _createConnectedReservationSessionSchemaV31();
+        await _backfillConnectedReservationSessionBindingsV31();
+        await _requireUnifiedV31Schema();
+        await _createConnectedReplicaSchemaV32();
+        await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
+        await _createConnectedCloudProofBoundaryV35();
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
       final origin = await _classifyUpgradeOrigin(from);
+      if (from == 29) {
+        await _requireUnifiedV29Schema();
+        await _createConnectedAuthorityPayloadSchemaV30();
+        await _requireUnifiedV30Schema();
+        await _createConnectedReservationSessionSchemaV31();
+        await _backfillConnectedReservationSessionBindingsV31();
+        await _requireUnifiedV31Schema();
+        await _createConnectedReplicaSchemaV32();
+        await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
+        await _createConnectedCloudProofBoundaryV35();
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
+      if (from == 28) {
+        await _requireUnifiedV28Schema();
+        final legacyTransmissions = await customSelect(
+          'SELECT COUNT(*) AS count FROM shop_site_command_transmissions',
+        ).getSingle();
+        if (legacyTransmissions.read<int>('count') != 0) {
+          // v28 did not retain the exact endpoint, headers, body and TLS pin.
+          // Reconstructing those bytes would invent transport evidence, so a
+          // populated private preview must be retired or explicitly migrated
+          // by a separately reviewed evidence policy.
+          throw StateError(
+            'Populated Shop v28 command attempts cannot migrate to v29 '
+            'without exact retained request envelopes.',
+          );
+        }
+        await _createConnectedEnvelopeSchemaV29();
+        await _requireUnifiedV29Schema();
+        await _createConnectedAuthorityPayloadSchemaV30();
+        await _requireUnifiedV30Schema();
+        await _createConnectedReservationSessionSchemaV31();
+        await _backfillConnectedReservationSessionBindingsV31();
+        await _requireUnifiedV31Schema();
+        await _createConnectedReplicaSchemaV32();
+        await _requireUnifiedV32Schema();
+        await _createConnectedReplicaDeliverySchemaV33();
+        await _requireUnifiedV33Schema();
+        await _createConnectedCloudProofSchemaV34();
+        await _requireUnifiedV34Schema();
+        await _createConnectedCloudProofBoundaryV35();
+        await _requireUnifiedV35Schema();
+        await _createConnectedAuthorityCheckpointSchemaV36();
+        await _requireUnifiedV36Schema();
+        await _createConnectedTrustedTimeSchemaV37();
+        await _requireUnifiedV37Schema();
+        await _createConnectedTrustedTimeIssuerSchemaV38();
+        await _requireUnifiedV38Schema();
+        await _createConnectedTrustedTimeClientSchemaV39();
+        await _requireUnifiedV39Schema();
+        await _createConnectedCloudFeedSchemaV40();
+        await _requireUnifiedV40Schema();
+        return;
+      }
       if (from < 2) {
         await migrator.createTable(menuImportDrafts);
         await migrator.createTable(merchantWalletProfiles);
@@ -2698,27 +7321,429 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV19Schema(
         allowCafeV20: from >= 20,
         allowCashCheckoutV21: from >= 21,
+        allowCashTenderV22: from >= 22,
+        allowConnectedV23: from >= 23,
+        allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
+        allowCloudV26: from >= 26,
       );
       if (from < 20) {
         await _createCafeCancellationSchemaV20();
       }
-      await _requireUnifiedV20Schema(allowCashCheckoutV21: from >= 21);
+      await _requireUnifiedV20Schema(
+        allowCashCheckoutV21: from >= 21,
+        allowCashTenderV22: from >= 22,
+        allowConnectedV23: from >= 23,
+        allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
+        allowCloudV26: from >= 26,
+      );
       if (from < 21) {
         await _createPendingCashCheckoutSchemaV21();
       }
-      await _requireUnifiedV21Schema();
+      await _requireUnifiedV21Schema(
+        allowCashTenderV22: from >= 22,
+        allowConnectedV23: from >= 23,
+        allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
+        allowCloudV26: from >= 26,
+      );
       if (from < 22) {
         await _createCashTenderSchemaV22();
       }
-      await _requireUnifiedV22Schema();
+      await _requireUnifiedV22Schema(
+        allowConnectedV23: from >= 23,
+        allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
+        allowCloudV26: from >= 26,
+      );
+      if (from < 23) {
+        await _createConnectedSiteSchemaV23();
+      }
+      await _requireUnifiedV23Schema(
+        allowReservationV24: from >= 24,
+        allowEnrollmentV25: from >= 25,
+        allowCloudV26: from >= 26,
+      );
+      if (from < 24) {
+        await _migrateConnectedStockReservationSchemaV24();
+      }
+      await _requireUnifiedV24Schema(
+        allowEnrollmentV25: from >= 25,
+        allowCloudV26: from >= 26,
+      );
+      if (from < 25) {
+        await _createConnectedEnrollmentSchemaV25();
+      }
+      await _requireUnifiedV25Schema(allowCloudV26: from >= 26);
+      if (from < 26) {
+        await _createConnectedCloudDispositionSchemaV26();
+      }
+      await _requireUnifiedV26Schema();
+      if (from < 27) {
+        await _createConnectedAuthoritySchemaV27();
+      }
+      await _requireUnifiedV27Schema();
+      if (from < 28) {
+        await _createConnectedAttemptSchemaV28();
+      }
+      await _requireUnifiedV28Schema();
+      await _createConnectedEnvelopeSchemaV29();
+      await _requireUnifiedV29Schema();
+      await _createConnectedAuthorityPayloadSchemaV30();
+      await _requireUnifiedV30Schema();
+      await _createConnectedReservationSessionSchemaV31();
+      await _backfillConnectedReservationSessionBindingsV31();
+      await _requireUnifiedV31Schema();
+      await _createConnectedReplicaSchemaV32();
+      await _requireUnifiedV32Schema();
+      await _createConnectedReplicaDeliverySchemaV33();
+      await _requireUnifiedV33Schema();
+      await _createConnectedCloudProofSchemaV34();
+      await _requireUnifiedV34Schema();
+      await _createConnectedCloudProofBoundaryV35();
+      await _requireUnifiedV35Schema();
+      await _createConnectedAuthorityCheckpointSchemaV36();
+      await _requireUnifiedV36Schema();
+      await _createConnectedTrustedTimeSchemaV37();
+      await _requireUnifiedV37Schema();
+      await _createConnectedTrustedTimeIssuerSchemaV38();
+      await _requireUnifiedV38Schema();
+      await _createConnectedTrustedTimeClientSchemaV39();
+      await _requireUnifiedV39Schema();
+      await _createConnectedCloudFeedSchemaV40();
+      await _requireUnifiedV40Schema();
+      if (!_testOnlyLegacyCloudFeedV40) {
+        await _createConnectedDeviceProfileSchemaV42();
+        await _requireUnifiedV42Schema();
+      }
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV22Schema();
+      if (_testOnlyLegacyCloudFeedV40) {
+        await _requireUnifiedV40Schema();
+      } else if (_testOnlyCloudFeedV41Trust != null ||
+          _historicalCloudFeedTrust != null) {
+        await transaction(_requireUnifiedV42Schema);
+      } else {
+        await _requireUnifiedV42Schema();
+      }
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV22Schema();
+  Future<void> verifyReadyForUse() => _testOnlyLegacyCloudFeedV40
+      ? _requireUnifiedV40Schema()
+      : _testOnlyCloudFeedV41Trust != null || _historicalCloudFeedTrust != null
+      ? transaction(_requireUnifiedV42Schema)
+      : _requireUnifiedV42Schema();
+
+  Future<void> verifyConnectedReplicaEvidence() async {
+    if (!await _v32ConnectedReplicaRowsValid() ||
+        !await _v33ConnectedReplicaDeliveryRowsValid()) {
+      throw StateError('Connected replica evidence is invalid.');
+    }
+  }
+
+  /// Retains the exact signed lease bytes needed by later cloud verification.
+  /// Existing pre-v34 leases are intentionally not reconstructed from columns.
+  Future<void> retainConnectedLeasePayloadV34(
+    OfflineStaffLeaseV1 lease, {
+    required int retainedAtMillis,
+    required String issuerEvidenceDigest,
+    required String issuerEvidenceJson,
+  }) async {
+    final issuerDecoded = jsonDecode(issuerEvidenceJson);
+    if (retainedAtMillis <= 0 ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(issuerEvidenceDigest) ||
+        canonicalConnectedSiteJson(issuerDecoded) != issuerEvidenceJson ||
+        connectedSiteSha256(issuerDecoded) != issuerEvidenceDigest) {
+      throw ArgumentError('Connected lease retention time is invalid.');
+    }
+    final encoded = canonicalConnectedSiteJson(lease.toJson());
+    await transaction(() async {
+      final stored = await customSelect(
+        'SELECT lease_id, tenant_id, site_id, actor_id, actor_role, '
+        'capabilities_json, device_id, session_generation, '
+        'revocation_generation, issued_at_millis, expires_at_millis, key_id, '
+        'signature FROM '
+        'shop_site_offline_leases WHERE payload_digest = ?',
+        variables: [Variable<String>(lease.payloadDigest)],
+      ).getSingleOrNull();
+      if (stored == null ||
+          stored.read<String>('tenant_id') != lease.workspaceId ||
+          stored.read<String>('site_id') != lease.siteId ||
+          stored.read<String>('actor_id') != lease.actorId ||
+          stored.read<String>('lease_id') != lease.leaseId ||
+          stored.read<String>('actor_role') != lease.role ||
+          canonicalConnectedSiteJson(
+                jsonDecode(stored.read<String>('capabilities_json')),
+              ) !=
+              canonicalConnectedSiteJson(lease.capabilities) ||
+          stored.read<String>('device_id') != lease.deviceId ||
+          stored.read<int>('session_generation') != lease.sessionGeneration ||
+          stored.read<int>('revocation_generation') !=
+              lease.revocationGeneration ||
+          stored.read<int>('issued_at_millis') != lease.issuedAtMillis ||
+          stored.read<int>('expires_at_millis') != lease.expiresAtMillis ||
+          stored.read<String>('key_id') != lease.issuerKeyId ||
+          stored.read<String>('signature') != lease.signature) {
+        throw StateError('Connected lease columns do not match signed bytes.');
+      }
+      final existing = await customSelect(
+        'SELECT lease_json, lease_bytes_digest, issuer_evidence_digest FROM '
+        'shop_site_offline_lease_payloads WHERE payload_digest = ?',
+        variables: [Variable<String>(lease.payloadDigest)],
+      ).getSingleOrNull();
+      final bytesDigest = connectedSiteSha256(lease.toJson());
+      await customInsert(
+        'INSERT OR IGNORE INTO shop_site_lease_issuer_evidence '
+        '(evidence_digest, evidence_json, evidence_bytes_digest, retained_at_millis) '
+        'VALUES (?, ?, ?, ?)',
+        variables: [
+          Variable<String>(issuerEvidenceDigest),
+          Variable<String>(issuerEvidenceJson),
+          Variable<String>(connectedSiteSha256(issuerDecoded)),
+          Variable<int>(retainedAtMillis),
+        ],
+      );
+      if (existing != null) {
+        if (existing.read<String>('lease_json') != encoded ||
+            existing.read<String>('lease_bytes_digest') != bytesDigest ||
+            existing.read<String>('issuer_evidence_digest') !=
+                issuerEvidenceDigest) {
+          throw StateError('Connected lease payload was substituted.');
+        }
+        return;
+      }
+      await customInsert(
+        'INSERT INTO shop_site_offline_lease_payloads '
+        '(payload_digest, lease_json, lease_bytes_digest, issuer_evidence_digest, retained_at_millis) '
+        'VALUES (?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(lease.payloadDigest),
+          Variable<String>(encoded),
+          Variable<String>(bytesDigest),
+          Variable<String>(issuerEvidenceDigest),
+          Variable<int>(retainedAtMillis),
+        ],
+      );
+    });
+  }
+
+  Future<Map<String, Object?>> readConnectedReplicaProjectionV2({
+    required String tenantId,
+    required String siteId,
+  }) async {
+    final aggregateRows = await customSelect(
+      'SELECT aggregate_type, aggregate_id, version, last_site_sequence '
+      'FROM shop_site_aggregate_versions WHERE tenant_id = ? AND site_id = ? '
+      'ORDER BY aggregate_type, aggregate_id',
+      variables: [Variable(tenantId), Variable(siteId)],
+    ).get();
+    const connectedCafeIds =
+        'SELECT DISTINCT command.aggregate_id FROM shop_site_commands command '
+        'JOIN shop_site_events event ON event.command_id = command.command_id '
+        "WHERE command.state = 'accepted' AND command.tenant_id = ? "
+        'AND command.site_id = ? AND command.aggregate_type = ? '
+        'AND event.tenant_id = command.tenant_id AND event.site_id = command.site_id '
+        'AND event.aggregate_id = command.aggregate_id AND event.event_type = ?';
+    final cafeRows = await customSelect(
+      'SELECT id, state, state_revision, ticket_version, ticket_json '
+      "FROM shop_cafe_orders WHERE state != 'completed' AND id IN ($connectedCafeIds) "
+      'ORDER BY id',
+      variables: [
+        Variable(tenantId),
+        Variable(siteId),
+        const Variable('cafeOrder'),
+        const Variable('shop.cafe_order.put.v1'),
+      ],
+    ).get();
+    final kitchenRows = await customSelect(
+      'SELECT payload_json FROM shop_sync_outbox WHERE event_type = ? '
+      "AND json_extract(payload_json, '\$.orderId') IN ($connectedCafeIds) "
+      'ORDER BY created_at_millis, operation_id',
+      variables: [
+        const Variable(cafeKitchenStatusEventType),
+        Variable(tenantId),
+        Variable(siteId),
+        const Variable('cafeOrder'),
+        const Variable('shop.cafe_order.put.v1'),
+      ],
+    ).get();
+    final kitchenByOrder = <String, List<Object?>>{};
+    for (final row in kitchenRows) {
+      final payload = jsonDecode(row.read<String>('payload_json'));
+      if (payload is! Map || payload['orderId'] is! String) {
+        throw StateError('Connected café kitchen evidence is invalid.');
+      }
+      kitchenByOrder
+          .putIfAbsent(payload['orderId']! as String, () => <Object?>[])
+          .add(Map<String, Object?>.from(payload));
+    }
+    final reservationRows = await customSelect(
+      'SELECT header.reservation_id, header.reservation_json, header.tenant_id, '
+      'header.site_id, header.actor_id, header.device_id, header.capability, '
+      'header.workflow_type, header.subject_id, header.basket_digest, '
+      'header.initial_reservation_digest, header.issued_at_millis, '
+      'header.expires_at_millis, transition.from_state, transition.to_state, '
+      'transition.before_digest, transition.after_digest, '
+      'transition.transition_digest, transition.transition_json, '
+      'transition.sale_id, transition.occurred_at_millis '
+      'FROM shop_connected_stock_reservation_headers header '
+      'LEFT JOIN shop_connected_stock_reservation_transitions transition '
+      'ON transition.reservation_id = header.reservation_id '
+      'WHERE header.tenant_id = ? AND header.site_id = ? AND header.legacy_source = 0 '
+      'ORDER BY header.reservation_id',
+      variables: [Variable(tenantId), Variable(siteId)],
+    ).get();
+    final stockReservations = <Map<String, Object?>>[];
+    for (final row in reservationRows) {
+      final initial = ConnectedStockReservationV1.fromJson(
+        jsonDecode(row.read<String>('reservation_json')),
+      );
+      if (initial.state != ConnectedStockReservationState.held ||
+          initial.stateVersion != 1 ||
+          initial.reservationId != row.read<String>('reservation_id') ||
+          initial.workspaceId != tenantId ||
+          initial.siteId != siteId ||
+          initial.actorId != row.read<String>('actor_id') ||
+          initial.deviceId != row.read<String>('device_id') ||
+          initial.capability.name != row.read<String>('capability') ||
+          initial.workflowType.name != row.read<String>('workflow_type') ||
+          initial.subjectId != row.read<String>('subject_id') ||
+          initial.basketDigest != row.read<String>('basket_digest') ||
+          initial.reservationDigest !=
+              row.read<String>('initial_reservation_digest') ||
+          row.read<String>('tenant_id') != tenantId ||
+          row.read<String>('site_id') != siteId ||
+          DateTime.parse(initial.issuedAt).millisecondsSinceEpoch !=
+              row.read<int>('issued_at_millis') ||
+          DateTime.parse(initial.expiresAt).millisecondsSinceEpoch !=
+              row.read<int>('expires_at_millis') ||
+          canonicalConnectedSiteJson(initial.toJson()) !=
+              row.read<String>('reservation_json')) {
+        throw StateError('Connected replica reservation evidence is invalid.');
+      }
+      final terminalState = row.readNullable<String>('to_state');
+      if (terminalState == null) {
+        if (row.readNullable<String>('transition_json') != null) {
+          throw StateError('Connected replica terminal evidence is invalid.');
+        }
+        stockReservations.add(
+          ConnectedStockReservationProjectionV1(reservation: initial).toJson(),
+        );
+        continue;
+      }
+      final transitionJson = row.readNullable<String>('transition_json');
+      if (transitionJson == null) {
+        throw StateError('Connected replica terminal evidence is invalid.');
+      }
+      final transition = ConnectedStockReservationTransitionV1.fromJson(
+        jsonDecode(transitionJson),
+      );
+      if (canonicalConnectedSiteJson(transition.before.toJson()) !=
+              canonicalConnectedSiteJson(initial.toJson()) ||
+          row.readNullable<String>('from_state') != 'held' ||
+          transition.after.state.name != terminalState ||
+          transition.before.reservationDigest !=
+              row.readNullable<String>('before_digest') ||
+          transition.after.reservationDigest !=
+              row.readNullable<String>('after_digest') ||
+          transition.transitionDigest !=
+              row.readNullable<String>('transition_digest') ||
+          transition.saleBinding?.saleId !=
+              row.readNullable<String>('sale_id') ||
+          DateTime.parse(transition.transitionedAt).millisecondsSinceEpoch !=
+              row.readNullable<int>('occurred_at_millis') ||
+          canonicalConnectedSiteJson(transition.toJson()) != transitionJson) {
+        throw StateError('Connected replica terminal evidence is invalid.');
+      }
+      stockReservations.add(
+        ConnectedStockReservationProjectionV1(
+          reservation: transition.after,
+          terminalTransition: transition,
+        ).toJson(),
+      );
+    }
+    final conflictRows = await customSelect(
+      'SELECT conflict.conflict_id, conflict.reason_code, conflict.state, '
+      'command.aggregate_id, COALESCE(aggregate.version, command.expected_version) AS actual_version '
+      'FROM shop_site_conflicts conflict JOIN shop_site_commands command '
+      'ON command.command_id = conflict.command_id '
+      'LEFT JOIN shop_site_aggregate_versions aggregate ON aggregate.tenant_id = command.tenant_id '
+      'AND aggregate.site_id = command.site_id AND aggregate.aggregate_type = command.aggregate_type '
+      'AND aggregate.aggregate_id = command.aggregate_id '
+      'WHERE command.tenant_id = ? AND command.site_id = ? ORDER BY conflict.conflict_id',
+      variables: [Variable(tenantId), Variable(siteId)],
+    ).get();
+    return <String, Object?>{
+      'schema': 'supermega.shop.connected-site-projections.v2',
+      'aggregates': [
+        for (final row in aggregateRows)
+          {
+            'aggregateType': row.read<String>('aggregate_type'),
+            'aggregateId': row.read<String>('aggregate_id'),
+            'version': row.read<int>('version'),
+            'lastSiteSequence': row.read<int>('last_site_sequence'),
+          },
+      ],
+      'cafeOrders': [
+        for (final row in cafeRows)
+          {
+            'orderId': row.read<String>('id'),
+            'state': row.read<String>('state'),
+            'stateRevision': row.read<int>('state_revision'),
+            'ticketVersion': row.read<int>('ticket_version'),
+            'ticket': jsonDecode(row.read<String>('ticket_json')),
+            'kitchenStateEvents':
+                kitchenByOrder[row.read<String>('id')] ?? const <Object?>[],
+          },
+      ],
+      'stockReservations': stockReservations,
+      'conflicts': [
+        for (final row in conflictRows)
+          {
+            'conflictId': row.read<String>('conflict_id'),
+            'reasonCode': row.read<String>('reason_code'),
+            'state': row.read<String>('state'),
+            'aggregateId': row.read<String>('aggregate_id'),
+            'actualVersion': row.read<int>('actual_version'),
+          },
+      ],
+    };
+  }
+
+  /// Revalidates the complete immutable cloud-disposition chain before a
+  /// reconstructed upload cursor is trusted in the current process.
+  Future<void> verifyConnectedCloudDispositionEvidence() async {
+    if (!await _v26ConnectedCloudDispositionRowsValid()) {
+      throw StateError('Connected cloud disposition evidence is invalid.');
+    }
+  }
+
+  Future<void> verifyConnectedAuthorityEvidence() async {
+    if (!await _v27ConnectedAuthorityRowsValid() ||
+        !await _v30ConnectedAuthorityPayloadRowsValid() ||
+        !await _v36ConnectedAuthorityCheckpointRowsValid()) {
+      throw StateError('Connected authority observation evidence is invalid.');
+    }
+  }
+
+  Future<void> verifyConnectedTrustedTimeEvidence() async {
+    if (!await _v37ConnectedTrustedTimeRowsValid()) {
+      throw StateError('Connected trusted-time evidence is invalid.');
+    }
+  }
+
+  /// Structural integrity only. Runtime activation must separately reverify
+  /// the retained approval signature with its trusted authority verifier.
+  Future<void> verifyConnectedAttemptEvidence() async {
+    if (!await _v28ConnectedAttemptRowsValid() ||
+        !await _v29ConnectedEnvelopeRowsValid() ||
+        !await _v31ConnectedReservationSessionRowsValid()) {
+      throw StateError('Connected command-attempt evidence is invalid.');
+    }
+  }
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
     final qrSnapshotColumns = includeQrSnapshot
@@ -2837,6 +7862,540 @@ class ShopDatabase extends _$ShopDatabase {
         "(payment_method = 'cash' AND cash_tendered_mmk >= total_mmk "
         'AND cash_tendered_mmk <= 200000000000000))',
   );
+
+  Future<void> _createConnectedSiteSchemaV23() async {
+    for (final definition in shopConnectedSiteSchemaDefinitionsV23().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedStockReservationSchemaV24() async {
+    for (final definition
+        in shopConnectedStockReservationSchemaDefinitionsV24().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedEnrollmentSchemaV25() async {
+    for (final definition
+        in shopConnectedEnrollmentSchemaDefinitionsV25().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedCloudDispositionSchemaV26() async {
+    for (final definition
+        in shopConnectedCloudDispositionSchemaDefinitionsV26().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedAuthoritySchemaV27() async {
+    for (final definition
+        in shopConnectedAuthoritySchemaDefinitionsV27().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedAttemptSchemaV28() async {
+    for (final definition
+        in shopConnectedAttemptSchemaDefinitionsV28().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedEnvelopeSchemaV29() async {
+    for (final definition
+        in shopConnectedEnvelopeSchemaDefinitionsV29().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedAuthorityPayloadSchemaV30() async {
+    for (final definition
+        in shopConnectedAuthorityPayloadSchemaDefinitionsV30().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedReservationSessionSchemaV31() async {
+    for (final definition
+        in shopConnectedReservationSessionSchemaDefinitionsV31().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedReplicaSchemaV32() async {
+    for (final definition
+        in shopConnectedReplicaSchemaDefinitionsV32().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedReplicaDeliverySchemaV33() async {
+    for (final definition
+        in shopConnectedReplicaSchemaDefinitionsV33().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedCloudProofSchemaV34() async {
+    for (final definition
+        in shopConnectedCloudProofSchemaDefinitionsV34().values) {
+      await customStatement(definition);
+    }
+    await customStatement(
+      'INSERT INTO shop_site_cloud_proof_requirements '
+      '(command_id, proof_state, recorded_at_millis) '
+      "SELECT command_id, CASE WHEN EXISTS (SELECT 1 FROM shop_site_cloud_proofs proof "
+      "WHERE proof.command_id = command.command_id) THEN 'proofRequired' "
+      "ELSE 'legacyUnverifiable' END, received_at_millis "
+      'FROM shop_site_commands command WHERE NOT EXISTS ('
+      'SELECT 1 FROM shop_site_cloud_proof_requirements requirement '
+      'WHERE requirement.command_id = command.command_id)',
+    );
+  }
+
+  Future<void> _createConnectedCloudProofBoundaryV35({
+    bool quarantineUnverifiableV34Proofs = false,
+  }) async {
+    // V34 retained only the issuer evidence digest, not the authenticated
+    // issuer evidence bytes. Those bytes cannot be reconstructed safely.
+    // V34 was never released, so an upgrade preserves every business/event
+    // row but deliberately retires only its cloud-upload proof eligibility.
+    // The immutable boundary below records the complete retired command list.
+    // Raw same-user SQLite replacement remains outside this source-only trust
+    // boundary until platform key custody and signed storage are available.
+    if (quarantineUnverifiableV34Proofs) {
+      await customStatement('DROP TRIGGER shop_site_cloud_proofs_no_delete');
+      await customStatement(
+        'DROP TRIGGER shop_site_cloud_proof_requirements_no_update',
+      );
+      await customStatement(
+        'DROP TRIGGER shop_site_cloud_proof_requirements_no_delete',
+      );
+      await customStatement('DELETE FROM shop_site_cloud_proofs');
+      await customStatement(
+        "UPDATE shop_site_cloud_proof_requirements SET proof_state = 'legacyUnverifiable' "
+        "WHERE proof_state = 'proofRequired'",
+      );
+    }
+    for (final definition
+        in shopConnectedCloudProofSchemaDefinitionsV35().values) {
+      await customStatement(definition);
+    }
+    final legacy = await customSelect(
+      'SELECT command.command_id, command.command_digest, command.received_at_millis '
+      'FROM shop_site_commands command JOIN shop_site_cloud_proof_requirements requirement '
+      'ON requirement.command_id = command.command_id '
+      "WHERE requirement.proof_state = 'legacyUnverifiable' "
+      'ORDER BY command.command_id',
+    ).get();
+    for (final row in legacy) {
+      final boundary = {
+        'contract': 'supermega.shop.connected-cloud-legacy-boundary.v1',
+        'commandId': row.read<String>('command_id'),
+        'commandDigest': row.read<String>('command_digest'),
+        'receivedAtMillis': row.read<int>('received_at_millis'),
+      };
+      await customInsert(
+        'INSERT OR IGNORE INTO shop_site_cloud_proof_legacy_boundary '
+        '(command_id, command_digest, boundary_digest, migrated_at_millis) '
+        'VALUES (?, ?, ?, ?)',
+        variables: [
+          Variable<String>(row.read<String>('command_id')),
+          Variable<String>(row.read<String>('command_digest')),
+          Variable<String>(connectedSiteSha256(boundary)),
+          Variable<int>(row.read<int>('received_at_millis')),
+        ],
+      );
+    }
+  }
+
+  Future<void> _createConnectedAuthorityCheckpointSchemaV36() async {
+    for (final definition
+        in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedTrustedTimeSchemaV37() async {
+    for (final definition
+        in shopConnectedTrustedTimeSchemaDefinitionsV37().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedTrustedTimeIssuerSchemaV38() async {
+    for (final definition
+        in shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().values) {
+      await customStatement(definition);
+    }
+    await customInsert(
+      'INSERT OR IGNORE INTO shop_connected_time_issuer_state '
+      '(singleton_id, issuance_suspended) VALUES (1, 0)',
+    );
+  }
+
+  Future<void> _createConnectedTrustedTimeClientSchemaV39() async {
+    for (final definition
+        in shopConnectedTrustedTimeClientSchemaDefinitionsV39().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedCloudFeedSchemaV40() async {
+    for (final definition
+        in shopConnectedCloudFeedSchemaDefinitionsV40().values) {
+      await customStatement(definition);
+    }
+    // All pre-v40 branches create an empty feed, so install the additive v41
+    // evidence objects in the same transaction before the v41 beforeOpen.
+    if (!_testOnlyLegacyCloudFeedV40) {
+      await _createConnectedCloudFeedSchemaV41();
+      await _createConnectedDeviceProfileSchemaV42();
+    }
+  }
+
+  Future<void> _createConnectedCloudFeedSchemaV41() async {
+    for (final definition
+        in shopConnectedCloudFeedSchemaDefinitionsV41().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedDeviceProfileSchemaV42() async {
+    for (final definition
+        in shopConnectedDeviceProfileSchemaDefinitionsV42().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _requireNoDeviceProfileSchemaBeforeV42() async {
+    final names = shopConnectedDeviceProfileSchemaDefinitionsV42().keys
+        .toList();
+    final rows = await customSelect(
+      'SELECT name FROM sqlite_master WHERE name IN (${List.filled(names.length, '?').join(',')})',
+      variables: names.map(Variable<String>.new).toList(),
+    ).get();
+    if (rows.isNotEmpty) {
+      throw StateError(
+        'A pre-v42 Shop database contains device-profile schema.',
+      );
+    }
+  }
+
+  Future<void> _requireNoCloudFeedSchemaBeforeV40() async {
+    final names = shopConnectedCloudFeedSchemaDefinitionsV40().keys.toList();
+    final placeholders = List.filled(names.length, '?').join(',');
+    final rows = await customSelect(
+      'SELECT name FROM sqlite_master WHERE name IN ($placeholders)',
+      variables: names.map(Variable<String>.new).toList(),
+    ).get();
+    if (rows.isNotEmpty) {
+      throw StateError('A pre-v40 Shop database contains cloud-feed schema.');
+    }
+  }
+
+  Future<void> _requireNoCloudFeedSchemaBeforeV41() async {
+    final names = shopConnectedCloudFeedSchemaDefinitionsV41().keys.toList();
+    final placeholders = List.filled(names.length, '?').join(',');
+    final rows = await customSelect(
+      'SELECT name FROM sqlite_master WHERE name IN ($placeholders)',
+      variables: names.map(Variable<String>.new).toList(),
+    ).get();
+    if (rows.isNotEmpty) {
+      throw StateError(
+        'A pre-v41 Shop database contains request evidence schema.',
+      );
+    }
+  }
+
+  Future<void> _requireEmptyCloudFeedBeforeV41() async {
+    for (final table in const [
+      'shop_connected_cloud_feed_streams',
+      'shop_connected_cloud_feed_pages',
+      'shop_connected_cloud_feed_heads',
+      'shop_connected_cloud_feed_restore_barriers',
+    ]) {
+      final row = await customSelect('SELECT 1 FROM $table LIMIT 1')
+          .getSingleOrNull();
+      if (row != null) {
+        throw StateError(
+          'Nonempty v40 cloud feed lacks signed request evidence.',
+        );
+      }
+    }
+  }
+
+  Future<void> _suspendTrustedTimeIssuerAfterRestoreV38() async {
+    await customUpdate(
+      'UPDATE shop_connected_time_issuer_state SET issuance_suspended = 1 '
+      'WHERE singleton_id = 1 AND issuance_suspended = 0',
+    );
+  }
+
+  Future<void> _markTrustedTimeClientStreamsRestoredV39() async {
+    final heads = await customSelect(
+      'SELECT head.* FROM shop_connected_time_client_heads head '
+      'WHERE head.authority_sequence = (SELECT MAX(candidate.authority_sequence) '
+      'FROM shop_connected_time_client_heads candidate '
+      'WHERE candidate.stream_digest = head.stream_digest)',
+    ).get();
+    for (final head in heads) {
+      final streamDigest = head.read<String>('stream_digest');
+      final sequenceRow = await customSelect(
+        'SELECT COALESCE(MAX(restore_sequence), 0) AS value FROM '
+        'shop_connected_time_client_restore_barriers WHERE stream_digest = ?',
+        variables: [Variable<String>(streamDigest)],
+      ).getSingle();
+      final restoreSequence = sequenceRow.read<int>('value') + 1;
+      final barrier = <String, Object>{
+        'schema': 'supermega.connected-trusted-time-client-restore-barrier.v1',
+        'streamDigest': streamDigest,
+        'restoreSequence': restoreSequence,
+        'headDigest': head.read<String>('head_digest'),
+        'reason': 'fresh_target_restore',
+      };
+      await customInsert(
+        'INSERT INTO shop_connected_time_client_restore_barriers '
+        '(barrier_digest, stream_digest, restore_sequence, head_digest, barrier_json) '
+        'VALUES (?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(connectedSiteSha256(barrier)),
+          Variable<String>(streamDigest),
+          Variable<int>(restoreSequence),
+          Variable<String>(head.read<String>('head_digest')),
+          Variable<String>(canonicalConnectedSiteJson(barrier)),
+        ],
+      );
+    }
+  }
+
+  /// V32 retained deltas as individually valid events, but did not retain the
+  /// complete delivery bytes needed to reconstruct and authenticate a V33
+  /// projection. After the complete V32 evidence has been verified, discard
+  /// only this read-only cache. Authoritative local and enrollment tables are
+  /// deliberately untouched; a freshly authenticated snapshot is required
+  /// before the replica can expose projections or enable shared writes.
+  Future<void> _rebaseConnectedReplicaCacheForV33() async {
+    await customStatement(
+      'DROP TRIGGER shop_connected_replica_events_no_update',
+    );
+    await customStatement(
+      'DROP TRIGGER shop_connected_replica_events_no_delete',
+    );
+    await customStatement('DELETE FROM shop_connected_replica_projections');
+    await customStatement('DELETE FROM shop_connected_replica_events');
+    await customStatement('DELETE FROM shop_connected_replica_heads');
+    await customStatement(
+      shopConnectedReplicaSchemaDefinitionsV32()['shop_connected_replica_events_no_update']!,
+    );
+    await customStatement(
+      shopConnectedReplicaSchemaDefinitionsV32()['shop_connected_replica_events_no_delete']!,
+    );
+    await _requireUnifiedV32Schema();
+  }
+
+  Future<void> _backfillConnectedReservationSessionBindingsV31() async {
+    final attempts = await customSelect(
+      'SELECT command_json, prepared_at_millis '
+      'FROM shop_site_command_attempts ORDER BY command_id',
+    ).get();
+    for (final row in attempts) {
+      final decoded = jsonDecode(row.read<String>('command_json'));
+      final command = SiteCommandV1.fromJson(decoded);
+      await bindConnectedReservationSessionAttemptV31(
+        command,
+        boundAtMillis: row.read<int>('prepared_at_millis'),
+      );
+    }
+  }
+
+  /// Atomically binds one retained reserve attempt to its durable subject.
+  ///
+  /// The caller must invoke this in the same SQLite transaction that inserts
+  /// the command attempt. Non-reservation commands are intentionally ignored.
+  Future<void> bindConnectedReservationSessionAttemptV31(
+    SiteCommandV1 command, {
+    required int boundAtMillis,
+  }) async {
+    if (command.payload['contract'] !=
+        _shopConnectedStockReservePayloadContract) {
+      return;
+    }
+    final reservation = ConnectedStockReservationV1.fromJson(
+      command.payload['reservation'],
+    );
+    final expectedType = switch (reservation.workflowType) {
+      ConnectedStockWorkflowType.retailCart => 'retail.stock.reserve.v1',
+      ConnectedStockWorkflowType.cafeOrder => 'cafe.stock.reserve.v1',
+    };
+    if (command.payload.length != 2 ||
+        command.commandType != expectedType ||
+        command.workspaceId != reservation.workspaceId ||
+        command.siteId != reservation.siteId ||
+        command.actorId != reservation.actorId ||
+        command.deviceId != reservation.deviceId ||
+        command.aggregateType != reservation.workflowType.name ||
+        command.aggregateId != reservation.subjectId ||
+        command.payloadDigest != connectedSiteSha256(command.payload) ||
+        boundAtMillis <= 0) {
+      throw StateError('connected_reservation_session_binding_invalid');
+    }
+    final existing = await customSelect(
+      'SELECT * FROM shop_connected_reservation_session_bindings '
+      'WHERE workspace_id = ? AND site_id = ? AND actor_id = ? '
+      'AND device_id = ? AND workflow_type = ? AND subject_id = ?',
+      variables: [
+        Variable<String>(reservation.workspaceId),
+        Variable<String>(reservation.siteId),
+        Variable<String>(reservation.actorId),
+        Variable<String>(reservation.deviceId),
+        Variable<String>(reservation.workflowType.name),
+        Variable<String>(reservation.subjectId),
+      ],
+    ).getSingleOrNull();
+    if (existing == null) {
+      await customInsert(
+        'INSERT INTO shop_connected_reservation_session_bindings '
+        '(workspace_id, site_id, actor_id, device_id, workflow_type, '
+        'subject_id, reservation_id, reservation_digest, reserve_command_id, '
+        'reserve_command_digest, bound_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(reservation.workspaceId),
+          Variable<String>(reservation.siteId),
+          Variable<String>(reservation.actorId),
+          Variable<String>(reservation.deviceId),
+          Variable<String>(reservation.workflowType.name),
+          Variable<String>(reservation.subjectId),
+          Variable<String>(reservation.reservationId),
+          Variable<String>(reservation.reservationDigest),
+          Variable<String>(command.commandId),
+          Variable<String>(command.commandDigest),
+          Variable<int>(boundAtMillis),
+        ],
+      );
+      return;
+    }
+    if (existing.read<String>('reservation_id') != reservation.reservationId ||
+        existing.read<String>('reservation_digest') !=
+            reservation.reservationDigest ||
+        existing.read<String>('reserve_command_id') != command.commandId ||
+        existing.read<String>('reserve_command_digest') !=
+            command.commandDigest ||
+        existing.read<int>('bound_at_millis') != boundAtMillis) {
+      throw StateError('connected_reservation_subject_already_bound');
+    }
+  }
+
+  Future<void> _migrateConnectedStockReservationSchemaV24() async {
+    await _createConnectedStockReservationSchemaV24();
+    final legacy = await customSelect(
+      'SELECT reservation.*, command.tenant_id, command.site_id, '
+      'command.actor_id, command.device_id, command.capability '
+      'FROM shop_site_stock_reservations reservation '
+      'JOIN shop_site_commands command ON command.command_id = reservation.command_id '
+      'ORDER BY reservation.reservation_id',
+    ).get();
+    final legacyScopes = {
+      for (final row in legacy)
+        '${row.read<String>('tenant_id')}\u0000${row.read<String>('site_id')}',
+    };
+    if (legacyScopes.length > 1) {
+      throw StateError(
+        'Legacy connected stock reservations span multiple local scopes.',
+      );
+    }
+    if (legacy.isNotEmpty) {
+      final first = legacy.first;
+      await customInsert(
+        'INSERT INTO shop_connected_scope_binding '
+        '(singleton, tenant_id, site_id, enrollment_evidence_digest, '
+        'bound_at_millis) VALUES (1, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(first.read<String>('tenant_id')),
+          Variable<String>(first.read<String>('site_id')),
+          Variable<String>(
+            await _sha256Hex(
+              'legacy-v23-scope:${first.read<String>('tenant_id')}:'
+              '${first.read<String>('site_id')}',
+            ),
+          ),
+          Variable<int>(first.read<int>('created_at_millis')),
+        ],
+      );
+    }
+    for (final row in legacy) {
+      final reservationId = row.read<String>('reservation_id');
+      final productId = row.read<String>('product_id');
+      final quantity = row.read<int>('quantity');
+      final created = row.read<int>('created_at_millis');
+      final linesDigest = await _sha256Hex(
+        canonicalConnectedSiteJson([
+          {'productId': productId, 'quantity': quantity},
+        ]),
+      );
+      final initialDigest = await _sha256Hex(
+        'legacy-v23:$reservationId:$linesDigest:$created',
+      );
+      await customInsert(
+        'INSERT INTO shop_connected_stock_reservation_headers '
+        '(reservation_id, command_id, tenant_id, site_id, actor_id, device_id, '
+        'capability, workflow_type, subject_id, basket_digest, initial_reservation_digest, reservation_json, '
+        'issued_at_millis, expires_at_millis, legacy_source) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, ?, ?, 1)',
+        variables: [
+          Variable<String>(reservationId),
+          Variable<String>(row.read<String>('command_id')),
+          Variable<String>(row.read<String>('tenant_id')),
+          Variable<String>(row.read<String>('site_id')),
+          Variable<String>(row.read<String>('actor_id')),
+          Variable<String>(row.read<String>('device_id')),
+          Variable<String>(row.read<String>('capability')),
+          Variable<String>(linesDigest),
+          Variable<String>(initialDigest),
+          Variable<int>(created),
+          Variable<int>(row.read<int>('expires_at_millis')),
+        ],
+      );
+      await customInsert(
+        'INSERT INTO shop_connected_stock_reservation_lines '
+        '(reservation_id, product_id, quantity) VALUES (?, ?, ?)',
+        variables: [
+          Variable<String>(reservationId),
+          Variable<String>(productId),
+          Variable<int>(quantity),
+        ],
+      );
+      final state = row.read<String>('state');
+      if (state != 'held') {
+        final resolved = row.read<int>('resolved_at_millis');
+        final afterDigest = await _sha256Hex('$initialDigest:$state:$resolved');
+        final transitionDigest = await _sha256Hex(
+          'legacy-v23-transition:$reservationId:$state:$resolved',
+        );
+        await customInsert(
+          'INSERT INTO shop_connected_stock_reservation_transitions '
+          '(transition_id, operation_id, reservation_id, from_state, to_state, '
+          'before_digest, after_digest, transition_digest, transition_json, '
+          'sale_id, occurred_at_millis, legacy_source) '
+          "VALUES (?, ?, ?, 'held', ?, ?, ?, ?, NULL, NULL, ?, 1)",
+          variables: [
+            Variable<String>('legacy-v23:$reservationId'),
+            Variable<String>('legacy-v23:$reservationId'),
+            Variable<String>(reservationId),
+            Variable<String>(state),
+            Variable<String>(initialDigest),
+            Variable<String>(afterDigest),
+            Variable<String>(transitionDigest),
+            Variable<int>(resolved),
+          ],
+        );
+      }
+    }
+  }
 
   Future<void> _createProductImageTable() => customStatement('''
     CREATE TABLE IF NOT EXISTS shop_product_images (
@@ -3687,8 +9246,40 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 21) {
-      throw StateError('This Shop database version cannot migrate to v22.');
+    if (from < 1 || from > 29) {
+      throw StateError('This Shop database version cannot migrate to v31.');
+    }
+    if (from == 29) {
+      await _requireUnifiedV29Schema();
+      return _ShopUpgradeOrigin.unifiedV29;
+    }
+    if (from == 28) {
+      await _requireUnifiedV28Schema();
+      return _ShopUpgradeOrigin.unifiedV28;
+    }
+    if (from == 27) {
+      await _requireUnifiedV27Schema();
+      return _ShopUpgradeOrigin.unifiedV27;
+    }
+    if (from == 26) {
+      await _requireUnifiedV26Schema();
+      return _ShopUpgradeOrigin.unifiedV26;
+    }
+    if (from == 25) {
+      await _requireUnifiedV25Schema();
+      return _ShopUpgradeOrigin.unifiedV25;
+    }
+    if (from == 24) {
+      await _requireUnifiedV24Schema();
+      return _ShopUpgradeOrigin.unifiedV24;
+    }
+    if (from == 23) {
+      await _requireUnifiedV23Schema();
+      return _ShopUpgradeOrigin.unifiedV23;
+    }
+    if (from == 22) {
+      await _requireUnifiedV22Schema();
+      return _ShopUpgradeOrigin.unifiedV22;
     }
     if (from == 21) {
       await _requireUnifiedV21Schema();
@@ -4201,9 +9792,46 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCafeV20 = false,
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
+    bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireDatabaseIntegrity();
     final objects = await _readSchemaObjects();
+    final hasEnvelopeV29 = shopConnectedEnvelopeSchemaDefinitionsV29().keys
+        .every(objects.containsKey);
+    final hasAuthorityPayloadV30 =
+        shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys.every(
+          objects.containsKey,
+        );
+    final hasReservationSessionV31 =
+        shopConnectedReservationSessionSchemaDefinitionsV31().keys.every(
+          objects.containsKey,
+        );
+    final hasReplicaV32 = shopConnectedReplicaSchemaDefinitionsV32().keys.every(
+      objects.containsKey,
+    );
+    final hasReplicaV33 = shopConnectedReplicaSchemaDefinitionsV33().keys.every(
+      objects.containsKey,
+    );
+    final hasCloudProofV34 = shopConnectedCloudProofSchemaDefinitionsV34().keys
+        .every(objects.containsKey);
+    final hasCloudProofV35 = shopConnectedCloudProofSchemaDefinitionsV35().keys
+        .every(objects.containsKey);
+    final hasAuthorityCheckpointV36 =
+        shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys.every(
+          objects.containsKey,
+        );
+    final hasTrustedTimeV37 = shopConnectedTrustedTimeSchemaDefinitionsV37()
+        .keys
+        .every(objects.containsKey);
+    final hasTrustedTimeIssuerV38 =
+        shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys.every(
+          objects.containsKey,
+        );
     final definitionGroups = [
       shopReversalSchemaDefinitionsV11(),
       shopWorkspaceSchemaDefinitionsV12(),
@@ -4230,6 +9858,67 @@ class ShopDatabase extends _$ShopDatabase {
             in shopPendingCashCheckoutSchemaDefinitionsV21().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (allowConnectedV23)
+        for (final entry
+            in (allowAttemptV28
+                    ? shopConnectedSiteSchemaDefinitionsV28()
+                    : allowAuthorityV27
+                    ? shopConnectedSiteSchemaDefinitionsV27()
+                    : allowCloudV26
+                    ? shopConnectedSiteSchemaDefinitionsV26()
+                    : allowEnrollmentV25
+                    ? shopConnectedSiteSchemaDefinitionsV25()
+                    : allowReservationV24
+                    ? shopConnectedSiteSchemaDefinitionsV24()
+                    : shopConnectedSiteSchemaDefinitionsV23())
+                .entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasEnvelopeV29)
+        for (final entry in shopConnectedEnvelopeSchemaDefinitionsV29().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasAuthorityPayloadV30)
+        for (final entry
+            in shopConnectedAuthorityPayloadSchemaDefinitionsV30().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasReservationSessionV31)
+        for (final entry
+            in shopConnectedReservationSessionSchemaDefinitionsV31().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasReplicaV32)
+        for (final entry in shopConnectedReplicaSchemaDefinitionsV32().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasReplicaV33)
+        for (final entry in shopConnectedReplicaSchemaDefinitionsV33().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasCloudProofV34)
+        for (final entry
+            in (hasCloudProofV35
+                    ? shopConnectedCloudProofSchemaDefinitionsV35()
+                    : shopConnectedCloudProofSchemaDefinitionsV34())
+                .entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasAuthorityCheckpointV36)
+        for (final entry
+            in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasTrustedTimeV37)
+        for (final entry
+            in shopConnectedTrustedTimeSchemaDefinitionsV37().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+      if (hasTrustedTimeIssuerV38)
+        for (final entry
+            in shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -4244,6 +9933,35 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCafeV20) ...shopCafeCancellationSchemaDefinitionsV20().keys,
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
+      if (allowConnectedV23)
+        ...(allowAttemptV28
+            ? shopConnectedSiteSchemaDefinitionsV28().keys
+            : allowAuthorityV27
+            ? shopConnectedSiteSchemaDefinitionsV27().keys
+            : allowCloudV26
+            ? shopConnectedSiteSchemaDefinitionsV26().keys
+            : allowEnrollmentV25
+            ? shopConnectedSiteSchemaDefinitionsV25().keys
+            : allowReservationV24
+            ? shopConnectedSiteSchemaDefinitionsV24().keys
+            : shopConnectedSiteSchemaDefinitionsV23().keys),
+      if (hasEnvelopeV29) ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
+      if (hasAuthorityPayloadV30)
+        ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,
+      if (hasReservationSessionV31)
+        ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
+      if (hasReplicaV32) ...shopConnectedReplicaSchemaDefinitionsV32().keys,
+      if (hasReplicaV33) ...shopConnectedReplicaSchemaDefinitionsV33().keys,
+      if (hasCloudProofV34)
+        ...(hasCloudProofV35
+            ? shopConnectedCloudProofSchemaDefinitionsV35().keys
+            : shopConnectedCloudProofSchemaDefinitionsV34().keys),
+      if (hasAuthorityCheckpointV36)
+        ...shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys,
+      if (hasTrustedTimeV37)
+        ...shopConnectedTrustedTimeSchemaDefinitionsV37().keys,
+      if (hasTrustedTimeIssuerV38)
+        ...shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -4398,14 +10116,53 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCafeV20 = false,
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
+    bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV18Schema(
       allowCafeV19: true,
       allowCafeV20: allowCafeV20,
       allowCashCheckoutV21: allowCashCheckoutV21,
       allowCashTenderV22: allowCashTenderV22,
+      allowConnectedV23: allowConnectedV23,
+      allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
+      allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
+    final hasEnvelopeV29 = shopConnectedEnvelopeSchemaDefinitionsV29().keys
+        .every(objects.containsKey);
+    final hasAuthorityPayloadV30 =
+        shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys.every(
+          objects.containsKey,
+        );
+    final hasReservationSessionV31 =
+        shopConnectedReservationSessionSchemaDefinitionsV31().keys.every(
+          objects.containsKey,
+        );
+    final hasReplicaV32 = shopConnectedReplicaSchemaDefinitionsV32().keys.every(
+      objects.containsKey,
+    );
+    final hasReplicaV33 = shopConnectedReplicaSchemaDefinitionsV33().keys.every(
+      objects.containsKey,
+    );
+    final hasCloudProofV34 = shopConnectedCloudProofSchemaDefinitionsV34().keys
+        .every(objects.containsKey);
+    final hasCloudProofV35 = shopConnectedCloudProofSchemaDefinitionsV35().keys
+        .every(objects.containsKey);
+    final hasAuthorityCheckpointV36 =
+        shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys.every(
+          objects.containsKey,
+        );
+    final hasTrustedTimeV37 = shopConnectedTrustedTimeSchemaDefinitionsV37()
+        .keys
+        .every(objects.containsKey);
     final definitions = shopCafeOrderSchemaDefinitionsV19();
     final expectedNames = {
       ..._expectedSchemaObjectNames(18),
@@ -4424,6 +10181,33 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCafeV20) ...shopCafeCancellationSchemaDefinitionsV20().keys,
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
+      if (allowConnectedV23)
+        ...(allowAttemptV28
+            ? shopConnectedSiteSchemaDefinitionsV28().keys
+            : allowAuthorityV27
+            ? shopConnectedSiteSchemaDefinitionsV27().keys
+            : allowCloudV26
+            ? shopConnectedSiteSchemaDefinitionsV26().keys
+            : allowEnrollmentV25
+            ? shopConnectedSiteSchemaDefinitionsV25().keys
+            : allowReservationV24
+            ? shopConnectedSiteSchemaDefinitionsV24().keys
+            : shopConnectedSiteSchemaDefinitionsV23().keys),
+      if (hasEnvelopeV29) ...shopConnectedEnvelopeSchemaDefinitionsV29().keys,
+      if (hasAuthorityPayloadV30)
+        ...shopConnectedAuthorityPayloadSchemaDefinitionsV30().keys,
+      if (hasReservationSessionV31)
+        ...shopConnectedReservationSessionSchemaDefinitionsV31().keys,
+      if (hasReplicaV32) ...shopConnectedReplicaSchemaDefinitionsV32().keys,
+      if (hasReplicaV33) ...shopConnectedReplicaSchemaDefinitionsV33().keys,
+      if (hasCloudProofV34)
+        ...(hasCloudProofV35
+            ? shopConnectedCloudProofSchemaDefinitionsV35().keys
+            : shopConnectedCloudProofSchemaDefinitionsV34().keys),
+      if (hasAuthorityCheckpointV36)
+        ...shopConnectedAuthorityCheckpointSchemaDefinitionsV36().keys,
+      if (hasTrustedTimeV37)
+        ...shopConnectedTrustedTimeSchemaDefinitionsV37().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -4437,11 +10221,23 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _requireUnifiedV20Schema({
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
+    bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV19Schema(
       allowCafeV20: true,
       allowCashCheckoutV21: allowCashCheckoutV21,
       allowCashTenderV22: allowCashTenderV22,
+      allowConnectedV23: allowConnectedV23,
+      allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
+      allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeCancellationSchemaDefinitionsV20();
@@ -4455,10 +10251,22 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _requireUnifiedV21Schema({
     bool allowCashTenderV22 = false,
+    bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV20Schema(
       allowCashCheckoutV21: true,
       allowCashTenderV22: allowCashTenderV22,
+      allowConnectedV23: allowConnectedV23,
+      allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
+      allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopPendingCashCheckoutSchemaDefinitionsV21();
@@ -4553,8 +10361,23 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<void> _requireUnifiedV22Schema() async {
-    await _requireUnifiedV21Schema(allowCashTenderV22: true);
+  Future<void> _requireUnifiedV22Schema({
+    bool allowConnectedV23 = false,
+    bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
+  }) async {
+    await _requireUnifiedV21Schema(
+      allowCashTenderV22: true,
+      allowConnectedV23: allowConnectedV23,
+      allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
+      allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
+    );
     final columns = await customSelect('PRAGMA table_info(shop_sales)').get();
     if (!columns.any(
           (row) => row.read<String>('name') == 'cash_tendered_mmk',
@@ -4601,6 +10424,2683 @@ class ShopDatabase extends _$ShopDatabase {
         }
       }
       return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> _requireUnifiedV23Schema({
+    bool allowReservationV24 = false,
+    bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
+  }) async {
+    await _requireUnifiedV22Schema(
+      allowConnectedV23: true,
+      allowReservationV24: allowReservationV24,
+      allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
+      allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
+    );
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedSiteSchemaDefinitionsV23();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v23ConnectedSiteRowsValid()) {
+      throw StateError(
+        'The unified Shop v23 connected-site schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v23ConnectedSiteRowsValid() async {
+    try {
+      final invalidAccepted = await customSelect('''
+        SELECT 1 FROM shop_site_commands command
+        LEFT JOIN shop_site_events event ON event.command_id = command.command_id
+        LEFT JOIN shop_site_command_acks ack ON ack.command_id = command.command_id
+        LEFT JOIN shop_site_audit audit ON audit.command_id = command.command_id
+        WHERE command.state = 'accepted' AND (
+          event.command_id IS NULL OR ack.status != 'accepted' OR
+          ack.event_row_id != event.event_row_id OR
+          ack.site_sequence != event.site_sequence OR
+          ack.canonical_version != event.aggregate_version OR
+          audit.command_id IS NULL OR
+          event.tenant_id != command.tenant_id OR
+          event.site_id != command.site_id OR
+          event.aggregate_type != command.aggregate_type OR
+          event.aggregate_id != command.aggregate_id
+        ) LIMIT 1
+      ''').getSingleOrNull();
+      if (invalidAccepted != null) return false;
+      final invalidConflict = await customSelect('''
+        SELECT 1 FROM shop_site_commands command
+        LEFT JOIN shop_site_events event ON event.command_id = command.command_id
+        LEFT JOIN shop_site_command_acks ack ON ack.command_id = command.command_id
+        LEFT JOIN shop_site_conflicts conflict
+          ON conflict.command_id = command.command_id
+        WHERE command.state = 'conflict' AND (
+          event.command_id IS NOT NULL OR ack.status != 'conflict' OR
+          ack.event_row_id IS NOT NULL OR ack.site_sequence IS NOT NULL OR
+          conflict.command_id IS NULL
+        ) LIMIT 1
+      ''').getSingleOrNull();
+      if (invalidConflict != null) return false;
+      final invalidAggregate = await customSelect('''
+        SELECT 1 FROM shop_site_aggregate_versions aggregate_row
+        LEFT JOIN shop_site_events event
+          ON event.event_row_id = aggregate_row.last_event_row_id
+        WHERE event.event_row_id IS NULL OR
+          event.tenant_id != aggregate_row.tenant_id OR
+          event.site_id != aggregate_row.site_id OR
+          event.aggregate_type != aggregate_row.aggregate_type OR
+          event.aggregate_id != aggregate_row.aggregate_id OR
+          event.aggregate_version != aggregate_row.version OR
+          event.site_sequence != aggregate_row.last_site_sequence OR
+          aggregate_row.version != (
+            SELECT MAX(candidate.aggregate_version) FROM shop_site_events candidate
+            WHERE candidate.tenant_id = aggregate_row.tenant_id
+              AND candidate.site_id = aggregate_row.site_id
+              AND candidate.aggregate_type = aggregate_row.aggregate_type
+              AND candidate.aggregate_id = aggregate_row.aggregate_id
+          ) LIMIT 1
+      ''').getSingleOrNull();
+      if (invalidAggregate != null) return false;
+      final missingAggregate = await customSelect('''
+        SELECT 1 FROM shop_site_events event
+        LEFT JOIN shop_site_aggregate_versions aggregate_row
+          ON aggregate_row.tenant_id = event.tenant_id
+          AND aggregate_row.site_id = event.site_id
+          AND aggregate_row.aggregate_type = event.aggregate_type
+          AND aggregate_row.aggregate_id = event.aggregate_id
+        WHERE aggregate_row.aggregate_id IS NULL LIMIT 1
+      ''').getSingleOrNull();
+      if (missingAggregate != null) return false;
+      final siteSequenceGap = await customSelect('''
+        SELECT 1 FROM shop_site_events event
+        WHERE event.site_sequence != (
+          SELECT COUNT(*) FROM shop_site_events candidate
+          WHERE candidate.tenant_id = event.tenant_id
+            AND candidate.site_id = event.site_id
+            AND candidate.site_sequence <= event.site_sequence
+        ) LIMIT 1
+      ''').getSingleOrNull();
+      return siteSequenceGap == null;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> _requireUnifiedV24Schema({
+    bool allowEnrollmentV25 = false,
+    bool allowCloudV26 = false,
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
+  }) async {
+    await _requireUnifiedV23Schema(
+      allowReservationV24: true,
+      allowEnrollmentV25: allowEnrollmentV25,
+      allowCloudV26: allowCloudV26,
+      allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
+    );
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedStockReservationSchemaDefinitionsV24();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v24ConnectedStockReservationRowsValid()) {
+      throw StateError(
+        'The unified Shop v24 connected-stock schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV25Schema({
+    bool allowCloudV26 = false,
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
+  }) async {
+    await _requireUnifiedV24Schema(
+      allowEnrollmentV25: true,
+      allowCloudV26: allowCloudV26,
+      allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
+    );
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedEnrollmentSchemaDefinitionsV25();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v25ConnectedEnrollmentRowsValid()) {
+      throw StateError(
+        'The unified Shop v25 connected-enrollment schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV26Schema({
+    bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
+  }) async {
+    await _requireUnifiedV25Schema(
+      allowCloudV26: true,
+      allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
+    );
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedCloudDispositionSchemaDefinitionsV26();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v26ConnectedCloudDispositionRowsValid()) {
+      throw StateError(
+        'The unified Shop v26 cloud-disposition schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV27Schema({bool allowAttemptV28 = false}) async {
+    await _requireUnifiedV26Schema(
+      allowAuthorityV27: true,
+      allowAttemptV28: allowAttemptV28,
+    );
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedAuthoritySchemaDefinitionsV27();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v27ConnectedAuthorityRowsValid()) {
+      throw StateError(
+        'The unified Shop v27 authority-observation schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV28Schema() async {
+    await _requireUnifiedV27Schema(allowAttemptV28: true);
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedAttemptSchemaDefinitionsV28();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v28ConnectedAttemptRowsValid()) {
+      throw StateError(
+        'The unified Shop v28 command-attempt schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV29Schema() async {
+    await _requireUnifiedV28Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedEnvelopeSchemaDefinitionsV29();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v29ConnectedEnvelopeRowsValid()) {
+      throw StateError(
+        'The unified Shop v29 request-envelope schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV30Schema() async {
+    await _requireUnifiedV29Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedAuthorityPayloadSchemaDefinitionsV30();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v30ConnectedAuthorityPayloadRowsValid()) {
+      throw StateError(
+        'The unified Shop v30 authority-payload schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV31Schema() async {
+    await _requireUnifiedV30Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedReservationSessionSchemaDefinitionsV31();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v31ConnectedReservationSessionRowsValid()) {
+      throw StateError(
+        'The unified Shop v31 reservation-session schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV32Schema() async {
+    await _requireUnifiedV31Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedReplicaSchemaDefinitionsV32();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v32ConnectedReplicaRowsValid()) {
+      throw StateError(
+        'The unified Shop v32 connected-replica schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV33Schema() async {
+    await _requireUnifiedV32Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedReplicaSchemaDefinitionsV33();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v33ConnectedReplicaDeliveryRowsValid()) {
+      throw StateError(
+        'The unified Shop v33 replica-delivery schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV34Schema({
+    bool historical4d9Proofs = false,
+  }) async {
+    await _requireUnifiedV33Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedCloudProofSchemaDefinitionsV34();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !(historical4d9Proofs
+            ? await _historicalV34ConnectedCloudProofRowsValid()
+            : await _v34ConnectedCloudProofRowsValid())) {
+      throw StateError(
+        'The unified Shop v34 cloud-proof schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _historicalV34ConnectedCloudProofRowsValid() async {
+    Future<List<Map<String, Object?>>> rows(String table) async =>
+        (await customSelect('SELECT * FROM $table').get())
+            .map((row) => Map<String, Object?>.from(row.data))
+            .toList(growable: false);
+    return shopHistoricalCloudProofRowsValidV34(
+      commands: await rows('shop_site_commands'),
+      requirements: await rows('shop_site_cloud_proof_requirements'),
+      proofs: await rows('shop_site_cloud_proofs'),
+      retainedLeases: await rows('shop_site_offline_lease_payloads'),
+      leases: await rows('shop_site_offline_leases'),
+    );
+  }
+
+  Future<void> _requireUnifiedV35Schema() async {
+    await _requireUnifiedV33Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedCloudProofSchemaDefinitionsV35();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v34ConnectedCloudProofRowsValid()) {
+      throw StateError(
+        'The unified Shop v35 migration-boundary schema failed verification.',
+      );
+    }
+    final legacyRows = await customSelect(
+      'SELECT requirement.command_id, command.command_digest, '
+      'command.received_at_millis, boundary.command_digest AS boundary_command_digest, '
+      'boundary.boundary_digest FROM shop_site_cloud_proof_requirements requirement '
+      'JOIN shop_site_commands command ON command.command_id = requirement.command_id '
+      'LEFT JOIN shop_site_cloud_proof_legacy_boundary boundary '
+      'ON boundary.command_id = requirement.command_id '
+      "WHERE requirement.proof_state = 'legacyUnverifiable'",
+    ).get();
+    for (final row in legacyRows) {
+      final expected = connectedSiteSha256({
+        'contract': 'supermega.shop.connected-cloud-legacy-boundary.v1',
+        'commandId': row.read<String>('command_id'),
+        'commandDigest': row.read<String>('command_digest'),
+        'receivedAtMillis': row.read<int>('received_at_millis'),
+      });
+      if (row.readNullable<String>('boundary_command_digest') !=
+              row.read<String>('command_digest') ||
+          row.readNullable<String>('boundary_digest') != expected) {
+        throw StateError('Connected cloud legacy boundary is invalid.');
+      }
+    }
+    final invalidBoundary = await customSelect(
+      'SELECT COUNT(*) AS total FROM shop_site_cloud_proof_legacy_boundary boundary '
+      'JOIN shop_site_cloud_proof_requirements requirement '
+      'ON requirement.command_id = boundary.command_id '
+      "WHERE requirement.proof_state != 'legacyUnverifiable'",
+    ).getSingle();
+    if (invalidBoundary.read<int>('total') != 0) {
+      throw StateError('Connected cloud legacy boundary was relabelled.');
+    }
+  }
+
+  Future<void> _requireUnifiedV36Schema() async {
+    await _requireUnifiedV35Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedAuthorityCheckpointSchemaDefinitionsV36();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v36ConnectedAuthorityCheckpointRowsValid()) {
+      throw StateError(
+        'The unified Shop v36 authority-checkpoint schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV37Schema() async {
+    await _requireUnifiedV36Schema();
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedTrustedTimeSchemaDefinitionsV37();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v37ConnectedTrustedTimeRowsValid()) {
+      throw StateError(
+        'The unified Shop v37 trusted-time schema failed verification.',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV38Schema() async {
+    await runZoned(
+      _requireUnifiedV37Schema,
+      zoneValues: const {#shopAllowV38NestedSchemaVerification: true},
+    );
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {#shopAllowV38NestedSchemaVerification: false},
+    );
+    final definitions = shopConnectedTrustedTimeIssuerSchemaDefinitionsV38();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    final rowsValid = await _v38ConnectedTrustedTimeIssuerRowsValid();
+    if (!definitionsValid || !rowsValid) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map((entry) => entry.key)
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v38 trusted-time issuer schema failed verification '
+        '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<bool> _v38ConnectedTrustedTimeIssuerRowsValid() async {
+    try {
+      final states = await customSelect(
+        'SELECT * FROM shop_connected_time_issuer_state',
+      ).get();
+      if (states.length != 1 || states.single.read<int>('singleton_id') != 1) {
+        return false;
+      }
+      final streams = await customSelect(
+        'SELECT * FROM shop_connected_time_issuer_streams',
+      ).get();
+      final streamsByDigest = <String, QueryRow>{};
+      for (final row in streams) {
+        final json = row.read<String>('stream_json');
+        final value = jsonDecode(json);
+        if (canonicalConnectedSiteJson(value) != json ||
+            connectedSiteSha256(value) != row.read<String>('stream_digest')) {
+          return false;
+        }
+        streamsByDigest[row.read<String>('stream_digest')] = row;
+      }
+      final allocations = await customSelect(
+        'SELECT * FROM shop_connected_time_issuer_allocations '
+        'ORDER BY stream_digest, authority_sequence',
+      ).get();
+      final allocationsByStream = <String, List<QueryRow>>{};
+      for (final row in allocations) {
+        final json = row.read<String>('unsigned_entry_json');
+        final entry = parseConnectedTrustedTimeUnsignedEntryV2(
+          utf8.encode(json),
+        );
+        if (entry.entryDigest != row.read<String>('entry_digest')) {
+          return false;
+        }
+        final streamValue = <String, Object?>{
+          'workspaceId': entry.workspaceId,
+          'siteId': entry.siteId,
+          'coordinatorDeviceId': entry.coordinatorDeviceId,
+          'clientDeviceId': entry.clientDeviceId,
+          'clientFingerprint': entry.clientFingerprint,
+          'sessionGeneration': entry.sessionGeneration,
+          'coordinatorBindingDigest': entry.coordinatorBindingDigest,
+          'coordinatorBindingGeneration': entry.coordinatorBindingGeneration,
+          'authorityKeyId': entry.authorityKeyId,
+          'authorityKeyFingerprint': entry.authorityKeyFingerprint,
+          'authorityKeyGeneration': entry.authorityKeyGeneration,
+          'authorityEpoch': entry.authorityEpoch,
+        };
+        if (connectedSiteSha256(streamValue) !=
+                row.read<String>('stream_digest') ||
+            entry.authoritySequence != row.read<int>('authority_sequence') ||
+            entry.previousEntryDigest !=
+                row.readNullable<String>('previous_entry_digest')) {
+          return false;
+        }
+        allocationsByStream
+            .putIfAbsent(row.read<String>('stream_digest'), () => [])
+            .add(row);
+      }
+      final signedEntries = await customSelect(
+        'SELECT entry_digest, signed_entry_json, signed_entry_digest FROM '
+        'shop_connected_time_issuer_signed_entries',
+      ).get();
+      final signedByDigest = <String, ConnectedTrustedTimeStreamEntryV2>{};
+      for (final row in signedEntries) {
+        final json = row.read<String>('signed_entry_json');
+        final entry = ConnectedTrustedTimeStreamEntryV2.fromCanonicalBytes(
+          utf8.encode(json),
+        );
+        if (entry.entryDigest != row.read<String>('entry_digest') ||
+            crypto.sha256.convert(utf8.encode(json)).toString() !=
+                row.read<String>('signed_entry_digest')) {
+          return false;
+        }
+        signedByDigest[entry.entryDigest] = entry;
+      }
+      final acknowledgements = await customSelect(
+        'SELECT ack_digest, entry_digest, ack_json, ack_bytes_digest FROM '
+        'shop_connected_time_issuer_acks',
+      ).get();
+      final ackByEntry = <String, ConnectedTrustedTimeStreamAckV1>{};
+      for (final row in acknowledgements) {
+        final json = row.read<String>('ack_json');
+        final ack = ConnectedTrustedTimeStreamAckV1.fromCanonicalBytes(
+          utf8.encode(json),
+        );
+        if (ack.ackDigest != row.read<String>('ack_digest') ||
+            ack.entryDigest != row.read<String>('entry_digest') ||
+            crypto.sha256.convert(utf8.encode(json)).toString() !=
+                row.read<String>('ack_bytes_digest')) {
+          return false;
+        }
+        ackByEntry[ack.entryDigest] = ack;
+      }
+      for (final streamEntry in streamsByDigest.entries) {
+        final stream = streamEntry.value;
+        final streamAllocations = allocationsByStream[streamEntry.key] ?? [];
+        String? predecessor;
+        for (var index = 0; index < streamAllocations.length; index++) {
+          final allocation = streamAllocations[index];
+          final sequence = index + 1;
+          final digest = allocation.read<String>('entry_digest');
+          if (allocation.read<int>('authority_sequence') != sequence ||
+              allocation.readNullable<String>('previous_entry_digest') !=
+                  predecessor) {
+            return false;
+          }
+          if (sequence <= stream.read<int>('acknowledged_sequence')) {
+            final signed = signedByDigest[digest];
+            final ack = ackByEntry[digest];
+            if (signed == null ||
+                ack == null ||
+                ack.authoritySequence != sequence ||
+                ack.entryDigest != digest ||
+                ack.workspaceId != signed.workspaceId ||
+                ack.siteId != signed.siteId ||
+                ack.coordinatorDeviceId != signed.coordinatorDeviceId ||
+                ack.clientDeviceId != signed.clientDeviceId ||
+                ack.clientFingerprint != signed.clientFingerprint ||
+                ack.sessionGeneration != signed.sessionGeneration ||
+                ack.coordinatorBindingDigest !=
+                    signed.coordinatorBindingDigest ||
+                ack.coordinatorBindingGeneration !=
+                    signed.coordinatorBindingGeneration ||
+                ack.authorityKeyGeneration != signed.authorityKeyGeneration ||
+                ack.authorityEpoch != signed.authorityEpoch) {
+              return false;
+            }
+          } else if (sequence ==
+              stream.read<int>('acknowledged_sequence') + 1) {
+            if (stream.readNullable<String>('pending_entry_digest') != digest ||
+                ackByEntry.containsKey(digest)) {
+              return false;
+            }
+          } else {
+            return false;
+          }
+          predecessor = digest;
+        }
+        final acknowledged = stream.read<int>('acknowledged_sequence');
+        final pending = stream.readNullable<String>('pending_entry_digest');
+        if (acknowledged > streamAllocations.length ||
+            (acknowledged == 0
+                ? stream.readNullable<String>('acknowledged_entry_digest') !=
+                      null
+                : stream.readNullable<String>('acknowledged_entry_digest') !=
+                      streamAllocations[acknowledged - 1].read<String>(
+                        'entry_digest',
+                      )) ||
+            (pending == null
+                ? streamAllocations.length != acknowledged
+                : streamAllocations.length != acknowledged + 1)) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> _requireUnifiedV39Schema() async {
+    await _requireUnifiedV38Schema();
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {#shopAllowV38NestedSchemaVerification: false},
+    );
+    final definitions = shopConnectedTrustedTimeClientSchemaDefinitionsV39();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    final rowsValid = await _v39ConnectedTrustedTimeClientRowsValid();
+    if (!definitionsValid || !rowsValid) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map(
+            (entry) => '${entry.key}:${objects[entry.key]?.type ?? 'missing'}',
+          )
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v39 trusted-time client schema failed verification '
+        '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV40Schema() async {
+    await runZoned(
+      _requireUnifiedV39Schema,
+      zoneValues: const {
+        #shopAllowV40NestedSchemaVerification: true,
+        #shopAllowV41NestedSchemaVerification: true,
+        #shopAllowV42NestedSchemaVerification: true,
+      },
+    );
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {
+        #shopAllowV40NestedSchemaVerification: false,
+        #shopAllowV41NestedSchemaVerification: true,
+        #shopAllowV42NestedSchemaVerification: true,
+      },
+    );
+    final definitions = shopConnectedCloudFeedSchemaDefinitionsV40();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    final rowsValid = await _v40ConnectedCloudFeedRowsValid();
+    if (!definitionsValid || !rowsValid) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map(
+            (entry) => '${entry.key}:${objects[entry.key]?.type ?? 'missing'}',
+          )
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v40 cloud-feed schema failed verification '
+        '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV41Schema() async {
+    await _requireUnifiedV40Schema();
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {
+        #shopAllowV40NestedSchemaVerification: false,
+        #shopAllowV41NestedSchemaVerification: false,
+        #shopAllowV42NestedSchemaVerification: true,
+      },
+    );
+    final definitions = shopConnectedCloudFeedSchemaDefinitionsV41();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    // Product still requires an empty feed. A test-only, independently pinned
+    // first-page history may be reopened, but it grants no current authority
+    // and never enables a v41 producer or restored connected writes.
+    final pageRows = (await customSelect(
+      'SELECT page_digest, page_json FROM shop_connected_cloud_feed_pages LIMIT 2049',
+    ).get()).map((row) => Map<String, Object?>.from(row.data));
+    final evidenceRows = (await customSelect(
+      'SELECT * FROM shop_connected_cloud_feed_page_evidence LIMIT 2049',
+    ).get()).map((row) => Map<String, Object?>.from(row.data));
+    final coverageValid = shopConnectedCloudFeedEvidenceCoverageV41(
+      pages: pageRows,
+      evidence: evidenceRows,
+    );
+    final historicalTrust =
+        _historicalCloudFeedTrust ?? _testOnlyCloudFeedV41Trust;
+    final historicalValid = historicalTrust == null
+        ? false
+        : await _v41HistoricalRowsValid(historicalTrust);
+    if (historicalTrust == null) await _requireEmptyCloudFeedBeforeV41();
+    if (!definitionsValid ||
+        !coverageValid ||
+        (historicalTrust == null
+            ? evidenceRows.isNotEmpty
+            : !historicalValid)) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map(
+            (entry) => '${entry.key}:${objects[entry.key]?.type ?? 'missing'}',
+          )
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v41 request evidence failed verification '
+        '(definitions=$definitionsValid, coverage=$coverageValid, '
+        'evidencePresent=${evidenceRows.isNotEmpty}, '
+        'mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<void> _requireUnifiedV42Schema() async {
+    await _requireUnifiedV41Schema();
+    final objects = await runZoned(
+      _readSchemaObjects,
+      zoneValues: const {#shopAllowV42NestedSchemaVerification: false},
+    );
+    final definitions = shopConnectedDeviceProfileSchemaDefinitionsV42();
+    final definitionsValid = _definitionGroupExact(
+      objects,
+      definitions,
+      definitions.keys.toSet(),
+    );
+    // The first migration milestone is deliberately empty-only. No v2
+    // enrollment may become usable before its signed cross-table verifier,
+    // current revocation and fresh-target restore rules are installed.
+    final rowsValid = await _v42DeviceProfileRowsValid();
+    if (!definitionsValid || !rowsValid) {
+      final mismatches = definitions.entries
+          .where((entry) {
+            final object = objects[entry.key];
+            return object == null ||
+                object.type != shopSchemaObjectTypeForDefinition(entry.value) ||
+                canonicalShopSchemaSql(object.sql) !=
+                    canonicalShopSchemaSql(entry.value);
+          })
+          .map((entry) => entry.key)
+          .toList(growable: false);
+      throw StateError(
+        'The unified Shop v42 device profile failed verification '
+        '(definitions=$definitionsValid, rows=$rowsValid, mismatches=$mismatches).',
+      );
+    }
+  }
+
+  Future<bool> _v42DeviceProfileRowsValid() async {
+    Future<List<Map<String, Object?>>> rows(String table) async =>
+        (await customSelect('SELECT * FROM $table').get())
+            .map((row) => Map<String, Object?>.from(row.data))
+            .toList(growable: false);
+    return shopConnectedEnrollmentRowsValidV42(
+      pairingNonces: await rows('shop_site_pairing_nonces'),
+      v1Pending: await rows('shop_site_pending_enrollments'),
+      v1Evidence: await rows('shop_site_enrollment_evidence'),
+      v2Pending: await rows('shop_site_v2_pending_enrollments'),
+      v2Evidence: await rows('shop_site_v2_enrollment_evidence'),
+      deviceProfiles: await rows('shop_site_device_profiles_v42'),
+      devices: await rows('shop_site_devices'),
+      pinnedOwnerIssuerKeys: _v42EnrollmentTrustSource.ownerIssuerKeys,
+    );
+  }
+
+  /// Called only from an enrollment write transaction. Historical row
+  /// authenticity is not current lease/revocation authority for a feed write.
+  Future<void> requireV42EnrollmentRowsInCurrentTransaction() async {
+    if (!await _v42DeviceProfileRowsValid()) {
+      throw StateError('connected_v42_enrollment_rows_invalid');
+    }
+  }
+
+  Future<bool> _v41HistoricalRowsValid(
+    ShopCloudFeedV41FirstPageTrust trust,
+  ) async {
+    try {
+      return shopCloudFeedFirstPageHistoricalRowsValidV41(
+        trust: trust,
+        completeTables: await _readV41HistoricalRows(),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<Map<String, List<Map<String, Object?>>>>
+  _readV41HistoricalRows() async {
+    final complete = <String, List<Map<String, Object?>>>{};
+    for (final table in shopCloudFeedV41HistoricalTables) {
+      final values = await customSelect('SELECT * FROM $table LIMIT 2049')
+          .get();
+      if (values.length > 2048) {
+        throw StateError('Connected cloud-feed history limit exceeded.');
+      }
+      complete[table] = values
+          .map((row) => Map<String, Object?>.from(row.data))
+          .toList(growable: false);
+    }
+    return complete;
+  }
+
+  Future<void> _requireCurrentV41Authority(
+    Map<String, List<Map<String, Object?>>> rows,
+    ShopCloudFeedV41FirstPageTrust trust,
+    String authorityPayloadDigest,
+  ) async {
+    final devices = rows['shop_site_devices']!
+        .where((row) => row['device_id'] == trust.deviceId)
+        .toList(growable: false);
+    if (devices.length != 1 ||
+        devices.single['state'] != 'active' ||
+        devices.single['revoked_at_millis'] != null ||
+        devices.single['session_generation'] != trust.sessionGeneration) {
+      throw StateError('Cloud-feed device is no longer active.');
+    }
+    final ownerRows =
+        rows['shop_site_enrollment_evidence']!
+            .where((row) => row['device_id'] == trust.deviceId)
+            .toList(growable: false)
+          ..sort(
+            (a, b) => (a['observed_at_millis'] as int).compareTo(
+              b['observed_at_millis'] as int,
+            ),
+          );
+    if (ownerRows.isEmpty ||
+        ownerRows.last['action'] != 'approve' ||
+        ownerRows.last['session_generation'] != trust.sessionGeneration) {
+      throw StateError('Cloud-feed enrollment is no longer approved.');
+    }
+    final authorityRows =
+        rows['shop_site_authority_payloads']!
+            .where(
+              (row) =>
+                  row['tenant_id'] == trust.workspaceId &&
+                  row['site_id'] == trust.siteId,
+            )
+            .toList(growable: false)
+          ..sort(
+            (a, b) => (a['authority_sequence'] as int).compareTo(
+              b['authority_sequence'] as int,
+            ),
+          );
+    if (authorityRows.isEmpty ||
+        authorityRows.last['authority_sequence'] != trust.authoritySequence ||
+        authorityRows.last['payload_digest'] != authorityPayloadDigest ||
+        authorityRows.last['revocation_generation'] !=
+            trust.revocationGeneration) {
+      throw StateError('Cloud-feed authority has changed.');
+    }
+    final revocation = await customSelect(
+      'SELECT generation FROM shop_site_revocation_observations '
+      'WHERE tenant_id = ? AND site_id = ? '
+      'ORDER BY generation DESC LIMIT 1',
+      variables: [
+        Variable<String>(trust.workspaceId),
+        Variable<String>(trust.siteId),
+      ],
+    ).getSingleOrNull();
+    if (revocation == null ||
+        revocation.read<int>('generation') != trust.revocationGeneration) {
+      throw StateError('Cloud-feed revocation generation has changed.');
+    }
+  }
+
+  Future<bool> _v40ConnectedCloudFeedRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedCloudFeedRowsValidV40(
+        streams: await rows('shop_connected_cloud_feed_streams'),
+        pages: await rows('shop_connected_cloud_feed_pages'),
+        heads: await rows('shop_connected_cloud_feed_heads'),
+        restoreBarriers: await rows(
+          'shop_connected_cloud_feed_restore_barriers',
+        ),
+        trustedIssuerKeys:
+            _historicalCloudFeedTrust?.feedIssuerKeys ??
+            _testOnlyCloudFeedPinnedKeys,
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> _suspendCloudFeedAfterRestoreV40() async {
+    await transaction(() async {
+      if (!await _v40ConnectedCloudFeedRowsValid()) {
+        throw StateError('Restored cloud-feed evidence is invalid.');
+      }
+      final heads = await customSelect(
+        'SELECT stream_digest, next_sequence, next_event_digest, '
+        'last_page_digest FROM shop_connected_cloud_feed_heads',
+      ).get();
+      for (final head in heads) {
+        final digest = head.read<String>('stream_digest');
+        final existing = await customSelect(
+          'SELECT barrier_digest FROM shop_connected_cloud_feed_restore_barriers '
+          'WHERE stream_digest = ?',
+          variables: [Variable<String>(digest)],
+        ).get();
+        await customUpdate(
+          'UPDATE shop_connected_cloud_feed_heads SET restore_paused = 1 '
+          'WHERE stream_digest = ?',
+          variables: [Variable<String>(digest)],
+        );
+        if (existing.isEmpty) {
+          final barrier = {
+            'contract': 'supermega.connected-cloud-feed-restore-barrier.v1',
+            'streamDigest': digest,
+            'nextSequence': head.read<int>('next_sequence'),
+            'nextEventDigest': head.read<String?>('next_event_digest'),
+            'lastPageDigest': head.read<String?>('last_page_digest'),
+          };
+          await customInsert(
+            'INSERT INTO shop_connected_cloud_feed_restore_barriers '
+            '(stream_digest, barrier_digest, next_sequence, '
+            'next_event_digest, last_page_digest, barrier_json) '
+            'VALUES (?, ?, ?, ?, ?, ?)',
+            variables: [
+              Variable<String>(digest),
+              Variable<String>(connectedSiteSha256(barrier)),
+              Variable<int>(head.read<int>('next_sequence')),
+              Variable<String>(head.read<String?>('next_event_digest')),
+              Variable<String>(head.read<String?>('last_page_digest')),
+              Variable<String>(canonicalConnectedSiteJson(barrier)),
+            ],
+          );
+        }
+      }
+      if (!await _v40ConnectedCloudFeedRowsValid()) {
+        throw StateError('Cloud-feed restore pause cannot be reconstructed.');
+      }
+    });
+  }
+
+  /// Exercises the signed-page transaction without mounting connected sync.
+  /// Product builds cannot supply test pins. Live authority/lease/clock ingress
+  /// and a server signer must be reviewed before any production equivalent.
+  Future<void> testOnlyApplyConnectedCloudFeedPageV40({
+    required ConnectedSiteRetailFeedExpectation expected,
+    required String actorRole,
+    required String requestNonce,
+    required String pageJson,
+    required String proofJson,
+    required int trustedNowMillis,
+    Future<void> Function()? testOnlyAfterPageInsert,
+  }) async {
+    if (!_testMutationBypassAvailable || _testOnlyCloudFeedPinnedKeys.isEmpty) {
+      throw UnsupportedError(
+        'Authenticated cloud feed test authority unavailable.',
+      );
+    }
+    final page = ConnectedSiteRetailFeedPageV1.parse(
+      canonicalBytes: pageJson,
+      expected: expected,
+    );
+    if (page.nextSequence <= expected.afterSequence) {
+      throw StateError('Empty cloud-feed pages cannot advance a cursor.');
+    }
+    final proof = ConnectedCloudFeedProofV1.parse(
+      canonicalBytes: proofJson,
+      page: page,
+      expected: expected,
+      requestNonce: requestNonce,
+      actorRole: actorRole,
+      trustedNowMillis: trustedNowMillis,
+    );
+    ConnectedCloudFeedPinnedIssuerVerifier(_testOnlyCloudFeedPinnedKeys)
+        .verifySync(proof);
+    final streamDigest = connectedSiteSha256({
+      'contract': 'supermega.connected-cloud-feed-stream.v1',
+      'workspaceId': expected.workspaceId,
+      'siteId': expected.siteId,
+      'actorId': expected.actorId,
+      'actorRole': actorRole,
+      'deviceId': expected.deviceId,
+      'authorityGeneration': expected.authorityGeneration,
+      'revocationGeneration': expected.revocationGeneration,
+      'authorityPayloadDigest': expected.authorityPayloadDigest,
+      'leaseDigest': expected.leaseDigest,
+    });
+    await transaction(() async {
+      if (!await _v40ConnectedCloudFeedRowsValid()) {
+        throw StateError('Stored cloud-feed evidence is invalid.');
+      }
+      final restoreBarriers = await customSelect(
+        'SELECT barrier_digest FROM shop_connected_cloud_feed_restore_barriers '
+        'WHERE stream_digest = ?',
+        variables: [Variable<String>(streamDigest)],
+      ).get();
+      if (restoreBarriers.isNotEmpty) {
+        throw StateError('Cloud-feed restore requires fresh rebootstrap.');
+      }
+      final replay = await customSelect(
+        'SELECT page_digest, page_json, authenticated_proof_json, '
+        'authenticated_proof_digest, request_nonce '
+        'FROM shop_connected_cloud_feed_pages '
+        'WHERE stream_digest = ? AND after_sequence = ?',
+        variables: [
+          Variable<String>(streamDigest),
+          Variable<int>(expected.afterSequence),
+        ],
+      ).get();
+      if (replay.isNotEmpty) {
+        if (replay.length != 1 ||
+            replay.single.read<String>('page_digest') != page.pageDigest ||
+            replay.single.read<String>('page_json') != pageJson ||
+            replay.single.read<String>('request_nonce') != requestNonce ||
+            replay.single.read<String>('authenticated_proof_json') !=
+                proofJson ||
+            replay.single.read<String>('authenticated_proof_digest') !=
+                proof.proofDigest) {
+          throw StateError('Cloud-feed cursor replay changed bytes.');
+        }
+        return;
+      }
+      final heads = await customSelect(
+        'SELECT next_sequence, next_event_digest, restore_paused '
+        'FROM shop_connected_cloud_feed_heads WHERE stream_digest = ?',
+        variables: [Variable<String>(streamDigest)],
+      ).get();
+      if (heads.isEmpty) {
+        if (expected.afterSequence != 0 || expected.priorEventDigest != null) {
+          throw StateError('Cloud-feed initial cursor mismatch.');
+        }
+        await customInsert(
+          'INSERT INTO shop_connected_cloud_feed_streams '
+          '(stream_digest, workspace_id, site_id, actor_id, device_id, '
+          'actor_role, lease_digest, authority_payload_digest, '
+          'authority_generation, revocation_generation) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(streamDigest),
+            Variable<String>(expected.workspaceId),
+            Variable<String>(expected.siteId),
+            Variable<String>(expected.actorId),
+            Variable<String>(expected.deviceId),
+            Variable<String>(actorRole),
+            Variable<String>(expected.leaseDigest),
+            Variable<String>(expected.authorityPayloadDigest),
+            Variable<int>(expected.authorityGeneration),
+            Variable<int>(expected.revocationGeneration),
+          ],
+        );
+      } else if (heads.length != 1 ||
+          heads.single.read<int>('restore_paused') != 0 ||
+          heads.single.read<int>('next_sequence') != expected.afterSequence ||
+          heads.single.read<String?>('next_event_digest') !=
+              expected.priorEventDigest) {
+        throw StateError('Cloud-feed cursor or restore state changed.');
+      }
+      await customInsert(
+        'INSERT INTO shop_connected_cloud_feed_pages '
+        '(page_digest, stream_digest, after_sequence, prior_event_digest, '
+        'next_sequence, next_event_digest, page_json, request_nonce, '
+        'authenticated_proof_json, authenticated_proof_digest) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(page.pageDigest),
+          Variable<String>(streamDigest),
+          Variable<int>(expected.afterSequence),
+          Variable<String>(expected.priorEventDigest),
+          Variable<int>(page.nextSequence),
+          Variable<String>(page.nextEventDigest!),
+          Variable<String>(pageJson),
+          Variable<String>(requestNonce),
+          Variable<String>(proofJson),
+          Variable<String>(proof.proofDigest),
+        ],
+      );
+      if (testOnlyAfterPageInsert != null) {
+        await testOnlyAfterPageInsert();
+      }
+      if (heads.isEmpty) {
+        await customInsert(
+          'INSERT INTO shop_connected_cloud_feed_heads '
+          '(stream_digest, next_sequence, next_event_digest, '
+          'last_page_digest, restore_paused) VALUES (?, ?, ?, ?, 0)',
+          variables: [
+            Variable<String>(streamDigest),
+            Variable<int>(page.nextSequence),
+            Variable<String>(page.nextEventDigest!),
+            Variable<String>(page.pageDigest),
+          ],
+        );
+      } else {
+        final changed = await customUpdate(
+          'UPDATE shop_connected_cloud_feed_heads SET next_sequence = ?, '
+          'next_event_digest = ?, last_page_digest = ? '
+          'WHERE stream_digest = ? AND next_sequence = ? '
+          'AND next_event_digest = ? AND restore_paused = 0',
+          variables: [
+            Variable<int>(page.nextSequence),
+            Variable<String>(page.nextEventDigest!),
+            Variable<String>(page.pageDigest),
+            Variable<String>(streamDigest),
+            Variable<int>(expected.afterSequence),
+            Variable<String>(expected.priorEventDigest!),
+          ],
+        );
+        if (changed != 1) {
+          throw StateError('Cloud-feed head compare-and-swap failed.');
+        }
+      }
+      if (!await _v40ConnectedCloudFeedRowsValid()) {
+        throw StateError('Cloud-feed transaction cannot be reconstructed.');
+      }
+    });
+  }
+
+  /// Product entry boundary for an authenticated first-page receipt. It takes
+  /// no caller-supplied pins, clock, authority gate or fixture permission.
+  /// Until reviewed product issuer roots and protected custody are present,
+  /// even a well-formed receipt must fail before any database mutation.
+  Future<void> applyConnectedCloudFeedFirstPage({
+    required ConnectedCloudFeedHttpReceipt receipt,
+    required String enrolledDeviceAlias,
+  }) async {
+    if (enrolledDeviceAlias.isEmpty ||
+        receipt.requestJson.isEmpty ||
+        receipt.pageJson.isEmpty ||
+        receipt.proofJson.isEmpty) {
+      throw const FormatException('connected_cloud_feed_product_input_invalid');
+    }
+    final pinned =
+        ShopCloudFeedHistoricalTrustSource.production().verifiedHistory;
+    if (pinned == null) {
+      throw StateError('Cloud-feed product authority is unavailable.');
+    }
+    // A future product composition must independently recover the enrolled
+    // device, current signed lease/revocation and same-boot accepted time,
+    // then enter the writer transaction before calling the private core.
+    // A reviewed historical pin alone never authorizes a current write.
+    throw StateError('Cloud-feed product writer is not enabled.');
+  }
+
+  /// Synthetic first-page writer only. A production writer needs real issuer
+  /// custody, authenticated ingress and a serialized current-authority fence.
+  /// This method does not mount connected sync or clear restore suspension.
+  Future<void> testOnlyApplyConnectedCloudFeedFirstPageV41({
+    required ShopCloudFeedV41FirstPageTrust trust,
+    required ShopConnectedCloudFeedLiveTimeSource timeAuthority,
+    required ConnectedSiteRetailFeedExpectation expected,
+    required String actorRole,
+    required String requestNonce,
+    required String pageJson,
+    required String proofJson,
+    required ShopCloudFeedV41FirstPageEvidence evidence,
+    ShopConnectedCloudFeedCurrentGate? currentGate,
+    ConnectedCloudFeedEnrolledDeviceTrust? enrollment,
+    OfflineStaffLeaseV1? lease,
+    Future<void> Function()? testOnlyBeforeCommit,
+  }) async {
+    if (!_testMutationBypassAvailable ||
+        expected.afterSequence != 0 ||
+        expected.priorEventDigest != null) {
+      throw UnsupportedError('Test v41 first-page authority unavailable.');
+    }
+    if ((currentGate == null) != (enrollment == null) ||
+        (currentGate == null) != (lease == null) ||
+        (currentGate != null &&
+            (!identical(currentGate.database, this) ||
+                !identical(currentGate.timeSource, timeAuthority) ||
+                enrollment!.tenantId != expected.workspaceId ||
+                enrollment.siteId != expected.siteId ||
+                enrollment.deviceId != expected.deviceId ||
+                enrollment.sessionGeneration != trust.sessionGeneration ||
+                enrollment.deviceTrust.publicKeyFingerprintSha256 !=
+                    trust.clientFingerprint ||
+                lease!.workspaceId != expected.workspaceId ||
+                lease.siteId != expected.siteId ||
+                lease.deviceId != expected.deviceId ||
+                lease.actorId != expected.actorId ||
+                lease.role != actorRole ||
+                lease.payloadDigest != expected.leaseDigest ||
+                lease.sessionGeneration != enrollment.sessionGeneration ||
+                lease.revocationGeneration != expected.revocationGeneration))) {
+      throw StateError(
+        'Cloud-feed current gate is not bound to this database.',
+      );
+    }
+    Future<void> write() => _applyConnectedCloudFeedFirstPageV41InTransaction(
+      trust: trust,
+      timeAuthority: timeAuthority,
+      expected: expected,
+      actorRole: actorRole,
+      requestNonce: requestNonce,
+      pageJson: pageJson,
+      proofJson: proofJson,
+      evidence: evidence,
+      testOnlyBeforeCommit: testOnlyBeforeCommit,
+    );
+    if (currentGate == null) {
+      await transaction(write);
+    } else {
+      await currentGate.run(
+        enrollment: enrollment!,
+        lease: lease!,
+        mutation: write,
+      );
+    }
+  }
+
+  /// Reusable atomic body. Callers must already hold this database's writer
+  /// transaction and supply independently verified current authority. It is
+  /// private until a protected, source-pinned product entry is reviewed.
+  Future<void> _applyConnectedCloudFeedFirstPageV41InTransaction({
+    required ShopCloudFeedV41FirstPageTrust trust,
+    required ShopConnectedCloudFeedLiveTimeSource timeAuthority,
+    required ConnectedSiteRetailFeedExpectation expected,
+    required String actorRole,
+    required String requestNonce,
+    required String pageJson,
+    required String proofJson,
+    required ShopCloudFeedV41FirstPageEvidence evidence,
+    Future<void> Function()? testOnlyBeforeCommit,
+  }) async {
+    final pinned = trust.immutableCopy();
+    if (expected.workspaceId != pinned.workspaceId ||
+        expected.siteId != pinned.siteId ||
+        expected.actorId != pinned.actorId ||
+        expected.deviceId != pinned.deviceId ||
+        expected.authorityGeneration != pinned.authoritySequence ||
+        expected.revocationGeneration != pinned.revocationGeneration ||
+        !const {'owner', 'manager'}.contains(actorRole)) {
+      throw StateError('Cloud-feed first-page scope changed.');
+    }
+    final current = await _readV41HistoricalRows();
+    final currentPages = current['shop_connected_cloud_feed_pages']!;
+    final currentHeads = current['shop_connected_cloud_feed_heads']!;
+    if (currentPages.length > 1 ||
+        currentHeads.length > 1 ||
+        current['shop_connected_cloud_feed_restore_barriers']!.isNotEmpty ||
+        currentHeads.any((row) => row['restore_paused'] != 0) ||
+        (currentPages.isNotEmpty &&
+            !shopCloudFeedFirstPageHistoricalRowsValidV41(
+              trust: pinned,
+              completeTables: current,
+            ))) {
+      throw StateError('Cloud-feed history or restore state is unsafe.');
+    }
+    await _requireCurrentV41Authority(
+      current,
+      pinned,
+      expected.authorityPayloadDigest,
+    );
+    final liveTime = await timeAuthority.readLiveTime(
+      tenantId: expected.workspaceId,
+      siteId: expected.siteId,
+    );
+    void requireBoundLiveTime(ConnectedTrustedTimeLiveReading reading) {
+      if (reading.entryDigest != evidence.timeEntryDigest ||
+          reading.ackDigest != evidence.timeAckDigest ||
+          reading.bootSessionId != evidence.bootSessionId ||
+          reading.monotonicMillis < evidence.sampleMonotonicMillis ||
+          reading.effectiveTimeMillis <= 0) {
+        throw StateError('Cloud-feed live-time evidence changed.');
+      }
+    }
+
+    requireBoundLiveTime(liveTime);
+    final now = liveTime.effectiveTimeMillis;
+    final retainedSample = currentPages.isEmpty
+        ? liveTime.monotonicMillis
+        : current['shop_connected_cloud_feed_page_evidence']!
+                  .single['sample_monotonic_millis']
+              as int;
+    final retainedNow = currentPages.isEmpty
+        ? now
+        : current['shop_connected_cloud_feed_page_evidence']!
+                  .single['trusted_now_millis']
+              as int;
+    final page = ConnectedSiteRetailFeedPageV1.parse(
+      canonicalBytes: pageJson,
+      expected: expected,
+    );
+    if (page.nextSequence <= 0) {
+      throw StateError('Cloud-feed first page did not advance.');
+    }
+    final proof = ConnectedCloudFeedProofV1.parse(
+      canonicalBytes: proofJson,
+      page: page,
+      expected: expected,
+      requestNonce: requestNonce,
+      actorRole: actorRole,
+      trustedNowMillis: now,
+    );
+    ConnectedCloudFeedPinnedIssuerVerifier(pinned.feedIssuerKeys)
+        .verifySync(proof);
+    final streamDigest = connectedSiteSha256({
+      'contract': 'supermega.connected-cloud-feed-stream.v1',
+      'workspaceId': expected.workspaceId,
+      'siteId': expected.siteId,
+      'actorId': expected.actorId,
+      'actorRole': actorRole,
+      'deviceId': expected.deviceId,
+      'authorityGeneration': expected.authorityGeneration,
+      'revocationGeneration': expected.revocationGeneration,
+      'authorityPayloadDigest': expected.authorityPayloadDigest,
+      'leaseDigest': expected.leaseDigest,
+    });
+    final streamRow = <String, Object?>{
+      'stream_digest': streamDigest,
+      'workspace_id': expected.workspaceId,
+      'site_id': expected.siteId,
+      'actor_id': expected.actorId,
+      'device_id': expected.deviceId,
+      'actor_role': actorRole,
+      'lease_digest': expected.leaseDigest,
+      'authority_payload_digest': expected.authorityPayloadDigest,
+      'authority_generation': expected.authorityGeneration,
+      'revocation_generation': expected.revocationGeneration,
+    };
+    final pageRow = <String, Object?>{
+      'page_digest': page.pageDigest,
+      'stream_digest': streamDigest,
+      'after_sequence': 0,
+      'prior_event_digest': null,
+      'next_sequence': page.nextSequence,
+      'next_event_digest': page.nextEventDigest,
+      'page_json': pageJson,
+      'request_nonce': requestNonce,
+      'authenticated_proof_json': proofJson,
+      'authenticated_proof_digest': proof.proofDigest,
+    };
+    final headRow = <String, Object?>{
+      'stream_digest': streamDigest,
+      'next_sequence': page.nextSequence,
+      'next_event_digest': page.nextEventDigest,
+      'last_page_digest': page.pageDigest,
+      'restore_paused': 0,
+    };
+    final evidenceRow = <String, Object?>{
+      'page_digest': page.pageDigest,
+      'request_json': evidence.requestJson,
+      'request_digest': connectedSiteSha256(jsonDecode(evidence.requestJson)),
+      'cloud_key_approval_json': evidence.cloudKeyApprovalJson,
+      'cloud_key_approval_digest': connectedSiteSha256(
+        jsonDecode(evidence.cloudKeyApprovalJson),
+      ),
+      'lease_digest': expected.leaseDigest,
+      'authority_payload_digest': expected.authorityPayloadDigest,
+      'enrollment_evidence_digest': evidence.enrollmentEvidenceDigest,
+      'time_entry_digest': evidence.timeEntryDigest,
+      'time_ack_digest': evidence.timeAckDigest,
+      'time_head_digest': evidence.timeHeadDigest,
+      'boot_session_id': evidence.bootSessionId,
+      'sample_monotonic_millis': retainedSample,
+      'trusted_now_millis': retainedNow,
+    };
+    final prospective = <String, List<Map<String, Object?>>>{
+      ...current,
+      'shop_connected_cloud_feed_streams': [streamRow],
+      'shop_connected_cloud_feed_pages': [pageRow],
+      'shop_connected_cloud_feed_heads': [headRow],
+      'shop_connected_cloud_feed_restore_barriers': const [],
+      'shop_connected_cloud_feed_page_evidence': [evidenceRow],
+    };
+    if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
+      trust: pinned,
+      completeTables: prospective,
+    )) {
+      throw StateError('Current signed cloud-feed authority is invalid.');
+    }
+    Future<void> requireCurrentLiveTime(
+      Map<String, List<Map<String, Object?>>> rows,
+    ) async {
+      final latest = await timeAuthority.readLiveTime(
+        tenantId: expected.workspaceId,
+        siteId: expected.siteId,
+      );
+      requireBoundLiveTime(latest);
+      if (latest.monotonicMillis < liveTime.monotonicMillis ||
+          latest.effectiveTimeMillis < now) {
+        throw StateError('Cloud-feed trusted time regressed before commit.');
+      }
+      final retained = rows['shop_connected_cloud_feed_page_evidence']!;
+      if (retained.length != 1 ||
+          !shopCloudFeedFirstPageHistoricalRowsValidV41(
+            trust: pinned,
+            completeTables: {
+              ...rows,
+              'shop_connected_cloud_feed_page_evidence': [
+                {
+                  ...retained.single,
+                  'sample_monotonic_millis': latest.monotonicMillis,
+                  'trusted_now_millis': latest.effectiveTimeMillis,
+                },
+              ],
+            },
+          )) {
+        throw StateError('Cloud-feed trusted time changed before commit.');
+      }
+    }
+
+    if (currentPages.isNotEmpty) {
+      bool same(Map<String, Object?> a, Map<String, Object?> b) =>
+          canonicalConnectedSiteJson(a) == canonicalConnectedSiteJson(b);
+      if (current['shop_connected_cloud_feed_streams']!.length != 1 ||
+          current['shop_connected_cloud_feed_page_evidence']!.length != 1 ||
+          !same(
+            current['shop_connected_cloud_feed_streams']!.single,
+            streamRow,
+          ) ||
+          !same(currentPages.single, pageRow) ||
+          !same(currentHeads.single, headRow) ||
+          !same(
+            current['shop_connected_cloud_feed_page_evidence']!.single,
+            evidenceRow,
+          )) {
+        throw StateError('Cloud-feed first-page replay changed bytes.');
+      }
+      await _requireCurrentV41Authority(
+        await _readV41HistoricalRows(),
+        pinned,
+        expected.authorityPayloadDigest,
+      );
+      await requireCurrentLiveTime(await _readV41HistoricalRows());
+      return;
+    }
+    if (current['shop_connected_cloud_feed_streams']!.isNotEmpty ||
+        currentHeads.isNotEmpty ||
+        current['shop_connected_cloud_feed_page_evidence']!.isNotEmpty) {
+      throw StateError('Cloud-feed first-page cursor is not empty.');
+    }
+    await customInsert(
+      'INSERT INTO shop_connected_cloud_feed_streams '
+      '(stream_digest, workspace_id, site_id, actor_id, device_id, '
+      'actor_role, lease_digest, authority_payload_digest, '
+      'authority_generation, revocation_generation) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(streamDigest),
+        Variable<String>(expected.workspaceId),
+        Variable<String>(expected.siteId),
+        Variable<String>(expected.actorId),
+        Variable<String>(expected.deviceId),
+        Variable<String>(actorRole),
+        Variable<String>(expected.leaseDigest),
+        Variable<String>(expected.authorityPayloadDigest),
+        Variable<int>(expected.authorityGeneration),
+        Variable<int>(expected.revocationGeneration),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_connected_cloud_feed_pages '
+      '(page_digest, stream_digest, after_sequence, prior_event_digest, '
+      'next_sequence, next_event_digest, page_json, request_nonce, '
+      'authenticated_proof_json, authenticated_proof_digest) '
+      'VALUES (?, ?, 0, NULL, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(page.pageDigest),
+        Variable<String>(streamDigest),
+        Variable<int>(page.nextSequence),
+        Variable<String>(page.nextEventDigest!),
+        Variable<String>(pageJson),
+        Variable<String>(requestNonce),
+        Variable<String>(proofJson),
+        Variable<String>(proof.proofDigest),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_connected_cloud_feed_page_evidence '
+      '(page_digest, request_json, request_digest, cloud_key_approval_json, '
+      'cloud_key_approval_digest, lease_digest, authority_payload_digest, '
+      'enrollment_evidence_digest, time_entry_digest, time_ack_digest, '
+      'time_head_digest, boot_session_id, sample_monotonic_millis, '
+      'trusted_now_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(page.pageDigest),
+        Variable<String>(evidence.requestJson),
+        Variable<String>(evidenceRow['request_digest'] as String),
+        Variable<String>(evidence.cloudKeyApprovalJson),
+        Variable<String>(evidenceRow['cloud_key_approval_digest'] as String),
+        Variable<String>(expected.leaseDigest),
+        Variable<String>(expected.authorityPayloadDigest),
+        Variable<String>(evidence.enrollmentEvidenceDigest),
+        Variable<String>(evidence.timeEntryDigest),
+        Variable<String>(evidence.timeAckDigest),
+        Variable<String>(evidence.timeHeadDigest),
+        Variable<String>(evidence.bootSessionId),
+        Variable<int>(retainedSample),
+        Variable<int>(retainedNow),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_connected_cloud_feed_heads '
+      '(stream_digest, next_sequence, next_event_digest, last_page_digest, '
+      'restore_paused) VALUES (?, ?, ?, ?, 0)',
+      variables: [
+        Variable<String>(streamDigest),
+        Variable<int>(page.nextSequence),
+        Variable<String>(page.nextEventDigest!),
+        Variable<String>(page.pageDigest),
+      ],
+    );
+    if (testOnlyBeforeCommit != null) await testOnlyBeforeCommit();
+    final finalRows = await _readV41HistoricalRows();
+    await _requireCurrentV41Authority(
+      finalRows,
+      pinned,
+      expected.authorityPayloadDigest,
+    );
+    await requireCurrentLiveTime(finalRows);
+    if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
+      trust: pinned,
+      completeTables: finalRows,
+    )) {
+      throw StateError('Cloud-feed authority changed before commit.');
+    }
+  }
+
+  /// Synthetic second-page append only. The same pinned stream must already
+  /// have one authenticated page; no production issuer or restore clearance
+  /// is inferred from these fixture-only inputs.
+  Future<void> testOnlyApplyConnectedCloudFeedSecondPageV41({
+    required ShopCloudFeedV41FirstPageTrust trust,
+    required ShopConnectedCloudFeedLiveTimeSource timeAuthority,
+    required ConnectedSiteRetailFeedExpectation expected,
+    required String actorRole,
+    required String requestNonce,
+    required String pageJson,
+    required String proofJson,
+    required ShopCloudFeedV41FirstPageEvidence evidence,
+    Future<void> Function()? testOnlyBeforeCommit,
+  }) async {
+    if (!_testMutationBypassAvailable ||
+        expected.afterSequence <= 0 ||
+        expected.priorEventDigest == null) {
+      throw UnsupportedError('Test v41 second-page authority unavailable.');
+    }
+    final pinned = trust.immutableCopy();
+    if (expected.workspaceId != pinned.workspaceId ||
+        expected.siteId != pinned.siteId ||
+        expected.actorId != pinned.actorId ||
+        expected.deviceId != pinned.deviceId ||
+        expected.authorityGeneration != pinned.authoritySequence ||
+        expected.revocationGeneration != pinned.revocationGeneration ||
+        !const {'owner', 'manager'}.contains(actorRole)) {
+      throw StateError('Cloud-feed second-page scope changed.');
+    }
+    await transaction(() async {
+      final current = await _readV41HistoricalRows();
+      final streams = current['shop_connected_cloud_feed_streams']!;
+      final pages = current['shop_connected_cloud_feed_pages']!;
+      final heads = current['shop_connected_cloud_feed_heads']!;
+      final retainedEvidence =
+          current['shop_connected_cloud_feed_page_evidence']!;
+      if (streams.length != 1 ||
+          heads.length != 1 ||
+          pages.isEmpty ||
+          pages.length > 2 ||
+          current['shop_connected_cloud_feed_restore_barriers']!.isNotEmpty ||
+          heads.single['restore_paused'] != 0 ||
+          !shopCloudFeedFirstPageHistoricalRowsValidV41(
+            trust: pinned,
+            completeTables: current,
+          )) {
+        throw StateError('Cloud-feed history or restore state is unsafe.');
+      }
+      final stream = streams.single;
+      final head = heads.single;
+      if (stream['actor_role'] != actorRole ||
+          stream['lease_digest'] != expected.leaseDigest ||
+          stream['authority_payload_digest'] !=
+              expected.authorityPayloadDigest) {
+        throw StateError('Cloud-feed second-page stream changed.');
+      }
+      await _requireCurrentV41Authority(
+        current,
+        pinned,
+        expected.authorityPayloadDigest,
+      );
+      final liveTime = await timeAuthority.readLiveTime(
+        tenantId: expected.workspaceId,
+        siteId: expected.siteId,
+      );
+      void requireBoundTime(ConnectedTrustedTimeLiveReading reading) {
+        if (reading.entryDigest != evidence.timeEntryDigest ||
+            reading.ackDigest != evidence.timeAckDigest ||
+            reading.bootSessionId != evidence.bootSessionId ||
+            reading.monotonicMillis < evidence.sampleMonotonicMillis ||
+            reading.effectiveTimeMillis <= 0) {
+          throw StateError('Cloud-feed live-time evidence changed.');
+        }
+      }
+
+      requireBoundTime(liveTime);
+      final page = ConnectedSiteRetailFeedPageV1.parse(
+        canonicalBytes: pageJson,
+        expected: expected,
+      );
+      if (page.nextSequence <= expected.afterSequence) {
+        throw StateError('Cloud-feed second page did not advance.');
+      }
+      final proof = ConnectedCloudFeedProofV1.parse(
+        canonicalBytes: proofJson,
+        page: page,
+        expected: expected,
+        requestNonce: requestNonce,
+        actorRole: actorRole,
+        trustedNowMillis: liveTime.effectiveTimeMillis,
+      );
+      ConnectedCloudFeedPinnedIssuerVerifier(pinned.feedIssuerKeys)
+          .verifySync(proof);
+      final streamDigest = stream['stream_digest'] as String;
+      final existing = pages
+          .where((row) => row['after_sequence'] == expected.afterSequence)
+          .toList(growable: false);
+      if (existing.length > 1) {
+        throw StateError('Cloud-feed second-page cursor is ambiguous.');
+      }
+      final existingEvidence = existing.isEmpty
+          ? null
+          : retainedEvidence
+                .where(
+                  (row) => row['page_digest'] == existing.single['page_digest'],
+                )
+                .single;
+      final sampleMonotonic = existingEvidence == null
+          ? liveTime.monotonicMillis
+          : existingEvidence['sample_monotonic_millis'] as int;
+      final sampleNow = existingEvidence == null
+          ? liveTime.effectiveTimeMillis
+          : existingEvidence['trusted_now_millis'] as int;
+      final pageRow = <String, Object?>{
+        'page_digest': page.pageDigest,
+        'stream_digest': streamDigest,
+        'after_sequence': expected.afterSequence,
+        'prior_event_digest': expected.priorEventDigest,
+        'next_sequence': page.nextSequence,
+        'next_event_digest': page.nextEventDigest,
+        'page_json': pageJson,
+        'request_nonce': requestNonce,
+        'authenticated_proof_json': proofJson,
+        'authenticated_proof_digest': proof.proofDigest,
+      };
+      final evidenceRow = <String, Object?>{
+        'page_digest': page.pageDigest,
+        'request_json': evidence.requestJson,
+        'request_digest': connectedSiteSha256(jsonDecode(evidence.requestJson)),
+        'cloud_key_approval_json': evidence.cloudKeyApprovalJson,
+        'cloud_key_approval_digest': connectedSiteSha256(
+          jsonDecode(evidence.cloudKeyApprovalJson),
+        ),
+        'lease_digest': expected.leaseDigest,
+        'authority_payload_digest': expected.authorityPayloadDigest,
+        'enrollment_evidence_digest': evidence.enrollmentEvidenceDigest,
+        'time_entry_digest': evidence.timeEntryDigest,
+        'time_ack_digest': evidence.timeAckDigest,
+        'time_head_digest': evidence.timeHeadDigest,
+        'boot_session_id': evidence.bootSessionId,
+        'sample_monotonic_millis': sampleMonotonic,
+        'trusted_now_millis': sampleNow,
+      };
+      bool same(Map<String, Object?> a, Map<String, Object?> b) =>
+          canonicalConnectedSiteJson(a) == canonicalConnectedSiteJson(b);
+      Future<void> requireCurrentTime(
+        Map<String, List<Map<String, Object?>>> rows,
+      ) async {
+        final latest = await timeAuthority.readLiveTime(
+          tenantId: expected.workspaceId,
+          siteId: expected.siteId,
+        );
+        requireBoundTime(latest);
+        if (latest.monotonicMillis < liveTime.monotonicMillis ||
+            latest.effectiveTimeMillis < liveTime.effectiveTimeMillis) {
+          throw StateError('Cloud-feed trusted time regressed before commit.');
+        }
+        final evidenceRows = rows['shop_connected_cloud_feed_page_evidence']!;
+        if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
+          trust: pinned,
+          completeTables: {
+            ...rows,
+            'shop_connected_cloud_feed_page_evidence': [
+              for (final row in evidenceRows)
+                row['page_digest'] == page.pageDigest
+                    ? {
+                        ...row,
+                        'sample_monotonic_millis': latest.monotonicMillis,
+                        'trusted_now_millis': latest.effectiveTimeMillis,
+                      }
+                    : row,
+            ],
+          },
+        )) {
+          throw StateError('Cloud-feed trusted time changed before commit.');
+        }
+      }
+
+      if (existing.isNotEmpty) {
+        if (pages.length != 2 ||
+            head['last_page_digest'] != page.pageDigest ||
+            !same(existing.single, pageRow) ||
+            existingEvidence == null ||
+            !same(existingEvidence, evidenceRow)) {
+          throw StateError('Cloud-feed second-page replay changed bytes.');
+        }
+        await _requireCurrentV41Authority(
+          await _readV41HistoricalRows(),
+          pinned,
+          expected.authorityPayloadDigest,
+        );
+        await requireCurrentTime(await _readV41HistoricalRows());
+        return;
+      }
+      if (pages.length != 1 ||
+          head['next_sequence'] != expected.afterSequence ||
+          head['next_event_digest'] != expected.priorEventDigest) {
+        throw StateError('Cloud-feed second-page cursor changed.');
+      }
+      final nextHead = <String, Object?>{
+        ...head,
+        'next_sequence': page.nextSequence,
+        'next_event_digest': page.nextEventDigest,
+        'last_page_digest': page.pageDigest,
+      };
+      final prospective = <String, List<Map<String, Object?>>>{
+        ...current,
+        'shop_connected_cloud_feed_pages': [...pages, pageRow],
+        'shop_connected_cloud_feed_page_evidence': [
+          ...retainedEvidence,
+          evidenceRow,
+        ],
+        'shop_connected_cloud_feed_heads': [nextHead],
+      };
+      if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
+        trust: pinned,
+        completeTables: prospective,
+      )) {
+        throw StateError('Current signed cloud-feed authority is invalid.');
+      }
+      await customInsert(
+        'INSERT INTO shop_connected_cloud_feed_pages '
+        '(page_digest, stream_digest, after_sequence, prior_event_digest, '
+        'next_sequence, next_event_digest, page_json, request_nonce, '
+        'authenticated_proof_json, authenticated_proof_digest) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(page.pageDigest),
+          Variable<String>(streamDigest),
+          Variable<int>(expected.afterSequence),
+          Variable<String>(expected.priorEventDigest!),
+          Variable<int>(page.nextSequence),
+          Variable<String>(page.nextEventDigest!),
+          Variable<String>(pageJson),
+          Variable<String>(requestNonce),
+          Variable<String>(proofJson),
+          Variable<String>(proof.proofDigest),
+        ],
+      );
+      await customInsert(
+        'INSERT INTO shop_connected_cloud_feed_page_evidence '
+        '(page_digest, request_json, request_digest, cloud_key_approval_json, '
+        'cloud_key_approval_digest, lease_digest, authority_payload_digest, '
+        'enrollment_evidence_digest, time_entry_digest, time_ack_digest, '
+        'time_head_digest, boot_session_id, sample_monotonic_millis, '
+        'trusted_now_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(page.pageDigest),
+          Variable<String>(evidence.requestJson),
+          Variable<String>(evidenceRow['request_digest'] as String),
+          Variable<String>(evidence.cloudKeyApprovalJson),
+          Variable<String>(evidenceRow['cloud_key_approval_digest'] as String),
+          Variable<String>(expected.leaseDigest),
+          Variable<String>(expected.authorityPayloadDigest),
+          Variable<String>(evidence.enrollmentEvidenceDigest),
+          Variable<String>(evidence.timeEntryDigest),
+          Variable<String>(evidence.timeAckDigest),
+          Variable<String>(evidence.timeHeadDigest),
+          Variable<String>(evidence.bootSessionId),
+          Variable<int>(sampleMonotonic),
+          Variable<int>(sampleNow),
+        ],
+      );
+      final changed = await customUpdate(
+        'UPDATE shop_connected_cloud_feed_heads SET next_sequence = ?, '
+        'next_event_digest = ?, last_page_digest = ? WHERE stream_digest = ? '
+        'AND next_sequence = ? AND next_event_digest = ? AND restore_paused = 0',
+        variables: [
+          Variable<int>(page.nextSequence),
+          Variable<String>(page.nextEventDigest!),
+          Variable<String>(page.pageDigest),
+          Variable<String>(streamDigest),
+          Variable<int>(expected.afterSequence),
+          Variable<String>(expected.priorEventDigest!),
+        ],
+      );
+      if (changed != 1) {
+        throw StateError('Cloud-feed head compare-and-swap failed.');
+      }
+      if (testOnlyBeforeCommit != null) await testOnlyBeforeCommit();
+      final finalRows = await _readV41HistoricalRows();
+      await _requireCurrentV41Authority(
+        finalRows,
+        pinned,
+        expected.authorityPayloadDigest,
+      );
+      await requireCurrentTime(finalRows);
+      if (!shopCloudFeedFirstPageHistoricalRowsValidV41(
+        trust: pinned,
+        completeTables: finalRows,
+      )) {
+        throw StateError('Cloud-feed authority changed before commit.');
+      }
+    });
+  }
+
+  Future<bool> _v39ConnectedTrustedTimeClientRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedTrustedTimeClientRowsValidV39(
+        entries: await rows('shop_connected_time_client_entries'),
+        acks: await rows('shop_connected_time_client_acks'),
+        heads: await rows('shop_connected_time_client_heads'),
+        barriers: await rows('shop_connected_time_client_restore_barriers'),
+        clearances: await rows('shop_connected_time_client_restore_clearances'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v37ConnectedTrustedTimeRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedTrustedTimeRowsValidV37(
+        approvals: await rows('shop_connected_time_approvals'),
+        requests: await rows('shop_connected_time_requests'),
+        observations: await rows('shop_connected_time_observations'),
+        acceptances: await rows('shop_connected_time_acceptances'),
+        authorityHeads: await rows('shop_connected_time_authority_heads'),
+        deviceHeads: await rows('shop_connected_time_device_heads'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v36ConnectedAuthorityCheckpointRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedAuthorityCheckpointRowsValidV36(
+        checkpoints: await rows('shop_site_authority_checkpoints'),
+        bootstrapProvenance: await rows(
+          'shop_site_authority_bootstrap_provenance',
+        ),
+        payloads: await rows('shop_site_authority_payloads'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v34ConnectedCloudProofRowsValid() async {
+    try {
+      final missingRequirement = await customSelect(
+        'SELECT COUNT(*) AS total FROM shop_site_commands command '
+        'LEFT JOIN shop_site_cloud_proof_requirements requirement '
+        'ON requirement.command_id = command.command_id '
+        'WHERE requirement.command_id IS NULL',
+      ).getSingle();
+      if (missingRequirement.read<int>('total') != 0) return false;
+      final requirements = await customSelect(
+        'SELECT requirement.command_id, requirement.proof_state, '
+        'requirement.recorded_at_millis, command.received_at_millis, '
+        'proof.command_id AS proof_command_id FROM '
+        'shop_site_cloud_proof_requirements requirement '
+        'LEFT JOIN shop_site_commands command '
+        'ON command.command_id = requirement.command_id '
+        'LEFT JOIN shop_site_cloud_proofs proof '
+        'ON proof.command_id = requirement.command_id '
+        'ORDER BY requirement.command_id',
+      ).get();
+      for (final row in requirements) {
+        final state = row.read<String>('proof_state');
+        final receivedAt = row.readNullable<int>('received_at_millis');
+        if (receivedAt == null ||
+            row.read<int>('recorded_at_millis') != receivedAt ||
+            (state == 'proofRequired' &&
+                row.readNullable<String>('proof_command_id') == null) ||
+            (state == 'legacyUnverifiable' &&
+                row.readNullable<String>('proof_command_id') != null)) {
+          return false;
+        }
+      }
+      final leaseRows = await customSelect(
+        'SELECT retained.payload_digest, retained.lease_json, '
+        'retained.lease_bytes_digest, retained.issuer_evidence_digest, '
+        'lease.lease_id, lease.tenant_id, lease.site_id, lease.actor_id, '
+        'lease.actor_role, lease.capabilities_json, lease.device_id, '
+        'lease.session_generation, lease.revocation_generation, '
+        'lease.issued_at_millis, lease.expires_at_millis, lease.key_id, '
+        'lease.signature FROM shop_site_offline_lease_payloads retained '
+        'LEFT JOIN shop_site_offline_leases lease '
+        'ON lease.payload_digest = retained.payload_digest '
+        'ORDER BY retained.payload_digest',
+      ).get();
+      for (final row in leaseRows) {
+        final encoded = row.read<String>('lease_json');
+        final decoded = jsonDecode(encoded);
+        final lease = OfflineStaffLeaseV1.fromJson(decoded);
+        if (canonicalConnectedSiteJson(decoded) != encoded ||
+            lease.payloadDigest != row.read<String>('payload_digest') ||
+            connectedSiteSha256(decoded) !=
+                row.read<String>('lease_bytes_digest') ||
+            !RegExp(r'^[0-9a-f]{64}$')
+                .hasMatch(row.read<String>('issuer_evidence_digest')) ||
+            lease.workspaceId != row.read<String>('tenant_id') ||
+            lease.siteId != row.read<String>('site_id') ||
+            lease.actorId != row.read<String>('actor_id') ||
+            lease.leaseId != row.read<String>('lease_id') ||
+            lease.role != row.read<String>('actor_role') ||
+            canonicalConnectedSiteJson(lease.capabilities) !=
+                canonicalConnectedSiteJson(
+                  jsonDecode(row.read<String>('capabilities_json')),
+                ) ||
+            lease.deviceId != row.read<String>('device_id') ||
+            lease.sessionGeneration != row.read<int>('session_generation') ||
+            lease.revocationGeneration !=
+                row.read<int>('revocation_generation') ||
+            lease.issuedAtMillis != row.read<int>('issued_at_millis') ||
+            lease.expiresAtMillis != row.read<int>('expires_at_millis') ||
+            lease.issuerKeyId != row.read<String>('key_id') ||
+            lease.signature != row.read<String>('signature')) {
+          return false;
+        }
+      }
+      final hasIssuerEvidence = (await _readSchemaObjects()).containsKey(
+        'shop_site_lease_issuer_evidence',
+      );
+      final rows = await customSelect(
+        'SELECT proof.command_id, proof.proof_kind, proof.proof_json, '
+        'proof.proof_digest, command.command_digest, command.tenant_id, '
+        'command.site_id, command.actor_id, command.device_id, '
+        'command.aggregate_type, command.aggregate_id, command.expected_version, '
+        'command.payload_digest, command.lease_digest, command.received_at_millis, '
+        'command.capability, event.event_id, event.event_type, event.payload_json, '
+        'event.event_digest, audit.action AS audit_action, '
+        'retained.issuer_evidence_digest, '
+        '${hasIssuerEvidence ? 'issuer.evidence_json' : 'NULL'} AS issuer_evidence_json '
+        'FROM shop_site_cloud_proofs proof '
+        'LEFT JOIN shop_site_commands command ON command.command_id = proof.command_id '
+        'LEFT JOIN shop_site_events event ON event.command_id = proof.command_id '
+        'LEFT JOIN shop_site_audit audit ON audit.command_id = proof.command_id '
+        'LEFT JOIN shop_site_offline_lease_payloads retained '
+        'ON retained.payload_digest = command.lease_digest '
+        '${hasIssuerEvidence ? 'LEFT JOIN shop_site_lease_issuer_evidence issuer ON issuer.evidence_digest = retained.issuer_evidence_digest ' : ''}'
+        'ORDER BY proof.command_id',
+      ).get();
+      for (final row in rows) {
+        final encoded = row.read<String>('proof_json');
+        final decoded = jsonDecode(encoded);
+        final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
+        final signed = proof.signedCommand;
+        final eventBinding = decoded is Map ? decoded['eventBinding'] : null;
+        final eventPayload = row.readNullable<String>('payload_json');
+        final derived = decoded is Map ? decoded['derivation'] : null;
+        if (canonicalConnectedSiteJson(decoded) != encoded ||
+            proof.proofKind != row.read<String>('proof_kind') ||
+            proof.proofDigest != row.read<String>('proof_digest') ||
+            proof.commandId != row.read<String>('command_id') ||
+            proof.commandDigest != row.read<String>('command_digest') ||
+            proof.workspaceId != row.read<String>('tenant_id') ||
+            proof.siteId != row.read<String>('site_id') ||
+            proof.deviceId != row.read<String>('device_id') ||
+            proof.leaseDigest != row.read<String>('lease_digest') ||
+            (signed != null &&
+                (signed.actorId != row.read<String>('actor_id') ||
+                    signed.aggregateType !=
+                        row.read<String>('aggregate_type') ||
+                    signed.aggregateId != row.read<String>('aggregate_id') ||
+                    signed.expectedVersion !=
+                        row.read<int>('expected_version') ||
+                    signed.payloadDigest !=
+                        row.read<String>('payload_digest') ||
+                    DateTime.parse(signed.issuedAt).millisecondsSinceEpoch !=
+                        row.read<int>('received_at_millis') ||
+                    (eventPayload != null &&
+                        canonicalConnectedSiteJson(signed.payload) !=
+                            eventPayload) ||
+                    eventBinding is! Map ||
+                    (eventPayload != null &&
+                        (eventBinding['eventType'] !=
+                                row.readNullable<String>('event_type') ||
+                            eventBinding['eventDigest'] !=
+                                row.readNullable<String>('event_digest') ||
+                            eventBinding['eventId'] !=
+                                row.readNullable<String>('event_id'))) ||
+                    eventBinding['capability'] !=
+                        row.read<String>('capability') ||
+                    (eventPayload != null &&
+                        eventBinding['auditAction'] !=
+                            row.readNullable<String>('audit_action')) ||
+                    eventBinding['commandType'] != signed.commandType)) ||
+            (proof.proofKind == 'coordinatorDerived' &&
+                (eventPayload == null ||
+                    derived is! Map ||
+                    derived['eventDigest'] !=
+                        row.readNullable<String>('event_digest')))) {
+          return false;
+        }
+        if (proof.proofKind == 'coordinatorDerived') {
+          final derivedMap = Map<String, Object?>.from(derived! as Map);
+          final sourceProof = ConnectedSiteCloudProofV1.fromJson(
+            (decoded as Map)['sourceProof'],
+          );
+          final sourceCommand = sourceProof.signedCommand;
+          final sourceReservation = sourceCommand?.payload['reservation'];
+          final identityDigest = connectedSiteSha256({
+            'reservationId': derivedMap['reservationId'],
+            'transitionDigest': derivedMap['transitionDigest'],
+            'state': derivedMap['state'],
+          });
+          final eventPayloadMap = Map<String, Object?>.from(
+            jsonDecode(eventPayload!) as Map,
+          );
+          final source = await customSelect(
+            'SELECT COUNT(*) AS total FROM shop_site_cloud_proofs source_proof '
+            'JOIN shop_site_commands source_command '
+            'ON source_command.command_id = source_proof.command_id '
+            'JOIN shop_site_command_acks source_ack '
+            'ON source_ack.command_id = source_command.command_id '
+            'JOIN shop_connected_stock_reservation_headers header '
+            'ON header.command_id = source_command.command_id '
+            'JOIN shop_connected_stock_reservation_transitions transition '
+            'ON transition.reservation_id = header.reservation_id '
+            'WHERE source_proof.command_id = ? AND source_proof.proof_digest = ? '
+            'AND source_command.tenant_id = ? AND source_command.site_id = ? '
+            'AND source_command.device_id = ? '
+            "AND source_command.state = 'accepted' AND source_ack.status = 'accepted' "
+            'AND header.reservation_id = ? AND header.legacy_source = 0 '
+            'AND header.reservation_json = ? '
+            'AND (transition.operation_id = ? OR transition.sale_id = ?) '
+            'AND transition.transition_digest = ? AND transition.to_state = ? '
+            'AND transition.transition_json = ?',
+            variables: [
+              Variable<String>(sourceProof.commandId),
+              Variable<String>(sourceProof.proofDigest),
+              Variable<String>(proof.workspaceId),
+              Variable<String>(proof.siteId),
+              Variable<String>(proof.deviceId),
+              Variable<String>(derivedMap['reservationId']! as String),
+              Variable<String>(canonicalConnectedSiteJson(sourceReservation)),
+              Variable<String>(derivedMap['operationId']! as String),
+              Variable<String>(derivedMap['operationId']! as String),
+              Variable<String>(derivedMap['transitionDigest']! as String),
+              Variable<String>(derivedMap['state']! as String),
+              Variable<String>(
+                canonicalConnectedSiteJson(eventPayloadMap['transition']),
+              ),
+            ],
+          ).getSingle();
+          if (source.read<int>('total') != 1 ||
+              sourceCommand == null ||
+              sourceReservation is! Map ||
+              sourceReservation['reservationId'] !=
+                  derivedMap['reservationId'] ||
+              proof.commandId != 'terminal:$identityDigest' ||
+              eventPayloadMap['transition'] is! Map ||
+              eventPayloadMap['operationId'] != derivedMap['operationId'] ||
+              eventPayloadMap['reservationId'] != derivedMap['reservationId'] ||
+              eventPayloadMap['transitionDigest'] !=
+                  derivedMap['transitionDigest'] ||
+              eventPayloadMap['state'] != derivedMap['state']) {
+            return false;
+          }
+        } else {
+          final proofMap = Map<String, Object?>.from(decoded as Map);
+          final enrollmentDigest =
+              proofMap['enrollmentEvidenceDigest']! as String;
+          final bindingDigest = proofMap['coordinatorBindingDigest']! as String;
+          final fingerprint = proofMap['clientFingerprint']! as String;
+          final command = signed!;
+          final authority = await customSelect(
+            'SELECT COUNT(*) AS total FROM shop_site_enrollment_evidence enrollment '
+            'JOIN shop_site_devices device ON device.device_id = enrollment.device_id '
+            'JOIN shop_site_coordinator_bindings binding '
+            'ON binding.enrollment_evidence_digest = enrollment.evidence_digest '
+            'WHERE enrollment.evidence_digest = ? AND enrollment.action = ? '
+            'AND enrollment.tenant_id = ? AND enrollment.site_id = ? '
+            'AND enrollment.device_id = ? AND enrollment.client_fingerprint = ? '
+            'AND device.tenant_id = enrollment.tenant_id '
+            'AND device.site_id = enrollment.site_id '
+            'AND device.public_key_fingerprint = enrollment.client_fingerprint '
+            'AND device.session_generation = enrollment.session_generation '
+            'AND binding.binding_digest = ? '
+            'AND binding.client_signing_key_id = ? '
+            'AND binding.client_device_id = enrollment.device_id '
+            'AND binding.client_fingerprint = enrollment.client_fingerprint',
+            variables: [
+              Variable<String>(enrollmentDigest),
+              const Variable<String>('approve'),
+              Variable<String>(proof.workspaceId),
+              Variable<String>(proof.siteId),
+              Variable<String>(proof.deviceId),
+              Variable<String>(fingerprint),
+              Variable<String>(bindingDigest),
+              Variable<String>(command.signingKeyId),
+            ],
+          ).getSingle();
+          if (authority.read<int>('total') != 1 ||
+              proofMap['authorityPayloadDigest'] !=
+                  row.readNullable<String>('issuer_evidence_digest')) {
+            return false;
+          }
+          final issuerJson = row.readNullable<String>('issuer_evidence_json');
+          if (hasIssuerEvidence &&
+              (issuerJson == null ||
+                  connectedSiteSha256(jsonDecode(issuerJson)) !=
+                      proofMap['authorityPayloadDigest'])) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v33ConnectedReplicaDeliveryRowsValid() async {
+    try {
+      final envelopes = await customSelect(
+        'SELECT * FROM shop_site_replica_event_envelopes ORDER BY tenant_id, site_id, replica_sequence',
+      ).get();
+      final nextSequenceByScope = <String, int>{};
+      for (final row in envelopes) {
+        final decoded = jsonDecode(row.read<String>('event_json'));
+        final tenantId = row.read<String>('tenant_id');
+        final siteId = row.read<String>('site_id');
+        final sequence = row.read<int>('replica_sequence');
+        final scope = '$tenantId\u0000$siteId';
+        final expectedSequence = nextSequenceByScope[scope] ?? 1;
+        if (decoded is! Map ||
+            canonicalConnectedSiteJson(decoded) !=
+                row.read<String>('event_json') ||
+            connectedSiteSha256(decoded) != row.read<String>('event_digest') ||
+            decoded['cursor'] != sequence ||
+            sequence != expectedSequence) {
+          return false;
+        }
+        SiteDeltaV1(
+          workspaceId: tenantId,
+          siteId: siteId,
+          afterCursor: sequence - 1,
+          nextCursor: sequence,
+          events: [decoded.cast<String, Object?>()],
+        );
+        nextSequenceByScope[scope] = sequence + 1;
+      }
+      final deliveries = await customSelect(
+        'SELECT * FROM shop_connected_replica_deliveries ORDER BY workspace_id, site_id, client_fingerprint, after_cursor',
+      ).get();
+      for (final row in deliveries) {
+        final decoded = jsonDecode(row.read<String>('delta_json'));
+        if (decoded is! Map ||
+            canonicalConnectedSiteJson(decoded) !=
+                row.read<String>('delta_json') ||
+            connectedSiteSha256(decoded) != row.read<String>('delta_digest') ||
+            decoded['workspaceId'] != row.read<String>('workspace_id') ||
+            decoded['siteId'] != row.read<String>('site_id') ||
+            decoded['afterCursor'] != row.read<int>('after_cursor') ||
+            decoded['nextCursor'] != row.read<int>('next_cursor')) {
+          return false;
+        }
+        final delta = SiteDeltaV1.fromJson(decoded.cast<String, Object?>());
+        final retained = await customSelect(
+          'SELECT cursor, event_json, event_digest FROM shop_connected_replica_events '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+          'AND cursor > ? AND cursor <= ? ORDER BY cursor',
+          variables: [
+            Variable(row.read<String>('workspace_id')),
+            Variable(row.read<String>('site_id')),
+            Variable(row.read<String>('client_fingerprint')),
+            Variable(row.read<int>('after_cursor')),
+            Variable(row.read<int>('next_cursor')),
+          ],
+        ).get();
+        if (retained.length != delta.events.length) return false;
+        for (var index = 0; index < retained.length; index++) {
+          final expected = delta.events[index];
+          if (retained[index].read<int>('cursor') != expected['cursor'] ||
+              retained[index].read<String>('event_json') !=
+                  canonicalConnectedSiteJson(expected['event']) ||
+              retained[index].read<String>('event_digest') !=
+                  expected['eventDigest']) {
+            return false;
+          }
+        }
+      }
+      final heads = await customSelect(
+        'SELECT * FROM shop_connected_replica_heads',
+      ).get();
+      for (final head in heads) {
+        final workspace = head.read<String>('workspace_id');
+        final site = head.read<String>('site_id');
+        final client = head.read<String>('client_fingerprint');
+        final snapshot = jsonDecode(head.read<String>('snapshot_json')) as Map;
+        var projections = (snapshot['projections'] as Map)
+            .cast<String, Object?>();
+        var projectionCursor = head.read<int>('snapshot_cursor');
+        final events = await customSelect(
+          'SELECT cursor, event_json FROM shop_connected_replica_events '
+          'WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? AND cursor > ? '
+          'ORDER BY cursor',
+          variables: [
+            Variable(workspace),
+            Variable(site),
+            Variable(client),
+            Variable(projectionCursor),
+          ],
+        ).get();
+        for (final row in events) {
+          final event = jsonDecode(row.read<String>('event_json')) as Map;
+          final payload = (event['payload'] as Map).cast<String, Object?>();
+          if (payload.length != 2 ||
+              payload['contract'] !=
+                  'supermega.shop.connected-site-replica-state.v1' ||
+              payload['projections'] is! Map) {
+            return false;
+          }
+          projections = (payload['projections'] as Map).cast<String, Object?>();
+          projectionCursor = row.read<int>('cursor');
+        }
+        final expected = _connectedReplicaProjectionRows(projections);
+        final actual = await customSelect(
+          'SELECT projection_kind, aggregate_id, aggregate_version, last_cursor, payload_json, payload_digest '
+          'FROM shop_connected_replica_projections WHERE workspace_id = ? AND site_id = ? AND client_fingerprint = ? '
+          'ORDER BY projection_kind, aggregate_id',
+          variables: [Variable(workspace), Variable(site), Variable(client)],
+        ).get();
+        if (actual.length != expected.length) return false;
+        for (var index = 0; index < actual.length; index++) {
+          final row = actual[index];
+          final wanted = expected[index];
+          if (row.read<String>('projection_kind') != wanted.$1 ||
+              row.read<String>('aggregate_id') != wanted.$2 ||
+              row.read<int>('aggregate_version') != wanted.$3 ||
+              row.read<int>('last_cursor') != projectionCursor ||
+              row.read<String>('payload_json') != wanted.$4 ||
+              row.read<String>('payload_digest') != wanted.$5) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  List<(String, String, int, String, String)> _connectedReplicaProjectionRows(
+    Map<String, Object?> projections,
+  ) {
+    if (projections['schema'] !=
+        'supermega.shop.connected-site-projections.v2') {
+      throw const FormatException('replica projection schema');
+    }
+    final rows = <(String, String, int, String, String)>[];
+    void add(String kind, String listKey, String idKey, String versionKey) {
+      final values = projections[listKey];
+      if (values is! List) {
+        throw const FormatException('replica projection list');
+      }
+      for (final value in values) {
+        final row = (value as Map).cast<String, Object?>();
+        final id = row[idKey] as String;
+        final version = row[versionKey] as int;
+        final canonical = canonicalConnectedSiteJson(row);
+        rows.add((kind, id, version, canonical, connectedSiteSha256(row)));
+      }
+    }
+
+    add('aggregate', 'aggregates', 'aggregateId', 'version');
+    add('cafeOrder', 'cafeOrders', 'orderId', 'ticketVersion');
+    add(
+      'stockReservation',
+      'stockReservations',
+      'reservationId',
+      'stateVersion',
+    );
+    add('conflict', 'conflicts', 'conflictId', 'actualVersion');
+    rows.sort((left, right) {
+      final kind = left.$1.compareTo(right.$1);
+      return kind != 0 ? kind : left.$2.compareTo(right.$2);
+    });
+    return rows;
+  }
+
+  Future<bool> _v32ConnectedReplicaRowsValid() async {
+    try {
+      final heads = await customSelect(
+        'SELECT * FROM shop_connected_replica_heads ORDER BY workspace_id, site_id, client_fingerprint',
+      ).get();
+      final events = await customSelect(
+        'SELECT * FROM shop_connected_replica_events ORDER BY workspace_id, site_id, client_fingerprint, cursor',
+      ).get();
+      final projections = await customSelect(
+        'SELECT * FROM shop_connected_replica_projections ORDER BY workspace_id, site_id, client_fingerprint, projection_kind, aggregate_id',
+      ).get();
+      final digest = RegExp(r'^[0-9a-f]{64}$');
+      for (final head in heads) {
+        final workspace = head.read<String>('workspace_id');
+        final site = head.read<String>('site_id');
+        final fingerprint = head.read<String>('client_fingerprint');
+        final evidenceStartCursor = head.read<int>('evidence_start_cursor');
+        final snapshotCursor = head.read<int>('snapshot_cursor');
+        final cursor = head.read<int>('continuation_cursor');
+        if (workspace.isEmpty ||
+            site.isEmpty ||
+            !digest.hasMatch(fingerprint) ||
+            !digest.hasMatch(head.read<String>('certificate_sha256')) ||
+            !digest.hasMatch(head.read<String>('checkpoint_digest')) ||
+            snapshotCursor > cursor ||
+            evidenceStartCursor > snapshotCursor) {
+          return false;
+        }
+        final snapshot = jsonDecode(head.read<String>('snapshot_json'));
+        if (snapshot is! Map ||
+            canonicalConnectedSiteJson(snapshot) !=
+                head.read<String>('snapshot_json') ||
+            connectedSiteSha256(snapshot) !=
+                head.read<String>('checkpoint_digest') ||
+            snapshot['workspaceId'] != workspace ||
+            snapshot['siteId'] != site ||
+            snapshot['version'] != head.read<int>('snapshot_version') ||
+            snapshot['continuationCursor'] != snapshotCursor) {
+          return false;
+        }
+        var expected = evidenceStartCursor + 1;
+        for (final row in events.where(
+          (row) =>
+              row.read<String>('workspace_id') == workspace &&
+              row.read<String>('site_id') == site &&
+              row.read<String>('client_fingerprint') == fingerprint,
+        )) {
+          final eventCursor = row.read<int>('cursor');
+          if (eventCursor != expected++) {
+            return false;
+          }
+          final decoded = jsonDecode(row.read<String>('event_json'));
+          if (decoded is! Map ||
+              decoded.keys.toSet().difference(const {
+                'eventId',
+                'workspaceId',
+                'siteId',
+                'aggregateType',
+                'aggregateId',
+                'aggregateVersion',
+                'eventType',
+                'occurredAt',
+                'payload',
+              }).isNotEmpty ||
+              decoded.length != 9 ||
+              decoded['workspaceId'] != workspace ||
+              decoded['siteId'] != site ||
+              canonicalConnectedSiteJson(decoded) !=
+                  row.read<String>('event_json') ||
+              connectedSiteSha256(decoded) !=
+                  row.read<String>('event_digest')) {
+            return false;
+          }
+        }
+        if (expected - 1 != cursor) return false;
+        for (final row in projections.where(
+          (row) =>
+              row.read<String>('workspace_id') == workspace &&
+              row.read<String>('site_id') == site &&
+              row.read<String>('client_fingerprint') == fingerprint,
+        )) {
+          final decoded = jsonDecode(row.read<String>('payload_json'));
+          if (decoded is! Map ||
+              row.read<int>('last_cursor') > cursor ||
+              canonicalConnectedSiteJson(decoded) !=
+                  row.read<String>('payload_json') ||
+              connectedSiteSha256(decoded) !=
+                  row.read<String>('payload_digest')) {
+            return false;
+          }
+        }
+      }
+      return events.every(
+            (event) => heads.any(
+              (head) =>
+                  head.read<String>('workspace_id') ==
+                      event.read<String>('workspace_id') &&
+                  head.read<String>('site_id') ==
+                      event.read<String>('site_id') &&
+                  head.read<String>('client_fingerprint') ==
+                      event.read<String>('client_fingerprint'),
+            ),
+          ) &&
+          projections.every(
+            (projection) => heads.any(
+              (head) =>
+                  head.read<String>('workspace_id') ==
+                      projection.read<String>('workspace_id') &&
+                  head.read<String>('site_id') ==
+                      projection.read<String>('site_id') &&
+                  head.read<String>('client_fingerprint') ==
+                      projection.read<String>('client_fingerprint'),
+            ),
+          );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v31ConnectedReservationSessionRowsValid() async {
+    try {
+      final attempts = await customSelect(
+        'SELECT command_id, command_digest, command_json, prepared_at_millis '
+        'FROM shop_site_command_attempts ORDER BY command_id',
+      ).get();
+      final bindings = await customSelect(
+        'SELECT * FROM shop_connected_reservation_session_bindings '
+        'ORDER BY workspace_id, site_id, actor_id, device_id, workflow_type, subject_id',
+      ).get();
+      final expected = <String, Map<String, Object?>>{};
+      for (final row in attempts) {
+        final command = SiteCommandV1.fromJson(
+          jsonDecode(row.read<String>('command_json')),
+        );
+        if (command.payload['contract'] !=
+            _shopConnectedStockReservePayloadContract) {
+          continue;
+        }
+        final reservation = ConnectedStockReservationV1.fromJson(
+          command.payload['reservation'],
+        );
+        final expectedType = switch (reservation.workflowType) {
+          ConnectedStockWorkflowType.retailCart => 'retail.stock.reserve.v1',
+          ConnectedStockWorkflowType.cafeOrder => 'cafe.stock.reserve.v1',
+        };
+        if (command.commandId != row.read<String>('command_id') ||
+            command.commandDigest != row.read<String>('command_digest') ||
+            command.commandType != expectedType ||
+            command.workspaceId != reservation.workspaceId ||
+            command.siteId != reservation.siteId ||
+            command.actorId != reservation.actorId ||
+            command.deviceId != reservation.deviceId ||
+            command.aggregateType != reservation.workflowType.name ||
+            command.aggregateId != reservation.subjectId ||
+            command.payloadDigest != connectedSiteSha256(command.payload)) {
+          return false;
+        }
+        final key = [
+          reservation.workspaceId,
+          reservation.siteId,
+          reservation.actorId,
+          reservation.deviceId,
+          reservation.workflowType.name,
+          reservation.subjectId,
+        ].join('\u0000');
+        if (expected.containsKey(key)) return false;
+        expected[key] = {
+          'workspace_id': reservation.workspaceId,
+          'site_id': reservation.siteId,
+          'actor_id': reservation.actorId,
+          'device_id': reservation.deviceId,
+          'workflow_type': reservation.workflowType.name,
+          'subject_id': reservation.subjectId,
+          'reservation_id': reservation.reservationId,
+          'reservation_digest': reservation.reservationDigest,
+          'reserve_command_id': command.commandId,
+          'reserve_command_digest': command.commandDigest,
+          'bound_at_millis': row.read<int>('prepared_at_millis'),
+        };
+      }
+      if (bindings.length != expected.length) return false;
+      for (final row in bindings) {
+        final data = Map<String, Object?>.from(row.data);
+        final key = [
+          data['workspace_id'],
+          data['site_id'],
+          data['actor_id'],
+          data['device_id'],
+          data['workflow_type'],
+          data['subject_id'],
+        ].join('\u0000');
+        final value = expected[key];
+        if (value == null ||
+            value.entries.any((entry) => data[entry.key] != entry.value)) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v30ConnectedAuthorityPayloadRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedAuthorityPayloadRowsValidV30(
+        payloads: await rows('shop_site_authority_payloads'),
+        members: await rows('shop_site_authority_members'),
+        configurations: await rows('shop_site_configuration_snapshots'),
+        deltas: await rows('shop_site_authority_deltas'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v29ConnectedEnvelopeRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedEnvelopeRowsValidV29(
+        envelopes: await rows('shop_site_request_envelopes'),
+        transmissions: await rows('shop_site_command_transmissions'),
+        attempts: await rows('shop_site_command_attempts'),
+        bindings: await rows('shop_site_coordinator_bindings'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v28ConnectedAttemptRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedAttemptRowsValidV28(
+        bindings: await rows('shop_site_coordinator_bindings'),
+        revocations: await rows('shop_site_coordinator_binding_revocations'),
+        attempts: await rows('shop_site_command_attempts'),
+        transmissions: await rows('shop_site_command_transmissions'),
+        results: await rows('shop_site_command_results'),
+        enrollmentEvidence: await rows('shop_site_enrollment_evidence'),
+        devices: await rows('shop_site_devices'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v27ConnectedAuthorityRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedAuthorityRowsValidV27(
+        deltas: await rows('shop_site_authority_deltas'),
+        revocations: await rows('shop_site_revocation_observations'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v26ConnectedCloudDispositionRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedCloudDispositionRowsValidV26(
+        commands: await rows('shop_site_commands'),
+        events: await rows('shop_site_events'),
+        cloudAcks: await rows('shop_site_cloud_acks'),
+        conflicts: await rows('shop_site_conflicts'),
+        dispositions: await rows('shop_site_cloud_dispositions'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v25ConnectedEnrollmentRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedEnrollmentRowsValidV25(
+        pairingNonces: await rows('shop_site_pairing_nonces'),
+        pendingEnrollments: await rows('shop_site_pending_enrollments'),
+        enrollmentEvidence: await rows('shop_site_enrollment_evidence'),
+        devices: await rows('shop_site_devices'),
+        requestNonces: await rows('shop_site_request_nonces'),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v24ConnectedStockReservationRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String sql) async =>
+          (await customSelect(sql).get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedStockReservationRowsValidV24(
+        commands: await rows('SELECT * FROM shop_site_commands'),
+        events: await rows('SELECT * FROM shop_site_events'),
+        headers: await rows(
+          'SELECT * FROM shop_connected_stock_reservation_headers',
+        ),
+        lines: await rows(
+          'SELECT * FROM shop_connected_stock_reservation_lines',
+        ),
+        transitions: await rows(
+          'SELECT * FROM shop_connected_stock_reservation_transitions',
+        ),
+        sales: await rows(
+          'SELECT id, operation_id, request_fingerprint FROM shop_sales',
+        ),
+        trustedTimes: await rows('SELECT * FROM shop_connected_trusted_time'),
+        scopeBindings: await rows('SELECT * FROM shop_connected_scope_binding'),
+        tenderBindings: await rows(
+          'SELECT * FROM shop_connected_tender_reservation_bindings',
+        ),
+        pendingCashCheckouts: await rows(
+          'SELECT operation_id FROM shop_pending_cash_checkouts',
+        ),
+        walletCheckoutIntents: await rows(
+          'SELECT operation_id, state FROM shop_wallet_checkout_intents',
+        ),
+      );
     } on Object {
       return false;
     }
@@ -5561,6 +14061,28 @@ class ShopDatabase extends _$ShopDatabase {
     final objects = <String, _ShopSchemaObject>{};
     for (final row in rows) {
       final name = row.read<String>('name').toLowerCase();
+      if (Zone.current[#shopAllowV38NestedSchemaVerification] == true &&
+          (shopConnectedTrustedTimeIssuerSchemaDefinitionsV38().containsKey(
+                name,
+              ) ||
+              shopConnectedTrustedTimeClientSchemaDefinitionsV39().containsKey(
+                name,
+              ))) {
+        continue;
+      }
+      if (Zone.current[#shopAllowV40NestedSchemaVerification] == true &&
+          shopConnectedCloudFeedSchemaDefinitionsV40().containsKey(name)) {
+        continue;
+      }
+      if ((Zone.current[#shopAllowV40NestedSchemaVerification] == true ||
+              Zone.current[#shopAllowV41NestedSchemaVerification] == true) &&
+          shopConnectedCloudFeedSchemaDefinitionsV41().containsKey(name)) {
+        continue;
+      }
+      if (Zone.current[#shopAllowV42NestedSchemaVerification] == true &&
+          shopConnectedDeviceProfileSchemaDefinitionsV42().containsKey(name)) {
+        continue;
+      }
       if (objects.containsKey(name)) {
         throw StateError('The Shop database has duplicate schema names.');
       }
@@ -5581,9 +14103,10 @@ class ShopDatabase extends _$ShopDatabase {
   bool _sameSchemaObjectNames(
     Map<String, _ShopSchemaObject> objects,
     Set<String> expected,
-  ) =>
-      objects.length == expected.length &&
-      objects.keys.toSet().containsAll(expected);
+  ) {
+    return objects.length == expected.length &&
+        objects.keys.toSet().containsAll(expected);
+  }
 
   Future<bool> _baseSchemaExact(
     int version,
@@ -5940,6 +14463,15 @@ class ShopDatabase extends _$ShopDatabase {
       final snapshot = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase(target),
         correctionReceiptVerifier: correctionReceiptVerifier,
+        testOnlyCloudFeedPinnedKeys:
+            _historicalCloudFeedTrustSource == null &&
+                _testOnlyCloudFeedV41Trust == null
+            ? _testOnlyCloudFeedPinnedKeys
+            : const {},
+        testOnlyCloudFeedV41Trust: _testOnlyCloudFeedV41Trust,
+        historicalCloudFeedTrustSource: _historicalCloudFeedTrustSource,
+        v42EnrollmentTrustSource: _v42EnrollmentTrustSource,
+        testOnlyLegacyCloudFeedV40: _testOnlyLegacyCloudFeedV40,
       );
       try {
         await snapshot.verifyReadyForUse();
@@ -5964,6 +14496,2363 @@ class ShopDatabase extends _$ShopDatabase {
     } catch (_) {
       if (await target.exists()) await target.delete();
       rethrow;
+    }
+  }
+
+  /// Applies one already authenticated connected-site command atomically.
+  ///
+  /// This persistence seam deliberately performs no signature verification or
+  /// network enrollment. A caller must keep [connectedSiteEnabled] false until
+  /// a production issuer, key store, and coordinator policy are injected. The
+  /// database still rechecks the persisted device, lease, capability,
+  /// revocation generation, aggregate version, and reservation invariant.
+  Future<ShopConnectedSiteCommandResult> applyConnectedSiteCommand(
+    ShopConnectedSiteCommandInput input, {
+    required bool connectedSiteEnabled,
+    ShopConnectedSiteCoordinatorTimeAuthority timeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
+  }) async {
+    if (!connectedSiteEnabled) {
+      throw StateError('Connected-site commands are disabled.');
+    }
+    _validateConnectedSiteCommandInput(input);
+    final payload = _connectedSiteEventPayload(input.eventPayloadJson);
+    final stockPayload = _connectedStockCommandPayload(input, payload);
+    _validateConnectedCafeReservationRequirement(input, payload);
+    final canonicalPayloadJson = canonicalConnectedSiteJson(payload);
+    final eventEnvelope = _connectedSiteEventEnvelope(
+      input,
+      aggregateVersion: input.expectedVersion + 1,
+      payload: payload,
+    );
+    if (connectedSiteSha256(eventEnvelope) != input.eventDigest) {
+      throw StateError('The connected-site event digest is invalid.');
+    }
+    return transaction(() async {
+      final existing = await customSelect(
+        'SELECT command.command_digest, command.state, command.tenant_id, '
+        'command.site_id, command.actor_id, command.device_id, '
+        'command.aggregate_type, command.aggregate_id, command.capability, '
+        'command.expected_version, command.payload_digest, command.lease_digest, '
+        'command.received_at_millis, ack.status, '
+        'ack.site_sequence, ack.canonical_version, ack.ack_digest, '
+        'event.event_digest, conflict.reason_code, proof.proof_json, '
+        'proof.proof_digest '
+        'FROM shop_site_commands command '
+        'JOIN shop_site_command_acks ack '
+        'ON ack.command_id = command.command_id '
+        'LEFT JOIN shop_site_events event ON event.command_id = command.command_id '
+        'LEFT JOIN shop_site_conflicts conflict ON conflict.command_id = command.command_id '
+        'LEFT JOIN shop_site_cloud_proofs proof ON proof.command_id = command.command_id '
+        'WHERE command.command_id = ?',
+        variables: [Variable<String>(input.commandId)],
+      ).getSingleOrNull();
+      if (existing != null) {
+        if (existing.read<String>('command_digest') != input.commandDigest ||
+            existing.read<String>('tenant_id') != input.tenantId ||
+            existing.read<String>('site_id') != input.siteId ||
+            existing.read<String>('actor_id') != input.actorId ||
+            existing.read<String>('device_id') != input.deviceId ||
+            existing.read<String>('aggregate_type') != input.aggregateType ||
+            existing.read<String>('aggregate_id') != input.aggregateId ||
+            existing.read<String>('capability') != input.capability ||
+            existing.read<int>('expected_version') != input.expectedVersion ||
+            existing.read<String>('payload_digest') != input.payloadDigest ||
+            existing.read<String>('lease_digest') != input.leaseDigest ||
+            existing.read<int>('received_at_millis') != input.createdAtMillis ||
+            existing.readNullable<String>('proof_json') !=
+                input.cloudProofJson ||
+            existing.readNullable<String>('proof_digest') !=
+                input.cloudProofDigest ||
+            (existing.read<String>('state') == 'accepted' &&
+                existing.readNullable<String>('event_digest') !=
+                    input.eventDigest)) {
+          throw StateError(
+            'A connected-site command ID was reused with different bytes.',
+          );
+        }
+        final accepted = existing.read<String>('state') == 'accepted';
+        return ShopConnectedSiteCommandResult(
+          status: accepted
+              ? ShopConnectedSiteCommandStatus.replayed
+              : ShopConnectedSiteCommandStatus.conflict,
+          commandId: input.commandId,
+          ackDigest: existing.read<String>('ack_digest'),
+          canonicalVersion: existing.read<int>('canonical_version'),
+          eventSequence: existing.readNullable<int>('site_sequence'),
+          eventDigest: existing.readNullable<String>('event_digest'),
+          conflictCode: existing.readNullable<String>('reason_code'),
+        );
+      }
+
+      final trustedNow =
+          stockPayload.reservation == null &&
+              stockPayload.lifecycle == null &&
+              input.stockReservationRequirement == null
+          ? null
+          : await _validatedConnectedSiteNow(
+              timeAuthority,
+              tenantId: input.tenantId,
+              siteId: input.siteId,
+            );
+
+      final authority = await customSelect(
+        'SELECT lease.capabilities_json, lease.session_generation, '
+        'lease.revocation_generation, lease.issued_at_millis, '
+        'lease.expires_at_millis, device.session_generation AS device_generation, '
+        'device.state AS device_state, observation.generation AS observed_generation '
+        'FROM shop_site_offline_leases lease '
+        'JOIN shop_site_devices device ON device.device_id = lease.device_id '
+        'LEFT JOIN shop_site_revocation_observations observation '
+        'ON observation.tenant_id = lease.tenant_id '
+        'AND observation.site_id = lease.site_id '
+        'WHERE lease.payload_digest = ? AND lease.tenant_id = ? '
+        'AND lease.site_id = ? AND lease.actor_id = ? AND lease.device_id = ?',
+        variables: [
+          Variable<String>(input.leaseDigest),
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.actorId),
+          Variable<String>(input.deviceId),
+        ],
+      ).getSingleOrNull();
+      if (authority == null ||
+          authority.read<String>('device_state') != 'active' ||
+          authority.read<int>('session_generation') !=
+              authority.read<int>('device_generation') ||
+          authority.readNullable<int>('observed_generation') !=
+              authority.read<int>('revocation_generation') ||
+          input.createdAtMillis < authority.read<int>('issued_at_millis') ||
+          input.createdAtMillis >= authority.read<int>('expires_at_millis')) {
+        throw StateError('Connected-site authority is absent or expired.');
+      }
+      final capabilities = jsonDecode(
+        authority.read<String>('capabilities_json'),
+      );
+      if (capabilities is! List ||
+          capabilities.any((value) => value is! String) ||
+          !capabilities.contains(input.capability)) {
+        throw StateError('The offline lease lacks this capability.');
+      }
+      if (trustedNow != null) {
+        const maxSkewMillis = 2 * 60 * 1000;
+        if ((input.createdAtMillis - trustedNow).abs() > maxSkewMillis ||
+            trustedNow < authority.read<int>('issued_at_millis') ||
+            trustedNow >= authority.read<int>('expires_at_millis')) {
+          throw StateError('Connected-site command time is outside policy.');
+        }
+        final reservation = stockPayload.reservation;
+        if (reservation != null) {
+          final issuedAt = DateTime.parse(reservation.issuedAt)
+              .millisecondsSinceEpoch;
+          final expiresAt = DateTime.parse(reservation.expiresAt)
+              .millisecondsSinceEpoch;
+          if ((issuedAt - trustedNow).abs() > maxSkewMillis ||
+              expiresAt <= trustedNow ||
+              expiresAt >
+                  trustedNow + const Duration(hours: 24).inMilliseconds ||
+              expiresAt > authority.read<int>('expires_at_millis')) {
+            throw StateError(
+              'Connected stock reservation time is outside policy.',
+            );
+          }
+        }
+      }
+
+      final scopeBinding = trustedNow == null
+          ? null
+          : await customSelect(
+              'SELECT tenant_id, site_id FROM shop_connected_scope_binding '
+              'WHERE singleton = 1',
+            ).getSingleOrNull();
+      final scopeMatches =
+          trustedNow == null ||
+          (scopeBinding != null &&
+              scopeBinding.read<String>('tenant_id') == input.tenantId &&
+              scopeBinding.read<String>('site_id') == input.siteId);
+      if (trustedNow != null && !scopeMatches) {
+        throw StateError('Connected stock scope does not match this database.');
+      }
+      if (trustedNow != null && scopeMatches) {
+        await _requireConnectedTrustedTimeNotRegressed(
+          tenantId: input.tenantId,
+          siteId: input.siteId,
+          nowMillis: trustedNow,
+        );
+      }
+
+      final aggregate = await customSelect(
+        'SELECT version FROM shop_site_aggregate_versions '
+        'WHERE tenant_id = ? AND site_id = ? AND aggregate_type = ? '
+        'AND aggregate_id = ?',
+        variables: [
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.aggregateType),
+          Variable<String>(input.aggregateId),
+        ],
+      ).getSingleOrNull();
+      final currentVersion = aggregate?.read<int>('version') ?? 0;
+
+      String? conflictReason;
+      ConnectedStockReservationTransitionV1? lifecycleTransition;
+      if (!scopeMatches) {
+        conflictReason = 'connected_scope_mismatch';
+      } else if (currentVersion != input.expectedVersion) {
+        conflictReason = 'aggregate_version_mismatch';
+      } else if (input.stockReservationRequirement case final requirement?) {
+        final validation = await _validateConnectedStockRequirement(
+          input,
+          requirement,
+          trustedNow: trustedNow!,
+        );
+        conflictReason = validation.conflictReason;
+        lifecycleTransition = validation.transition;
+      } else if (stockPayload.reservation != null) {
+        for (final line in stockPayload.reservation!.lines) {
+          final product = await customSelect(
+            'SELECT on_hand FROM shop_products WHERE id = ? AND archived = 0',
+            variables: [Variable<String>(line.productId)],
+          ).getSingleOrNull();
+          final reserved = await _readTotalReservedStockQuantity(
+            line.productId,
+          );
+          if (product == null ||
+              product.read<int>('on_hand') - reserved < line.quantity) {
+            conflictReason = 'stock_reservation_unavailable';
+            break;
+          }
+        }
+      } else if (stockPayload.lifecycle case final lifecycle?) {
+        final header = await customSelect(
+          'SELECT reservation_json, legacy_source, workflow_type, subject_id, '
+          'capability FROM '
+          'shop_connected_stock_reservation_headers '
+          'WHERE reservation_id = ? AND tenant_id = ? AND site_id = ? '
+          'AND actor_id = ? AND device_id = ? '
+          'AND workflow_type = ? AND subject_id = ? AND capability = ?',
+          variables: [
+            Variable<String>(lifecycle.reservationId),
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+            Variable<String>(input.actorId),
+            Variable<String>(input.deviceId),
+            Variable<String>(input.aggregateType),
+            Variable<String>(input.aggregateId),
+            Variable<String>(input.capability),
+          ],
+        ).getSingleOrNull();
+        if (header == null) {
+          conflictReason = 'reservation_not_found';
+        } else if (header.read<int>('legacy_source') == 1) {
+          conflictReason = 'reservation_legacy_unadoptable';
+        } else {
+          final terminal = await customSelect(
+            'SELECT 1 FROM shop_connected_stock_reservation_transitions '
+            'WHERE reservation_id = ? LIMIT 1',
+            variables: [Variable<String>(lifecycle.reservationId)],
+          ).getSingleOrNull();
+          if (terminal != null) {
+            conflictReason = 'reservation_terminal';
+          } else {
+            final reservation = ConnectedStockReservationV1.fromJson(
+              jsonDecode(header.read<String>('reservation_json')),
+            );
+            if (reservation.workspaceId != input.tenantId ||
+                reservation.siteId != input.siteId ||
+                reservation.actorId != input.actorId ||
+                reservation.deviceId != input.deviceId ||
+                reservation.workflowType.name != input.aggregateType ||
+                reservation.subjectId != input.aggregateId ||
+                reservation.capability.name != input.capability) {
+              conflictReason = 'reservation_scope_mismatch';
+            } else if (reservation.reservationDigest !=
+                lifecycle.expectedReservationDigest) {
+              conflictReason = 'reservation_digest_mismatch';
+            } else if (trustedNow! <
+                    DateTime.parse(reservation.issuedAt)
+                        .millisecondsSinceEpoch ||
+                trustedNow >=
+                    DateTime.parse(reservation.expiresAt)
+                        .millisecondsSinceEpoch) {
+              conflictReason = 'reservation_time_invalid';
+            } else {
+              lifecycleTransition = transitionConnectedStockReservation(
+                reservation: reservation,
+                expectedReservationDigest: lifecycle.expectedReservationDigest,
+                targetState: lifecycle.targetState,
+                transitionedAt: _connectedSiteOccurredAt(trustedNow),
+                reason: lifecycle.reason,
+              );
+            }
+          }
+        }
+      }
+
+      if (conflictReason != null) {
+        if (trustedNow != null && scopeBinding != null && scopeMatches) {
+          await _recordConnectedTrustedTime(
+            tenantId: input.tenantId,
+            siteId: input.siteId,
+            nowMillis: trustedNow,
+          );
+        }
+        return _recordConnectedSiteConflict(
+          input,
+          currentVersion: currentVersion,
+          reason: conflictReason,
+        );
+      }
+
+      final nextVersion = currentVersion + 1;
+      if (trustedNow != null) {
+        await _recordConnectedTrustedTime(
+          tenantId: input.tenantId,
+          siteId: input.siteId,
+          nowMillis: trustedNow,
+        );
+      }
+      await customStatement('SAVEPOINT shop_connected_projection');
+      try {
+        await customInsert(
+          'INSERT INTO shop_site_commands '
+          '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+          'aggregate_type, capability, expected_version, payload_digest, lease_digest, '
+          'command_digest, state, received_at_millis) '
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?)",
+          variables: [
+            Variable<String>(input.commandId),
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+            Variable<String>(input.actorId),
+            Variable<String>(input.deviceId),
+            Variable<String>(input.aggregateId),
+            Variable<String>(input.aggregateType),
+            Variable<String>(input.capability),
+            Variable<int>(input.expectedVersion),
+            Variable<String>(input.payloadDigest),
+            Variable<String>(input.leaseDigest),
+            Variable<String>(input.commandDigest),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        await _insertConnectedCloudProof(
+          commandId: input.commandId,
+          proofJson: input.cloudProofJson,
+          proofDigest: input.cloudProofDigest,
+          createdAtMillis: input.createdAtMillis,
+        );
+        final nextSiteSequenceRow = await customSelect(
+          'SELECT COALESCE(MAX(site_sequence), 0) + 1 AS next_sequence '
+          'FROM shop_site_events WHERE tenant_id = ? AND site_id = ?',
+          variables: [
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+          ],
+        ).getSingle();
+        final siteSequence = nextSiteSequenceRow.read<int>('next_sequence');
+        final eventRowId = await customInsert(
+          'INSERT INTO shop_site_events '
+          '(site_sequence, event_id, command_id, tenant_id, site_id, '
+          'aggregate_type, aggregate_id, '
+          'aggregate_version, event_type, payload_json, event_digest, '
+          'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<int>(siteSequence),
+            Variable<String>(input.eventId),
+            Variable<String>(input.commandId),
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+            Variable<String>(input.aggregateType),
+            Variable<String>(input.aggregateId),
+            Variable<int>(nextVersion),
+            Variable<String>(input.eventType),
+            Variable<String>(canonicalPayloadJson),
+            Variable<String>(input.eventDigest),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        await customInsert(
+          'INSERT INTO shop_site_aggregate_versions '
+          '(tenant_id, site_id, aggregate_type, aggregate_id, version, '
+          'last_event_row_id, last_site_sequence, updated_at_millis) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?) '
+          'ON CONFLICT(tenant_id, site_id, aggregate_type, aggregate_id) DO UPDATE SET '
+          'version = excluded.version, '
+          'last_event_row_id = excluded.last_event_row_id, '
+          'last_site_sequence = excluded.last_site_sequence, '
+          'updated_at_millis = excluded.updated_at_millis',
+          variables: [
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+            Variable<String>(input.aggregateType),
+            Variable<String>(input.aggregateId),
+            Variable<int>(nextVersion),
+            Variable<int>(eventRowId),
+            Variable<int>(siteSequence),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        if (stockPayload.reservation != null) {
+          await _insertConnectedStockReservation(
+            stockPayload.reservation!,
+            commandId: input.commandId,
+          );
+        }
+        if (lifecycleTransition != null) {
+          await _insertConnectedStockTransition(
+            lifecycleTransition,
+            operationId: input.commandId,
+            saleId: null,
+          );
+        }
+        await customInsert(
+          'INSERT INTO shop_site_audit '
+          '(audit_id, command_id, actor_id, action, metadata_digest, '
+          'created_at_millis) VALUES (?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>('audit:${input.commandId}'),
+            Variable<String>(input.commandId),
+            Variable<String>(input.actorId),
+            Variable<String>(input.auditAction),
+            Variable<String>(input.auditMetadataDigest),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        await input.acceptedProjection?.call();
+        await _appendConnectedReplicaEnvelope(
+          sourceEventRowId: eventRowId,
+          eventId: input.eventId,
+          tenantId: input.tenantId,
+          siteId: input.siteId,
+          aggregateType: input.aggregateType,
+          aggregateId: input.aggregateId,
+          aggregateVersion: nextVersion,
+          occurredAtMillis: input.createdAtMillis,
+        );
+        await customInsert(
+          'INSERT INTO shop_site_command_acks '
+          '(command_id, status, event_row_id, site_sequence, canonical_version, '
+          "ack_digest, created_at_millis) VALUES (?, 'accepted', ?, ?, ?, ?, ?)",
+          variables: [
+            Variable<String>(input.commandId),
+            Variable<int>(eventRowId),
+            Variable<int>(siteSequence),
+            Variable<int>(nextVersion),
+            Variable<String>(input.ackDigest),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        await customStatement('RELEASE SAVEPOINT shop_connected_projection');
+        return ShopConnectedSiteCommandResult(
+          status: ShopConnectedSiteCommandStatus.accepted,
+          commandId: input.commandId,
+          ackDigest: input.ackDigest,
+          canonicalVersion: nextVersion,
+          eventSequence: siteSequence,
+          eventDigest: input.eventDigest,
+          conflictCode: null,
+        );
+      } on ShopConnectedProjectionConflict catch (conflict) {
+        await customStatement(
+          'ROLLBACK TO SAVEPOINT shop_connected_projection',
+        );
+        await customStatement('RELEASE SAVEPOINT shop_connected_projection');
+        return _recordConnectedSiteConflict(
+          input,
+          currentVersion: currentVersion,
+          reason: conflict.code,
+        );
+      }
+    });
+  }
+
+  Future<void> _appendConnectedReplicaEnvelope({
+    required int? sourceEventRowId,
+    required String eventId,
+    required String tenantId,
+    required String siteId,
+    required String aggregateType,
+    required String aggregateId,
+    required int aggregateVersion,
+    required int occurredAtMillis,
+  }) async {
+    final replicaSequence = (await customSelect(
+      'SELECT COALESCE(MAX(replica_sequence), 0) + 1 AS next_sequence '
+      'FROM shop_site_replica_event_envelopes WHERE tenant_id = ? AND site_id = ?',
+      variables: [Variable(tenantId), Variable(siteId)],
+    ).getSingle()).read<int>('next_sequence');
+    final projections = await readConnectedReplicaProjectionV2(
+      tenantId: tenantId,
+      siteId: siteId,
+    );
+    final event = <String, Object?>{
+      'eventId': eventId,
+      'workspaceId': tenantId,
+      'siteId': siteId,
+      'aggregateType': aggregateType,
+      'aggregateId': aggregateId,
+      'aggregateVersion': aggregateVersion,
+      'eventType': 'shop.connected_replica.state.v1',
+      'occurredAt': _connectedSiteOccurredAt(occurredAtMillis),
+      'payload': {
+        'contract': 'supermega.shop.connected-site-replica-state.v1',
+        'projections': projections,
+      },
+    };
+    final envelope = <String, Object?>{
+      'cursor': replicaSequence,
+      'event': event,
+      'eventDigest': connectedSiteSha256(event),
+    };
+    await customStatement(
+      'INSERT INTO shop_site_replica_event_envelopes '
+      '(source_event_row_id, tenant_id, site_id, replica_sequence, event_json, event_digest, created_at_millis) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        sourceEventRowId,
+        tenantId,
+        siteId,
+        replicaSequence,
+        canonicalConnectedSiteJson(envelope),
+        connectedSiteSha256(envelope),
+        occurredAtMillis,
+      ],
+    );
+  }
+
+  Future<ShopConnectedSiteCommandResult> _recordConnectedSiteConflict(
+    ShopConnectedSiteCommandInput input, {
+    required int currentVersion,
+    required String reason,
+  }) async {
+    final conflictDigest = await _sha256Hex(
+      '${input.commandDigest}:$reason:$currentVersion',
+    );
+    await customInsert(
+      'INSERT INTO shop_site_commands '
+      '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+      'aggregate_type, capability, expected_version, payload_digest, lease_digest, '
+      'command_digest, state, received_at_millis) '
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'conflict', ?)",
+      variables: [
+        Variable<String>(input.commandId),
+        Variable<String>(input.tenantId),
+        Variable<String>(input.siteId),
+        Variable<String>(input.actorId),
+        Variable<String>(input.deviceId),
+        Variable<String>(input.aggregateId),
+        Variable<String>(input.aggregateType),
+        Variable<String>(input.capability),
+        Variable<int>(input.expectedVersion),
+        Variable<String>(input.payloadDigest),
+        Variable<String>(input.leaseDigest),
+        Variable<String>(input.commandDigest),
+        Variable<int>(input.createdAtMillis),
+      ],
+    );
+    await _insertConnectedCloudProof(
+      commandId: input.commandId,
+      proofJson: input.cloudProofJson,
+      proofDigest: input.cloudProofDigest,
+      createdAtMillis: input.createdAtMillis,
+    );
+    await customInsert(
+      'INSERT INTO shop_site_conflicts '
+      '(conflict_id, command_id, reason_code, detail_digest, state, '
+      "created_at_millis) VALUES (?, ?, ?, ?, 'pending', ?)",
+      variables: [
+        Variable<String>('conflict:${input.commandId}'),
+        Variable<String>(input.commandId),
+        Variable<String>(reason),
+        Variable<String>(conflictDigest),
+        Variable<int>(input.createdAtMillis),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_site_command_acks '
+      '(command_id, status, event_row_id, site_sequence, canonical_version, '
+      "ack_digest, created_at_millis) VALUES (?, 'conflict', NULL, NULL, ?, ?, ?)",
+      variables: [
+        Variable<String>(input.commandId),
+        Variable<int>(currentVersion),
+        Variable<String>(conflictDigest),
+        Variable<int>(input.createdAtMillis),
+      ],
+    );
+    final conflictId = 'conflict:${input.commandId}';
+    await _appendConnectedReplicaEnvelope(
+      sourceEventRowId: null,
+      eventId: 'conflict-event:${input.commandId}',
+      tenantId: input.tenantId,
+      siteId: input.siteId,
+      aggregateType: 'conflict',
+      aggregateId: conflictId,
+      aggregateVersion: 1,
+      occurredAtMillis: input.createdAtMillis,
+    );
+    return ShopConnectedSiteCommandResult(
+      status: ShopConnectedSiteCommandStatus.conflict,
+      commandId: input.commandId,
+      ackDigest: conflictDigest,
+      canonicalVersion: currentVersion,
+      eventSequence: null,
+      eventDigest: null,
+      conflictCode: reason,
+    );
+  }
+
+  Future<void> _insertConnectedCloudProof({
+    required String commandId,
+    required String proofJson,
+    required String proofDigest,
+    required int createdAtMillis,
+  }) async {
+    final decoded = jsonDecode(proofJson);
+    final proof = ConnectedSiteCloudProofV1.fromJson(decoded);
+    if (canonicalConnectedSiteJson(decoded) != proofJson ||
+        proof.commandId != commandId ||
+        proof.proofDigest != proofDigest) {
+      throw StateError('Connected-site cloud proof changed before storage.');
+    }
+    await customInsert(
+      'INSERT INTO shop_site_cloud_proofs '
+      '(command_id, proof_kind, proof_json, proof_digest, created_at_millis) '
+      'VALUES (?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(commandId),
+        Variable<String>(proof.proofKind),
+        Variable<String>(proofJson),
+        Variable<String>(proofDigest),
+        Variable<int>(createdAtMillis),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_site_cloud_proof_requirements '
+      '(command_id, proof_state, recorded_at_millis) '
+      "VALUES (?, 'proofRequired', ?)",
+      variables: [Variable<String>(commandId), Variable<int>(createdAtMillis)],
+    );
+  }
+
+  /// Reconstructs strict wire events from immutable database rows.
+  ///
+  /// [tenantId] is the local persistence name for the wire `workspaceId`.
+  /// Construction of [ConnectedSitePendingEvent] revalidates the complete
+  /// canonical event-envelope digest and fails closed on any stored mismatch.
+  Future<void> requireConnectedCloudUploadAuthority(
+    ConnectedSiteCloudProofV1 proof,
+  ) async {
+    final proofJson = proof.toJson();
+    final signedProof = proof.proofKind == 'coordinatorDerived'
+        ? ConnectedSiteCloudProofV1.fromJson(proofJson['sourceProof'])
+        : proof;
+    final command = signedProof.signedCommand;
+    final signedJson = signedProof.toJson();
+    if (command == null) {
+      throw StateError('connected_site_cloud_authority_evidence_unavailable');
+    }
+    final rows = await customSelect(
+      'SELECT retained.lease_json, issuer.evidence_json '
+      'FROM shop_site_enrollment_evidence enrollment '
+      'JOIN shop_site_devices device ON device.device_id = enrollment.device_id '
+      'JOIN shop_site_coordinator_bindings binding '
+      'ON binding.enrollment_evidence_digest = enrollment.evidence_digest '
+      'JOIN shop_site_offline_lease_payloads retained '
+      'ON retained.payload_digest = ? '
+      'JOIN shop_site_lease_issuer_evidence issuer '
+      'ON issuer.evidence_digest = retained.issuer_evidence_digest '
+      "WHERE enrollment.action = 'approve' AND enrollment.evidence_digest = ? "
+      'AND enrollment.tenant_id = ? AND enrollment.site_id = ? '
+      'AND enrollment.device_id = ? AND enrollment.client_fingerprint = ? '
+      'AND device.tenant_id = enrollment.tenant_id '
+      'AND device.site_id = enrollment.site_id '
+      'AND device.public_key_fingerprint = enrollment.client_fingerprint '
+      'AND device.session_generation = enrollment.session_generation '
+      "AND device.state = 'active' AND binding.binding_digest = ? "
+      'AND binding.client_signing_key_id = ? '
+      'AND binding.client_device_id = enrollment.device_id '
+      'AND binding.client_fingerprint = enrollment.client_fingerprint '
+      'AND NOT EXISTS (SELECT 1 FROM shop_site_enrollment_evidence revoked '
+      "WHERE revoked.action = 'revoke' AND revoked.tenant_id = enrollment.tenant_id "
+      'AND revoked.site_id = enrollment.site_id '
+      'AND revoked.device_id = enrollment.device_id '
+      'AND revoked.client_fingerprint = enrollment.client_fingerprint '
+      'AND revoked.session_generation >= enrollment.session_generation) '
+      'AND NOT EXISTS (SELECT 1 FROM shop_site_coordinator_binding_revocations revoked '
+      'WHERE revoked.target_binding_digest = binding.binding_digest) '
+      "AND 'approve:' || binding.binding_digest = (SELECT latest.action || ':' || latest.binding_digest FROM ("
+      'SELECT binding_digest, action, approval_generation FROM '
+      'shop_site_coordinator_bindings WHERE workspace_id = enrollment.tenant_id '
+      'AND site_id = enrollment.site_id AND client_device_id = enrollment.device_id '
+      'UNION ALL SELECT target_binding_digest, action, approval_generation FROM '
+      'shop_site_coordinator_binding_revocations '
+      'WHERE workspace_id = enrollment.tenant_id AND site_id = enrollment.site_id '
+      'AND client_device_id = enrollment.device_id) latest '
+      'ORDER BY latest.approval_generation DESC LIMIT 1)',
+      variables: [
+        Variable<String>(command.leaseDigest),
+        Variable<String>(signedJson['enrollmentEvidenceDigest']! as String),
+        Variable<String>(command.workspaceId),
+        Variable<String>(command.siteId),
+        Variable<String>(command.deviceId),
+        Variable<String>(signedJson['clientFingerprint']! as String),
+        Variable<String>(signedJson['coordinatorBindingDigest']! as String),
+        Variable<String>(command.signingKeyId),
+      ],
+    ).get();
+    if (rows.length != 1 ||
+        rows.single.read<String>('lease_json') !=
+            canonicalConnectedSiteJson(signedJson['lease']) ||
+        connectedSiteSha256(
+              jsonDecode(rows.single.read<String>('evidence_json')),
+            ) !=
+            signedJson['authorityPayloadDigest']) {
+      throw StateError('connected_site_cloud_authority_evidence_unavailable');
+    }
+  }
+
+  Future<List<ConnectedSitePendingEvent>> readConnectedSitePendingEvents({
+    required String tenantId,
+    required String siteId,
+    required int afterSequence,
+    int limit = 100,
+  }) async {
+    final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$');
+    if (!id.hasMatch(tenantId) ||
+        !id.hasMatch(siteId) ||
+        afterSequence < 0 ||
+        limit < 1 ||
+        limit > 500) {
+      throw ArgumentError('Connected-site pending-event query is invalid.');
+    }
+    if (!await _v34ConnectedCloudProofRowsValid()) {
+      throw StateError('connected_site_cloud_proof_invalid');
+    }
+    final rows = await customSelect(
+      'SELECT event.site_sequence, event.event_id, event.aggregate_type, '
+      'event.aggregate_id, event.aggregate_version, event.event_type, '
+      'event.payload_json, event.event_digest, event.created_at_millis, '
+      'command.command_id, command.command_digest, command.capability, '
+      'audit.action AS audit_action, proof.proof_json, proof.proof_digest '
+      'FROM shop_site_events event '
+      'JOIN shop_site_commands command ON command.command_id = event.command_id '
+      'JOIN shop_site_audit audit ON audit.command_id = command.command_id '
+      'LEFT JOIN shop_site_cloud_proofs proof ON proof.command_id = command.command_id '
+      'WHERE event.tenant_id = ? AND event.site_id = ? '
+      'AND event.site_sequence > ? ORDER BY event.site_sequence LIMIT ?',
+      variables: [
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<int>(afterSequence),
+        Variable<int>(limit),
+      ],
+    ).get();
+    final pending = <ConnectedSitePendingEvent>[];
+    for (final row in rows) {
+      final payload = _connectedSiteEventPayload(
+        row.read<String>('payload_json'),
+      );
+      final event = <String, Object?>{
+        'eventId': row.read<String>('event_id'),
+        'workspaceId': tenantId,
+        'siteId': siteId,
+        'aggregateType': row.read<String>('aggregate_type'),
+        'aggregateId': row.read<String>('aggregate_id'),
+        'aggregateVersion': row.read<int>('aggregate_version'),
+        'eventType': row.read<String>('event_type'),
+        'occurredAt': _connectedSiteOccurredAt(
+          row.read<int>('created_at_millis'),
+        ),
+        'payload': payload,
+      };
+      final proofJson = row.readNullable<String>('proof_json');
+      final proofDigest = row.readNullable<String>('proof_digest');
+      if (proofJson == null || proofDigest == null) {
+        throw StateError('connected_site_cloud_proof_unavailable');
+      }
+      final proofDecoded = jsonDecode(proofJson);
+      final proof = ConnectedSiteCloudProofV1.fromJson(proofDecoded);
+      if (canonicalConnectedSiteJson(proofDecoded) != proofJson ||
+          proof.proofDigest != proofDigest) {
+        throw StateError('connected_site_cloud_proof_invalid');
+      }
+      proof.requireUploadEventBinding(
+        event: event,
+        eventDigest: row.read<String>('event_digest'),
+        capability: row.read<String>('capability'),
+        auditAction: row.read<String>('audit_action'),
+      );
+      await requireConnectedCloudUploadAuthority(proof);
+      pending.add(
+        ConnectedSitePendingEvent(
+          cursor: row.read<int>('site_sequence'),
+          commandId: row.read<String>('command_id'),
+          commandDigest: row.read<String>('command_digest'),
+          event: event,
+          eventDigest: row.read<String>('event_digest'),
+          cloudProof: proof,
+        ),
+      );
+    }
+    return List.unmodifiable(pending);
+  }
+
+  Future<void> _insertConnectedStockReservation(
+    ConnectedStockReservationV1 reservation, {
+    required String commandId,
+  }) async {
+    await customInsert(
+      'INSERT INTO shop_connected_stock_reservation_headers '
+      '(reservation_id, command_id, tenant_id, site_id, actor_id, device_id, '
+      'capability, workflow_type, subject_id, basket_digest, '
+      'initial_reservation_digest, reservation_json, issued_at_millis, '
+      'expires_at_millis, legacy_source) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+      variables: [
+        Variable<String>(reservation.reservationId),
+        Variable<String>(commandId),
+        Variable<String>(reservation.workspaceId),
+        Variable<String>(reservation.siteId),
+        Variable<String>(reservation.actorId),
+        Variable<String>(reservation.deviceId),
+        Variable<String>(reservation.capability.name),
+        Variable<String>(reservation.workflowType.name),
+        Variable<String>(reservation.subjectId),
+        Variable<String>(reservation.basketDigest),
+        Variable<String>(reservation.reservationDigest),
+        Variable<String>(canonicalConnectedSiteJson(reservation.toJson())),
+        Variable<int>(
+          DateTime.parse(reservation.issuedAt).millisecondsSinceEpoch,
+        ),
+        Variable<int>(
+          DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch,
+        ),
+      ],
+    );
+    for (final line in reservation.lines) {
+      await customInsert(
+        'INSERT INTO shop_connected_stock_reservation_lines '
+        '(reservation_id, product_id, quantity) VALUES (?, ?, ?)',
+        variables: [
+          Variable<String>(reservation.reservationId),
+          Variable<String>(line.productId),
+          Variable<int>(line.quantity),
+        ],
+      );
+    }
+  }
+
+  Future<
+    ({
+      String? conflictReason,
+      ConnectedStockReservationTransitionV1? transition,
+    })
+  >
+  _validateConnectedStockRequirement(
+    ShopConnectedSiteCommandInput input,
+    ShopConnectedStockReservationRequirement requirement, {
+    required int trustedNow,
+  }) async {
+    final row = await customSelect(
+      'SELECT header.reservation_json, header.legacy_source, '
+      'source_command.state AS command_state, source_ack.status AS ack_status, '
+      'source_ack.ack_digest FROM shop_connected_stock_reservation_headers header '
+      'JOIN shop_site_commands source_command '
+      'ON source_command.command_id = header.command_id '
+      'JOIN shop_site_command_acks source_ack '
+      'ON source_ack.command_id = header.command_id '
+      'WHERE header.reservation_id = ? AND header.command_id = ? '
+      'AND header.tenant_id = ? AND header.site_id = ? '
+      'AND header.actor_id = ? AND header.device_id = ? '
+      "AND header.workflow_type = 'cafeOrder' AND header.subject_id = ? "
+      "AND header.capability = 'cafeOrderWrite'",
+      variables: [
+        Variable<String>(requirement.reservationId),
+        Variable<String>(requirement.reservationCommandId),
+        Variable<String>(input.tenantId),
+        Variable<String>(input.siteId),
+        Variable<String>(input.actorId),
+        Variable<String>(input.deviceId),
+        Variable<String>(input.aggregateId),
+      ],
+    ).getSingleOrNull();
+    if (row == null ||
+        row.read<String>('command_state') != 'accepted' ||
+        row.read<String>('ack_status') != 'accepted' ||
+        row.read<String>('ack_digest') != requirement.reservationAckDigest) {
+      return (conflictReason: 'reservation_not_acknowledged', transition: null);
+    }
+    if (row.read<int>('legacy_source') == 1) {
+      return (
+        conflictReason: 'reservation_legacy_unadoptable',
+        transition: null,
+      );
+    }
+    final reservation = ConnectedStockReservationV1.fromJson(
+      jsonDecode(row.read<String>('reservation_json')),
+    );
+    if (reservation.reservationDigest != requirement.reservationDigest) {
+      return (conflictReason: 'reservation_digest_mismatch', transition: null);
+    }
+    if (reservation.basketDigest != requirement.requiredBasketDigest) {
+      return (conflictReason: 'reservation_basket_mismatch', transition: null);
+    }
+    final terminal = await customSelect(
+      'SELECT 1 FROM shop_connected_stock_reservation_transitions '
+      'WHERE reservation_id = ? LIMIT 1',
+      variables: [Variable<String>(requirement.reservationId)],
+    ).getSingleOrNull();
+    if (terminal != null) {
+      return (conflictReason: 'reservation_terminal', transition: null);
+    }
+    if (trustedNow <
+            DateTime.parse(reservation.issuedAt).millisecondsSinceEpoch ||
+        trustedNow >=
+            DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch) {
+      return (conflictReason: 'reservation_time_invalid', transition: null);
+    }
+    final expectedBinding = <String, Object?>{
+      'reservationId': requirement.reservationId,
+      'reservationDigest': requirement.reservationDigest,
+      'reservationCommandId': requirement.reservationCommandId,
+      'reservationAckDigest': requirement.reservationAckDigest,
+      'basketDigest': requirement.requiredBasketDigest,
+    };
+    final requiredPriorEventType = requirement.requiredPriorEventType;
+    if (requiredPriorEventType != null) {
+      final prior = await customSelect(
+        'SELECT event.payload_json FROM shop_site_events event '
+        'JOIN shop_site_commands command ON command.command_id = event.command_id '
+        'WHERE command.state = \'accepted\' AND event.tenant_id = ? '
+        'AND event.site_id = ? AND event.aggregate_type = ? '
+        'AND event.aggregate_id = ? AND event.event_type = ? '
+        'ORDER BY event.site_sequence LIMIT 1',
+        variables: [
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.aggregateType),
+          Variable<String>(input.aggregateId),
+          Variable<String>(requiredPriorEventType),
+        ],
+      ).getSingleOrNull();
+      if (prior == null) {
+        return (
+          conflictReason: 'reservation_order_binding_missing',
+          transition: null,
+        );
+      }
+      final priorPayload = jsonDecode(prior.read<String>('payload_json'));
+      if (priorPayload is! Map ||
+          canonicalConnectedSiteJson(priorPayload['reservationBinding']) !=
+              canonicalConnectedSiteJson(expectedBinding)) {
+        return (
+          conflictReason: 'reservation_order_binding_mismatch',
+          transition: null,
+        );
+      }
+    }
+    if (!requirement.releaseOnAccepted) {
+      return (conflictReason: null, transition: null);
+    }
+    return (
+      conflictReason: null,
+      transition: transitionConnectedStockReservation(
+        reservation: reservation,
+        expectedReservationDigest: requirement.reservationDigest,
+        targetState: ConnectedStockReservationState.released,
+        transitionedAt: _connectedSiteOccurredAt(trustedNow),
+        reason: 'cafe_order_cancelled',
+      ),
+    );
+  }
+
+  Future<int> _readConnectedHeldQuantity(
+    String productId, {
+    String? excludingReservationId,
+  }) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(line.quantity), 0) AS quantity '
+      'FROM shop_connected_stock_reservation_lines line '
+      'JOIN shop_connected_stock_reservation_headers header '
+      'ON header.reservation_id = line.reservation_id '
+      'WHERE line.product_id = ? '
+      "AND (? = '' OR header.reservation_id != ?) "
+      'AND NOT EXISTS (SELECT 1 FROM shop_connected_stock_reservation_transitions transition_row '
+      'WHERE transition_row.reservation_id = header.reservation_id)',
+      variables: [
+        Variable<String>(productId),
+        Variable<String>(excludingReservationId ?? ''),
+        Variable<String>(excludingReservationId ?? ''),
+      ],
+    ).getSingle();
+    return row.read<int>('quantity');
+  }
+
+  Future<int> _readPendingWalletReservedQuantity(
+    String productId, {
+    String? excludingOperationId,
+  }) async {
+    final rows = await customSelect(
+      'SELECT intent.operation_id, intent.basket_json, '
+      'binding.operation_id AS connected_binding_operation_id '
+      'FROM shop_wallet_checkout_intents intent '
+      'LEFT JOIN shop_connected_tender_reservation_bindings binding '
+      "ON binding.operation_id = intent.operation_id AND binding.tender_kind = 'wallet' "
+      "WHERE intent.state = 'pending'",
+    ).get();
+    var quantity = 0;
+    for (final row in rows) {
+      if (row.read<String>('operation_id') == excludingOperationId) continue;
+      if (row.readNullable<String>('connected_binding_operation_id') != null) {
+        continue;
+      }
+      final decoded = jsonDecode(row.read<String>('basket_json'));
+      if (decoded is! List) {
+        throw StateError('The pending wallet basket is invalid.');
+      }
+      for (final value in decoded) {
+        if (value is Map && value['productId'] == productId) {
+          final lineQuantity = value['quantity'];
+          if (lineQuantity is! int || lineQuantity < 1) {
+            throw StateError('The pending wallet basket is invalid.');
+          }
+          quantity += lineQuantity;
+        }
+      }
+    }
+    return quantity;
+  }
+
+  Future<int> _readTotalReservedStockQuantity(
+    String productId, {
+    String? excludingConnectedReservationId,
+    String? excludingPendingCashOperationId,
+    String? excludingWalletOperationId,
+    bool includeWallet = true,
+  }) async {
+    final connected = await _readConnectedHeldQuantity(
+      productId,
+      excludingReservationId: excludingConnectedReservationId,
+    );
+    final cash = await readPendingCashReservedQuantity(
+      productId,
+      excludingOperationId: excludingPendingCashOperationId,
+    );
+    final wallet = includeWallet
+        ? await _readPendingWalletReservedQuantity(
+            productId,
+            excludingOperationId: excludingWalletOperationId,
+          )
+        : 0;
+    final total = connected + cash + wallet;
+    if (total > 2000000000) {
+      throw StateError('Reserved stock exceeds the supported range.');
+    }
+    return total;
+  }
+
+  /// Shared stock-availability oracle for transaction-scoped sale workflows.
+  ///
+  /// Callers completing an existing hold must exclude only that exact hold.
+  /// The query includes connected reservations, pending cash checkouts, and
+  /// pending wallet checkouts in the caller's current SQLite transaction.
+  Future<int> readReservedStockQuantity(
+    String productId, {
+    String? excludingConnectedReservationId,
+    String? excludingPendingCashOperationId,
+    String? excludingWalletOperationId,
+  }) => _readTotalReservedStockQuantity(
+    productId,
+    excludingConnectedReservationId: excludingConnectedReservationId,
+    excludingPendingCashOperationId: excludingPendingCashOperationId,
+    excludingWalletOperationId: excludingWalletOperationId,
+  );
+
+  Map<String, Object> _connectedTenderBindingPayload({
+    required String operationId,
+    required String tenderKind,
+    required ConnectedStockReservationV1 reservation,
+  }) => {
+    'contract': 'supermega.shop.connected-tender-reservation.v1',
+    'operationId': operationId,
+    'tenderKind': tenderKind,
+    'reservationId': reservation.reservationId,
+    'reservationDigest': reservation.reservationDigest,
+    'workspaceId': reservation.workspaceId,
+    'siteId': reservation.siteId,
+    'workflowType': reservation.workflowType.name,
+    'subjectId': reservation.subjectId,
+    'basketDigest': reservation.basketDigest,
+  };
+
+  Future<void> _insertConnectedTenderReservationBinding({
+    required String operationId,
+    required String tenderKind,
+    required ConnectedStockReservationV1 reservation,
+    required int createdAtMillis,
+  }) async {
+    final payload = _connectedTenderBindingPayload(
+      operationId: operationId,
+      tenderKind: tenderKind,
+      reservation: reservation,
+    );
+    await customInsert(
+      'INSERT OR IGNORE INTO shop_connected_tender_reservation_bindings '
+      '(operation_id, tender_kind, reservation_id, reservation_digest, '
+      'tenant_id, site_id, workflow_type, subject_id, basket_digest, '
+      'binding_digest, created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(operationId),
+        Variable<String>(tenderKind),
+        Variable<String>(reservation.reservationId),
+        Variable<String>(reservation.reservationDigest),
+        Variable<String>(reservation.workspaceId),
+        Variable<String>(reservation.siteId),
+        Variable<String>(reservation.workflowType.name),
+        Variable<String>(reservation.subjectId),
+        Variable<String>(reservation.basketDigest),
+        Variable<String>(connectedSiteSha256(payload)),
+        Variable<int>(createdAtMillis),
+      ],
+    );
+    await _requireConnectedTenderReservationBinding(
+      operationId: operationId,
+      tenderKind: tenderKind,
+      reservation: reservation,
+    );
+  }
+
+  Future<void> _requireConnectedTenderReservationBinding({
+    required String operationId,
+    required String tenderKind,
+    required ConnectedStockReservationV1? reservation,
+  }) async {
+    final row = await customSelect(
+      'SELECT reservation_id, reservation_digest, tenant_id, site_id, '
+      'workflow_type, subject_id, basket_digest, binding_digest '
+      'FROM shop_connected_tender_reservation_bindings WHERE operation_id = ? '
+      'AND tender_kind = ?',
+      variables: [Variable<String>(operationId), Variable<String>(tenderKind)],
+    ).getSingleOrNull();
+    if (row == null && reservation == null) return;
+    if (row == null || reservation == null) {
+      throw StateError(
+        'The pending tender connected reservation binding changed.',
+      );
+    }
+    final payload = _connectedTenderBindingPayload(
+      operationId: operationId,
+      tenderKind: tenderKind,
+      reservation: reservation,
+    );
+    if (row.read<String>('reservation_id') != reservation.reservationId ||
+        row.read<String>('reservation_digest') !=
+            reservation.reservationDigest ||
+        row.read<String>('tenant_id') != reservation.workspaceId ||
+        row.read<String>('site_id') != reservation.siteId ||
+        row.read<String>('workflow_type') != reservation.workflowType.name ||
+        row.read<String>('subject_id') != reservation.subjectId ||
+        row.read<String>('basket_digest') != reservation.basketDigest ||
+        row.read<String>('binding_digest') != connectedSiteSha256(payload)) {
+      throw StateError(
+        'The pending tender connected reservation binding changed.',
+      );
+    }
+  }
+
+  /// Verifies that an already-persisted cash or wallet intent adopted exactly
+  /// the reservation supplied by its owning sale transaction.
+  Future<void> requireConnectedTenderReservationBindingForSale({
+    required String operationId,
+    required String tenderKind,
+    required ConnectedStockReservationV1? reservation,
+  }) => _requireConnectedTenderReservationBinding(
+    operationId: operationId,
+    tenderKind: tenderKind,
+    reservation: reservation,
+  );
+
+  /// Verifies an idempotent completed-sale replay without reading fresh time.
+  ///
+  /// A committed transition is immutable proof of the reservation and sale
+  /// command bytes that were accepted by the original transaction.
+  Future<void> requireConnectedStockReservationSaleReplay({
+    required String saleId,
+    required String saleCommandId,
+    required String saleRequestFingerprint,
+    required ConnectedStockReservationV1? reservation,
+  }) async {
+    final rows = await customSelect(
+      'SELECT transition_json FROM '
+      'shop_connected_stock_reservation_transitions '
+      "WHERE to_state = 'committed' AND sale_id = ?",
+      variables: [Variable<String>(saleId)],
+    ).get();
+    if (reservation == null) {
+      if (rows.isNotEmpty) {
+        throw StateError(
+          'The completed sale requires its connected reservation.',
+        );
+      }
+      return;
+    }
+    if (rows.length != 1 ||
+        rows.single.readNullable<String>('transition_json') == null) {
+      throw StateError('The connected reservation is not bound to this sale.');
+    }
+    final transition = ConnectedStockReservationTransitionV1.fromJson(
+      jsonDecode(rows.single.read<String>('transition_json')),
+    );
+    final saleCommandDigest = connectedSiteSha256({
+      'operationId': saleCommandId,
+      'requestFingerprint': saleRequestFingerprint,
+    });
+    if (canonicalConnectedSiteJson(transition.before.toJson()) !=
+            canonicalConnectedSiteJson(reservation.toJson()) ||
+        transition.saleBinding?.saleId != saleId ||
+        transition.saleBinding?.saleCommandId != saleCommandId ||
+        transition.saleBinding?.saleCommandDigest != saleCommandDigest) {
+      throw StateError('The connected reservation is not bound to this sale.');
+    }
+  }
+
+  Future<int> _validatedConnectedSiteNow(
+    ShopConnectedSiteCoordinatorTimeAuthority authority, {
+    required String tenantId,
+    required String siteId,
+  }) async {
+    final now = await authority.readValidatedNowMillis(
+      tenantId: tenantId,
+      siteId: siteId,
+    );
+    if (now <= 0) {
+      throw StateError('Connected-site trusted time is invalid.');
+    }
+    return now;
+  }
+
+  Future<void> _recordConnectedTrustedTime({
+    required String tenantId,
+    required String siteId,
+    required int nowMillis,
+  }) async {
+    await _requireConnectedTrustedTimeNotRegressed(
+      tenantId: tenantId,
+      siteId: siteId,
+      nowMillis: nowMillis,
+    );
+    await customInsert(
+      'INSERT INTO shop_connected_trusted_time '
+      '(tenant_id, site_id, observed_at_millis) VALUES (?, ?, ?) '
+      'ON CONFLICT(tenant_id, site_id) DO UPDATE SET '
+      'observed_at_millis = excluded.observed_at_millis',
+      variables: [
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<int>(nowMillis),
+      ],
+    );
+  }
+
+  Future<void> _requireConnectedTrustedTimeNotRegressed({
+    required String tenantId,
+    required String siteId,
+    required int nowMillis,
+  }) async {
+    final prior = await customSelect(
+      'SELECT observed_at_millis FROM shop_connected_trusted_time '
+      'WHERE tenant_id = ? AND site_id = ?',
+      variables: [Variable<String>(tenantId), Variable<String>(siteId)],
+    ).getSingleOrNull();
+    if (prior != null && prior.read<int>('observed_at_millis') > nowMillis) {
+      throw StateError('Connected-site trusted time regressed.');
+    }
+  }
+
+  /// Validates an exact connected hold for adoption by an outer sale
+  /// transaction and persists the coordinator's nondecreasing trusted time.
+  ///
+  /// A café or other owner must call this inside the same [transaction] that
+  /// writes its sale, stock movements, outbox event, receipt, and terminal
+  /// reservation transition.
+  Future<int> validateConnectedStockReservationForSale({
+    required ConnectedStockReservationV1 reservation,
+    required String operationId,
+    required ConnectedStockWorkflowType workflowType,
+    required ShopStaffCapability capability,
+    required String subjectId,
+    required Map<String, int> productQuantities,
+    required ShopConnectedSiteCoordinatorTimeAuthority timeAuthority,
+  }) async {
+    final binding = await customSelect(
+      'SELECT tenant_id, site_id FROM shop_connected_scope_binding '
+      'WHERE singleton = 1',
+    ).getSingleOrNull();
+    if (binding == null ||
+        binding.read<String>('tenant_id') != reservation.workspaceId ||
+        binding.read<String>('site_id') != reservation.siteId) {
+      throw StateError('Connected stock scope does not match this database.');
+    }
+    final nowMillis = await _validatedConnectedSiteNow(
+      timeAuthority,
+      tenantId: reservation.workspaceId,
+      siteId: reservation.siteId,
+    );
+    await _recordConnectedTrustedTime(
+      tenantId: reservation.workspaceId,
+      siteId: reservation.siteId,
+      nowMillis: nowMillis,
+    );
+    await _requireAdoptableConnectedStockReservation(
+      reservation,
+      operationId: operationId,
+      workflowType: workflowType,
+      capability: capability,
+      subjectId: subjectId,
+      productQuantities: productQuantities,
+      nowMillis: nowMillis,
+    );
+    return nowMillis;
+  }
+
+  /// Commits a previously validated connected hold inside the owner's outer
+  /// sale transaction. The referenced sale must already exist in that same
+  /// transaction, so rollback removes the sale and transition together.
+  Future<ConnectedStockReservationTransitionV1>
+  commitConnectedStockReservationForSale({
+    required ConnectedStockReservationV1 reservation,
+    required String saleId,
+    required String saleCommandId,
+    required String saleCommandDigest,
+    required ConnectedStockWorkflowType workflowType,
+    required ShopStaffCapability capability,
+    required String subjectId,
+    required Map<String, int> productQuantities,
+    required int validatedNowMillis,
+  }) async {
+    final trustedTime = await customSelect(
+      'SELECT observed_at_millis FROM shop_connected_trusted_time '
+      'WHERE tenant_id = ? AND site_id = ?',
+      variables: [
+        Variable<String>(reservation.workspaceId),
+        Variable<String>(reservation.siteId),
+      ],
+    ).getSingleOrNull();
+    if (trustedTime == null ||
+        trustedTime.read<int>('observed_at_millis') != validatedNowMillis) {
+      throw StateError(
+        'The connected reservation trusted-time validation is unavailable.',
+      );
+    }
+    await _requireAdoptableConnectedStockReservation(
+      reservation,
+      operationId: saleCommandId,
+      workflowType: workflowType,
+      capability: capability,
+      subjectId: subjectId,
+      productQuantities: productQuantities,
+      nowMillis: validatedNowMillis,
+    );
+    final sale = await customSelect(
+      'SELECT 1 FROM shop_sales WHERE id = ? AND operation_id = ?',
+      variables: [Variable<String>(saleId), Variable<String>(saleCommandId)],
+    ).getSingleOrNull();
+    if (sale == null) {
+      throw StateError(
+        'The connected reservation sale is not in this transaction.',
+      );
+    }
+    final committedAt = DateTime.fromMillisecondsSinceEpoch(
+      validatedNowMillis,
+      isUtc: true,
+    ).toIso8601String();
+    final binding = ConnectedStockSaleBindingV1.create(
+      reservation: reservation,
+      saleId: saleId,
+      saleCommandId: saleCommandId,
+      saleCommandDigest: saleCommandDigest,
+      committedAt: committedAt,
+    );
+    final transition = transitionConnectedStockReservation(
+      reservation: reservation,
+      expectedReservationDigest: reservation.reservationDigest,
+      targetState: ConnectedStockReservationState.committed,
+      transitionedAt: committedAt,
+      reason: 'sale_committed',
+      saleBinding: binding,
+    );
+    await _insertConnectedStockTransition(
+      transition,
+      operationId:
+          'commit:${connectedSiteSha256({'saleCommandId': saleCommandId})}',
+      saleId: saleId,
+    );
+    await _appendConnectedStockTerminalSiteEvent(
+      transition,
+      operationId: saleCommandId,
+    );
+    return transition;
+  }
+
+  Future<ShopConnectedStockReservationResult> expireConnectedStockReservation({
+    required String tenantId,
+    required String siteId,
+    required String reservationId,
+    required String expectedReservationDigest,
+    required String operationId,
+    required ShopConnectedSiteCoordinatorTimeAuthority timeAuthority,
+    bool connectedSiteEnabled = false,
+  }) {
+    if (!connectedSiteEnabled) {
+      throw StateError('Connected-site reservation expiry is disabled.');
+    }
+    return _transitionConnectedStockReservation(
+      tenantId: tenantId,
+      siteId: siteId,
+      reservationId: reservationId,
+      expectedReservationDigest: expectedReservationDigest,
+      operationId: operationId,
+      reason: 'trusted_time_expiry',
+      targetState: ConnectedStockReservationState.expired,
+      timeAuthority: timeAuthority,
+    );
+  }
+
+  Future<ShopConnectedStockReservationResult>
+  _transitionConnectedStockReservation({
+    required String tenantId,
+    required String siteId,
+    required String reservationId,
+    required String expectedReservationDigest,
+    required String operationId,
+    required String reason,
+    required ConnectedStockReservationState targetState,
+    required ShopConnectedSiteCoordinatorTimeAuthority timeAuthority,
+  }) async {
+    return transaction(() async {
+      final replay = await customSelect(
+        'SELECT reservation_id, to_state, before_digest, transition_json, '
+        'transition_digest FROM '
+        'shop_connected_stock_reservation_transitions WHERE operation_id = ?',
+        variables: [Variable<String>(operationId)],
+      ).getSingleOrNull();
+      if (replay != null) {
+        final json = replay.readNullable<String>('transition_json');
+        if (json == null) {
+          final expectedDigest = connectedSiteSha256({
+            'contract': 'supermega.shop.legacy-stock-transition.v1',
+            'tenantId': tenantId,
+            'siteId': siteId,
+            'reservationId': reservationId,
+            'expectedReservationDigest': expectedReservationDigest,
+            'targetState': targetState.name,
+            'reason': reason,
+            'operationId': operationId,
+          });
+          if (replay.read<String>('reservation_id') != reservationId ||
+              replay.read<String>('before_digest') !=
+                  expectedReservationDigest ||
+              replay.read<String>('to_state') != targetState.name ||
+              replay.read<String>('transition_digest') != expectedDigest) {
+            throw StateError(
+              'A reservation operation ID was reused differently.',
+            );
+          }
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.replayed,
+            canonicalVersion: 2,
+            eventDigest: expectedDigest,
+            ackDigest: expectedDigest,
+          );
+        }
+        final transition = ConnectedStockReservationTransitionV1.fromJson(
+          jsonDecode(json),
+        );
+        if (transition.before.reservationId != reservationId ||
+            transition.before.workspaceId != tenantId ||
+            transition.before.siteId != siteId ||
+            transition.before.reservationDigest != expectedReservationDigest ||
+            transition.after.state != targetState ||
+            transition.reason != reason) {
+          throw StateError(
+            'A reservation operation ID was reused differently.',
+          );
+        }
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.replayed,
+          canonicalVersion: transition.after.stateVersion,
+          eventDigest: transition.transitionDigest,
+          ackDigest: transition.transitionDigest,
+          transition: transition,
+        );
+      }
+      final now = await _validatedConnectedSiteNow(
+        timeAuthority,
+        tenantId: tenantId,
+        siteId: siteId,
+      );
+      final binding = await customSelect(
+        'SELECT tenant_id, site_id FROM shop_connected_scope_binding '
+        'WHERE singleton = 1',
+      ).getSingleOrNull();
+      if (binding == null ||
+          binding.read<String>('tenant_id') != tenantId ||
+          binding.read<String>('site_id') != siteId) {
+        throw StateError('Connected stock scope does not match this database.');
+      }
+      await _recordConnectedTrustedTime(
+        tenantId: tenantId,
+        siteId: siteId,
+        nowMillis: now,
+      );
+      final header = await customSelect(
+        'SELECT reservation_json, legacy_source, initial_reservation_digest, '
+        'issued_at_millis, expires_at_millis FROM '
+        'shop_connected_stock_reservation_headers '
+        'WHERE reservation_id = ? AND tenant_id = ? AND site_id = ?',
+        variables: [
+          Variable<String>(reservationId),
+          Variable<String>(tenantId),
+          Variable<String>(siteId),
+        ],
+      ).getSingleOrNull();
+      if (header == null) {
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.conflict,
+          canonicalVersion: 0,
+          eventDigest: null,
+          ackDigest: expectedReservationDigest,
+          conflictCode: 'reservation_not_found',
+        );
+      }
+      if (header.read<int>('legacy_source') == 1) {
+        if (targetState != ConnectedStockReservationState.expired) {
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.conflict,
+            canonicalVersion: 1,
+            eventDigest: null,
+            ackDigest: expectedReservationDigest,
+            conflictCode: 'reservation_legacy_unadoptable',
+          );
+        }
+        final storedDigest = header.read<String>('initial_reservation_digest');
+        if (storedDigest != expectedReservationDigest) {
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.conflict,
+            canonicalVersion: 1,
+            eventDigest: storedDigest,
+            ackDigest: storedDigest,
+            conflictCode: 'reservation_digest_mismatch',
+          );
+        }
+        final terminal = await customSelect(
+          'SELECT after_digest FROM '
+          'shop_connected_stock_reservation_transitions '
+          'WHERE reservation_id = ? LIMIT 1',
+          variables: [Variable<String>(reservationId)],
+        ).getSingleOrNull();
+        if (terminal != null) {
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.conflict,
+            canonicalVersion: 2,
+            eventDigest: terminal.read<String>('after_digest'),
+            ackDigest: terminal.read<String>('after_digest'),
+            conflictCode: 'reservation_terminal',
+          );
+        }
+        if (now < header.read<int>('expires_at_millis')) {
+          return ShopConnectedStockReservationResult(
+            disposition: ShopConnectedStockReservationDisposition.conflict,
+            canonicalVersion: 1,
+            eventDigest: null,
+            ackDigest: storedDigest,
+            conflictCode: 'reservation_not_expired',
+          );
+        }
+        final afterDigest = connectedSiteSha256({
+          'contract': 'supermega.shop.legacy-stock-after.v1',
+          'reservationId': reservationId,
+          'beforeDigest': storedDigest,
+          'targetState': targetState.name,
+          'occurredAtMillis': now,
+        });
+        final transitionDigest = connectedSiteSha256({
+          'contract': 'supermega.shop.legacy-stock-transition.v1',
+          'tenantId': tenantId,
+          'siteId': siteId,
+          'reservationId': reservationId,
+          'expectedReservationDigest': storedDigest,
+          'targetState': targetState.name,
+          'reason': reason,
+          'operationId': operationId,
+        });
+        await customInsert(
+          'INSERT INTO shop_connected_stock_reservation_transitions '
+          '(transition_id, operation_id, reservation_id, from_state, to_state, '
+          'before_digest, after_digest, transition_digest, transition_json, '
+          'sale_id, occurred_at_millis, legacy_source) '
+          "VALUES (?, ?, ?, 'held', 'expired', ?, ?, ?, NULL, NULL, ?, 1)",
+          variables: [
+            Variable<String>(
+              'transition:${connectedSiteSha256({'operationId': operationId})}',
+            ),
+            Variable<String>(operationId),
+            Variable<String>(reservationId),
+            Variable<String>(storedDigest),
+            Variable<String>(afterDigest),
+            Variable<String>(transitionDigest),
+            Variable<int>(now),
+          ],
+        );
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.accepted,
+          canonicalVersion: 2,
+          eventDigest: transitionDigest,
+          ackDigest: transitionDigest,
+        );
+      }
+      final priorTransition = await customSelect(
+        'SELECT to_state, after_digest FROM '
+        'shop_connected_stock_reservation_transitions WHERE reservation_id = ?',
+        variables: [Variable<String>(reservationId)],
+      ).getSingleOrNull();
+      if (priorTransition != null) {
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.conflict,
+          canonicalVersion: 2,
+          eventDigest: priorTransition.read<String>('after_digest'),
+          ackDigest: priorTransition.read<String>('after_digest'),
+          conflictCode: 'reservation_terminal',
+        );
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(
+        jsonDecode(header.read<String>('reservation_json')),
+      );
+      if (reservation.reservationDigest != expectedReservationDigest) {
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.conflict,
+          canonicalVersion: reservation.stateVersion,
+          eventDigest: reservation.reservationDigest,
+          ackDigest: reservation.reservationDigest,
+          conflictCode: 'reservation_digest_mismatch',
+        );
+      }
+      if (targetState == ConnectedStockReservationState.expired &&
+          now < DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch) {
+        return ShopConnectedStockReservationResult(
+          disposition: ShopConnectedStockReservationDisposition.conflict,
+          canonicalVersion: reservation.stateVersion,
+          eventDigest: null,
+          ackDigest: reservation.reservationDigest,
+          conflictCode: 'reservation_not_expired',
+        );
+      }
+      final at = DateTime.fromMillisecondsSinceEpoch(
+        now,
+        isUtc: true,
+      ).toIso8601String();
+      final transition = transitionConnectedStockReservation(
+        reservation: reservation,
+        expectedReservationDigest: expectedReservationDigest,
+        targetState: targetState,
+        transitionedAt: at,
+        reason: reason,
+      );
+      await _insertConnectedStockTransition(
+        transition,
+        operationId: operationId,
+        saleId: null,
+      );
+      if (targetState == ConnectedStockReservationState.expired) {
+        await _appendConnectedStockTerminalSiteEvent(
+          transition,
+          operationId: operationId,
+        );
+      }
+      return ShopConnectedStockReservationResult(
+        disposition: ShopConnectedStockReservationDisposition.accepted,
+        canonicalVersion: transition.after.stateVersion,
+        eventDigest: transition.transitionDigest,
+        ackDigest: transition.transitionDigest,
+        transition: transition,
+      );
+    });
+  }
+
+  Future<void> _insertConnectedStockTransition(
+    ConnectedStockReservationTransitionV1 transition, {
+    required String operationId,
+    required String? saleId,
+  }) async {
+    await customInsert(
+      'INSERT INTO shop_connected_stock_reservation_transitions '
+      '(transition_id, operation_id, reservation_id, from_state, to_state, '
+      'before_digest, after_digest, transition_digest, transition_json, sale_id, '
+      'occurred_at_millis, legacy_source) '
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, 0)",
+      variables: [
+        Variable<String>(
+          'transition:${connectedSiteSha256({'operationId': operationId})}',
+        ),
+        Variable<String>(operationId),
+        Variable<String>(transition.before.reservationId),
+        Variable<String>(transition.before.state.name),
+        Variable<String>(transition.after.state.name),
+        Variable<String>(transition.before.reservationDigest),
+        Variable<String>(transition.after.reservationDigest),
+        Variable<String>(transition.transitionDigest),
+        Variable<String>(canonicalConnectedSiteJson(transition.toJson())),
+        Variable<String>(saleId ?? ''),
+        Variable<int>(
+          DateTime.parse(transition.transitionedAt).millisecondsSinceEpoch,
+        ),
+      ],
+    );
+  }
+
+  /// Appends a coordinator-derived terminal reservation event atomically with
+  /// the sale or expiry transaction. The synthetic command retains the
+  /// authenticated authority of the original hold; it never invents a new
+  /// actor, lease, device, or client signature.
+  Future<void> _appendConnectedStockTerminalSiteEvent(
+    ConnectedStockReservationTransitionV1 transition, {
+    required String operationId,
+  }) async {
+    final state = transition.after.state;
+    if (state != ConnectedStockReservationState.committed &&
+        state != ConnectedStockReservationState.expired) {
+      throw StateError('Only terminal stock events can be appended here.');
+    }
+    final source = await customSelect(
+      'SELECT header.tenant_id, header.site_id, header.actor_id, '
+      'header.device_id, header.capability, header.workflow_type, '
+      'header.subject_id, command.lease_digest, command.received_at_millis, '
+      'proof.proof_json, proof.proof_digest '
+      'FROM shop_connected_stock_reservation_headers header '
+      'JOIN shop_site_commands command ON command.command_id = header.command_id '
+      'JOIN shop_site_cloud_proofs proof ON proof.command_id = command.command_id '
+      'WHERE header.reservation_id = ? AND header.legacy_source = 0',
+      variables: [Variable<String>(transition.before.reservationId)],
+    ).getSingleOrNull();
+    if (source == null) {
+      throw StateError('Connected reservation event authority is unavailable.');
+    }
+    final tenantId = source.read<String>('tenant_id');
+    final siteId = source.read<String>('site_id');
+    final aggregateType = source.read<String>('workflow_type');
+    final aggregateId = source.read<String>('subject_id');
+    final occurredAtMillis = DateTime.parse(transition.transitionedAt)
+        .millisecondsSinceEpoch;
+    final eventType = state == ConnectedStockReservationState.committed
+        ? shopConnectedStockCommittedEventType
+        : shopConnectedStockExpiredEventType;
+    final payload = <String, Object?>{
+      'contract': 'supermega.shop.connected-stock-terminal.v1',
+      'operationId': operationId,
+      'reservationId': transition.before.reservationId,
+      'beforeDigest': transition.before.reservationDigest,
+      'afterDigest': transition.after.reservationDigest,
+      'state': state.name,
+      'transitionDigest': transition.transitionDigest,
+      'transition': transition.toJson(),
+    };
+    final payloadJson = canonicalConnectedSiteJson(payload);
+    final payloadDigest = connectedSiteSha256(payload);
+    final identityDigest = connectedSiteSha256({
+      'reservationId': transition.before.reservationId,
+      'transitionDigest': transition.transitionDigest,
+      'state': state.name,
+    });
+    final commandId = 'terminal:$identityDigest';
+    final eventId = 'terminal-event:$identityDigest';
+    final existing = await customSelect(
+      'SELECT event.event_digest, event.payload_json, event.event_type, '
+      'event.aggregate_version '
+      'FROM shop_site_commands command JOIN shop_site_events event '
+      'ON event.command_id = command.command_id WHERE command.command_id = ?',
+      variables: [Variable<String>(commandId)],
+    ).getSingleOrNull();
+    final versionRow = await customSelect(
+      'SELECT version FROM shop_site_aggregate_versions WHERE tenant_id = ? '
+      'AND site_id = ? AND aggregate_type = ? AND aggregate_id = ?',
+      variables: [
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(aggregateType),
+        Variable<String>(aggregateId),
+      ],
+    ).getSingleOrNull();
+    if (versionRow == null) {
+      throw StateError('Connected reservation aggregate is unavailable.');
+    }
+    final nextVersion = existing == null
+        ? versionRow.read<int>('version') + 1
+        : existing.read<int>('aggregate_version');
+    final eventEnvelope = <String, Object?>{
+      'eventId': eventId,
+      'workspaceId': tenantId,
+      'siteId': siteId,
+      'aggregateType': aggregateType,
+      'aggregateId': aggregateId,
+      'aggregateVersion': nextVersion,
+      'eventType': eventType,
+      'occurredAt': _connectedSiteOccurredAt(occurredAtMillis),
+      'payload': payload,
+    };
+    final eventDigest = connectedSiteSha256(eventEnvelope);
+    if (existing != null) {
+      if (existing.read<String>('event_digest') != eventDigest ||
+          existing.read<String>('payload_json') != payloadJson ||
+          existing.read<String>('event_type') != eventType) {
+        throw StateError('Connected terminal event identity changed.');
+      }
+      return;
+    }
+    final commandDigest = connectedSiteSha256({
+      'contract': 'supermega.shop.connected-stock-terminal-command.v1',
+      'commandId': commandId,
+      'workspaceId': tenantId,
+      'siteId': siteId,
+      'actorId': source.read<String>('actor_id'),
+      'deviceId': source.read<String>('device_id'),
+      'aggregateType': aggregateType,
+      'aggregateId': aggregateId,
+      'expectedVersion': nextVersion - 1,
+      'payloadDigest': payloadDigest,
+      'leaseDigest': source.read<String>('lease_digest'),
+    });
+    await customInsert(
+      'INSERT INTO shop_site_commands '
+      '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+      'aggregate_type, capability, expected_version, payload_digest, '
+      'lease_digest, command_digest, state, received_at_millis) '
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?)",
+      variables: [
+        Variable<String>(commandId),
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(source.read<String>('actor_id')),
+        Variable<String>(source.read<String>('device_id')),
+        Variable<String>(aggregateId),
+        Variable<String>(aggregateType),
+        Variable<String>(source.read<String>('capability')),
+        Variable<int>(nextVersion - 1),
+        Variable<String>(payloadDigest),
+        Variable<String>(source.read<String>('lease_digest')),
+        Variable<String>(commandDigest),
+        Variable<int>(occurredAtMillis),
+      ],
+    );
+    final sourceProofDecoded = jsonDecode(source.read<String>('proof_json'));
+    final sourceProof = ConnectedSiteCloudProofV1.fromJson(sourceProofDecoded);
+    if (canonicalConnectedSiteJson(sourceProofDecoded) !=
+            source.read<String>('proof_json') ||
+        sourceProof.proofDigest != source.read<String>('proof_digest')) {
+      throw StateError('Connected reservation source proof is invalid.');
+    }
+    // V2 binds the terminal transition to the exact client-signed reserve.
+    // operationId remains coordinator audit metadata; it cannot select a
+    // different reservation, basket, subject, actor, device, or stock line.
+    final derivation = <String, Object?>{
+      'contract': 'supermega.shop.connected-stock-terminal-derivation.v2',
+      'sourceCommandDigest': sourceProof.commandDigest,
+      'sourceReservationDigest': transition.before.reservationDigest,
+      'operationId': operationId,
+      'reservationId': transition.before.reservationId,
+      'transitionDigest': transition.transitionDigest,
+      'state': state.name,
+      'eventDigest': eventDigest,
+    };
+    final derivedProof = ConnectedSiteCloudProofV1.coordinatorDerived(
+      commandId: commandId,
+      commandDigest: commandDigest,
+      workspaceId: tenantId,
+      siteId: siteId,
+      deviceId: source.read<String>('device_id'),
+      leaseDigest: source.read<String>('lease_digest'),
+      sourceProof: sourceProof,
+      derivation: derivation,
+    );
+    await _insertConnectedCloudProof(
+      commandId: commandId,
+      proofJson: canonicalConnectedSiteJson(derivedProof.toJson()),
+      proofDigest: derivedProof.proofDigest,
+      createdAtMillis: occurredAtMillis,
+    );
+    final sequenceRow = await customSelect(
+      'SELECT COALESCE(MAX(site_sequence), 0) + 1 AS next_sequence '
+      'FROM shop_site_events WHERE tenant_id = ? AND site_id = ?',
+      variables: [Variable<String>(tenantId), Variable<String>(siteId)],
+    ).getSingle();
+    final siteSequence = sequenceRow.read<int>('next_sequence');
+    final eventRowId = await customInsert(
+      'INSERT INTO shop_site_events '
+      '(site_sequence, event_id, command_id, tenant_id, site_id, '
+      'aggregate_type, aggregate_id, aggregate_version, event_type, '
+      'payload_json, event_digest, created_at_millis) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<int>(siteSequence),
+        Variable<String>(eventId),
+        Variable<String>(commandId),
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(aggregateType),
+        Variable<String>(aggregateId),
+        Variable<int>(nextVersion),
+        Variable<String>(eventType),
+        Variable<String>(payloadJson),
+        Variable<String>(eventDigest),
+        Variable<int>(occurredAtMillis),
+      ],
+    );
+    final updatedAggregate = await customUpdate(
+      'UPDATE shop_site_aggregate_versions SET version = ?, '
+      'last_event_row_id = ?, last_site_sequence = ?, updated_at_millis = ? '
+      'WHERE tenant_id = ? AND site_id = ? AND aggregate_type = ? '
+      'AND aggregate_id = ? AND version = ?',
+      variables: [
+        Variable<int>(nextVersion),
+        Variable<int>(eventRowId),
+        Variable<int>(siteSequence),
+        Variable<int>(occurredAtMillis),
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(aggregateType),
+        Variable<String>(aggregateId),
+        Variable<int>(nextVersion - 1),
+      ],
+    );
+    if (updatedAggregate != 1) {
+      throw StateError('Connected reservation aggregate changed.');
+    }
+    await customInsert(
+      'INSERT INTO shop_site_audit '
+      '(audit_id, command_id, actor_id, action, metadata_digest, '
+      'created_at_millis) VALUES (?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>('audit:$commandId'),
+        Variable<String>(commandId),
+        Variable<String>(source.read<String>('actor_id')),
+        Variable<String>('connected_stock_${state.name}'),
+        Variable<String>(transition.transitionDigest),
+        Variable<int>(occurredAtMillis),
+      ],
+    );
+    await customInsert(
+      'INSERT INTO shop_site_command_acks '
+      '(command_id, status, event_row_id, site_sequence, canonical_version, '
+      "ack_digest, created_at_millis) VALUES (?, 'accepted', ?, ?, ?, ?, ?)",
+      variables: [
+        Variable<String>(commandId),
+        Variable<int>(eventRowId),
+        Variable<int>(siteSequence),
+        Variable<int>(nextVersion),
+        Variable<String>(eventDigest),
+        Variable<int>(occurredAtMillis),
+      ],
+    );
+    await _appendConnectedReplicaEnvelope(
+      sourceEventRowId: eventRowId,
+      eventId: eventId,
+      tenantId: tenantId,
+      siteId: siteId,
+      aggregateType: aggregateType,
+      aggregateId: aggregateId,
+      aggregateVersion: nextVersion,
+      occurredAtMillis: occurredAtMillis,
+    );
+  }
+
+  Future<void> _requireAdoptableConnectedStockReservation(
+    ConnectedStockReservationV1 reservation, {
+    required String operationId,
+    required ConnectedStockWorkflowType workflowType,
+    required ShopStaffCapability capability,
+    required String subjectId,
+    required Map<String, int> productQuantities,
+    required int nowMillis,
+  }) async {
+    if (reservation.state != ConnectedStockReservationState.held ||
+        reservation.workflowType != workflowType ||
+        reservation.capability != capability ||
+        reservation.subjectId != subjectId ||
+        DateTime.parse(reservation.expiresAt).millisecondsSinceEpoch <=
+            nowMillis ||
+        reservation.lines.length != productQuantities.length ||
+        reservation.lines.any(
+          (line) => productQuantities[line.productId] != line.quantity,
+        )) {
+      throw StateError('The connected reservation does not match this sale.');
+    }
+    final header = await customSelect(
+      'SELECT tenant_id, site_id, workflow_type, subject_id, capability, basket_digest, '
+      'initial_reservation_digest, reservation_json, legacy_source '
+      'FROM shop_connected_stock_reservation_headers WHERE reservation_id = ?',
+      variables: [Variable<String>(reservation.reservationId)],
+    ).getSingleOrNull();
+    if (header == null) {
+      throw StateError('The connected reservation was not found.');
+    }
+    if (header.read<int>('legacy_source') == 1 ||
+        header.read<String>('tenant_id') != reservation.workspaceId ||
+        header.read<String>('site_id') != reservation.siteId ||
+        header.read<String>('workflow_type') != workflowType.name ||
+        header.read<String>('subject_id') != reservation.subjectId ||
+        header.read<String>('capability') != capability.name ||
+        header.read<String>('basket_digest') != reservation.basketDigest ||
+        header.read<String>('initial_reservation_digest') !=
+            reservation.reservationDigest ||
+        canonicalConnectedSiteJson(
+              jsonDecode(header.read<String>('reservation_json')),
+            ) !=
+            canonicalConnectedSiteJson(reservation.toJson())) {
+      throw StateError('The connected reservation scope or bytes changed.');
+    }
+    final terminal = await customSelect(
+      'SELECT 1 FROM shop_connected_stock_reservation_transitions '
+      'WHERE reservation_id = ? LIMIT 1',
+      variables: [Variable<String>(reservation.reservationId)],
+    ).getSingleOrNull();
+    if (terminal != null) {
+      throw StateError('The connected reservation is already terminal.');
+    }
+    // The sale operation is independently bound in the immutable sale binding;
+    // subject identity must match before any stock or money row is written.
+    if (operationId.isEmpty) {
+      throw StateError('The connected sale operation is invalid.');
+    }
+  }
+
+  Map<String, Object?> _connectedSiteEventPayload(String payloadJson) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(payloadJson);
+    } on FormatException {
+      throw ArgumentError('Connected-site event JSON is invalid.');
+    }
+    if (decoded is! Map) {
+      throw ArgumentError('Connected-site event payload must be an object.');
+    }
+    final payload = decoded.cast<String, Object?>();
+    // The shared canonicalizer rejects non-JSON values, floating point values,
+    // and malformed map keys before the payload can reach durable storage.
+    canonicalConnectedSiteJson(payload);
+    return payload;
+  }
+
+  ({
+    ConnectedStockReservationV1? reservation,
+    ShopConnectedStockReservationLifecycleInput? lifecycle,
+  })
+  _connectedStockCommandPayload(
+    ShopConnectedSiteCommandInput input,
+    Map<String, Object?> payload,
+  ) {
+    final reservationSidecar = input.stockReservation;
+    final lifecycleSidecar = input.stockReservationLifecycle;
+    if (reservationSidecar == null && lifecycleSidecar == null) {
+      if (input.eventType == shopConnectedStockReservedEventType ||
+          input.eventType == shopConnectedStockReleasedEventType ||
+          payload['contract'] == _shopConnectedStockReservePayloadContract ||
+          payload['contract'] == _shopConnectedStockReleasePayloadContract) {
+        throw ArgumentError(
+          'Connected stock events require their exact persistence sidecar.',
+        );
+      }
+      return (reservation: null, lifecycle: null);
+    }
+    if (reservationSidecar != null) {
+      if (input.eventType != shopConnectedStockReservedEventType ||
+          payload['contract'] != _shopConnectedStockReservePayloadContract ||
+          payload['reservation'] == null) {
+        throw ArgumentError('Connected stock reserve event is invalid.');
+      }
+      final reservation = ConnectedStockReservationV1.fromJson(
+        payload['reservation'],
+      );
+      final expected = <String, Object?>{
+        'contract': _shopConnectedStockReservePayloadContract,
+        'reservation': reservation.toJson(),
+      };
+      if (canonicalConnectedSiteJson(payload) !=
+              canonicalConnectedSiteJson(expected) ||
+          canonicalConnectedSiteJson(reservation.toJson()) !=
+              canonicalConnectedSiteJson(reservationSidecar.toJson()) ||
+          reservation.workspaceId != input.tenantId ||
+          reservation.siteId != input.siteId ||
+          reservation.actorId != input.actorId ||
+          reservation.deviceId != input.deviceId ||
+          reservation.workflowType.name != input.aggregateType ||
+          reservation.subjectId != input.aggregateId ||
+          reservation.capability.name != input.capability ||
+          input.payloadDigest != connectedSiteSha256(expected)) {
+        throw StateError(
+          'Connected stock reserve payload bytes are not authorized.',
+        );
+      }
+      return (reservation: reservation, lifecycle: null);
+    }
+    final lifecycle = lifecycleSidecar!;
+    final expected = <String, Object?>{
+      'contract': _shopConnectedStockReleasePayloadContract,
+      'reservationId': lifecycle.reservationId,
+      'expectedReservationDigest': lifecycle.expectedReservationDigest,
+      'targetState': lifecycle.targetState.name,
+      'reason': lifecycle.reason,
+    };
+    if (input.eventType != shopConnectedStockReleasedEventType ||
+        canonicalConnectedSiteJson(payload) !=
+            canonicalConnectedSiteJson(expected) ||
+        input.payloadDigest != connectedSiteSha256(expected)) {
+      throw StateError(
+        'Connected stock release payload bytes are not authorized.',
+      );
+    }
+    return (reservation: null, lifecycle: lifecycle);
+  }
+
+  void _validateConnectedCafeReservationRequirement(
+    ShopConnectedSiteCommandInput input,
+    Map<String, Object?> payload,
+  ) {
+    final requirement = input.stockReservationRequirement;
+    if (requirement == null) {
+      if (payload.containsKey('reservationBinding')) {
+        throw StateError(
+          'Connected café reservation bytes require their persistence sidecar.',
+        );
+      }
+      return;
+    }
+    final expectedBinding = <String, Object?>{
+      'reservationId': requirement.reservationId,
+      'reservationDigest': requirement.reservationDigest,
+      'reservationCommandId': requirement.reservationCommandId,
+      'reservationAckDigest': requirement.reservationAckDigest,
+      'basketDigest': requirement.requiredBasketDigest,
+    };
+    final isPut =
+        input.eventType == 'shop.cafe_order.put.v1' &&
+        payload['contract'] == 'supermega.shop.connected-cafe-order-put.v1' &&
+        !requirement.releaseOnAccepted &&
+        requirement.requiredPriorEventType == null;
+    final isCancel =
+        input.eventType == 'shop.cafe_order.cancel.v1' &&
+        payload['contract'] ==
+            'supermega.shop.connected-cafe-order-cancel.v1' &&
+        requirement.releaseOnAccepted &&
+        requirement.requiredPriorEventType == 'shop.cafe_order.put.v1';
+    if ((!isPut && !isCancel) ||
+        canonicalConnectedSiteJson(payload['reservationBinding']) !=
+            canonicalConnectedSiteJson(expectedBinding)) {
+      throw StateError(
+        'Connected café reservation sidecar does not match event bytes.',
+      );
+    }
+  }
+
+  /// Immutably binds this local inventory to an authenticated enrollment
+  /// scope before any connected stock command is accepted.
+  ///
+  /// The caller must supply the digest of its independently verified
+  /// enrollment evidence. Commands can never create this authority binding.
+  Future<void> bindConnectedStockScopeForEnrollment({
+    required String tenantId,
+    required String siteId,
+    required String enrollmentEvidenceDigest,
+    required int boundAtMillis,
+    bool connectedSiteEnabled = false,
+  }) => transaction(() async {
+    if (!connectedSiteEnabled ||
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$').hasMatch(tenantId) ||
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$').hasMatch(siteId) ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(enrollmentEvidenceDigest) ||
+        boundAtMillis <= 0) {
+      throw StateError('Connected stock enrollment binding is invalid.');
+    }
+    final existing = await customSelect(
+      'SELECT tenant_id, site_id, enrollment_evidence_digest, '
+      'bound_at_millis FROM shop_connected_scope_binding WHERE singleton = 1',
+    ).getSingleOrNull();
+    if (existing != null) {
+      if (existing.read<String>('tenant_id') != tenantId ||
+          existing.read<String>('site_id') != siteId ||
+          existing.read<String>('enrollment_evidence_digest') !=
+              enrollmentEvidenceDigest ||
+          existing.read<int>('bound_at_millis') != boundAtMillis) {
+        throw StateError('Connected stock scope does not match this database.');
+      }
+      return;
+    }
+    final history = await customSelect(
+      'SELECT 1 FROM shop_connected_stock_reservation_headers LIMIT 1',
+    ).getSingleOrNull();
+    final authority = await customSelect(
+      'SELECT 1 FROM shop_site_devices device '
+      'JOIN shop_site_offline_leases lease '
+      'ON lease.device_id = device.device_id '
+      'AND lease.tenant_id = device.tenant_id '
+      'AND lease.site_id = device.site_id '
+      'WHERE device.tenant_id = ? AND device.site_id = ? '
+      "AND device.state = 'active' LIMIT 1",
+      variables: [Variable<String>(tenantId), Variable<String>(siteId)],
+    ).getSingleOrNull();
+    if (history != null || authority == null) {
+      throw StateError('Connected stock enrollment authority is unavailable.');
+    }
+    await customInsert(
+      'INSERT INTO shop_connected_scope_binding '
+      '(singleton, tenant_id, site_id, enrollment_evidence_digest, '
+      'bound_at_millis) VALUES (1, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<String>(enrollmentEvidenceDigest),
+        Variable<int>(boundAtMillis),
+      ],
+    );
+  });
+
+  Map<String, Object?> _connectedSiteEventEnvelope(
+    ShopConnectedSiteCommandInput input, {
+    required int aggregateVersion,
+    required Map<String, Object?> payload,
+  }) => <String, Object?>{
+    'eventId': input.eventId,
+    'workspaceId': input.tenantId,
+    'siteId': input.siteId,
+    'aggregateType': input.aggregateType,
+    'aggregateId': input.aggregateId,
+    'aggregateVersion': aggregateVersion,
+    'eventType': input.eventType,
+    'occurredAt': _connectedSiteOccurredAt(input.createdAtMillis),
+    'payload': payload,
+  };
+
+  String _connectedSiteOccurredAt(int millis) =>
+      DateTime.fromMillisecondsSinceEpoch(
+        millis,
+        isUtc: true,
+      ).toIso8601String();
+
+  void _validateConnectedSiteCommandInput(ShopConnectedSiteCommandInput input) {
+    final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$');
+    final digest = RegExp(r'^[0-9a-f]{64}$');
+    final values = [
+      input.commandId,
+      input.tenantId,
+      input.siteId,
+      input.actorId,
+      input.deviceId,
+      input.aggregateType,
+      input.aggregateId,
+      input.capability,
+      input.eventId,
+      input.eventType,
+      input.auditAction,
+    ];
+    if (values.any((value) => !id.hasMatch(value)) ||
+        input.expectedVersion < 0 ||
+        input.createdAtMillis <= 0 ||
+        !digest.hasMatch(input.payloadDigest) ||
+        !digest.hasMatch(input.leaseDigest) ||
+        !digest.hasMatch(input.commandDigest) ||
+        !digest.hasMatch(input.cloudProofDigest) ||
+        !digest.hasMatch(input.eventDigest) ||
+        !digest.hasMatch(input.ackDigest) ||
+        !digest.hasMatch(input.auditMetadataDigest)) {
+      throw ArgumentError('Connected-site command values are invalid.');
+    }
+    final proofDecoded = jsonDecode(input.cloudProofJson);
+    final proof = ConnectedSiteCloudProofV1.fromJson(proofDecoded)
+        .requireEventBinding(
+          workspaceId: input.tenantId,
+          siteId: input.siteId,
+          commandId: input.commandId,
+          commandDigest: input.commandDigest,
+        );
+    final signedCommand = proof.signedCommand;
+    final eventBinding = proofDecoded is Map
+        ? proofDecoded['eventBinding']
+        : null;
+    if (canonicalConnectedSiteJson(proofDecoded) != input.cloudProofJson ||
+        proof.proofDigest != input.cloudProofDigest ||
+        proof.proofKind != 'signedClientCommand' ||
+        signedCommand == null ||
+        signedCommand.actorId != input.actorId ||
+        signedCommand.deviceId != input.deviceId ||
+        signedCommand.aggregateType != input.aggregateType ||
+        signedCommand.aggregateId != input.aggregateId ||
+        signedCommand.expectedVersion != input.expectedVersion ||
+        signedCommand.payloadDigest != input.payloadDigest ||
+        eventBinding is! Map ||
+        eventBinding['eventId'] != input.eventId ||
+        eventBinding['eventType'] != input.eventType ||
+        eventBinding['eventDigest'] != input.eventDigest ||
+        eventBinding['capability'] != input.capability ||
+        eventBinding['auditAction'] != input.auditAction ||
+        eventBinding['commandType'] != signedCommand.commandType ||
+        canonicalConnectedSiteJson(signedCommand.payload) !=
+            input.eventPayloadJson ||
+        DateTime.parse(signedCommand.issuedAt).millisecondsSinceEpoch !=
+            input.createdAtMillis ||
+        proof.leaseDigest != input.leaseDigest ||
+        proof.deviceId != input.deviceId) {
+      throw ArgumentError('Connected-site cloud proof is invalid.');
+    }
+    _connectedSiteEventPayload(input.eventPayloadJson);
+    final reservationFields = [
+      input.reservationId,
+      input.reservationProductId,
+      input.reservationQuantity,
+      input.reservationExpiresAtMillis,
+    ];
+    final hasReservation = reservationFields.every((value) => value != null);
+    if (reservationFields.any((value) => value != null) || hasReservation) {
+      throw ArgumentError('Connected-site reservation values are invalid.');
+    }
+    final reservation = input.stockReservation;
+    final lifecycle = input.stockReservationLifecycle;
+    if (reservation != null && lifecycle != null) {
+      throw ArgumentError(
+        'A connected-site command cannot hold and release stock together.',
+      );
+    }
+    if (reservation != null &&
+        (reservation.workspaceId != input.tenantId ||
+            reservation.siteId != input.siteId ||
+            reservation.actorId != input.actorId ||
+            reservation.deviceId != input.deviceId ||
+            reservation.workflowType.name != input.aggregateType ||
+            reservation.subjectId != input.aggregateId ||
+            reservation.capability.name != input.capability ||
+            reservation.state != ConnectedStockReservationState.held ||
+            reservation.stateVersion != 1 ||
+            DateTime.parse(reservation.issuedAt).millisecondsSinceEpoch !=
+                input.createdAtMillis)) {
+      throw ArgumentError('Connected-site reservation scope is invalid.');
+    }
+    if (lifecycle != null &&
+        (!id.hasMatch(lifecycle.reservationId) ||
+            !digest.hasMatch(lifecycle.expectedReservationDigest) ||
+            !id.hasMatch(lifecycle.reason) ||
+            lifecycle.targetState != ConnectedStockReservationState.released)) {
+      throw ArgumentError('Connected-site reservation lifecycle is invalid.');
+    }
+    final requirement = input.stockReservationRequirement;
+    if (requirement != null &&
+        (!id.hasMatch(requirement.reservationId) ||
+            !id.hasMatch(requirement.reservationCommandId) ||
+            !digest.hasMatch(requirement.reservationDigest) ||
+            !digest.hasMatch(requirement.reservationAckDigest) ||
+            !digest.hasMatch(requirement.requiredBasketDigest) ||
+            (requirement.requiredPriorEventType != null &&
+                !id.hasMatch(requirement.requiredPriorEventType!)) ||
+            input.aggregateType != 'cafeOrder' ||
+            input.capability != ShopStaffCapability.cafeOrderWrite.name)) {
+      throw ArgumentError('Connected-site reservation requirement is invalid.');
     }
   }
 
@@ -6263,11 +17152,18 @@ class ShopDatabase extends _$ShopDatabase {
         .get();
   }
 
-  Future<int> _pendingCashQuantityForProduct(String productId) async {
+  Future<int> readPendingCashReservedQuantity(
+    String productId, {
+    String? excludingOperationId,
+  }) async {
     final rows = await customSelect(
-      'SELECT intent.checkout_kind, draft.operation_id AS draft_operation_id, '
-      'draft.basket_json, draft.updated_at_millis, cafe.ticket_json '
+      'SELECT intent.operation_id, intent.checkout_kind, '
+      'draft.operation_id AS draft_operation_id, '
+      'draft.basket_json, draft.updated_at_millis, cafe.ticket_json, '
+      'binding.operation_id AS connected_binding_operation_id '
       'FROM shop_pending_cash_checkouts intent '
+      'LEFT JOIN shop_connected_tender_reservation_bindings binding '
+      "ON binding.operation_id = intent.operation_id AND binding.tender_kind = 'cash' "
       'LEFT JOIN shop_counter_drafts draft '
       "ON intent.checkout_kind = 'counter' "
       'AND draft.operation_id = intent.subject_id '
@@ -6278,6 +17174,10 @@ class ShopDatabase extends _$ShopDatabase {
     ).get();
     var quantity = 0;
     for (final row in rows) {
+      if (row.read<String>('operation_id') == excludingOperationId) continue;
+      if (row.readNullable<String>('connected_binding_operation_id') != null) {
+        continue;
+      }
       final kind = row.read<String>('checkout_kind');
       final pendingQuantity = kind == 'counter'
           ? _decodeCounterDraft(
@@ -6372,40 +17272,14 @@ class ShopDatabase extends _$ShopDatabase {
         throw StateError('Stock would exceed the supported quantity.');
       }
       if (kind == 'count') {
-        final pendingCashQuantity = await _pendingCashQuantityForProduct(
+        final reservedQuantity = await _readTotalReservedStockQuantity(
           cleanProductId,
         );
-        if (resultingOnHand < pendingCashQuantity) {
+        if (resultingOnHand < reservedQuantity) {
           throw StateError(
-            'Finish or cancel the pending cash checkout before counting '
-            'this item below its saved quantity.',
+            'Finish or cancel reserved sales before counting this item below '
+            'their saved quantity.',
           );
-        }
-        final pendingRows = await customSelect(
-          'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
-          'merchant_phone, merchant_qr_payload, basket_json, state, created_at_millis '
-          'FROM shop_wallet_checkout_intents '
-          'WHERE state = ? LIMIT 2',
-          variables: [const Variable<String>('pending')],
-        ).get();
-        if (pendingRows.length > 1) {
-          throw StateError(
-            'Resolve the pending wallet payments before counting stock.',
-          );
-        }
-        final pendingWallet = pendingRows.isEmpty
-            ? null
-            : await _walletCheckoutFromRow(pendingRows.single);
-        if (pendingWallet != null) {
-          final pendingQuantity = pendingWallet.lines
-              .where((line) => line.productId == cleanProductId)
-              .fold<int>(0, (total, line) => total + line.quantity);
-          if (resultingOnHand < pendingQuantity) {
-            throw StateError(
-              'Finish or cancel the pending wallet payment before counting '
-              'this item below its saved quantity.',
-            );
-          }
         }
       }
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -6882,6 +17756,9 @@ class ShopDatabase extends _$ShopDatabase {
     required MerchantWalletSetup merchant,
     required List<ShopSaleLineInput> lines,
     String? memberCardToken,
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) async {
     final cleanOperationId = operationId.trim();
     final paymentMethod = merchant.provider == 'KBZPay' ? 'kbzpay' : 'wavepay';
@@ -6951,11 +17828,57 @@ class ShopDatabase extends _$ShopDatabase {
             for (final line in canonicalLines)
               {'productId': line.key, 'quantity': line.value},
           ],
+          if (connectedStockReservation != null)
+            'connectedReservation': connectedStockReservation.toJson(),
         });
         if (prior.state == 'pending' &&
             prior.paymentMethod == paymentMethod &&
             prior.requestFingerprint == retryFingerprint) {
+          await _requireConnectedTenderReservationBinding(
+            operationId: cleanOperationId,
+            tenderKind: 'wallet',
+            reservation: connectedStockReservation,
+          );
           return prior;
+        }
+        if (prior.state == 'cancelled' &&
+            prior.paymentMethod == paymentMethod &&
+            prior.requestFingerprint == retryFingerprint &&
+            connectedStockReservation != null) {
+          await _requireConnectedTenderReservationBinding(
+            operationId: cleanOperationId,
+            tenderKind: 'wallet',
+            reservation: connectedStockReservation,
+          );
+          await validateConnectedStockReservationForSale(
+            reservation: connectedStockReservation,
+            operationId: cleanOperationId,
+            workflowType: ConnectedStockWorkflowType.retailCart,
+            capability: ShopStaffCapability.counterSale,
+            subjectId: cleanOperationId,
+            productQuantities: quantities,
+            timeAuthority: connectedTimeAuthority,
+          );
+          final reopened = await customUpdate(
+            "UPDATE shop_wallet_checkout_intents SET state = 'pending' "
+            "WHERE operation_id = ? AND state = 'cancelled'",
+            variables: [Variable<String>(cleanOperationId)],
+          );
+          if (reopened != 1) {
+            throw StateError('This wallet checkout could not be reopened.');
+          }
+          return PendingWalletCheckout(
+            operationId: prior.operationId,
+            paymentMethod: prior.paymentMethod,
+            requestFingerprint: prior.requestFingerprint,
+            totalMmk: prior.totalMmk,
+            merchantPhone: prior.merchantPhone,
+            merchantQrPayload: prior.merchantQrPayload,
+            lines: prior.lines,
+            state: 'pending',
+            createdAtMillis: prior.createdAtMillis,
+            member: prior.member,
+          );
         }
         throw StateError('This wallet checkout ID was already used.');
       }
@@ -6975,6 +17898,8 @@ class ShopDatabase extends _$ShopDatabase {
           for (final line in canonicalLines)
             {'productId': line.key, 'quantity': line.value},
         ],
+        if (connectedStockReservation != null)
+          'connectedReservation': connectedStockReservation.toJson(),
       });
       final openIntent = await customSelect(
         'SELECT operation_id FROM shop_wallet_checkout_intents WHERE state = ? LIMIT 1',
@@ -6993,6 +17918,18 @@ class ShopDatabase extends _$ShopDatabase {
         throw StateError('This sale ID was already completed.');
       }
 
+      final connectedNow = connectedStockReservation == null
+          ? null
+          : await validateConnectedStockReservationForSale(
+              reservation: connectedStockReservation,
+              operationId: cleanOperationId,
+              workflowType: ConnectedStockWorkflowType.retailCart,
+              capability: ShopStaffCapability.counterSale,
+              subjectId: cleanOperationId,
+              productQuantities: quantities,
+              timeAuthority: connectedTimeAuthority,
+            );
+
       final snapshots = <WalletCheckoutLineSnapshot>[];
       var totalMmk = 0;
       for (final line in canonicalLines) {
@@ -7004,7 +17941,12 @@ class ShopDatabase extends _$ShopDatabase {
         if (product == null) {
           throw StateError('A selected product is no longer available.');
         }
-        if (product.onHand < line.value) {
+        final reserved = await _readTotalReservedStockQuantity(
+          product.id,
+          excludingConnectedReservationId:
+              connectedStockReservation?.reservationId,
+        );
+        if (product.onHand - reserved < line.value) {
           throw StateError('Not enough stock for ${product.name}.');
         }
         final lineTotal = product.priceMmk * line.value;
@@ -7044,6 +17986,14 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(createdAt),
         ],
       );
+      if (connectedStockReservation != null) {
+        await _insertConnectedTenderReservationBinding(
+          operationId: cleanOperationId,
+          tenderKind: 'wallet',
+          reservation: connectedStockReservation,
+          createdAtMillis: connectedNow!,
+        );
+      }
       final saleMember = member == null
           ? null
           : ShopSaleMember(
@@ -7103,6 +18053,27 @@ class ShopDatabase extends _$ShopDatabase {
       if (row == null) return false;
       final intent = await _walletCheckoutFromRow(row);
       if (resumeOperationId != null) {
+        final connectedBinding = await customSelect(
+          'SELECT reservation_id FROM '
+          'shop_connected_tender_reservation_bindings '
+          "WHERE operation_id = ? AND tender_kind = 'wallet'",
+          variables: [Variable<String>(operationId)],
+        ).getSingleOrNull();
+        if (connectedBinding != null) {
+          final released = await customSelect(
+            'SELECT 1 FROM shop_connected_stock_reservation_transitions '
+            "WHERE reservation_id = ? AND to_state = 'released'",
+            variables: [
+              Variable<String>(connectedBinding.read<String>('reservation_id')),
+            ],
+          ).getSingleOrNull();
+          if (released == null) {
+            throw StateError(
+              'Release the connected stock reservation before resuming '
+              'under a new sale ID.',
+            );
+          }
+        }
         final priorSale =
             await (select(shopSales)
                   ..where((sale) => sale.operationId.equals(resumeOperationId)))
@@ -7852,6 +18823,45 @@ class ShopDatabase extends _$ShopDatabase {
     return _sha256Hex(row.read<String>('ticket_json'));
   }
 
+  Future<Map<String, int>> _cashCheckoutSubjectQuantities({
+    required String checkoutKind,
+    required String subjectId,
+  }) async {
+    if (checkoutKind == 'counter') {
+      final row = await customSelect(
+        'SELECT basket_json, updated_at_millis FROM shop_counter_drafts '
+        'WHERE operation_id = ?',
+        variables: [Variable<String>(subjectId)],
+      ).getSingleOrNull();
+      if (row == null) {
+        throw StateError('The counter sale changed. Review it again.');
+      }
+      return _decodeCounterDraft(
+        operationId: subjectId,
+        basketJson: row.read<String>('basket_json'),
+        updatedAtMillis: row.read<int>('updated_at_millis'),
+      ).quantities;
+    }
+    final row = await customSelect(
+      "SELECT ticket_json FROM shop_cafe_orders WHERE id = ? AND state = 'open'",
+      variables: [Variable<String>(subjectId)],
+    ).getSingleOrNull();
+    if (row == null) {
+      throw StateError('The café order changed. Refresh and review it.');
+    }
+    final quantities = <String, int>{};
+    for (final line in CafeOrderTicket.fromJson(
+      jsonDecode(row.read<String>('ticket_json')),
+    ).lines) {
+      quantities.update(
+        line.productId,
+        (quantity) => quantity + line.quantity,
+        ifAbsent: () => line.quantity,
+      );
+    }
+    return quantities;
+  }
+
   ShopPendingCashCheckout _pendingCashCheckoutFromRow(QueryRow row) =>
       ShopPendingCashCheckout(
         operationId: row.read<String>('operation_id'),
@@ -7882,6 +18892,9 @@ class ShopDatabase extends _$ShopDatabase {
     required String subjectId,
     String? memberId,
     int? memberCardRevision,
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) => transaction(() async {
     final cleanOperationId = operationId.trim();
     final cleanSubjectId = subjectId.trim();
@@ -7908,11 +18921,61 @@ class ShopDatabase extends _$ShopDatabase {
       checkoutKind: checkoutKind,
       subjectId: cleanSubjectId,
     );
-    if (existing != null) return existing;
+    if (existing != null) {
+      await _requireConnectedTenderReservationBinding(
+        operationId: cleanOperationId,
+        tenderKind: 'cash',
+        reservation: connectedStockReservation,
+      );
+      return existing;
+    }
     final subjectFingerprint = await _cashCheckoutSubjectFingerprint(
       checkoutKind: checkoutKind,
       subjectId: cleanSubjectId,
     );
+    final subjectQuantities = await _cashCheckoutSubjectQuantities(
+      checkoutKind: checkoutKind,
+      subjectId: cleanSubjectId,
+    );
+    final connectedWorkflow = checkoutKind == 'counter'
+        ? ConnectedStockWorkflowType.retailCart
+        : ConnectedStockWorkflowType.cafeOrder;
+    final connectedCapability = checkoutKind == 'counter'
+        ? ShopStaffCapability.counterSale
+        : ShopStaffCapability.cafeOrderWrite;
+    final connectedNow = connectedStockReservation == null
+        ? null
+        : await validateConnectedStockReservationForSale(
+            reservation: connectedStockReservation,
+            operationId: cleanOperationId,
+            workflowType: connectedWorkflow,
+            capability: connectedCapability,
+            subjectId: cleanSubjectId,
+            productQuantities: subjectQuantities,
+            timeAuthority: connectedTimeAuthority,
+          );
+    for (final entry in subjectQuantities.entries) {
+      final product = await customSelect(
+        'SELECT name, on_hand FROM shop_products WHERE id = ?',
+        variables: [Variable<String>(entry.key)],
+      ).getSingleOrNull();
+      if (product == null) {
+        throw StateError('A selected product is no longer available.');
+      }
+      final alreadyReserved = await _readTotalReservedStockQuantity(
+        entry.key,
+        excludingConnectedReservationId:
+            connectedStockReservation?.reservationId,
+      );
+      final available = product.read<int>('on_hand') - alreadyReserved;
+      if (entry.value > available) {
+        throw ShopStockUnavailableException(
+          productName: product.read<String>('name'),
+          available: available < 0 ? 0 : available,
+          requiredQuantity: entry.value,
+        );
+      }
+    }
     if (memberId != null) {
       final card = await customSelect(
         'SELECT 1 FROM shop_member_cards '
@@ -7954,6 +19017,14 @@ class ShopDatabase extends _$ShopDatabase {
         Variable<int>(createdAt),
       ],
     );
+    if (connectedStockReservation != null) {
+      await _insertConnectedTenderReservationBinding(
+        operationId: cleanOperationId,
+        tenderKind: 'cash',
+        reservation: connectedStockReservation,
+        createdAtMillis: connectedNow!,
+      );
+    }
     return ShopPendingCashCheckout(
       operationId: cleanOperationId,
       checkoutKind: checkoutKind,
@@ -8201,6 +19272,29 @@ class ShopDatabase extends _$ShopDatabase {
       ).getSingleOrNull();
       if (pendingWallet != null) {
         throw StateError('Finish or cancel the pending wallet checkout first.');
+      }
+      final pendingCashReversal = await customSelect(
+        'SELECT intent.consumption_request_id '
+        'FROM shop_correction_consumption_intents AS intent '
+        'LEFT JOIN shop_correction_consumptions AS consumption '
+        'ON consumption.consumption_request_id = intent.consumption_request_id '
+        'WHERE consumption.consumption_request_id IS NULL '
+        "AND intent.capability = 'shop.sale.reverse' "
+        'AND json_valid(intent.recovery_envelope_json) '
+        'AND json_extract(intent.recovery_envelope_json, ?1) = ?2 '
+        "AND json_extract(intent.recovery_envelope_json, '\$.command.originalPaymentMethod') = 'cash' "
+        "AND json_extract(intent.recovery_envelope_json, '\$.command.expectedCashShiftId') = ?3 "
+        'LIMIT 1',
+        variables: [
+          const Variable<String>(r'$.contract'),
+          const Variable<String>(_shopFullSaleCorrectionRecoveryContract),
+          Variable<String>(shiftId),
+        ],
+      ).getSingleOrNull();
+      if (pendingCashReversal != null) {
+        throw StateError(
+          'Finish the pending cash return before closing this shift.',
+        );
       }
       final review = await readCashShiftReview(shiftId);
       if (review.saleCount != seenSaleCount ||
@@ -9824,6 +20918,9 @@ class ShopDatabase extends _$ShopDatabase {
     String? staffActorId,
     ShopStaffCommandAuthorizer staffAuthorizer =
         const ShopStaffCommandAuthorizationUnavailable(),
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) => recordSale(
     operationId: operationId,
     lines: lines,
@@ -9832,6 +20929,8 @@ class ShopDatabase extends _$ShopDatabase {
     cashCheckoutSubjectId: requirePendingCashCheckout ? operationId : null,
     staffActorId: staffActorId,
     staffAuthorizer: staffAuthorizer,
+    connectedStockReservation: connectedStockReservation,
+    connectedTimeAuthority: connectedTimeAuthority,
   );
 
   Future<ShopSaleReceipt> recordSale({
@@ -9848,6 +20947,9 @@ class ShopDatabase extends _$ShopDatabase {
     String? staffActorId,
     ShopStaffCommandAuthorizer staffAuthorizer =
         const ShopStaffCommandAuthorizationUnavailable(),
+    ConnectedStockReservationV1? connectedStockReservation,
+    ShopConnectedSiteCoordinatorTimeAuthority connectedTimeAuthority =
+        const ShopConnectedSiteTimeUnavailable(),
   }) async {
     final cleanOperationId = operationId.trim();
     final cleanWalletCheckoutId = walletCheckoutOperationId?.trim();
@@ -9938,7 +21040,7 @@ class ShopDatabase extends _$ShopDatabase {
     } else if (cleanWalletCheckoutId != null) {
       selectedMember = await _readWalletCheckoutMember(cleanWalletCheckoutId);
     }
-    final fingerprint = paymentMethod == 'cash'
+    final checkoutFingerprint = paymentMethod == 'cash'
         ? selectedMember == null && cashTenderedMmk == null
               ? jsonEncode(fingerprintLines)
               : jsonEncode({
@@ -9956,6 +21058,13 @@ class ShopDatabase extends _$ShopDatabase {
               'memberCardRevision': selectedMember.cardRevision,
             },
             'lines': fingerprintLines,
+          });
+    final fingerprint = connectedStockReservation == null
+        ? checkoutFingerprint
+        : jsonEncode({
+            'checkoutFingerprint': checkoutFingerprint,
+            'connectedReservation': connectedStockReservation.toJson(),
+            'saleOperationId': cleanOperationId,
           });
 
     return transaction(() async {
@@ -10017,6 +21126,45 @@ class ShopDatabase extends _$ShopDatabase {
             )) {
           throw StateError('Sale item changed. Review each line again.');
         }
+        final committedRows = await customSelect(
+          'SELECT transition_json FROM '
+          'shop_connected_stock_reservation_transitions '
+          "WHERE to_state = 'committed' AND sale_id = ?",
+          variables: [Variable<String>(priorSale.id)],
+        ).get();
+        if (connectedStockReservation == null) {
+          if (committedRows.isNotEmpty) {
+            throw StateError(
+              'The completed sale requires its connected reservation.',
+            );
+          }
+        } else {
+          if (committedRows.length != 1 ||
+              committedRows.single.readNullable<String>('transition_json') ==
+                  null) {
+            throw StateError(
+              'The connected reservation is not bound to this sale.',
+            );
+          }
+          final transition = ConnectedStockReservationTransitionV1.fromJson(
+            jsonDecode(committedRows.single.read<String>('transition_json')),
+          );
+          final saleCommandDigest = connectedSiteSha256({
+            'operationId': cleanOperationId,
+            'requestFingerprint': fingerprint,
+          });
+          if (canonicalConnectedSiteJson(transition.before.toJson()) !=
+                  canonicalConnectedSiteJson(
+                    connectedStockReservation.toJson(),
+                  ) ||
+              transition.saleBinding?.saleId != priorSale.id ||
+              transition.saleBinding?.saleCommandId != cleanOperationId ||
+              transition.saleBinding?.saleCommandDigest != saleCommandDigest) {
+            throw StateError(
+              'The connected reservation is not bound to this sale.',
+            );
+          }
+        }
         await clearCounterSaleDraft(cleanOperationId);
         return ShopSaleReceipt(
           id: priorSale.id,
@@ -10046,6 +21194,11 @@ class ShopDatabase extends _$ShopDatabase {
           checkoutKind: 'counter',
           subjectId: cashCheckoutSubjectId,
         );
+        await _requireConnectedTenderReservationBinding(
+          operationId: cleanOperationId,
+          tenderKind: 'cash',
+          reservation: connectedStockReservation,
+        );
         if (pendingCash.memberId != selectedMember?.memberId ||
             pendingCash.memberCardRevision != selectedMember?.cardRevision) {
           throw StateError(
@@ -10064,6 +21217,18 @@ class ShopDatabase extends _$ShopDatabase {
           );
         }
       }
+
+      final connectedNow = connectedStockReservation == null
+          ? null
+          : await validateConnectedStockReservationForSale(
+              reservation: connectedStockReservation,
+              operationId: cleanOperationId,
+              workflowType: ConnectedStockWorkflowType.retailCart,
+              capability: ShopStaffCapability.counterSale,
+              subjectId: cashCheckoutSubjectId ?? cleanOperationId,
+              productQuantities: productQuantities,
+              timeAuthority: connectedTimeAuthority,
+            );
 
       // Read the persisted intent inside the same transaction as the stock
       // mutation. Startup UI recovery can still be loading or can fail, so a
@@ -10100,8 +21265,23 @@ class ShopDatabase extends _$ShopDatabase {
           throw StateError('The wallet checkout is no longer pending.');
         }
         final intent = await _walletCheckoutFromRow(intentRow);
+        await _requireConnectedTenderReservationBinding(
+          operationId: cleanWalletCheckoutId,
+          tenderKind: 'wallet',
+          reservation: connectedStockReservation,
+        );
+        final expectedIntentFingerprint = jsonEncode({
+          'paymentMethod': paymentMethod,
+          if (selectedMember case final member?) ...{
+            'memberId': member.memberId,
+            'memberCardRevision': member.cardRevision,
+          },
+          'lines': fingerprintLines,
+          if (connectedStockReservation != null)
+            'connectedReservation': connectedStockReservation.toJson(),
+        });
         if (intent.paymentMethod != paymentMethod ||
-            intent.requestFingerprint != fingerprint) {
+            intent.requestFingerprint != expectedIntentFingerprint) {
           throw StateError('The pending checkout does not match this sale.');
         }
         if (intent.lines.length != canonicalLines.length ||
@@ -10235,6 +21415,16 @@ class ShopDatabase extends _$ShopDatabase {
         final productName = snapshot?.productName ?? product.name;
         final unitPriceMmk = snapshot?.unitPriceMmk ?? product.priceMmk;
         final lineTotal = unitPriceMmk * quantity;
+        final reservedByOthers = await _readTotalReservedStockQuantity(
+          product.id,
+          excludingConnectedReservationId:
+              connectedStockReservation?.reservationId,
+          excludingPendingCashOperationId: cashCheckoutSubjectId == null
+              ? null
+              : cleanOperationId,
+          excludingWalletOperationId: cleanWalletCheckoutId,
+        );
+        final requiredOnHand = quantity + reservedByOthers;
         final changedRows = await customUpdate(
           'UPDATE shop_products '
           'SET on_hand = on_hand - ?, updated_at_millis = ? '
@@ -10243,7 +21433,7 @@ class ShopDatabase extends _$ShopDatabase {
             Variable<int>(quantity),
             Variable<int>(now),
             Variable<String>(product.id),
-            Variable<int>(quantity),
+            Variable<int>(requiredOnHand),
             Variable<int>(walletSnapshots == null ? 0 : 1),
           ],
         );
@@ -10324,6 +21514,23 @@ class ShopDatabase extends _$ShopDatabase {
           operationId: cleanOperationId,
           checkoutKind: 'counter',
           subjectId: cashCheckoutSubjectId,
+        );
+      }
+      if (connectedStockReservation != null) {
+        final saleCommandDigest = connectedSiteSha256({
+          'operationId': cleanOperationId,
+          'requestFingerprint': fingerprint,
+        });
+        await commitConnectedStockReservationForSale(
+          reservation: connectedStockReservation,
+          saleId: saleId,
+          saleCommandId: cleanOperationId,
+          saleCommandDigest: saleCommandDigest,
+          workflowType: ConnectedStockWorkflowType.retailCart,
+          capability: ShopStaffCapability.counterSale,
+          subjectId: cashCheckoutSubjectId ?? cleanOperationId,
+          productQuantities: productQuantities,
+          validatedNowMillis: connectedNow!,
         );
       }
       await clearCounterSaleDraft(cleanOperationId);
@@ -10475,6 +21682,84 @@ class ShopDatabase extends _$ShopDatabase {
     final query = selectOnly(shopSyncOutbox)..addColumns([count]);
     return await query.map((row) => row.read(count) ?? 0).getSingle();
   }
+
+  /// Reads the synthetic installed-QA counters from one SQLite snapshot.
+  ///
+  /// The first statement reads counts and the store reference; the latter is
+  /// hashed before leaving this method. The following queries read rows into
+  /// process memory only to hash one stable database snapshot. No row payload
+  /// is returned or written to the QA evidence sidecar. The transaction keeps
+  /// counts and the snapshot digest on the same database state.
+  Future<ShopQaMetricsSnapshot> readQaMetricsSnapshot() =>
+      transaction(() async {
+        final row = await customSelect('''
+      SELECT
+        (SELECT COUNT(*) FROM shop_sales) AS sales,
+        (SELECT COUNT(*) FROM shop_stock_movements) AS stock_movements,
+        (SELECT COUNT(*) FROM shop_sales AS sale
+          WHERE EXISTS (SELECT 1 FROM shop_sale_lines AS line
+            WHERE line.sale_id = sale.id)) AS receipts,
+        (SELECT COUNT(*) FROM shop_sync_outbox) AS outbox,
+        (SELECT COALESCE(SUM(on_hand), 0) FROM shop_products) AS on_hand,
+        (SELECT COUNT(*) FROM shop_cash_shifts) AS shifts,
+        (SELECT store_ref FROM shop_store_identity
+          WHERE singleton = 1) AS store_ref
+    ''').getSingle();
+        final counts = <String, int>{
+          'sales': row.read<int>('sales'),
+          'stockMovements': row.read<int>('stock_movements'),
+          'receipts': row.read<int>('receipts'),
+          'outbox': row.read<int>('outbox'),
+          'onHand': row.read<int>('on_hand'),
+          'shifts': row.read<int>('shifts'),
+        };
+        final storeIdentitySha256 = crypto.sha256
+            .convert(utf8.encode(row.read<String>('store_ref')))
+            .toString();
+        final state = <String, Object>{};
+        for (final entry in const <String, String>{
+          'shop_products': 'id',
+          'shop_sales': 'id',
+          'shop_sale_lines': 'id',
+          'shop_stock_movements': 'id',
+          'shop_sync_outbox': 'operation_id',
+          'shop_cash_shifts': 'id',
+        }.entries) {
+          final rows = await customSelect(
+            'SELECT * FROM ${entry.key} ORDER BY ${entry.value}',
+          ).get();
+          state[entry.key] = <Map<String, Object?>>[
+            for (final row in rows)
+              Map<String, Object?>.fromEntries(
+                row.data.entries.toList()
+                  ..sort((left, right) => left.key.compareTo(right.key)),
+              ),
+          ];
+        }
+        final snapshotSha256 = crypto.sha256
+            .convert(
+              utf8.encode(
+                jsonEncode(<String, Object>{
+                  'contract': 'supermega.shop.synthetic-qa-db-snapshot.v1',
+                  'schemaVersion': schemaVersion,
+                  'storeIdentitySha256': storeIdentitySha256,
+                  'state': state,
+                }),
+              ),
+            )
+            .toString();
+        return ShopQaMetricsSnapshot(
+          schemaVersion: schemaVersion,
+          storeIdentitySha256: storeIdentitySha256,
+          sales: counts['sales']!,
+          stockMovements: counts['stockMovements']!,
+          receipts: counts['receipts']!,
+          outbox: counts['outbox']!,
+          onHand: counts['onHand']!,
+          shifts: counts['shifts']!,
+          snapshotSha256: snapshotSha256,
+        );
+      });
 
   Future<int> stageMenuCandidates({
     required String batchId,

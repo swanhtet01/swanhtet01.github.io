@@ -3,6 +3,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
@@ -11,9 +12,40 @@ import { verifyShopNativeCiContract } from './verify_shop_native_ci_contract.mjs
 const workflow = await readFile('.github/workflows/shop-native-ci.yml', 'utf8')
 const gradleWrapper = await readFile('mobile/shop_pos/android/gradle/wrapper/gradle-wrapper.properties', 'utf8')
 const qaManifest = await readFile('mobile/shop_pos/android/app/src/qa/AndroidManifest.xml', 'utf8')
+const windowsOverlayScript = await readFile('mobile/shop_pos/windows_overlay/apply.ps1', 'utf8')
+const windowsSecurityBridge = await readFile(
+  'mobile/shop_pos/windows_overlay/runner/connected_security_bridge.cpp',
+  'utf8',
+)
+const windowsCoordinatorHost = await readFile(
+  'mobile/shop_pos/windows_overlay/runner/connected_coordinator_host.cpp',
+  'utf8',
+)
+const windowsSecurityStore = await readFile(
+  'mobile/shop_pos/windows_overlay/runner/connected_security_store.cpp',
+  'utf8',
+)
+const windowsSecurityStoreHeader = await readFile(
+  'mobile/shop_pos/windows_overlay/runner/connected_security_store.h',
+  'utf8',
+)
 const actualTestPaths = (await readdir('mobile/shop_pos/test', { withFileTypes: true }))
   .filter(entry => entry.isFile() && entry.name.endsWith('_test.dart'))
   .map(entry => `test/${entry.name}`)
+
+function windowsMaterialFileName(alias, materialId) {
+  const token = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+  if (!token.test(alias) || !token.test(materialId)) return null
+  const field = value => {
+    const bytes = Buffer.from(value, 'utf8')
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(bytes.length)
+    return Buffer.concat([length, bytes])
+  }
+  return `${createHash('sha256')
+    .update(Buffer.concat([Buffer.from('SMCS1'), field(alias), field(materialId)]))
+    .digest('hex')}.dpapi`
+}
 
 test('Android QA source declares the exact fail-closed recovery capability tuple', () => {
   for (const token of [
@@ -45,8 +77,50 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
 })
 
-test('iOS and Windows QA artifacts inspect signing and use canonical source binding', () => {
+test('visual capture remains bounded and reports its terminal status', () => {
+  for (const [token, failure] of [
+    [
+      'visual_capture_start budget_seconds=300 per_test_timeout_seconds=60',
+      'native_visual_capture_test_not_separately_bounded',
+    ],
+    [
+      'timeout --signal=TERM --kill-after=10s 300s flutter test test/visual_capture_test.dart --update-goldens --reporter expanded --timeout 60s',
+      'native_visual_capture_test_not_separately_bounded',
+    ],
+    [
+      'visual_capture_status=$?',
+      'native_visual_capture_status_not_captured',
+    ],
+    [
+      'visual_capture_complete status=$visual_capture_status elapsed_seconds=$visual_capture_elapsed',
+      'native_visual_capture_diagnostics_missing',
+    ],
+    [
+      'if [ "$visual_capture_status" -ne 0 ]; then',
+      'native_visual_capture_failure_not_propagated',
+    ],
+    [
+      'exit "$visual_capture_status"',
+      'native_visual_capture_failure_not_propagated',
+    ],
+  ]) {
+    const result = verifyShopNativeCiContract(
+      workflow.replace(token, 'visual-capture-control-omitted'),
+      gradleWrapper,
+      actualTestPaths,
+    )
+    assert.ok(result.failures.includes(failure), failure)
+  }
+})
+
+test('Android, iOS and Windows QA artifacts inspect signing and use canonical source binding', () => {
   for (const [command, failure] of [
+    ['apksigner" verify --verbose --print-certs app-qa-debug.apk', 'android_qa_signature_not_verified'],
+    ['flutter --version --machine > app-qa-debug.apk.toolchain.json', 'android_qa_observed_toolchain_missing'],
+    [
+      'node tools/write_shop_qa_artifact_manifest.mjs --platform android --artifact app-qa-debug.apk --checksum app-qa-debug.apk.sha256 --toolchain app-qa-debug.apk.toolchain.json --signing app-qa-debug.apk.signing.json --identity app-qa-debug.apk.identity.json --output app-qa-debug.apk.manifest',
+      'android_qa_canonical_manifest_missing',
+    ],
     ['codesign -dv --verbose=4', 'ios_qa_signature_not_inspected'],
     ['code object is not signed at all', 'ios_qa_unsigned_result_not_verified'],
     ['flutter --version --machine > Runner.app.zip.toolchain.json', 'ios_qa_observed_toolchain_missing'],
@@ -69,6 +143,139 @@ test('iOS and Windows QA artifacts inspect signing and use canonical source bind
     )
     assert.ok(result.failures.includes(failure), failure)
   }
+})
+
+test('Android canonical publication rechecks exact source and clears release signing inputs', () => {
+  for (const [token, failure] of [
+    ['git diff --exit-code', 'android_qa_clean_source_precheck_missing'],
+    ['test "$(git rev-parse HEAD)" = "${{ github.sha }}"', 'android_qa_source_head_recheck_missing'],
+    ['sha256sum --check "${RUNNER_TEMP}/shop-build-identity.sha256"', 'android_qa_generated_identity_recheck_missing'],
+    ['"buildIdentitySha256": os.environ["BUILD_IDENTITY_SHA256"]', 'android_qa_generated_identity_not_bound'],
+    ["test -z \"$changed_paths\" || test \"$changed_paths\" = 'mobile/shop_pos/lib/shop_build_identity.g.dart'", 'android_qa_source_drift_recheck_missing'],
+    ['test "$untracked_before_manifest" = "$expected_before_manifest"', 'android_qa_untracked_source_drift_recheck_missing'],
+    ['test "$untracked_after_manifest" = "$expected_after_manifest"', 'android_qa_untracked_source_drift_recheck_missing'],
+    ['re.fullmatch(r"lib/([^/]+)/[^/]+\\.so", line)', 'android_qa_abi_inventory_not_root_anchored'],
+    ['apksigner_jar="$android_sdk_root/build-tools/$build_tools_version/lib/apksigner.jar"', 'android_qa_apksigner_jar_not_bound'],
+    ["ORG_GRADLE_PROJECT_SHOP_ANDROID_KEYSTORE_PATH: ''", 'android_qa_ci_may_inherit_signing_credentials:SHOP_ANDROID_KEYSTORE_PATH'],
+  ]) {
+    const result = verifyShopNativeCiContract(
+      workflow.replaceAll(token, 'android-canonical-control-omitted'),
+      gradleWrapper,
+      actualTestPaths,
+    )
+    assert.ok(result.failures.includes(failure), failure)
+  }
+})
+
+test('both generated Windows runners apply the fail-closed security overlay', () => {
+  assert.equal(
+    workflow.split('& .\\windows_overlay\\apply.ps1').length - 1,
+    2,
+  )
+  const missing = verifyShopNativeCiContract(
+    workflow.replace('& .\\windows_overlay\\apply.ps1', 'echo overlay-omitted'),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(
+    missing.failures.includes('windows_connected_security_overlay_missing'),
+  )
+  for (const token of [
+    'connected_coordinator_host.cpp',
+    'connected_coordinator_host.h',
+    'connected_security_bridge.cpp',
+    'connected_security_store.cpp',
+    'windows_security_overlay_registration_anchor_invalid',
+    'advapi32.lib',
+    'bcrypt.lib',
+    'crypt32.lib',
+    'windows_security_overlay_destination_exists',
+  ]) {
+    assert.ok(windowsOverlayScript.includes(token), token)
+  }
+  assert.ok(windowsSecurityBridge.includes('result->NotImplemented()'))
+  assert.ok(windowsSecurityBridge.includes('SupportsPersistentNonExportableEd25519'))
+  assert.ok(windowsSecurityBridge.includes('RegisterConnectedCoordinatorHostChannel(engine, false)'))
+  for (const token of [
+    'call.method_name() == "readTrustedTimeClock"',
+    'supermega.connected-trusted-time-platform-clock-request.v1',
+    'windows_system_boot_identifier_get_tick_count64_v1',
+    'NtQuerySystemInformation',
+    'kSystemBootEnvironmentInformation = 90',
+    'environment.boot_identifier',
+    'std::any_of(guid',
+    'GetTickCount64()',
+    'BCryptHashData',
+    'connected_trusted_time_platform_clock_unavailable',
+  ]) {
+    assert.ok(windowsSecurityBridge.includes(token), token)
+  }
+  assert.ok(
+    windowsSecurityBridge.indexOf(
+      'call.method_name() == "readTrustedTimeClock"',
+    ) < windowsSecurityBridge.indexOf('if (IsKnownMethod(call.method_name()))'),
+  )
+  assert.equal(windowsSecurityBridge.includes('GetSystemTime'), false)
+  assert.equal(windowsSecurityBridge.includes('system_clock'), false)
+  assert.ok(windowsSecurityStore.includes('CRYPTPROTECT_UI_FORBIDDEN'))
+  assert.ok(windowsSecurityStore.includes('PROTECTED_DACL_SECURITY_INFORMATION'))
+  assert.ok(windowsSecurityStore.includes("std::vector<uint8_t> identity{'S', 'M', 'C', 'S', '1'}"))
+  assert.ok(windowsSecurityStore.includes('BCryptHashData'))
+  assert.ok(windowsSecurityStore.includes('SupportsPersistentNonExportableEd25519() { return false; }'))
+  assert.ok(windowsSecurityStoreHeader.includes('class IdentityMetadataStore'))
+  assert.ok(windowsSecurityStoreHeader.includes('class PersistentEd25519KeyStore'))
+})
+
+test('Windows coordinator host stays visible, single-owner, and default-off', () => {
+  for (const token of [
+    'connected_coordinator_host_v1',
+    'supermega.connected-coordinator-host-status.v1',
+    'Local\\\\SuperMegaShopConnectedCoordinatorHostV1',
+    'call.method_name() == "status"',
+    'call.method_name() == "start"',
+    'call.method_name() == "markListening"',
+    'call.method_name() == "stop"',
+    'supermega.connected-coordinator-host-request.v1',
+    'connected_site_disabled',
+    'coordinator_start_rejected',
+    'transportListening',
+    'sharedWritesAvailable',
+    'restartCleanupComplete',
+    'visibleStatusRequired',
+    'CreateMutexW',
+    'WAIT_ABANDONED',
+    'ReleaseOwnership()',
+    'coordinator_listener_transition_invalid',
+    'coordinator_already_started',
+  ]) {
+    assert.ok(windowsCoordinatorHost.includes(token), token)
+  }
+  for (const forbidden of [
+    /\bHttpServer\b/,
+    /\bWSAStartup\b/,
+    /\bsocket\s*\(/,
+    /\blisten\s*\(/,
+    /\bbind\s*\(/,
+    /\bconnect\s*\(/,
+  ]) {
+    assert.equal(forbidden.test(windowsCoordinatorHost), false, forbidden)
+  }
+})
+
+test('Windows sealed-state filenames are digest-only and collision resistant', () => {
+  const colon = windowsMaterialFileName('shop:counter', 'tls:stream')
+  const upper = windowsMaterialFileName('Foo', 'tls')
+  const lower = windowsMaterialFileName('foo', 'tls')
+  const reserved = windowsMaterialFileName('CON', 'NUL')
+  for (const name of [colon, upper, lower, reserved]) {
+    assert.match(name, /^[0-9a-f]{64}\.dpapi$/)
+    assert.equal(name.includes(':'), false)
+  }
+  assert.notEqual(upper, lower)
+  assert.equal(windowsMaterialFileName('../escape', 'tls'), null)
+  assert.equal(windowsMaterialFileName('alias', '..\\escape'), null)
+  assert.equal(windowsMaterialFileName('a'.repeat(129), 'tls'), null)
+  assert.equal(windowsMaterialFileName('alias', 'm'.repeat(129)), null)
 })
 
 test('native CI retains exactly the contracted 18-file public gallery artifact', () => {
@@ -123,7 +330,7 @@ test('Android QA label is parsed structurally from the built manifest', () => {
     'xml.etree.ElementTree',
     'findall("application")',
     'apps[0].get(android + "label")',
-    'sys.exit(None if valid else "shop_android_qa_identity_or_capability_mismatch")',
+    'raise SystemExit("shop_android_qa_identity_or_capability_mismatch")',
   ]) {
     const missing = verifyShopNativeCiContract(
       workflow.replace(token, 'label-inspection-omitted'),
@@ -142,7 +349,7 @@ test('Android QA analyzer is resolved from one consistent runner SDK root', () =
     'test -x "$analyzer"',
   ]) {
     const missing = verifyShopNativeCiContract(
-      workflow.replace(token, 'sdk-analyzer-discovery-omitted'),
+      workflow.replaceAll(token, 'sdk-analyzer-discovery-omitted'),
       gradleWrapper,
     )
     assert.ok(missing.failures.includes('android_qa_postbuild_analyzer_not_pinned_to_sdk'))
@@ -159,12 +366,14 @@ test('Android QA analyzer is resolved from one consistent runner SDK root', () =
 })
 
 test('Android QA label parser fails closed for wrong, missing, duplicate, and malformed manifests', async () => {
-  const parser = workflow.match(/python3 -c '([^'\n]+)' "\$manifest_xml"/)?.[1]
+  const parser = workflow.match(/python3 - "\$manifest_xml" app-qa-debug\.apk\.files\.txt app-qa-debug\.apk\.identity\.json <<'PY'\n([\s\S]*?)\n          PY/)?.[1]
+    ?.split('\n').map(line => line.replace(/^          /, '')).join('\n')
   assert.ok(parser, 'workflow must retain an executable Android manifest parser')
   const directory = await mkdtemp(join(tmpdir(), 'shop-android-qa-manifest-'))
   try {
     const fixtures = [
-      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', status: 0 },
+      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android" platformBuildVersionCode="36"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', files: '/assets/packages/printer/lib/resources/asset.bin\n/lib/\n/lib/armeabi-v7a/\n/lib/armeabi-v7a/libapp.so\n/lib/arm64-v8a/\n/lib/arm64-v8a/libapp.so\n/lib/x86_64/\n/lib/x86_64/libapp.so\n', status: 0 },
+      { name: 'malformed-lib.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android" platformBuildVersionCode="36"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', files: '/lib/resources/not-a-shared-object\n', status: 1 },
       { name: 'wrong.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop"/></manifest>', status: 1 },
       { name: 'wrong-capability.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v999"/></application></manifest>', status: 1 },
       { name: 'unsafe-external.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="true"/></application></manifest>', status: 1 },
@@ -175,12 +384,28 @@ test('Android QA label parser fails closed for wrong, missing, duplicate, and ma
     ]
     for (const fixture of fixtures) {
       const path = join(directory, fixture.name)
+      const filesPath = join(directory, `${fixture.name}.files`)
+      const outputPath = join(directory, `${fixture.name}.json`)
       await writeFile(path, fixture.source, 'utf8')
-      const result = spawnSync('python3', ['-c', parser, path], {
+      await writeFile(filesPath, fixture.files ?? '/lib/arm64-v8a/libapp.so\n', 'utf8')
+      const result = spawnSync('python3', ['-c', parser, path, filesPath, outputPath], {
         encoding: 'utf8',
-        env: { ...process.env, PYTHONOPTIMIZE: '1' },
+        env: {
+          ...process.env,
+          PYTHONOPTIMIZE: '1',
+          APPLICATION_ID: 'dev.supermega.supermega_shop.qa',
+          VERSION_CODE: '1',
+          VERSION_NAME: '1.0.0',
+          MIN_SDK: '24',
+          TARGET_SDK: '36',
+          BUILD_IDENTITY_SHA256: '9'.repeat(64),
+        },
       })
       assert.equal(result.status, fixture.status, fixture.name)
+      if (fixture.status === 0) {
+        const identity = JSON.parse(await readFile(outputPath, 'utf8'))
+        assert.deepEqual(identity.abis, ['arm64-v8a', 'armeabi-v7a', 'x86_64'])
+      }
     }
   } finally {
     await rm(directory, { recursive: true, force: true })
@@ -210,6 +435,19 @@ test('native CI pins one exact Flutter SDK across production and QA native jobs'
   const missingCorrectionFormat = verifyShopNativeCiContract(
     workflow.replaceAll('lib/shop_correction_consumption.dart', 'lib/shop_correction_consumption_omitted.dart'),
     gradleWrapper,
+  )
+
+  const missingSuccessorFormat = verifyShopNativeCiContract(
+    workflow.replace(
+      '            lib/shop_connected_trusted_time_client_store.dart \\\n',
+      '',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingSuccessorFormat.failures.includes(
+      'connected_successor_format_gate_missing:lib/shop_connected_trusted_time_client_store.dart',
+    ),
   )
   assert.ok(
     missingCorrectionFormat.failures.includes(
@@ -293,22 +531,19 @@ test('production identity is generated only after every default-profile test sha
   assert.ok(generatedTooEarly.failures.includes('android_production_identity_generated_before_default_profile_tests'))
 
   const omittedShard = verifyShopNativeCiContract(
-    workflow.replaceAll('test/shop_member_identity_test.dart', 'test/omitted_member_identity_test.dart'),
+    workflow.replace('              test/shop_member_identity_test.dart \\\n', ''),
     gradleWrapper,
   )
   assert.ok(omittedShard.failures.includes('native_test_shard_missing:test/shop_member_identity_test.dart'))
 
   const omittedMmkShard = verifyShopNativeCiContract(
-    workflow.replaceAll('test/shop_mmk_input_test.dart', 'test/omitted_mmk_input_test.dart'),
+    workflow.replace('              test/shop_mmk_input_test.dart \\\n', ''),
     gradleWrapper,
   )
   assert.ok(omittedMmkShard.failures.includes('native_test_shard_missing:test/shop_mmk_input_test.dart'))
 
   const omittedPendingCashShard = verifyShopNativeCiContract(
-    workflow.replaceAll(
-      'test/shop_pending_cash_checkout_test.dart',
-      'test/omitted_pending_cash_checkout_test.dart',
-    ),
+    workflow.replace('              test/shop_pending_cash_checkout_test.dart\n', ''),
     gradleWrapper,
   )
   assert.ok(
@@ -318,10 +553,7 @@ test('production identity is generated only after every default-profile test sha
   )
 
   const omittedSqliteFullShard = verifyShopNativeCiContract(
-    workflow.replaceAll(
-      'test/shop_sqlite_full_recovery_test.dart',
-      'test/omitted_sqlite_full_recovery_test.dart',
-    ),
+    workflow.replace('              test/shop_sqlite_full_recovery_test.dart \\\n', ''),
     gradleWrapper,
   )
   assert.ok(
@@ -363,9 +595,67 @@ test('production identity is generated only after every default-profile test sha
     missingWorkerInventory.failures.includes('native_test_inventory_does_not_match_filesystem'),
   )
 
+  const swappedInventory = verifyShopNativeCiContract(
+    workflow.replace(
+      '          test/widget_checkout_second_test.dart\n          test/widget_checkout_test.dart\n',
+      '          test/widget_checkout_test.dart\n          test/widget_checkout_second_test.dart\n',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(swappedInventory.failures.includes('native_test_inventory_does_not_match_filesystem'))
+
+  const duplicateInventory = verifyShopNativeCiContract(
+    workflow.replace(
+      '          test/widget_checkout_second_test.dart\n',
+      '          test/widget_checkout_second_test.dart\n          test/widget_checkout_second_test.dart\n',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(duplicateInventory.failures.includes('native_test_inventory_does_not_match_filesystem'))
+
+  const extraInventory = verifyShopNativeCiContract(
+    workflow.replace(
+      '          test/widget_checkout_second_test.dart\n',
+      '          test/unreviewed_extra_test.dart\n          test/widget_checkout_second_test.dart\n',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(extraInventory.failures.includes('native_test_inventory_does_not_match_filesystem'))
+
+  const missingSuccessorShard = verifyShopNativeCiContract(
+    workflow.replace(
+      '              test/shop_connected_trusted_time_client_store_test.dart \\\n',
+      '',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(
+    missingSuccessorShard.failures.includes(
+      'native_test_shard_assignment_missing:test/shop_connected_trusted_time_client_store_test.dart',
+    ),
+  )
+
+  const duplicateSuccessorShard = verifyShopNativeCiContract(
+    workflow.replace(
+      '              test/shop_connected_trusted_time_client_store_test.dart \\\n',
+      '              test/shop_connected_trusted_time_client_store_test.dart \\\n              test/shop_connected_trusted_time_client_store_test.dart \\\n',
+    ),
+    gradleWrapper,
+    actualTestPaths,
+  )
+  assert.ok(
+    duplicateSuccessorShard.failures.includes(
+      'native_test_shard_assignment_duplicate:test/shop_connected_trusted_time_client_store_test.dart',
+    ),
+  )
+
   const missingProcessHarness = verifyShopNativeCiContract(
     workflow.replace(
-      'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 180s python3 scripts/test_shop_process_interruption.py',
+      'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 300s python3 scripts/test_shop_process_interruption.py',
       'true',
     ),
     gradleWrapper,
@@ -373,81 +663,473 @@ test('production identity is generated only after every default-profile test sha
   assert.ok(
     missingProcessHarness.failures.includes('native_process_interruption_harness_not_bounded_or_missing'),
   )
-})
-
-test('default-profile test shards share one evidence-backed aggregate budget', () => {
-  const widened = verifyShopNativeCiContract(
+  const missingCloudFeedHarness = verifyShopNativeCiContract(
     workflow.replace(
-      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "300"',
-      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "360"',
-    ),
-    gradleWrapper,
-  )
-  assert.ok(
-    widened.failures.includes(
-      'native_test_aggregate_budget_not_bounded_to_300_seconds',
-    ),
-  )
-
-  const missingStart = verifyShopNativeCiContract(
-    workflow.replace(
-      'started_at="$(date +%s)"',
+      'FLUTTER_BIN="$flutter_bin" timeout --signal=TERM --kill-after=10s 360s python3 scripts/test_cloud_feed_process_interruption.py',
       'true',
     ),
     gradleWrapper,
   )
   assert.ok(
-    missingStart.failures.includes('native_test_aggregate_budget_start_missing'),
+    missingCloudFeedHarness.failures.includes('native_cloud_feed_interruption_harness_not_bounded_or_missing'),
+  )
+})
+
+test('default-profile test shards run serially with fail-closed shard and total budgets', () => {
+  const shortJob = verifyShopNativeCiContract(
+    workflow.replace('timeout-minutes: 120', 'timeout-minutes: 60'),
+    gradleWrapper,
+  )
+  assert.ok(shortJob.failures.includes('native_android_job_timeout_not_120_minutes'))
+
+  const widened = verifyShopNativeCiContract(
+    workflow.replace(
+      'SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS: "600"',
+      'SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS: "660"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    widened.failures.includes(
+      'native_test_shard_budget_not_bounded_to_600_seconds',
+    ),
   )
 
-  const unboundedPersistence = verifyShopNativeCiContract(
+  const widenedTotal = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$persistence_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+      'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "5400"',
+      'SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS: "5399"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    widenedTotal.failures.includes(
+      'native_test_total_budget_not_bounded_to_5400_seconds',
+    ),
+  )
+
+  const missingStart = verifyShopNativeCiContract(
+    workflow.replace(
+      'behavior_core_started_at="$(date +%s)"',
+      'true',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingStart.failures.includes('native_behavior_core_shard_start_missing'),
+  )
+
+  const missingConnectedStart = verifyShopNativeCiContract(
+    workflow.replace('connected_started_at="$(date +%s)"', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(missingConnectedStart.failures.includes('native_connected_shard_start_missing'))
+
+  const missingOverallStart = verifyShopNativeCiContract(
+    workflow.replace('overall_started_at="$(date +%s)"', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(missingOverallStart.failures.includes('native_test_total_budget_start_missing'))
+
+  const missingRemainingBudget = verifyShopNativeCiContract(
+    workflow.replace(
+      'remaining="$(( SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS - elapsed ))"',
+      'remaining="$SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingRemainingBudget.failures.includes('native_test_remaining_total_budget_guard_missing'),
+  )
+
+  const unappliedRemainingBudget = verifyShopNativeCiContract(
+    workflow.replace(
+      'behavior_checkout_budget="$(calculate_shard_budget)" || exit "$?"',
+      'behavior_checkout_budget="$SHOP_FLUTTER_TEST_SHARD_BUDGET_SECONDS"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    unappliedRemainingBudget.failures.includes(
+      'native_behavior_checkout_remaining_total_budget_not_applied',
+    ),
+  )
+
+  const wrongShellInventory = verifyShopNativeCiContract(
+    workflow.replace(
+      '              test/widget_shell_test.dart',
+      '              test/widget_checkout_test.dart',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    wrongShellInventory.failures.includes('native_behavior_shell_shard_inventory_or_order_wrong'),
+  )
+
+  const incompleteBehaviorCore = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_stock_activity_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    incompleteBehaviorCore.failures.includes(
+      'native_behavior_core_shard_inventory_or_order_wrong',
+    ),
+  )
+
+  const missingFoundation = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_foundation_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(missingFoundation.failures.includes('native_behavior_foundation_shard_inventory_or_order_wrong'))
+
+  const missingCheckoutSecond = verifyShopNativeCiContract(
+    workflow.replace('              test/widget_checkout_second_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(missingCheckoutSecond.failures.includes('native_behavior_checkout_second_shard_inventory_or_order_wrong'))
+
+  const unboundedCheckoutSecond = verifyShopNativeCiContract(
+    workflow.replace(
+      'TMPDIR="$behavior_checkout_second_tmp" timeout --signal=TERM --kill-after=10s "${behavior_checkout_second_budget}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$behavior_checkout_second_tmp" flutter test --concurrency=2',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(unboundedCheckoutSecond.failures.includes('native_behavior_checkout_second_shard_not_bounded_or_sequential'))
+
+  const unboundedPersistenceA = verifyShopNativeCiContract(
+    workflow.replace(
+      'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${persistence_a_budget}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
   )
   assert.ok(
-    unboundedPersistence.failures.includes(
-      'native_persistence_shard_not_bounded_or_sequential',
+    unboundedPersistenceA.failures.includes(
+      'native_persistence_a_shard_not_bounded_or_sequential',
     ),
   )
 
-  const unboundedBehavior = verifyShopNativeCiContract(
+  const unboundedPersistenceB = verifyShopNativeCiContract(
     workflow.replace(
-      'TMPDIR="$behavior_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+      'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${persistence_b_budget}s" flutter test --no-pub --concurrency=1',
       'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
     ),
     gradleWrapper,
   )
   assert.ok(
-    unboundedBehavior.failures.includes(
-      'native_behavior_shard_not_bounded_or_sequential',
+    unboundedPersistenceB.failures.includes(
+      'native_persistence_b_shard_not_bounded_or_sequential',
     ),
   )
+
+  const unboundedConnected = verifyShopNativeCiContract(
+    workflow.replace(
+      'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${connected_budget}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$behavior_tmp" flutter test --concurrency=2',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    unboundedConnected.failures.includes(
+      'native_connected_shard_not_bounded_or_sequential',
+    ),
+  )
+
+  const unboundedConnectedB = verifyShopNativeCiContract(
+    workflow.replace(
+      'TMPDIR="$connected_b_tmp" timeout --signal=TERM --kill-after=10s "${connected_b_budget}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$connected_b_tmp" flutter test --concurrency=2',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    unboundedConnectedB.failures.includes(
+      'native_connected_b_shard_not_bounded_or_sequential',
+    ),
+  )
+
+  const missingConnectedBPath = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_site_coordinator_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingConnectedBPath.failures.includes(
+      'native_connected_b_shard_inventory_or_order_wrong',
+    ),
+  )
+
+  const unboundedBehaviorCore = verifyShopNativeCiContract(
+    workflow.replace(
+      'TMPDIR="$behavior_core_tmp" timeout --signal=TERM --kill-after=10s "${behavior_core_budget}s" flutter test --no-pub --concurrency=1',
+      'TMPDIR="$behavior_core_tmp" flutter test --concurrency=2',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    unboundedBehaviorCore.failures.includes(
+      'native_behavior_core_shard_not_bounded_or_sequential',
+    ),
+  )
+
+  for (const [shard, failure] of [
+    ['behavior_core', 'native_behavior_core_shard_not_bounded_or_sequential'],
+    ['behavior_shell', 'native_behavior_shell_shard_not_bounded_or_sequential'],
+    ['behavior_checkout', 'native_behavior_checkout_shard_not_bounded_or_sequential'],
+    ['persistence_backup', 'native_persistence_backup_shard_not_bounded_or_sequential'],
+    ['persistence_a', 'native_persistence_a_shard_not_bounded_or_sequential'],
+    ['persistence_b', 'native_persistence_b_shard_not_bounded_or_sequential'],
+    ['persistence_c', 'native_persistence_c_shard_not_bounded_or_sequential'],
+    ['visual', 'native_visual_shard_not_bounded_or_sequential'],
+    ['connected', 'native_connected_shard_not_bounded_or_sequential'],
+  ]) {
+    const missingNoPub = verifyShopNativeCiContract(
+      workflow.replace(
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --no-pub --concurrency=1`,
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --concurrency=1`,
+      ),
+      gradleWrapper,
+    )
+    assert.ok(missingNoPub.failures.includes(failure), `${shard} must require --no-pub`)
+
+    const missingPerTestTimeout = verifyShopNativeCiContract(
+      workflow.replace(
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded --timeout 2m`,
+        `TMPDIR="$${shard}_tmp" timeout --signal=TERM --kill-after=10s "\${${shard}_budget}s" flutter test --no-pub --concurrency=1 --reporter expanded`,
+      ),
+      gradleWrapper,
+    )
+    assert.ok(
+      missingPerTestTimeout.failures.includes(failure),
+      `${shard} must retain the per-test timeout`,
+    )
+  }
 
   const missingElapsedGuard = verifyShopNativeCiContract(
     workflow.replace(
-      'if [ "$elapsed" -gt "$SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS" ]; then',
+      'if [ "$behavior_core_elapsed" -ge "$behavior_core_budget" ]; then',
       'if false; then',
     ),
     gradleWrapper,
   )
   assert.ok(
     missingElapsedGuard.failures.includes(
-      'native_test_aggregate_budget_elapsed_guard_missing',
+      'native_behavior_core_shard_elapsed_guard_missing',
     ),
   )
 
-  const sharedTemp = verifyShopNativeCiContract(
+  const missingConnectedElapsed = verifyShopNativeCiContract(
     workflow.replace(
-      'persistence_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence.XXXXXX")"',
-      'persistence_tmp="$behavior_tmp"',
+      'connected_elapsed="$(( $(date +%s) - connected_started_at ))"',
+      'connected_elapsed=0',
     ),
     gradleWrapper,
   )
   assert.ok(
-    sharedTemp.failures.includes('native_persistence_shard_temp_isolation_missing'),
+    missingConnectedElapsed.failures.includes('native_connected_shard_elapsed_capture_missing'),
+  )
+
+  const missingConnectedGuard = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$connected_elapsed" -ge "$connected_budget" ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingConnectedGuard.failures.includes('native_connected_shard_elapsed_guard_missing'),
+  )
+
+  const revertedElapsedBoundary = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$behavior_core_elapsed" -ge "$behavior_core_budget" ]; then',
+      'if [ "$behavior_core_elapsed" -gt "$behavior_core_budget" ]; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    revertedElapsedBoundary.failures.includes(
+      'native_behavior_core_shard_elapsed_guard_missing',
+    ),
+  )
+
+  const missingTimeoutStatus = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$behavior_core_status" -eq 124 ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingTimeoutStatus.failures.includes(
+      'native_behavior_core_timeout_status_not_classified',
+    ),
+  )
+
+  const missingNonzeroStatus = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$behavior_core_status" -ne 0 ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingNonzeroStatus.failures.includes(
+      'native_behavior_core_nonzero_status_not_classified',
+    ),
+  )
+
+  const wrongStatusOrder = verifyShopNativeCiContract(
+    workflow.replace(
+      `if [ "$behavior_core_status" -eq 124 ]; then
+            echo "shop_flutter_test_behavior_core_budget_exhausted" >&2
+            exit 124
+          fi
+          if [ "$behavior_core_status" -ne 0 ]; then
+            echo "shop_flutter_test_behavior_core_failed_status:$behavior_core_status" >&2
+            exit "$behavior_core_status"
+          fi`,
+      `if [ "$behavior_core_status" -ne 0 ]; then
+            echo "shop_flutter_test_behavior_core_failed_status:$behavior_core_status" >&2
+            exit "$behavior_core_status"
+          fi
+          if [ "$behavior_core_status" -eq 124 ]; then
+            echo "shop_flutter_test_behavior_core_budget_exhausted" >&2
+            exit 124
+          fi`,
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    wrongStatusOrder.failures.includes(
+      'native_behavior_core_nonzero_status_checked_before_timeout_status',
+    ),
+  )
+
+  for (const [token, failure] of [
+    ['shop_flutter_test_behavior_core_budget_exhausted', 'native_behavior_core_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_behavior_shell_budget_exhausted', 'native_behavior_shell_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_behavior_checkout_budget_exhausted', 'native_behavior_checkout_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_persistence_backup_budget_exhausted', 'native_persistence_backup_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_persistence_a_budget_exhausted', 'native_persistence_a_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_persistence_b_budget_exhausted', 'native_persistence_b_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_persistence_c_budget_exhausted', 'native_persistence_c_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_visual_budget_exhausted', 'native_visual_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_connected_budget_exhausted', 'native_connected_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_connected_b_budget_exhausted', 'native_connected_b_shard_budget_exhaustion_not_fail_closed'],
+    ['shop_flutter_test_total_budget_exhausted', 'native_test_total_budget_exhaustion_not_fail_closed'],
+  ]) {
+    const missingExhaustion = verifyShopNativeCiContract(
+      workflow.replaceAll(token, 'budget_exhaustion_removed'),
+      gradleWrapper,
+    )
+    assert.ok(missingExhaustion.failures.includes(failure), `${token} must fail closed`)
+  }
+
+  const missingTotalElapsed = verifyShopNativeCiContract(
+    workflow.replace(
+      'overall_elapsed="$(( $(date +%s) - overall_started_at ))"',
+      'overall_elapsed=0',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingTotalElapsed.failures.includes('native_test_total_budget_elapsed_capture_missing'),
+  )
+
+  const missingTotalGuard = verifyShopNativeCiContract(
+    workflow.replace(
+      'if [ "$overall_elapsed" -ge "$SHOP_FLUTTER_TEST_TOTAL_BUDGET_SECONDS" ]; then',
+      'if false; then',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(missingTotalGuard.failures.includes('native_test_total_budget_elapsed_guard_missing'))
+
+  const sharedTemp = verifyShopNativeCiContract(
+    workflow.replace(
+      'persistence_a_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-a.XXXXXX")"',
+      'persistence_a_tmp="$behavior_core_tmp"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    sharedTemp.failures.includes('native_persistence_a_shard_temp_isolation_missing'),
+  )
+
+  const incompleteCleanup = verifyShopNativeCiContract(
+    workflow.replace(
+      'rm -rf -- "$behavior_core_tmp" "$behavior_foundation_tmp" "$behavior_shell_tmp" "$behavior_checkout_tmp" "$behavior_checkout_second_tmp" "$persistence_backup_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$persistence_c_tmp" "$visual_tmp" "$connected_tmp"',
+      'rm -rf -- "$behavior_core_tmp"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(incompleteCleanup.failures.includes('native_test_shard_cleanup_incomplete'))
+
+  const missingPersistenceC = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_qa_metrics_evidence_test.dart \\\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingPersistenceC.failures.includes('native_persistence_c_shard_inventory_or_order_wrong'),
+  )
+
+  const missingVisualTest = verifyShopNativeCiContract(
+    workflow.replace('              test/visual_capture_test.dart\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingVisualTest.failures.includes('native_visual_shard_inventory_or_order_wrong'),
+  )
+
+  const backgroundBehaviorCore = verifyShopNativeCiContract(
+    workflow.replace(
+      '          )\n          behavior_core_status="$?"',
+      '          ) &\n          behavior_core_status="$?"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(backgroundBehaviorCore.failures.includes('native_test_shards_not_strictly_serial'))
+
+  const startsPersistenceBackupEarly = verifyShopNativeCiContract(
+    workflow.replace(
+      'persistence_backup_started_at="$(date +%s)"',
+      'behavior_checkout_second_started_at="$(date +%s)"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    startsPersistenceBackupEarly.failures.includes(
+      'native_persistence_backup_shard_started_before_behavior_checkout_second_passed',
+    ),
+  )
+
+  const missingPersistenceAStatus = verifyShopNativeCiContract(
+    workflow.replace('persistence_a_status="$?"', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingPersistenceAStatus.failures.includes(
+      'native_persistence_a_shard_status_capture_missing',
+    ),
+  )
+
+  const ignoredPersistenceB = verifyShopNativeCiContract(
+    workflow.replace('test "$persistence_b_status" -eq 0', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(
+    ignoredPersistenceB.failures.includes('native_persistence_b_shard_status_not_fail_closed'),
+  )
+
+  const missingConnectedTest = verifyShopNativeCiContract(
+    workflow.replace('              test/shop_connected_site_contracts_test.dart \\\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingConnectedTest.failures.includes(
+      'native_test_shard_missing:test/shop_connected_site_contracts_test.dart',
+    ),
   )
 })
 

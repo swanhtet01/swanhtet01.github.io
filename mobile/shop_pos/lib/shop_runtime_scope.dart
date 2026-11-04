@@ -11,6 +11,10 @@ typedef ShopRuntimeConfigurationProvider = ShopRuntimeConfiguration Function();
 
 const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
 const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
+const shopQaLoopbackReceiptEvidenceFileName =
+    'SuperMega-Shop-SYNTHETIC-QA-RECEIPTS-v1.json';
+const shopQaMetricsEvidenceFileName =
+    'SuperMega-Shop-SYNTHETIC-QA-METRICS-v1.json';
 
 ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(
   ShopRuntimeScope? runtimeScope, {
@@ -64,7 +68,6 @@ class ShopPreferenceKeys {
   String get favoriteProductIds => _key('shop_favorite_product_ids');
   String get receiptPrinterHost => _key(shopReceiptPrinterHostKey);
   String get receiptPaperWidth => _key(shopReceiptPaperWidthKey);
-
   static const production = ShopPreferenceKeys._('');
   static const syntheticQa = ShopPreferenceKeys._('qa.synthetic-qa-v1.');
 }

@@ -151,6 +151,56 @@ test('Shop handoffs preserve valid context and unsupported internal routes canno
   }
 })
 
+test('exact managed-account handoffs show account help without submitting sales intent', async () => {
+  const tuple = 'template=managed-account&utm_source=app&utm_medium=business_setup'
+  for (const requestedProduct of ['guide', 'shop']) {
+    const state = harness([{ body: receipt }], `?product=${requestedProduct}&${tuple}`)
+    assert.equal(state.fields.get('[name="product"]').value, 'guide')
+    assert.equal(state.fields.get('[name="plan"]').value, '')
+    assert.equal(state.fields.get('[name="template"]').value, '')
+    assert.equal(state.fields.get('[name="service"]').value, '')
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Get help with your SuperMega account')
+    assert.match(state.headings.get('[data-contact-lede]').textContent, /does not create an account or grant access/)
+    assert.equal(state.languageSwitch.href, `/my/contact/?product=${requestedProduct}&template=managed-account&utm_source=app&utm_medium=business_setup`)
+    await state.submit()
+    const payload = JSON.parse(state.calls[0].body)
+    assert.equal(payload.product, 'guide')
+    assert.equal(payload.plan, '')
+    assert.equal(payload.template, '')
+    assert.equal(payload.service, '')
+  }
+
+  const myanmar = harness([], `?product=shop&${tuple}`, '', 'my')
+  assert.equal(myanmar.fields.get('[name="product"]').value, 'guide')
+  assert.equal(myanmar.headings.get('[data-contact-heading]').textContent, 'SuperMega အကောင့်အတွက် အကူအညီရယူရန်')
+  assert.match(myanmar.headings.get('[data-contact-lede]').textContent, /အကောင့်ဖန်တီးပေးခြင်း သို့မဟုတ် အသုံးပြုခွင့်ပေးခြင်း မရှိပါ/)
+})
+
+test('managed-account near misses retain ordinary bounded contact behavior', () => {
+  for (const search of [
+    '?product=shop&template=managed-account&utm_source=app',
+    '?product=shop&template=managed-account&utm_source=app&utm_medium=other',
+    '?product=shop&template=managed-account&template=managed-account&utm_source=app&utm_medium=business_setup',
+    '?product=unknown&template=managed-account&utm_source=app&utm_medium=business_setup',
+  ]) {
+    const state = harness([], search)
+    assert.notEqual(state.headings.get('[data-contact-heading]').textContent, 'Get help with your SuperMega account')
+    assert.equal(state.fields.get('[name="template"]').value, '')
+    if (search.includes('template=managed-account&template=managed-account')) {
+      assert.doesNotMatch(state.languageSwitch.href, /template=/)
+      const switchedSearch = state.languageSwitch.href.includes('?')
+        ? '?' + state.languageSwitch.href.split('?')[1]
+        : ''
+      const switched = harness([], switchedSearch, '', 'my')
+      assert.notEqual(switched.headings.get('[data-contact-heading]').textContent, 'SuperMega အကောင့်အတွက် အကူအညီရယူရန်')
+    }
+  }
+  const shop = harness([], '?product=shop&template=managed-account&utm_source=app')
+  assert.equal(shop.fields.get('[name="product"]').value, 'shop')
+  assert.equal(shop.fields.get('[name="plan"]').value, 'shop-pilot')
+  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Contact us about Shop')
+})
+
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
 test('Burmese contact route keeps the same safe receipt contract with Burmese controls and states', async () => {
   for (const token of ['<label>အမည်<input', '<label>အီးမေးလ်<input', '<label class="wide">စာ<textarea', '>စာပို့ရန်</button>']) assert.match(myanmarPage, new RegExp(token))

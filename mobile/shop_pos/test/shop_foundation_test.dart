@@ -18,7 +18,10 @@ import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_runtime_profile.dart';
+import 'package:supermega_shop/shop_runtime_scope.dart';
 
+import 'historical_shop_fixture_support.dart';
 import 'managed_staff_test_support.dart';
 
 import 'package:supermega_shop/shop_models.dart';
@@ -48,6 +51,30 @@ void main() {
         expiresAtMillis: 301000,
       ),
       '5bd47b28aba9fda0f821113cad67d159c0ad94c38f052ff1a3efb42a6ce54c7a',
+    );
+  });
+
+  test('pending cash return shift-close guidance is bilingual', () {
+    final error = StateError(
+      'Finish the pending cash return before closing this shift.',
+    );
+    expect(
+      shopCashShiftErrorMessage(
+        myanmar: false,
+        error: error,
+        englishFallback: 'fallback',
+        burmeseFallback: 'fallback',
+      ),
+      'Finish the pending cash return before closing this shift.',
+    );
+    expect(
+      shopCashShiftErrorMessage(
+        myanmar: true,
+        error: error,
+        englishFallback: 'fallback',
+        burmeseFallback: 'fallback',
+      ),
+      'ဆိုင်းငံ့ထားသော ငွေသားပြန်အမ်းမှုကို အရင်ပြီးစီးစေပြီးမှ ဤတာဝန်ချိန်ကို ပိတ်ပါ။',
     );
   });
 
@@ -3596,6 +3623,7 @@ void main() {
         await _dropV16MemberSchema(database);
         await database.customStatement('DROP TABLE shop_cash_shift_sales');
         await database.customStatement('DROP TABLE shop_cash_shifts');
+        await requireNoPostV15SchemaObjectsInShopDatabase(database);
         await database.customStatement('PRAGMA user_version = 5');
         await database.close();
         database = ShopDatabase(NativeDatabase(file));
@@ -3696,6 +3724,90 @@ void main() {
         await database.close();
       }
     });
+
+    for (final myanmar in [false, true]) {
+      testWidgets(
+        'cash difference clearly closes the ${myanmar ? 'MY' : 'EN'} shift exactly once',
+        (tester) async {
+          tester.view.physicalSize = myanmar
+              ? const ui.Size(768, 1024)
+              : const ui.Size(390, 800);
+          tester.view.devicePixelRatio = 1;
+          final database = ShopDatabase(NativeDatabase.memory());
+          try {
+            await tester.pumpWidget(
+              MaterialApp(
+                home: ShopCashShiftScreen(database: database, myanmar: myanmar),
+              ),
+            );
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextField).first, 'May');
+            await tester.enterText(find.byType(TextField).last, '10000');
+            await tester.tap(
+              find.text(myanmar ? 'တာဝန်ချိန် စတင်မည်' : 'Start shift'),
+            );
+            await tester.pumpAndSettle();
+            final outboxBeforeClose = await database.countOutboxOperations();
+
+            Future<void> requestClose() async {
+              await tester.enterText(find.byType(TextField).last, '9000');
+              final close = find.text(
+                myanmar ? 'တာဝန်ချိန် ပိတ်မည်' : 'Close shift',
+              );
+              await tester.scrollUntilVisible(
+                close,
+                240,
+                scrollable: find.byType(Scrollable).first,
+              );
+              await tester.tap(close);
+              await tester.pumpAndSettle();
+            }
+
+            await requestClose();
+            expect(
+              find.textContaining(
+                myanmar
+                    ? 'ဤကွာခြားချက်ကို မှတ်တမ်းတင်လျှင် တာဝန်ချိန်ကို ပိတ်ပါမည်။'
+                    : 'Recording this difference will close the shift.',
+              ),
+              findsOneWidget,
+            );
+            expect(
+              find.text(
+                myanmar
+                    ? 'ကွာခြားချက်မှတ်တမ်းတင်ပြီး တာဝန်ချိန်ပိတ်မည်'
+                    : 'Record difference & close shift',
+              ),
+              findsOneWidget,
+            );
+            await tester.tap(find.text(myanmar ? 'ဖွင့်ထားမည်' : 'Keep open'));
+            await tester.pumpAndSettle();
+            expect((await database.readLatestCashShift())?.state, 'open');
+            expect(await database.countOutboxOperations(), outboxBeforeClose);
+
+            await requestClose();
+            await tester.tap(
+              find.text(
+                myanmar
+                    ? 'ကွာခြားချက်မှတ်တမ်းတင်ပြီး တာဝန်ချိန်ပိတ်မည်'
+                    : 'Record difference & close shift',
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect((await database.readLatestCashShift())?.state, 'closed');
+            expect(
+              await database.countOutboxOperations(),
+              outboxBeforeClose + 1,
+            );
+          } finally {
+            await tester.pumpWidget(const SizedBox());
+            await database.close();
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          }
+        },
+      );
+    }
 
     testWidgets('shift review separates KBZPay and WavePay records', (
       tester,
@@ -4216,6 +4328,198 @@ void main() {
       expect(PrinterDiscoveryService.new, throwsStateError);
       expect(ShopReceiptPrinter.new, throwsStateError);
       expect(ReceiptReprintService.new, throwsStateError);
+    });
+
+    test(
+      'synthetic receipt capture is redacted, idempotent and side-effect free',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final root = await Directory.systemTemp.createTemp(
+          'shop-qa-loopback-receipt-',
+        );
+        final support = await Directory('${root.path}/support').create();
+        final temporary = await Directory('${root.path}/temporary').create();
+        final configuration = ShopRuntimeConfiguration.resolve(
+          runtimeProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+          qaProfile: ShopRuntimeConfiguration.qaProfileId,
+          buildIdentityProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+          buildIdentityQaProfile: ShopRuntimeConfiguration.qaProfileId,
+          platformIdentity: 'dev.supermega.supermega_shop.qa',
+        );
+        final scope = await ShopRuntimeScope.resolve(
+          ShopRuntimeProfile.syntheticQa,
+          configuration: configuration,
+          supportProvider: () async => support,
+          temporaryProvider: () async => temporary,
+        );
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'private-tea-product',
+            name: 'Private Tea Name',
+            priceMmk: 2500,
+            openingStock: 2,
+          );
+          final receipt = await database.recordManagedTestCashSale(
+            operationId: 'private-receipt-operation',
+            lines: const [
+              ShopSaleLineInput(productId: 'private-tea-product', quantity: 1),
+            ],
+          );
+          final before = (
+            sales: await database.countSales(),
+            stock: await database.countStockMovements(),
+            outbox: await database.countOutboxOperations(),
+            onHand: (await database.readActiveProducts()).single.onHand,
+          );
+          final service = ReceiptReprintService(runtimeScope: scope);
+
+          expect(await service.printIfTrusted(receipt, myanmar: false), isTrue);
+          expect(await service.printIfTrusted(receipt, myanmar: false), isTrue);
+          final store = ShopQaLoopbackReceiptCaptureStore.forRuntime(scope);
+          final english = (await store.read()).single;
+          expect(english.captureCount, 2);
+          expect(english.language, 'en');
+          expect(
+            english.receiptBindingSha256,
+            matches(RegExp(r'^[a-f0-9]{64}$')),
+          );
+          expect(
+            english.renderedReceiptSha256,
+            matches(RegExp(r'^[a-f0-9]{64}$')),
+          );
+
+          expect(await service.printIfTrusted(receipt, myanmar: true), isTrue);
+          final captures = await store.read();
+          expect(captures, hasLength(2));
+          expect(
+            captures.map((capture) => capture.language),
+            containsAll(<String>['en', 'my']),
+          );
+          expect(
+            captures.map((capture) => capture.receiptBindingSha256).toSet(),
+            hasLength(1),
+          );
+
+          final fixedReceipt = ShopSaleReceipt(
+            id: 'fixture-receipt',
+            operationId: 'fixture-operation',
+            totalMmk: 2500,
+            createdAtMillis: 42,
+            paymentMethod: 'cash',
+            cashTenderedMmk: 3000,
+            lines: const [
+              ShopSaleReceiptLine(
+                id: 'fixture-line',
+                productId: 'fixture-product',
+                productName: 'Tea',
+                unitPriceMmk: 2500,
+                quantity: 1,
+                lineTotalMmk: 2500,
+              ),
+            ],
+          );
+          final fixed = await store.capture(fixedReceipt, myanmar: false);
+          expect(
+            fixed.receiptBindingSha256,
+            'cee016243a485917a7663496a8c25f909ed2f9d799c3a67ed3609dea05edf0fe',
+          );
+          final altered = await store.capture(
+            ShopSaleReceipt(
+              id: fixedReceipt.id,
+              operationId: 'substituted-operation',
+              totalMmk: fixedReceipt.totalMmk,
+              createdAtMillis: fixedReceipt.createdAtMillis,
+              paymentMethod: fixedReceipt.paymentMethod,
+              cashTenderedMmk: fixedReceipt.cashTenderedMmk,
+              lines: fixedReceipt.lines,
+            ),
+            myanmar: false,
+          );
+          expect(
+            altered.receiptBindingSha256,
+            isNot(fixed.receiptBindingSha256),
+          );
+          await Future.wait([
+            for (var index = 0; index < 4; index++)
+              store.capture(fixedReceipt, myanmar: false),
+          ]);
+          expect(
+            (await store.read())
+                .singleWhere(
+                  (capture) =>
+                      capture.receiptBindingSha256 ==
+                      fixed.receiptBindingSha256,
+                )
+                .captureCount,
+            5,
+          );
+
+          expect(
+            store.evidenceFile.path,
+            endsWith(
+              '${Platform.pathSeparator}synthetic-evidence'
+              '${Platform.pathSeparator}'
+              'SuperMega-Shop-SYNTHETIC-QA-RECEIPTS-v1.json',
+            ),
+          );
+          final encoded = await store.evidenceFile.readAsString();
+          for (final privateValue in const [
+            'private-receipt-operation',
+            'private-tea-product',
+            'Private Tea Name',
+            '2500',
+          ]) {
+            expect(encoded, isNot(contains(privateValue)));
+          }
+          expect(await database.countSales(), before.sales);
+          expect(await database.countStockMovements(), before.stock);
+          expect(await database.countOutboxOperations(), before.outbox);
+          expect(
+            (await database.readActiveProducts()).single.onHand,
+            before.onHand,
+          );
+        } finally {
+          await database.close();
+          await root.delete(recursive: true);
+        }
+      },
+    );
+
+    test('production runtime cannot open synthetic receipt capture', () async {
+      SharedPreferences.setMockInitialValues({});
+      final root = await Directory.systemTemp.createTemp(
+        'shop-production-loopback-receipt-',
+      );
+      final documents = await Directory('${root.path}/documents').create();
+      final temporary = await Directory('${root.path}/temporary').create();
+      try {
+        final configuration = ShopRuntimeConfiguration.resolve(
+          runtimeProfile: 'production',
+          qaProfile: '',
+          buildIdentityProfile: 'production',
+          buildIdentityQaProfile: '',
+          platformIdentity: 'production-current',
+        );
+        final scope = await ShopRuntimeScope.resolve(
+          ShopRuntimeProfile.production,
+          configuration: configuration,
+          documentsProvider: () async => documents,
+          temporaryProvider: () async => temporary,
+        );
+        expect(
+          () => ShopQaLoopbackReceiptCaptureStore.forRuntime(scope),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'shop_qa_loopback_receipt_scope_required',
+            ),
+          ),
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
     });
 
     test('injected printer callbacks still require an explicit test seam', () {
@@ -4782,6 +5086,55 @@ void main() {
 }
 
 Future<void> _dropV16MemberSchema(ShopDatabase database) async {
+  for (final definitions in [
+    shopConnectedDeviceProfileSchemaDefinitionsV42(),
+    shopConnectedCloudFeedSchemaDefinitionsV41(),
+    shopConnectedCloudFeedSchemaDefinitionsV40(),
+    shopConnectedTrustedTimeClientSchemaDefinitionsV39(),
+    shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+    shopConnectedTrustedTimeSchemaDefinitionsV37(),
+    shopConnectedAuthorityCheckpointSchemaDefinitionsV36(),
+    shopConnectedCloudProofSchemaDefinitionsV35(),
+    shopConnectedReplicaSchemaDefinitionsV33(),
+    shopConnectedReplicaSchemaDefinitionsV32(),
+    shopConnectedReservationSessionSchemaDefinitionsV31(),
+    shopConnectedAuthorityPayloadSchemaDefinitionsV30(),
+  ]) {
+    for (final definition in definitions.entries.toList().reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      await database.customStatement(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
+  }
+  for (final definition
+      in shopConnectedEnvelopeSchemaDefinitionsV29().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedSiteSchemaDefinitionsV28().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   await database.customStatement(
     'ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk',
   );

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0" Author="SuperMega">
+  <Profiles>
+    <SystemCollector Id="SuperMegaSystemCollector" Name="SuperMega Kernel Collector">
+      <BufferSize Value="1024" />
+      <Buffers Value="256" />
+    </SystemCollector>
+    <SystemProvider Id="SuperMegaSystemProvider">
+      <Keywords>
+        <Keyword Value="ProcessThread" />
+        <Keyword Value="Loader" />
+      </Keywords>
+    </SystemProvider>
+    <Profile Id="SuperMegaProcessImage.Verbose.File"
+             Name="SuperMegaProcessImage"
+             Description="Non-authoritative process and image-load capability probe"
+             LoggingMode="File"
+             DetailLevel="Verbose">
+      <Collectors>
+        <SystemCollectorId Value="SuperMegaSystemCollector">
+          <SystemProviderId Value="SuperMegaSystemProvider" />
+        </SystemCollectorId>
+      </Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>

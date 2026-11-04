@@ -21,7 +21,7 @@ const expectedPrivateMigrationCount = 24
 // v11 evidence. This packet targets the full current v14 source chain; applying
 // it to any managed target remains a separate founder decision and rehearsal.
 const expectedSchemaVersion = 14
-const expectedMigrationNames = [
+const expectedExecutableMigrationNames = [
   '20260711081300_public_legacy_baseline.sql',
   '20260722004500_private_trial_backend_role_preflight.sql',
   '20260722005134_private_trial_backend_foundation.sql',
@@ -47,6 +47,14 @@ const expectedMigrationNames = [
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
   '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql',
+]
+const expectedSourceOnlyMigrationNames = [
+  '20261101090000_private_trial_backend_v15_connected_site.sql',
+  '20261103090000_private_trial_backend_v16_connected_upload_batches.sql',
+]
+const expectedMigrationNames = [
+  ...expectedExecutableMigrationNames,
+  ...expectedSourceOnlyMigrationNames,
 ]
 
 export function validateRehearsalMigrationNames(names) {
@@ -76,13 +84,20 @@ async function migrationInventory(repositoryRoot) {
   if (sqlEntries.some((entry) => !entry.isFile())) fail('supabase_rehearsal_migration_not_regular_file')
   const names = sqlEntries.map((entry) => entry.name).sort()
   validateRehearsalMigrationNames(names)
-  if (names.filter((name) => name !== expectedMigrationNames[0]).length !== expectedPrivateMigrationCount) {
+  if (expectedExecutableMigrationNames.filter(
+    (name) => name !== expectedExecutableMigrationNames[0],
+  ).length !== expectedPrivateMigrationCount) {
     fail('supabase_rehearsal_private_migration_inventory_mismatch')
   }
-  return Promise.all(names.map(async (name) => ({
+  const inventory = await Promise.all(names.map(async (name) => ({
     name,
     sha256: sha256(await readFile(resolve(directory, name))),
   })))
+  const byName = new Map(inventory.map((migration) => [migration.name, migration]))
+  return {
+    migrations: expectedExecutableMigrationNames.map((name) => byName.get(name)),
+    sourceOnlyMigrations: expectedSourceOnlyMigrationNames.map((name) => byName.get(name)),
+  }
 }
 
 async function browserQuarantineInventory(repositoryRoot) {
@@ -280,10 +295,11 @@ export async function buildSupabaseRehearsalPacket({
   if (targetProjectRef === productionProjectRef) fail('supabase_rehearsal_target_is_production')
 
   const reviewedRelease = validateReleaseReview(releaseReview, releaseCommit)
-  const [migrations, browserQuarantine] = await Promise.all([
+  const [migrationSets, browserQuarantine] = await Promise.all([
     migrationInventory(repositoryRoot),
     browserQuarantineInventory(repositoryRoot),
   ])
+  const { migrations, sourceOnlyMigrations } = migrationSets
   const payload = {
     contract: SUPABASE_REHEARSAL_CONTRACT,
     state: 'prepared-not-executed',
@@ -298,6 +314,8 @@ export async function buildSupabaseRehearsalPacket({
       migrationCount: migrations.length,
       privateMigrationCount: expectedPrivateMigrationCount,
       migrations,
+      sourceOnlyMigrationCount: sourceOnlyMigrations.length,
+      sourceOnlyMigrations,
       browserQuarantine,
     },
     authority: {

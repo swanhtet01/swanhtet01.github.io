@@ -1,0 +1,83 @@
+{
+  "contract": "supermega.postgres17-windows-bootstrap-policy.v1",
+  "policyId": "github-windows-2025-postgres17-bootstrap-v1",
+  "status": "pending-closure-observer",
+  "platform": { "os": "windows", "arch": "x64", "runner": "windows-2025" },
+  "installer": {
+    "sourceId": "edb-postgresql-17.11-5-windows-x64",
+    "url": "https://get.enterprisedb.com/postgresql/postgresql-17.11-5-windows-x64.exe",
+    "fileName": "postgresql-17.11-5-windows-x64.exe",
+    "bytes": 413001200,
+    "sha256": "612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072",
+    "publisherPolicyPath": "hq/research/postgres17-publisher-policy.json"
+  },
+  "execution": {
+    "authoritativeDocumentationUrl": "https://www.enterprisedb.com/docs/supported-open-source/postgresql/installing/command_line_parameters/",
+    "authoritativeDocumentationSha256": "6b60234851ac72ff5d2447058d4d2826d0aef8652b9ba31da6c05e02c12133e0",
+    "mode": "extract-only",
+    "arguments": [
+      "--extract-only", "1",
+      "--mode", "unattended",
+      "--unattendedmodeui", "none",
+      "--prefix", "{runtimeRoot}",
+      "--install_runtimes", "0",
+      "--create_shortcuts", "0"
+    ],
+    "serviceInstallationAllowed": false,
+    "systemPathMutationAllowed": false,
+    "interactiveUiAllowed": false
+  },
+  "closureObserver": {
+    "status": "pending",
+    "contract": "supermega.windows-process-image-observer.v2",
+    "captureMethod": "windows-kernel-process-image-events-v1",
+    "launcherKind": "native-executable-v1",
+    "requiresCaptureBeforeSpawn": true,
+    "requiresDroppedEvents": 0,
+    "requiresDroppedBuffers": 0,
+    "requiresCompleteDescendantCorrelation": true,
+    "command": null,
+    "sha256": null,
+    "capabilityProbe": {
+      "status": "source-only",
+      "contract": "supermega.windows-process-image-observer-probe.v1",
+      "captureMethod": "windows-wpr-etw-process-image-probe-v1",
+      "authoritative": false,
+      "scriptPath": "tools/postgres17_windows_trace_observer.ps1",
+      "scriptSha256": "2c3949ab50880767b3a494a48619546ba28d71099313b096c7e53cf9967ec1f6",
+      "parserPath": "tools/postgres17_windows_trace_parser.mjs",
+      "parserSha256": "0fe486d7267b63e37dc0fa839b188cdf50fb1c1bb684bd26e50b70b555054d43",
+      "profilePath": "hq/research/postgres17-process-image.wprp",
+      "profileSha256": "ad64780da3422ec18e67a782e7607dcdec638b7ed8d55a41c6627191cb8b1d4c",
+      "wprPath": "C:\\Windows\\System32\\wpr.exe",
+      "tracerptPath": "C:\\Windows\\System32\\tracerpt.exe",
+      "probeParentExecutablePath": "C:\\Windows\\System32\\cmd.exe",
+      "probeExecutablePath": "C:\\Windows\\System32\\where.exe",
+      "requiredSignerOrganization": "Microsoft Corporation",
+      "requiresEventsLost": 0,
+      "requiresBuffersLost": 0,
+      "requiresProcessEvent": true,
+      "requiresImageEvent": true,
+      "requiresProcessEndEvent": true,
+      "requiresStableProcessKey": true,
+      "requiresParentChildCorrelation": true,
+      "requiresExitStatus": true,
+      "requiresFullImagePath": true,
+      "requiresModuleEvent": true,
+      "requiresCompleteOrdering": true,
+      "requiresDrain": true
+    }
+  },
+  "trustedBoundary": {
+    "singlePurposeEphemeralRunner": true,
+    "concurrentSameUserWorkloadsAllowed": false,
+    "interactiveUsersAllowed": false,
+    "hostileSameUserMutationInScope": false
+  },
+  "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
+  "blockers": [
+    "The service-free extract-only flags are bound to the retained authoritative EDB documentation digest, but the policy is not independently approved.",
+    "A dependency-free WPR/tracerpt capability probe is source-controlled but has not run on windows-2025 or received independent evidence review; installer execution therefore remains disabled.",
+    "Stage 2 remains disabled until a complete reviewed profile, source policies and retained evidence are committed at the exact rehearsal SHA."
+  ]
+}
