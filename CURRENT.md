@@ -1,9 +1,34 @@
 # SuperMega current release truth
 
-- Last verified: 2026-11-04 01:40 UTC
+- Last verified: 2026-11-04 01:52 UTC
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: one native Shop application for retail and cafe, its supporting
   website/account journey, release evidence, and accountable operations
+
+## 2026-11-04 01:52 UTC private disposable-PG replay assertions
+
+- **SOURCE PREPARED / REAL PG ROUTE NOT RUN:** private successor
+  `2e8c2fc67f6c0a7a17fadc4c1114fe96cd6ca676`, tree
+  `0b3c042c8cb926036add396c8d16732a4a2524d8`, one-file patch SHA-256
+  `5b766f9719c2d8cd116e7c7965d6f8aef85ab404cb80bb53523bd1c1857d01a3`.
+  The disposable-PG TestClient fixture now asserts that a byte-identical
+  signed retry preserves canonical request/page bytes and exactly two stored
+  events; a fresh, correctly signed wrong prior digest must return 409
+  `event_page_cursor_changed` before the existing wrong-device and database
+  revocation denials. Local connected-site Python discovery **81 run, 75 pass,
+  6 opt-in PG17 skips**; compile/diff **PASS**. Independent read-only review
+  **ACCEPT for hosted CI**, including a fresh timestamp on the wrong-cursor
+  probe while the exact replay retains the original 30-second request window.
+  Do not label the skipped real-PG route or installed two-device path as PASS.
+- **FAIL / BLOCKED (public exact-head App):** push App run `41755287225` on
+  `4161952717b549a5b1abbd4d425dfed612acf7c8` is terminal **FAILURE** at
+  canonical step 638/668, `hq:verify`, due to
+  `database_rehearsal_evidence_stale`. Checks 1–637 passed; later checks are
+  **NOT RUN**. Same-head PR App run `41755294041` is intentionally **SKIPPED**,
+  not coverage. Public disposable-PG bridge `41755294111` and Kernel
+  `41755293979` are **SUCCESS**; dependency audit `41755294058` is **FAILURE**.
+  Native `41755293925` remains in progress. Keep public head fixed until its
+  useful jobs terminate.
 
 ## 2026-11-04 01:40 UTC private real-PG route verification candidate
 
