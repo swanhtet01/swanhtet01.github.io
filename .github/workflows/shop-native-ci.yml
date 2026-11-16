@@ -1477,3 +1477,407 @@ jobs:
               os.close(fd)
           print('Scoped KVM API access PASS; no emulator, APK or app ran')
           PYKVM
+
+  android-emulator-acceleration:
+    name: Android emulator 37.2.13 acceleration (no AVD or APK)
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 752 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.action == 'synchronize' &&
+      github.event.before == '14535f5a042c21b82a12e9e88a8d84b590699355' &&
+      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {}
+    steps:
+      - name: Verify pinned Google emulator and KVM acceleration
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Separate GitHub-hosted test pin; the historical GCP pilot retains 37.2.12.
+          # Google's feed supplies SHA-1; observed SHA-256 is recorded only after download.
+          for tool in python3 getfacl setfacl sudo timeout grep cmp unshare setpriv env id tr mount mountpoint stat; do
+            command -v "$tool" >/dev/null || { echo "required host tool absent: $tool"; exit 1; }
+          done
+          [[ -c /dev/kvm && ! -L /dev/kvm ]] || { echo 'KVM character device absent'; exit 1; }
+          [[ -d /tmp && ! -L /tmp ]] || { echo 'isolated temp root unavailable'; exit 1; }
+          unshare_bin="$(command -v unshare)"
+          setpriv_bin="$(command -v setpriv)"
+          env_bin="$(command -v env)"
+          id_bin="$(command -v id)"
+          sudo_bin="$(command -v sudo)"
+          mount_bin="$(command -v mount)"
+          mountpoint_bin="$(command -v mountpoint)"
+          stat_bin="$(command -v stat)"
+          python_bin="$(command -v python3)"
+          runner_uid="$("$id_bin" -u)"
+          runner_gid="$("$id_bin" -g)"
+          runner_groups="$("$id_bin" -G | tr ' ' ',')"
+          [[ "$runner_uid" =~ ^[0-9]+$ && "$runner_gid" =~ ^[0-9]+$ && "$runner_groups" =~ ^[0-9]+(,[0-9]+)*$ ]] || {
+            echo 'runner identity unavailable'
+            exit 1
+          }
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            sudo -n true || { echo 'noninteractive KVM grant unavailable'; exit 1; }
+          fi
+
+          task_dir="$(mktemp -d /tmp/supermega-accel.XXXXXXXX)"
+          acl_changed=false
+          passwd_home=''
+          host_home_identity=''
+          cleanup() {
+            result=$?
+            trap - EXIT
+            if [[ "$acl_changed" == true ]]; then
+              if ! sudo -n setfacl --restore="$task_dir/acl.before"; then result=1; fi
+              if ! cmp -s "$task_dir/acl.before" <(getfacl -p /dev/kvm); then result=1; fi
+            fi
+            if [[ -n "$passwd_home" && -n "$host_home_identity" &&
+                  "$("$stat_bin" -Lc '%d:%i:%a:%u:%g' "$passwd_home" 2>/dev/null || true)" != "$host_home_identity" ]]; then
+              echo 'runner home mount identity changed; task directory retained'
+              result=1
+            elif ! rm -rf -- "$task_dir"; then
+              result=1
+            fi
+            exit "$result"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          passwd_home="$("$python_bin" -I -B - "$runner_uid" "$task_dir" <<'PYHOME'
+          import os
+          import stat
+          import sys
+
+          uid = int(sys.argv[1])
+          task = sys.argv[2]
+          with open('/etc/passwd', encoding='utf-8') as source:
+              rows = [line.rstrip('\n').split(':') for line in source]
+          matches = [row for row in rows if len(row) == 7 and row[2].isdecimal()
+                     and int(row[2]) == uid]
+          if len(matches) != 1:
+              raise SystemExit('unique local passwd home unavailable')
+          candidate = matches[0][5]
+
+          def checked_directory(path):
+              if (not path.startswith('/') or len(path) > 4096 or
+                      any(part in ('', '.', '..') for part in path.split('/')[1:])):
+                  raise SystemExit('unsafe home or temp path')
+              flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+              opened = [os.open('/', flags)]
+              try:
+                  for part in path.split('/')[1:]:
+                      opened.append(os.open(part, flags, dir_fd=opened[-1]))
+                  if not stat.S_ISDIR(os.fstat(opened[-1]).st_mode):
+                      raise SystemExit('path is not a directory')
+              finally:
+                  for handle in reversed(opened):
+                      os.close(handle)
+
+          checked_directory('/tmp')
+          checked_directory(candidate)
+          checked_directory(task)
+          common = os.path.commonpath((candidate, task))
+          if candidate == '/' or common in (candidate, task):
+              raise SystemExit('task directory overlaps runner home')
+          print(candidate)
+          PYHOME
+          )" || { echo 'runner home confinement path invalid'; exit 1; }
+          home_overlay="$task_dir/empty-home"
+          mkdir -m 700 "$home_overlay"
+          overlay_identity="$("$stat_bin" -c '%d:%i' "$home_overlay")"
+          host_home_identity="$("$stat_bin" -Lc '%d:%i:%a:%u:%g' "$passwd_home")"
+          cd "$task_dir"
+
+          namespace_command() {
+            [[ ! -L "$home_overlay" && -d "$home_overlay" &&
+              "$("$stat_bin" -c '%d:%i' "$home_overlay")" == "$overlay_identity" ]] || {
+              echo 'runner home overlay identity changed'
+              return 1
+            }
+            timeout --kill-after=5s 30s "$env_bin" -i PATH=/usr/bin:/bin \
+              "$sudo_bin" -n "$unshare_bin" --mount --net --pid --mount-proc \
+              --fork --kill-child --propagation private --wd "$task_dir" -- \
+              "$env_bin" -i PATH=/usr/bin:/bin /bin/sh -eu -c '
+                ns_mount=$1
+                ns_mountpoint=$2
+                ns_stat=$3
+                ns_overlay=$4
+                ns_passwd_home=$5
+                ns_setpriv=$6
+                ns_uid=$7
+                ns_gid=$8
+                ns_groups=$9
+                shift 9
+                ns_overlay_identity=$1
+                shift
+                "$ns_mount" -n --make-rprivate /
+                [ ! -L "$ns_overlay" ] && [ -d "$ns_overlay" ] && \
+                  [ "$("$ns_stat" -c "%d:%i" "$ns_overlay")" = "$ns_overlay_identity" ]
+                "$ns_mount" -n --bind -- "$ns_overlay" "$ns_passwd_home"
+                "$ns_mount" -n --make-private "$ns_passwd_home"
+                "$ns_mountpoint" -q "$ns_passwd_home"
+                [ "$("$ns_stat" -Lc "%d:%i" "$ns_passwd_home")" = \
+                  "$("$ns_stat" -Lc "%d:%i" "$ns_overlay")" ]
+                exec "$ns_setpriv" --reuid "$ns_uid" --regid "$ns_gid" \
+                  --groups "$ns_groups" --no-new-privs --reset-env "$@"
+              ' namespace "$mount_bin" "$mountpoint_bin" "$stat_bin" \
+              "$home_overlay" "$passwd_home" "$setpriv_bin" \
+              "$runner_uid" "$runner_gid" "$runner_groups" "$overlay_identity" "$@"
+          }
+          if ! namespace_command "$python_bin" -I -B -c '
+          import os, sys
+          masked, overlay, task, uid = sys.argv[1:]
+          left, right = os.stat(masked), os.stat(overlay)
+          if not (os.getuid() == int(uid) and os.getpid() == 1 and
+                  os.environ.get("HOME") == masked and os.getcwd() == task and
+                  (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino) and
+                  os.path.ismount("/proc") and
+                  not os.listdir(masked)):
+              raise SystemExit("private runner home unavailable")
+          ' "$passwd_home" "$home_overlay" "$task_dir" "$runner_uid"; then
+            echo 'private no-egress runner-home preflight unavailable'
+            exit 1
+          fi
+          [[ "$("$stat_bin" -Lc '%d:%i:%a:%u:%g' "$passwd_home")" == "$host_home_identity" ]] || {
+            echo 'runner home mount identity changed after preflight'
+            exit 1
+          }
+
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - "$task_dir" <<'PYARCH'
+          import hashlib
+          import os
+          import shutil
+          import ssl
+          import stat
+          import sys
+          import urllib.request
+          import zipfile
+          from pathlib import Path
+
+          URL = 'https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip'
+          SIZE = 349658551
+          SHA1 = 'f41f9e31eb5ca64926603c03265c50bbc0ff4172'
+          LICENSE_HASH = b'24333f8a63b6825ea9c5514f83c2829b004d1fee'
+          GIB = 1024 ** 3
+          WORK = Path(sys.argv[1])
+          SDK = WORK / 'sdk'
+          ARCHIVE = WORK / 'emulator.zip'
+
+          def require(condition):
+              if not condition:
+                  raise ValueError('pinned_emulator_check_failed')
+
+          def license_marker_matches():
+              home = os.environ.get('ANDROID_HOME') or ''
+              sdk_root = os.environ.get('ANDROID_SDK_ROOT') or ''
+              if home and sdk_root and home != sdk_root:
+                  return False
+              root = home or sdk_root
+              if not root.startswith('/') or len(root) > 4096:
+                  return False
+              parts = root.split('/')[1:]
+              if not parts or any(part in ('', '.', '..') for part in parts):
+                  return False
+              flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+              opened = []
+              try:
+                  opened.append(os.open('/', flags))
+                  for part in (*parts, 'licenses'):
+                      opened.append(os.open(part, flags, dir_fd=opened[-1]))
+                  opened.append(os.open('android-sdk-license',
+                                        os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                                        dir_fd=opened[-1]))
+                  source = opened[-1]
+                  details = os.fstat(source)
+                  if not stat.S_ISREG(details.st_mode) or details.st_size > 4096:
+                      return False
+                  data = os.read(source, 4097)
+                  if len(data) > 4096 or os.read(source, 1):
+                      return False
+                  return any(line.removesuffix(b'\r') == LICENSE_HASH
+                             for line in data.split(b'\n'))
+              except (OSError, ValueError):
+                  return False
+              finally:
+                  for handle in reversed(opened):
+                      try:
+                          os.close(handle)
+                      except OSError:
+                          pass
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, fp, code, message, headers, newurl):
+                  raise ValueError('redirect_forbidden')
+
+          def main():
+              os.umask(0o077)
+              require(license_marker_matches())
+              cpu = os.cpu_count()
+              require(isinstance(cpu, int) and cpu >= 4)
+              pages = os.sysconf('SC_PHYS_PAGES')
+              page_size = os.sysconf('SC_PAGE_SIZE')
+              require(all(isinstance(value, int) and 0 < value < 10 ** 15
+                          for value in (pages, page_size)))
+              require(pages * page_size >= 8 * GIB)
+              require(shutil.disk_usage(WORK).free >= 8 * GIB)
+              require(stat.S_ISCHR(os.lstat('/dev/kvm').st_mode))
+
+              opener = urllib.request.build_opener(
+                  urllib.request.ProxyHandler({}),
+                  urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+                  NoRedirect(),
+              )
+              request = urllib.request.Request(URL, headers={'Accept-Encoding': 'identity'})
+              digest1, digest256 = hashlib.sha1(), hashlib.sha256()
+              count = 0
+              with opener.open(request, timeout=20) as response:
+                  require(response.status == 200 and response.geturl() == URL)
+                  length = response.headers.get('Content-Length')
+                  require(length is None or (length.isdecimal() and int(length) == SIZE))
+                  with ARCHIVE.open('xb') as output:
+                      while count <= SIZE:
+                          chunk = response.read(min(1048576, SIZE + 1 - count))
+                          if not chunk:
+                              break
+                          count += len(chunk)
+                          require(count <= SIZE)
+                          digest1.update(chunk)
+                          digest256.update(chunk)
+                          output.write(chunk)
+              require(count == SIZE and digest1.hexdigest() == SHA1)
+
+              with zipfile.ZipFile(ARCHIVE) as source:
+                  entries = source.infolist()
+                  require(0 < len(entries) <= 20000)
+                  seen = set()
+                  total = 0
+                  for entry in entries:
+                      name = entry.filename
+                      require(name and not name.startswith('/') and '\\' not in name)
+                      parts = name.rstrip('/').split('/')
+                      require(parts[0] == 'emulator' and all(
+                          part not in ('', '.', '..') for part in parts))
+                      require(name not in seen and not entry.flag_bits & 1)
+                      seen.add(name)
+                      kind = stat.S_IFMT(entry.external_attr >> 16)
+                      if entry.is_dir():
+                          require(kind in (0, stat.S_IFDIR))
+                      else:
+                          require(kind in (0, stat.S_IFREG)
+                                  and entry.file_size <= 2 * GIB)
+                          total += entry.file_size
+                          require(total <= 4 * GIB)
+
+                  SDK.mkdir(mode=0o700)
+                  for entry in entries:
+                      target = SDK.joinpath(*entry.filename.rstrip('/').split('/'))
+                      if entry.is_dir():
+                          target.mkdir(mode=0o700, parents=True, exist_ok=True)
+                          continue
+                      target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                      copied = 0
+                      with source.open(entry) as input_file, target.open('xb') as output:
+                          while True:
+                              chunk = input_file.read(1048576)
+                              if not chunk:
+                                  break
+                              copied += len(chunk)
+                              require(copied <= entry.file_size)
+                              output.write(chunk)
+                      require(copied == entry.file_size)
+                      mode = entry.external_attr >> 16
+                      target.chmod(0o755 if mode & 0o111 else 0o644)
+
+              properties_path = SDK / 'emulator' / 'source.properties'
+              require(properties_path.is_file() and properties_path.stat().st_size <= 65536)
+              properties = properties_path.read_text('utf-8')
+              revisions = [line.split('=', 1)[1].strip()
+                           for line in properties.splitlines()
+                           if line.startswith('Pkg.Revision=')]
+              require(revisions == ['37.2.13'])
+              binary = SDK / 'emulator' / 'emulator'
+              require(binary.is_file() and os.access(binary, os.X_OK))
+              require(shutil.disk_usage(WORK).free >= 2 * GIB)
+              ARCHIVE.unlink()
+              print('pinned_emulator_version=37.2.13')
+              print('official_archive_bytes=' + str(count))
+              print('observed_archive_sha256=' + digest256.hexdigest())
+
+          try:
+              main()
+          except Exception:
+              raise SystemExit('pinned_emulator_preflight_or_archive_invalid') from None
+          PYARCH
+
+          emulator_bin="$task_dir/sdk/emulator/emulator"
+          export ANDROID_SDK_ROOT="$task_dir/sdk"
+          export ANDROID_HOME="$task_dir/sdk"
+          export ANDROID_USER_HOME="$task_dir/android-user"
+          export ANDROID_SDK_HOME="$task_dir/android-sdk-home"
+          export ANDROID_EMULATOR_HOME="$task_dir/emulator-home"
+          export ANDROID_AVD_HOME="$task_dir/avd-home"
+          export XDG_CACHE_HOME="$task_dir/cache"
+          export XDG_CONFIG_HOME="$task_dir/config"
+          export XDG_DATA_HOME="$task_dir/data"
+          export TMPDIR="$task_dir/tmp"
+          for dir in "$ANDROID_USER_HOME" "$ANDROID_SDK_HOME" "$ANDROID_EMULATOR_HOME" "$ANDROID_AVD_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$TMPDIR"; do
+            mkdir -m 700 "$dir"
+          done
+          offline_emulator() {
+            namespace_command "$env_bin" \
+              PATH=/usr/bin:/bin \
+              ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" ANDROID_HOME="$ANDROID_HOME" \
+              ANDROID_USER_HOME="$ANDROID_USER_HOME" ANDROID_SDK_HOME="$ANDROID_SDK_HOME" \
+              ANDROID_EMULATOR_HOME="$ANDROID_EMULATOR_HOME" ANDROID_AVD_HOME="$ANDROID_AVD_HOME" \
+              XDG_CACHE_HOME="$XDG_CACHE_HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+              XDG_DATA_HOME="$XDG_DATA_HOME" TMPDIR="$TMPDIR" \
+              "$emulator_bin" "$1"
+          }
+          if ! offline_emulator -version > "$task_dir/version.out" 2>&1; then
+            echo 'pinned emulator binary version command failed'
+            exit 1
+          fi
+          [[ "$("$stat_bin" -Lc '%d:%i:%a:%u:%g' "$passwd_home")" == "$host_home_identity" ]] || {
+            echo 'runner home mount identity changed after version check'
+            exit 1
+          }
+          grep -Eq 'Android emulator version 37[.]2[.]13([.]0)?([^0-9.]|$)' "$task_dir/version.out" || {
+            echo 'emulator binary version does not match pinned package'
+            exit 1
+          }
+
+          getfacl -p /dev/kvm > "$task_dir/acl.before"
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            getfacl -ncp /dev/kvm > "$task_dir/acl.numeric"
+            acl_scan=0
+            grep -Eq '^(user:[0-9]+:|group:[0-9]+:|mask::)' "$task_dir/acl.numeric" || acl_scan=$?
+            [[ "$acl_scan" == 1 ]] || { echo 'KVM ACL extended or inspection failed'; exit 1; }
+            acl_changed=true
+            sudo -n setfacl -m "u:$(id -u):rw" /dev/kvm
+            [[ -r /dev/kvm && -w /dev/kvm ]] || { echo 'runner-user KVM access failed'; exit 1; }
+          fi
+          python3 - <<'PYKVM'
+          import fcntl
+          import os
+          fd = os.open('/dev/kvm', os.O_RDWR | os.O_CLOEXEC)
+          try:
+              if fcntl.ioctl(fd, 0xAE00, 0) != 12:
+                  raise SystemExit('unsupported KVM API version')
+          finally:
+              os.close(fd)
+          PYKVM
+          if ! offline_emulator -accel-check > "$task_dir/accel.out" 2>&1; then
+            echo 'emulator acceleration check command failed'
+            exit 1
+          fi
+          [[ "$("$stat_bin" -Lc '%d:%i:%a:%u:%g' "$passwd_home")" == "$host_home_identity" ]] || {
+            echo 'runner home mount identity changed after acceleration check'
+            exit 1
+          }
+          grep -Eq 'KVM.*is installed and usable' "$task_dir/accel.out" || {
+            echo 'emulator acceleration was not reported usable'
+            exit 1
+          }
+          echo 'Pinned emulator 37.2.13 acceleration PASS; no AVD, APK or app ran'
