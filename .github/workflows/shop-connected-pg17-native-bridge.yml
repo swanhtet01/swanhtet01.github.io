@@ -56,6 +56,7 @@ jobs:
 
       - name: Prepare disposable PostgreSQL 17 tools
         run: |
+          set -o pipefail
           sudo install -d /usr/share/postgresql-common/pgdg
           curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
           . /etc/os-release
