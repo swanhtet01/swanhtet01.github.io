@@ -14,7 +14,6 @@ services:
       SUPERMEGA_APP_PASSWORD: supermega-demo
       SUPERMEGA_APP_DISPLAY_NAME: Owner
       SUPERMEGA_APP_ROLE: owner
-      SUPERMEGA_INTERNAL_CRON_TOKEN: supermega-internal-demo-token
     volumes:
       - supermega-app-data:/app/data
     restart: unless-stopped

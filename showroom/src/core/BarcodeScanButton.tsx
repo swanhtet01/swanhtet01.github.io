@@ -83,7 +83,8 @@ export function BarcodeScanButton({ disabled, label, onDetected }: {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' } } })
       } catch (cause) {
-        setError(cameraFailureMessage(cause))
+        // A rejected request from a closed scan must not overwrite a reopened session.
+        if (!cancelled) setError(cameraFailureMessage(cause))
         return
       }
       if (cancelled) {
@@ -99,6 +100,9 @@ export function BarcodeScanButton({ disabled, label, onDetected }: {
         // once the browser lets the element run; the interval below tolerates a video
         // that has not produced data yet.
       }
+      // Cleanup may have run while play() was pending. Do not create a timer
+      // after that cleanup has already released this scan session.
+      if (cancelled) return
       timer = window.setInterval(() => {
         if (detecting || cancelled || video.readyState < 2) return
         detecting = true
