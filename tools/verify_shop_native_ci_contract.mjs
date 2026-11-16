@@ -229,6 +229,105 @@ function checkoutSteps(source) {
   return steps
 }
 
+function namedJob(source, name) {
+  const jobs = [...source.matchAll(/^  ([a-z0-9-]+):\s*$/gm)]
+  const matches = jobs.filter(match => match[1] === name)
+  if (matches.length !== 1) return null
+  const start = matches[0].index
+  const next = jobs.find(match => match.index > start)
+  const end = next?.index ?? source.length
+  return { start, end, text: source.slice(start, end) }
+}
+
+function namedStep(job, name) {
+  const marker = `      - name: ${name}\n`
+  const start = job.indexOf(marker)
+  if (start < 0 || job.indexOf(marker, start + marker.length) >= 0) return null
+  const next = job.indexOf('\n      - name:', start + marker.length)
+  return job.slice(start, next < 0 ? job.length : next)
+}
+
+function verifiedReadbackJob(source, failures) {
+  const job = namedJob(source, 'android-qa-original-zip-readback')
+  const producer = namedJob(source, 'android-qa')
+  if (!job || !producer) {
+    failures.push('android_qa_readback_job_missing_or_duplicate')
+    return null
+  }
+  const header = job.text.slice(0, job.text.indexOf('    steps:\n') + '    steps:\n'.length)
+  const expectedHeader = `  android-qa-original-zip-readback:
+    name: Read back original Android QA ZIP (integrity only)
+    needs: android-qa
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 752 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+`
+  if (header !== expectedHeader) failures.push('android_qa_readback_job_unrestricted')
+  const expectedCheckout = `      - name: Check out exact merge source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: \${{ github.sha }}
+          persist-credentials: false`
+  const checkout = namedStep(job.text, 'Check out exact merge source')
+  const checkouts = checkoutSteps(job.text)
+  if (checkout?.trimEnd() !== expectedCheckout || checkouts.length !== 1
+    || !checkoutDisablesCredentialPersistence(checkouts[0])) {
+    failures.push('android_qa_readback_checkout_invalid')
+  }
+  const producerBinding = `    outputs:
+      qa_artifact_id: \${{ steps.qa_upload.outputs.artifact-id }}
+      qa_artifact_digest: \${{ steps.qa_upload.outputs.artifact-digest }}`
+  const expectedPreflight = `      - name: Require same-run upload identity before download
+        env:
+          QA_ARTIFACT_ID: \${{ needs.android-qa.outputs.qa_artifact_id }}
+          QA_ARTIFACT_DIGEST: \${{ needs.android-qa.outputs.qa_artifact_digest }}
+        run: |
+          [[ "$QA_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$QA_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]`
+  const expectedDownload = `      - name: Download original same-run ZIP bytes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: \${{ needs.android-qa.outputs.qa_artifact_id }}
+          skip-decompress: true
+          digest-mismatch: error
+          path: \${{ runner.temp }}/shop-qa-original-zip-readback`
+  const expectedVerify = `      - name: Verify ZIP, six members and source identity
+        env:
+          QA_DOWNLOAD_DIR: \${{ runner.temp }}/shop-qa-original-zip-readback
+          QA_ARTIFACT_ID: \${{ needs.android-qa.outputs.qa_artifact_id }}
+          QA_ARTIFACT_DIGEST: \${{ needs.android-qa.outputs.qa_artifact_digest }}
+          QA_RUN_ID: \${{ github.run_id }}
+          QA_MERGE_SHA: \${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$QA_MERGE_SHA"
+          QA_SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')" \\
+          QA_NATIVE_TREE="$(git rev-parse 'HEAD:mobile/shop_pos')" \\
+            node tools/verify_shop_android_qa_same_run_readback.mjs`
+  const preflight = namedStep(job.text, 'Require same-run upload identity before download')
+  const download = namedStep(job.text, 'Download original same-run ZIP bytes')
+  const verify = namedStep(job.text, 'Verify ZIP, six members and source identity')
+  const expectedJob = `${expectedHeader}${[
+    expectedCheckout, expectedPreflight, expectedDownload, expectedVerify,
+  ].join('\n\n')}`
+  const upload = namedStep(producer.text, 'Upload promotion-ineligible Android QA artifact')
+  if (!producer.text.includes(producerBinding)
+    || !upload?.startsWith('      - name: Upload promotion-ineligible Android QA artifact\n        id: qa_upload\n        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2\n')
+    || preflight?.trimEnd() !== expectedPreflight
+    || download?.trimEnd() !== expectedDownload
+    || verify?.trimEnd() !== expectedVerify
+    || job.text.trimEnd() !== expectedJob) {
+    failures.push('android_qa_readback_artifact_binding_invalid')
+  }
+  return failures.some(failure => failure.startsWith('android_qa_readback_')) ? null : job
+}
+
 function checkoutDisablesCredentialPersistence(step) {
   const lines = step.split(/\r?\n/)
   const useIndent = lines[0].match(/^\s*/)?.[0].length ?? -1
@@ -260,8 +359,12 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   const flutterVersionPins = source.match(new RegExp(`flutter-version: '${FLUTTER_VERSION.replaceAll('.', '\\.')}'`, 'g')) ?? []
   if (flutterVersionPins.length !== 6) failures.push('flutter_sdk_not_exactly_pinned_for_all_native_jobs')
   if (/^\s*channel:\s*stable\s*$/m.test(source)) failures.push('flutter_sdk_uses_mutable_stable_channel')
+  const readbackJob = verifiedReadbackJob(source, failures)
   const checkoutBlocks = checkoutSteps(source)
-  if (checkoutBlocks.length !== 6) failures.push('native_checkout_step_count_not_exactly_six')
+  const legacyCheckoutBlocks = checkoutSteps(readbackJob
+    ? source.slice(0, readbackJob.start) + source.slice(readbackJob.end)
+    : source)
+  if (legacyCheckoutBlocks.length !== 6) failures.push('native_checkout_step_count_not_exactly_six')
   if (checkoutBlocks.some(block => !checkoutDisablesCredentialPersistence(block))) {
     failures.push('native_checkout_credentials_persisted_or_unspecified')
   }

@@ -14,7 +14,7 @@ function input(overrides = {}) {
   const manifest = JSON.parse(sample.manifestText)
   return {
     archiveBytes: sample.archiveBytes,
-    artifactDigest: `sha256:${sha256(sample.archiveBytes)}`,
+    artifactDigest: sha256(sample.archiveBytes),
     artifactId: sample.metadata.artifactId,
     runId: sample.metadata.runId,
     mergeSha: sample.metadata.mergeSha,
@@ -36,8 +36,11 @@ test('same-run raw ZIP readback binds all six bytes and remains transport-only',
 test('upload digest, artifact ID and checked-out merge provenance fail closed', () => {
   const valid = input()
   assert.throws(() => verifyShopAndroidQaSameRunReadback({
-    ...valid, artifactDigest: `sha256:${'a'.repeat(64)}`,
+    ...valid, artifactDigest: 'a'.repeat(64),
   }), /upload_digest_mismatch/)
+  assert.throws(() => verifyShopAndroidQaSameRunReadback({
+    ...valid, artifactDigest: `sha256:${valid.artifactDigest}`,
+  }), /upload_digest_invalid/)
   assert.throws(() => verifyShopAndroidQaSameRunReadback({
     ...valid, artifactId: '',
   }), /artifact_identity_invalid/)
@@ -59,6 +62,6 @@ test('missing, extra and altered ZIP members are refused', () => {
   const changed = Buffer.from(input().archiveBytes)
   changed[70] ^= 1
   assert.throws(() => verifyShopAndroidQaSameRunReadback({
-    ...input(), archiveBytes: changed, artifactDigest: `sha256:${sha256(changed)}`,
+    ...input(), archiveBytes: changed, artifactDigest: sha256(changed),
   }))
 })

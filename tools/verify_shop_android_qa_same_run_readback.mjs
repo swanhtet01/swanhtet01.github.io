@@ -20,7 +20,7 @@ const MEMBERS = [
 ]
 const SHA40 = /^[0-9a-f]{40}$/
 const SHA64 = /^[0-9a-f]{64}$/
-const DIGEST = /^sha256:[0-9a-f]{64}$/
+const DIGEST = /^[0-9a-f]{64}$/
 const DECIMAL_ID = /^[1-9][0-9]*$/
 const MAX_ZIP_BYTES = 256 * 1024 * 1024
 
@@ -52,7 +52,7 @@ export function verifyShopAndroidQaSameRunReadback({
   requireCondition(Buffer.isBuffer(archiveBytes)
     && archiveBytes.length > 0 && archiveBytes.length <= MAX_ZIP_BYTES, 'archive_size_invalid')
   const archiveSha256 = sha256(archiveBytes)
-  requireCondition(artifactDigest === `sha256:${archiveSha256}`, 'upload_digest_mismatch')
+  requireCondition(artifactDigest === archiveSha256, 'upload_digest_mismatch')
 
   const entries = readZipEntries(archiveBytes)
   requireCondition(entries.size === MEMBERS.length && MEMBERS.every(name => entries.has(name)), 'zip_members_invalid')

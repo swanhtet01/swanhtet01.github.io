@@ -520,6 +520,69 @@ test('native CI checkouts never persist the workflow credential', () => {
   )
 })
 
+test('Android QA readback checkout remains exact-source and same-run guarded', () => {
+  const readback = workflow.match(/\n  android-qa-original-zip-readback:[\s\S]*?(?=\n  ios-qa:)/)?.[0]
+  assert.ok(readback)
+  const changeReadback = mutate => workflow.replace(readback, mutate(readback))
+  const readbackCheckout = readback.match(
+    /      - name: Check out exact merge source[\s\S]*?(?=\n\n      - name: Require)/,
+  )?.[0]
+  assert.ok(readbackCheckout)
+  const cases = [
+    [workflow.replace(readback, ''), 'android_qa_readback_job_missing_or_duplicate'],
+    [workflow.replace('\n  ios-qa:', `${readback}\n  ios-qa:`), 'android_qa_readback_job_missing_or_duplicate'],
+    [changeReadback(block => block.replace(`${readbackCheckout}\n\n`, '')),
+      'android_qa_readback_checkout_invalid'],
+    [changeReadback(block => block.replace('\n\n      - name: Require',
+      `\n\n${readbackCheckout}\n\n      - name: Require`)), 'android_qa_readback_checkout_invalid'],
+    [changeReadback(block => block.replace(
+      'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803',
+      'actions/checkout@0000000000000000000000000000000000000000',
+    )), 'android_qa_readback_checkout_invalid'],
+    [changeReadback(block => block.replace('ref: ${{ github.sha }}', 'ref: ${{ github.ref }}')),
+      'android_qa_readback_checkout_invalid'],
+    [changeReadback(block => block.replace(
+      '        with:\n          ref: ${{ github.sha }}',
+      '        env:\n          ref: ${{ github.sha }}',
+    )), 'android_qa_readback_checkout_invalid'],
+    [changeReadback(block => block.replace('persist-credentials: false', 'persist-credentials: true')),
+      'native_checkout_credentials_persisted_or_unspecified'],
+    [changeReadback(block => block.replace(
+      '          ref: ${{ github.sha }}\n          persist-credentials: false',
+      '          ref: ${{ github.sha }}\n        env:\n          persist-credentials: false',
+    )), 'native_checkout_credentials_persisted_or_unspecified'],
+    [changeReadback(block => block.replace("github.event.pull_request.number == 752", 'true')),
+      'android_qa_readback_job_unrestricted'],
+    [changeReadback(block => block.replace(
+      '[[ "$QA_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]', 'true',
+    )), 'android_qa_readback_artifact_binding_invalid'],
+    [changeReadback(block => block.replace(
+      '[[ "$QA_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]',
+      '[[ "$QA_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]',
+    )), 'android_qa_readback_artifact_binding_invalid'],
+    [changeReadback(block => block.replace('skip-decompress: true', 'skip-decompress: false')),
+      'android_qa_readback_artifact_binding_invalid'],
+    [changeReadback(block => block.replace(
+      'test "$(git rev-parse HEAD)" = "$QA_MERGE_SHA"',
+      'true',
+    )), 'android_qa_readback_artifact_binding_invalid'],
+    [changeReadback(block => block.replace(
+      '      - name: Verify ZIP, six members and source identity',
+      '      - name: Verify ZIP, six members and source identity\n        if: false',
+    )), 'android_qa_readback_artifact_binding_invalid'],
+    [changeReadback(block => block.replace(
+      'artifact-ids: ${{ needs.android-qa.outputs.qa_artifact_id }}',
+      'artifact-ids: 0',
+    )), 'android_qa_readback_artifact_binding_invalid'],
+    [workflow.replace('qa_artifact_digest: ${{ steps.qa_upload.outputs.artifact-digest }}',
+      'qa_artifact_digest: unset'), 'android_qa_readback_artifact_binding_invalid'],
+  ]
+  for (const [changed, failure] of cases) {
+    const result = verifyShopNativeCiContract(changed, gradleWrapper)
+    assert.ok(result.failures.includes(failure), failure)
+  }
+})
+
 test('production identity is generated only after every default-profile test shard', () => {
   const generatedTooEarly = verifyShopNativeCiContract(
     workflow.replace(
