@@ -728,15 +728,35 @@ jobs:
           release_output="$(flutter build apk --release --no-pub --flavor production 2>&1)"
           release_status=$?
           set -e
+          release_marker=absent
+          if [[ "$release_output" == *shop_android_release_signing_unavailable* ]]; then
+            release_marker=present
+          fi
+          release_apk=absent
+          if [ -n "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print -quit 2>/dev/null)" ]; then
+            release_apk=present
+          fi
+          printf 'unsigned_release_flutter_status=%s marker=%s release_apk=%s\n' "$release_status" "$release_marker" "$release_apk"
           test "$release_status" -ne 0
-          printf '%s\n' "$release_output" | grep -F 'shop_android_release_signing_unavailable'
+          printf '%s\n' "$release_output" | grep -F 'shop_android_release_signing_unavailable' >/dev/null
+          unset release_output
           test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print -quit 2>/dev/null)"
           set +e
           aggregate_output="$(cd android && ./gradlew assembleProductionRelease --console=plain 2>&1)"
           aggregate_status=$?
           set -e
+          aggregate_marker=absent
+          if [[ "$aggregate_output" == *shop_android_release_signing_unavailable* ]]; then
+            aggregate_marker=present
+          fi
+          aggregate_apk=absent
+          if [ -n "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print -quit 2>/dev/null)" ]; then
+            aggregate_apk=present
+          fi
+          printf 'unsigned_release_gradle_status=%s marker=%s release_apk=%s\n' "$aggregate_status" "$aggregate_marker" "$aggregate_apk"
           test "$aggregate_status" -ne 0
-          printf '%s\n' "$aggregate_output" | grep -F 'shop_android_release_signing_unavailable'
+          printf '%s\n' "$aggregate_output" | grep -F 'shop_android_release_signing_unavailable' >/dev/null
+          unset aggregate_output
           test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print -quit 2>/dev/null)"
 
       - name: Build Android debug APK
@@ -1485,7 +1505,7 @@ jobs:
       github.event.pull_request.number == 752 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.action == 'synchronize' &&
-      github.event.before == '14535f5a042c21b82a12e9e88a8d84b590699355' &&
+      github.event.before == 'fa98aed359c862bfa7bd61e1aaea1ff2d28a4084' &&
       github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1826,6 +1846,13 @@ jobs:
             mkdir -m 700 "$dir"
           done
           offline_emulator() {
+            local -a emulator_argv=("$emulator_bin" "$1")
+            if [[ "$1" == "-version" ]]; then
+              emulator_argv=(/bin/sh -eu -c '
+                printf "%s\n" "__SM_EMULATOR_EXEC_ATTEMPT__"
+                exec "$@"
+              ' emulator-version "$emulator_bin" "$1")
+            fi
             namespace_command "$env_bin" \
               PATH=/usr/bin:/bin \
               ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" ANDROID_HOME="$ANDROID_HOME" \
@@ -1833,10 +1860,53 @@ jobs:
               ANDROID_EMULATOR_HOME="$ANDROID_EMULATOR_HOME" ANDROID_AVD_HOME="$ANDROID_AVD_HOME" \
               XDG_CACHE_HOME="$XDG_CACHE_HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
               XDG_DATA_HOME="$XDG_DATA_HOME" TMPDIR="$TMPDIR" \
-              "$emulator_bin" "$1"
+              "${emulator_argv[@]}"
           }
-          if ! offline_emulator -version > "$task_dir/version.out" 2>&1; then
-            echo 'pinned emulator binary version command failed'
+          version_rc=0
+          offline_emulator -version > "$task_dir/version.out" 2>&1 || version_rc=$?
+          if (( version_rc != 0 )); then
+            printf 'emulator_version_attempt_exit=%s\n' "$version_rc"
+            "$python_bin" -I -B - "$task_dir/version.out" <<'PYVERSION'
+          import os
+          import stat
+          import sys
+
+          MAX = 65536
+          stage = 'before_exec_attempt'
+          hint = 'unclassified'
+          try:
+              fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+              try:
+                  info = os.fstat(fd)
+                  if not stat.S_ISREG(info.st_mode) or info.st_size > MAX:
+                      raise ValueError('unavailable')
+                  data = os.read(fd, MAX + 1)
+                  if len(data) > MAX:
+                      raise ValueError('unavailable')
+              finally:
+                  os.close(fd)
+              if b'__SM_EMULATOR_EXEC_ATTEMPT__' in data.splitlines():
+                  stage = 'exec_attempt_reached'
+              lower = data.lower()
+              classes = (
+                  ('shared_library', (b'error while loading shared libraries',
+                                      b'cannot open shared object file')),
+                  ('missing_file_or_loader', (b'no such file or directory',
+                                              b'not found')),
+                  ('permission', (b'permission denied', b'operation not permitted')),
+                  ('process_abort', (b'segmentation fault', b'aborted')),
+              )
+              matches = [name for name, terms in classes
+                         if any(term in lower for term in terms)]
+              hint = ('multiple_categories' if len(matches) > 1 else
+                      matches[0] if matches else 'unclassified')
+          except (OSError, ValueError):
+              stage = 'unavailable'
+              hint = 'unavailable'
+          print('emulator_version_stage=' + stage)
+          print('emulator_version_output_hint=' + hint)
+          PYVERSION
+            echo 'pinned emulator version attempt failed'
             exit 1
           fi
           [[ "$("$stat_bin" -Lc '%d:%i:%a:%u:%g' "$passwd_home")" == "$host_home_identity" ]] || {
