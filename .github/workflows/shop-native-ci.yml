@@ -1292,3 +1292,136 @@ jobs:
             printf '| Total memory (MiB) | %s |\n' "$memory_mib"
             printf '| Free root disk at probe start (MiB) | %s |\n' "$free_disk_mib"
           } | tee "$GITHUB_STEP_SUMMARY"
+
+  android-emulator-kvm-access:
+    name: Android KVM scoped access (host only; no installed QA)
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 752 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Observe SDK license marker and current host capacity (facts only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PYFACT'
+          import os
+          import shutil
+          import stat
+
+          expected = b'24333f8a63b6825ea9c5514f83c2829b004d1fee'
+          directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+          file_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+
+          def license_marker_matches():
+              home = os.environ.get('ANDROID_HOME') or ''
+              sdk_root = os.environ.get('ANDROID_SDK_ROOT') or ''
+              if home and sdk_root and home != sdk_root:
+                  return False
+              root = home or sdk_root
+              if not root.startswith('/') or len(root) > 4096:
+                  return False
+              parts = root.split('/')[1:]
+              if not parts or any(part in ('', '.', '..') for part in parts):
+                  return False
+              opened = []
+              try:
+                  opened.append(os.open('/', directory_flags))
+                  for part in (*parts, 'licenses'):
+                      opened.append(os.open(part, directory_flags, dir_fd=opened[-1]))
+                  opened.append(os.open('android-sdk-license', file_flags, dir_fd=opened[-1]))
+                  source = opened[-1]
+                  details = os.fstat(source)
+                  if not stat.S_ISREG(details.st_mode) or details.st_size > 4096:
+                      return False
+                  data = b''
+                  while len(data) <= 4096:
+                      chunk = os.read(source, 4097 - len(data))
+                      if not chunk:
+                          break
+                      data += chunk
+                  if len(data) > 4096:
+                      return False
+                  return any(line.removesuffix(b'\r') == expected for line in data.split(b'\n'))
+              except (OSError, ValueError):
+                  return False
+              finally:
+                  for handle in reversed(opened):
+                      try:
+                          os.close(handle)
+                      except OSError:
+                          pass
+
+          def bounded_count(value):
+              return str(value) if isinstance(value, int) and 0 < value < 10**9 else 'unknown'
+
+          cpu_count = bounded_count(os.cpu_count())
+          try:
+              pages, page_size = os.sysconf('SC_PHYS_PAGES'), os.sysconf('SC_PAGE_SIZE')
+              if all(isinstance(value, int) and 0 < value < 10**15 for value in (pages, page_size)):
+                  memory_mib = bounded_count(pages * page_size // 1048576)
+              else:
+                  memory_mib = 'unknown'
+          except (OSError, ValueError, OverflowError):
+              memory_mib = 'unknown'
+          try:
+              free_disk_mib = bounded_count(shutil.disk_usage('/').free // 1048576)
+          except OSError:
+              free_disk_mib = 'unknown'
+
+          print('sdk_license_marker_match=' + str(license_marker_matches()).lower())
+          print('cpu_count=' + cpu_count)
+          print('memory_mib=' + memory_mib)
+          print('free_root_disk_mib=' + free_disk_mib)
+          PYFACT
+      - name: Prove KVM API under a temporary runner-user ACL
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in getfacl setfacl sudo python3; do
+            command -v "$tool" >/dev/null || { echo "required host tool absent: $tool"; exit 1; }
+          done
+          [[ -c /dev/kvm ]] || { echo 'KVM character device absent'; exit 1; }
+          [[ -d "${RUNNER_TEMP:?}" && ! -L "$RUNNER_TEMP" ]] || { echo 'runner temp unavailable'; exit 1; }
+
+          task_dir="$(mktemp -d "$RUNNER_TEMP/supermega-kvm.XXXXXXXX")"
+          acl_changed=false
+          cleanup() {
+            result=$?
+            trap - EXIT
+            if [[ "$acl_changed" == true ]]; then
+              if ! sudo -n setfacl --restore="$task_dir/acl.before"; then result=1; fi
+              if ! cmp -s "$task_dir/acl.before" <(getfacl -p /dev/kvm); then result=1; fi
+            fi
+            if ! rm -rf -- "$task_dir"; then result=1; fi
+            exit "$result"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          getfacl -p /dev/kvm > "$task_dir/acl.before"
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            getfacl -ncp /dev/kvm > "$task_dir/acl.numeric"
+            acl_scan=0
+            grep -Eq '^(user:[0-9]+:|group:[0-9]+:|mask::)' "$task_dir/acl.numeric" || acl_scan=$?
+            [[ "$acl_scan" == 1 ]] || { echo 'KVM ACL extended or inspection failed'; exit 1; }
+            acl_changed=true
+            sudo -n setfacl -m "u:$(id -u):rw" /dev/kvm
+            [[ -r /dev/kvm && -w /dev/kvm ]] || { echo 'runner-user KVM access failed'; exit 1; }
+          fi
+          python3 - <<'PYKVM'
+          import fcntl
+          import os
+          fd = os.open('/dev/kvm', os.O_RDWR | os.O_CLOEXEC)
+          try:
+              version = fcntl.ioctl(fd, 0xAE00, 0)  # KVM_GET_API_VERSION
+              if version != 12:
+                  raise SystemExit('unsupported KVM API version')
+          finally:
+              os.close(fd)
+          print('Scoped KVM API access PASS; no emulator, APK or app ran')
+          PYKVM
