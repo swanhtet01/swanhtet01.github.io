@@ -4,7 +4,7 @@ import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
 import { initialShopCashTenderGateState, reduceShopCashTenderGate, reviewShopCashTenderGate, shopCashTenderGateCanSubmit, shopCashTenderGateValue } from './shop-cash-tender'
 import { ShopCashTenderFields } from './ShopCashTenderFields'
-import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
+import { COUNTER_TICKET_STALE_PREWRITE_MESSAGE, CounterTicketStalePrewriteError, createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
   shopBusinessTemplateCommerceItems,
@@ -975,6 +975,8 @@ const ownerFacingActionErrors: readonly { match: RegExp; message: string }[] = [
 const technicalErrorShape = /\[\d+\]|\b[a-z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*\b/
 
 function ownerFacingActionError(detail: string) {
+  // bi() retains English until this outcome's Myanmar wording receives native review.
+  if (detail === COUNTER_TICKET_STALE_PREWRITE_MESSAGE) return bi(detail)
   const known = ownerFacingActionErrors.find((entry) => entry.match.test(detail))
   if (known) return known.message
   return technicalErrorShape.test(detail)
@@ -1372,12 +1374,18 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             && tickets.getSnapshot().state.revision === reviewedRevision + 1
             && tickets.checkpoint(orderId)
         }
-        if (!tickets.checkpoint() || tickets.getSnapshot().state.revision !== reviewedRevision) return false
-        if (!persistLocalDraft) return true
+        const currentTicket = tickets.getSnapshot()
+        if (currentTicket.blocked || currentTicket.pending || currentTicket.state.checkoutOrderId
+          || currentTicket.state.revision !== reviewedRevision) return false
+        if (!persistLocalDraft) return tickets.checkpoint()
+        // The stored ticket comparison belongs to begin_checkout's existing lock.
+        // A pre-lock checkpoint would discard the exact pre-write conflict cause.
         if (!tickets.dispatch({ kind: 'begin_checkout', orderId })) return false
         securedCheckoutId = orderId
         await tickets.settled()
-        return tickets.checkpoint(orderId)
+        if (tickets.checkpoint(orderId)) return true
+        if (tickets.getSnapshot().prewriteFailure === 'stale_ticket_revision') throw new CounterTicketStalePrewriteError()
+        return false
       },
       onCommitted: (orderId) => {
         if (persistLocalDraft) tickets.dispatch({ kind: 'resolve_checkout', orderId })
@@ -4038,7 +4046,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       apply: async (action) => {
         const proof = commerceActionProof(action)
         const ownedOrder = { ...order, owner: action.actor }
-        if (!await review.beforeCommit(order.id)) throw new Error('Counter recovery could not be secured. No new sale was attempted.')
+        if (!await review.beforeCommit(order.id)) throw new Error('Counter recovery could not be secured. Review Orders and recovery before trying again; an earlier attempt may have saved.')
         // Browser-local counter settlement is one crash-safe workspace write. The same
         // pure lifecycle transitions used by Orders are composed inside one recovery
         // intent, with a unique proof id per recorded step. Managed workspaces stay on

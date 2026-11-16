@@ -8,6 +8,15 @@ export type ParkedTicket = CounterBasket & { id: string; label: string }
 export type CounterTickets = CounterBasket & { schema: typeof SCHEMA; revision: number; parked: ParkedTicket[]; activeLabel: string; checkoutOrderId: string | null }
 type Storage = { getItem(key: string): string | null; setItem(key: string, value: string): void }
 type Locks = { request<T>(name: string, options: { mode: 'exclusive' }, callback: () => Promise<T>): Promise<T> }
+export const COUNTER_TICKET_STALE_PREWRITE_MESSAGE = 'Saved Counter ticket state changed elsewhere before checkout was secured. This attempt recorded no new sale. Review Orders and the current ticket before trying again.'
+export class CounterTicketStalePrewriteError extends Error {
+  readonly code = 'counter_ticket_stale_prewrite'
+  constructor() { super(COUNTER_TICKET_STALE_PREWRITE_MESSAGE); this.name = 'CounterTicketStalePrewriteError' }
+}
+// Only the comparison below may authorize the cashier's specific no-new-sale wording.
+// Storage and lock failures can throw arbitrary Error instances, including this public class.
+const provenStalePrewriteErrors = new WeakSet<CounterTicketStalePrewriteError>()
+type CounterTicketPrewriteFailure = 'stale_ticket_revision' | null
 export const emptyCounterBasket = (): CounterBasket => ({ cart: {}, customer: '', payment: 'Cash', outcome: 'paid_handoff' })
 
 function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
@@ -92,11 +101,27 @@ export async function mutateCounterTickets(storage: Storage, locks: Locks, expec
     throw new Error('Counter reset marker is invalid. Review recovery before continuing.')
   }
   // Freeze the reviewed transition before waiting for a lock; callers may edit their inputs.
-  const next = transitionCounterTickets(parseCounterTickets(expectedRaw), action)
+  const expected = parseCounterTickets(expectedRaw)
+  const next = transitionCounterTickets(expected, action)
   const raw = JSON.stringify(next)
   return locks.request('supermega:shop:order-draft:reset', { mode: 'exclusive' }, async () => {
     if (!stillCurrent()) throw new Error('Counter context changed. Reload recovery before continuing.')
-    if (storage.getItem(RESET_KEY) !== expectedReset || storage.getItem(COUNTER_TICKETS_KEY) !== expectedRaw) {
+    if (storage.getItem(RESET_KEY) !== expectedReset) {
+      throw new Error('Counter recovery changed or was reset. Review it before trying again.')
+    }
+    const actualRaw = storage.getItem(COUNTER_TICKETS_KEY)
+    if (actualRaw !== expectedRaw) {
+      // Only checkout can claim this specific pre-write outcome. Other ticket
+      // mutations retain the generic recovery warning.
+      if (action.kind === 'begin_checkout') {
+        let actualRevision: number | null = null
+        try { actualRevision = parseCounterTickets(actualRaw).revision } catch { /* malformed bytes remain generic */ }
+        if (actualRevision !== null && actualRevision > expected.revision) {
+          const error = new CounterTicketStalePrewriteError()
+          provenStalePrewriteErrors.add(error)
+          throw error
+        }
+      }
       throw new Error('Counter recovery changed or was reset. Review it before trying again.')
     }
     // One key write atomically moves the basket into/out of parked work. Never clear first.
@@ -109,7 +134,7 @@ export async function mutateCounterTickets(storage: Storage, locks: Locks, expec
 // Event-driven serial persistence. No mount/autosave effect and no silent recovery reset.
 export function createCounterTicketSession(storage: Storage | null, locks: Locks | null, initialCustomer = '') {
   let raw: string | null = null, reset: string | null = null, alive = true, failed = false
-  let snapshot = { state: parseCounterTickets(null), pending: 0, error: '', blocked: false }
+  let snapshot = { state: parseCounterTickets(null), pending: 0, error: '', blocked: false, prewriteFailure: null as CounterTicketPrewriteFailure }
   let tail: Promise<void> = Promise.resolve()
   const listeners = new Set<() => void>()
   const publish = () => { for (const listener of listeners) listener() }
@@ -137,19 +162,22 @@ export function createCounterTicketSession(storage: Storage | null, locks: Locks
         frozen = structuredClone(action)
         next = transitionCounterTickets(snapshot.state, frozen)
       } catch (error) {
-        snapshot = { ...snapshot, error: error instanceof Error ? error.message : 'Review this ticket before continuing.' }
+        snapshot = { ...snapshot, prewriteFailure: null, error: error instanceof Error ? error.message : 'Review this ticket before continuing.' }
         publish(); return false
       }
-      snapshot = { state: next, pending: snapshot.pending + (storage ? 1 : 0), error: '', blocked: false }
+      snapshot = { state: next, pending: snapshot.pending + (storage ? 1 : 0), error: '', blocked: false, prewriteFailure: null }
       publish()
       if (storage && locks) tail = tail.then(async () => {
         try {
           if (failed || !alive) throw new Error('Counter session changed.')
           const result = await mutateCounterTickets(storage, locks, raw, reset, frozen, () => alive && !failed)
           raw = result.raw
-        } catch {
+        } catch (error) {
           failed = true
-          snapshot = { ...snapshot, blocked: true, error: 'Counter save is unconfirmed or changed in another tab. Do not repeat the sale. Reload to reconcile saved tickets.' }
+          snapshot = { ...snapshot, blocked: true,
+            prewriteFailure: frozen.kind === 'begin_checkout' && error instanceof CounterTicketStalePrewriteError
+              && provenStalePrewriteErrors.has(error) ? 'stale_ticket_revision' : null,
+            error: 'Counter save is unconfirmed or changed in another tab. Do not repeat the sale. Reload to reconcile saved tickets.' }
         } finally {
           snapshot = { ...snapshot, pending: snapshot.pending - 1 }
           publish()
@@ -165,7 +193,7 @@ export function createCounterTicketSession(storage: Storage | null, locks: Locks
         return true
       } catch {
         failed = true
-        snapshot = { ...snapshot, blocked: true, error: 'Counter recovery changed. Reload before reviewing a sale.' }
+        snapshot = { ...snapshot, blocked: true, prewriteFailure: null, error: 'Counter recovery changed. Reload before reviewing a sale.' }
         publish(); return false
       }
     },

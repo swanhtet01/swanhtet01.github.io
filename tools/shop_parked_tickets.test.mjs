@@ -2,8 +2,19 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { COUNTER_TICKETS_KEY, emptyCounterBasket, parseCounterTickets, transitionCounterTickets, mutateCounterTickets, createCounterTicketSession } from '../showroom/src/core/shop-parked-tickets.ts'
+import * as ticketModule from '../showroom/src/core/shop-parked-tickets.ts'
 const input = { cart: { 'TEA-1': 2 }, customer: '', payment: 'Cash', outcome: 'paid_handoff' }
 const saved = () => transitionCounterTickets(parseCounterTickets(null), { kind: 'save', basket: input })
+
+function actualBeforeCommit(tickets, persistLocalDraft, reviewedRevision) {
+  const source = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const start = source.indexOf('beforeCommit: async (orderId) => {')
+  const end = source.indexOf('\n      },', start)
+  assert.ok(start > 0 && end > start)
+  const callback = source.slice(start + 'beforeCommit: '.length, end) + '\n}'
+  const create = new Function('tickets', 'persistLocalDraft', 'reviewedRevision', 'CounterTicketStalePrewriteError', "let securedCheckoutId = ''; return (" + callback + ')')
+  return create(tickets, persistLocalDraft, reviewedRevision, ticketModule.CounterTicketStalePrewriteError)
+}
 
 test('memory-only company baskets remain isolated without global storage fallback', async () => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
@@ -215,35 +226,169 @@ test('UI persists checkout identity before commerce and only offers recorded-ord
   assert.ok(flow.includes('review.onCommitted(order.id)'))
   assert.ok(source.includes('recordedOrderIds.includes(checkoutOrderId)'))
   assert.ok(source.includes('await tickets.settled()'))
-  assert.ok(source.includes('return tickets.checkpoint(orderId)'))
+  assert.ok(source.includes('if (tickets.checkpoint(orderId)) return true'))
+  assert.ok(source.includes("if (tickets.getSnapshot().prewriteFailure === 'stale_ticket_revision') throw new CounterTicketStalePrewriteError()"))
+  assert.ok(source.includes('if (detail === COUNTER_TICKET_STALE_PREWRITE_MESSAGE) return bi(detail)'))
 })
 
 
 test('actual Counter review callback retries only its secured unchanged checkout', async () => {
-  const source = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
-  const start = source.indexOf('beforeCommit: async (orderId) => {')
-  const end = source.indexOf('\n      },', start)
-  const callback = source.slice(start + 'beforeCommit: '.length, end) + '\n}'
-  const create = new Function('tickets', 'persistLocalDraft', 'reviewedRevision', "let securedCheckoutId = ''; return (" + callback + ')')
   let raw = JSON.stringify(saved())
   const storage = { getItem: key => key === COUNTER_TICKETS_KEY ? raw : null, setItem: (_key, value) => { raw = value } }
   const locks = { request: async (_name, _options, callback) => callback() }
   const session = createCounterTicketSession(storage, locks)
   const reviewedRevision = session.getSnapshot().state.revision
-  const beforeCommit = create(session, true, reviewedRevision)
+  const beforeCommit = actualBeforeCommit(session, true, reviewedRevision)
   assert.equal(await beforeCommit('ORD-RETRY'), true)
   const secured = raw
   assert.equal(await beforeCommit('ORD-RETRY'), true)
   assert.equal(raw, secured, 'retry does not begin a second checkout')
   assert.equal(await beforeCommit('ORD-OTHER'), false)
-  const unrelatedReview = create(session, true, reviewedRevision)
+  const unrelatedReview = actualBeforeCommit(session, true, reviewedRevision)
   assert.equal(await unrelatedReview('ORD-RETRY'), false, 'another review cannot adopt the checkout')
   session.dispatch({ kind: 'resolve_checkout', orderId: 'ORD-RETRY' })
   await session.settled()
   assert.equal(await beforeCommit('ORD-RETRY'), false, 'resolved checkout cannot be reused')
   const changed = createCounterTicketSession(null, null)
   changed.dispatch({ kind: 'save', basket: input })
-  const stale = create(changed, false, changed.getSnapshot().state.revision)
+  const stale = actualBeforeCommit(changed, false, changed.getSnapshot().state.revision)
   changed.dispatch({ kind: 'save', basket: { ...input, customer: 'Changed' } })
   assert.equal(await stale('ORD-STALE'), false)
+})
+
+test('actual precommit distinguishes a proven stale same-reset ticket before a new sale', async () => {
+  let raw = JSON.stringify(saved()), writes = 0
+  const storage = {
+    getItem: key => key === COUNTER_TICKETS_KEY ? raw : null,
+    setItem: (_key, value) => { writes++; raw = value },
+  }
+  const locks = { request: async (_name, _options, callback) => callback() }
+  const staleTab = createCounterTicketSession(storage, locks)
+  const otherTab = createCounterTicketSession(storage, locks)
+  const beforeCommit = actualBeforeCommit(staleTab, true, staleTab.getSnapshot().state.revision)
+  assert.equal(otherTab.dispatch({ kind: 'save', basket: { ...input, customer: 'Other tab' } }), true)
+  await otherTab.settled()
+  const retained = raw
+  await assert.rejects(beforeCommit('ORD-STALE'), error => error?.code === 'counter_ticket_stale_prewrite')
+  assert.equal(raw, retained)
+  assert.equal(writes, 1, 'the stale attempt made no additional ticket write')
+  assert.equal(staleTab.getSnapshot().prewriteFailure, 'stale_ticket_revision')
+  assert.equal(staleTab.getSnapshot().blocked, true)
+  assert.equal(await beforeCommit('ORD-STALE'), false, 'a repeat cannot reuse specific no-sale guidance')
+})
+
+test('typed outcome is confined to a valid higher same-reset revision under checkout lock', async () => {
+  const expectedRaw = JSON.stringify(saved())
+  let raw = JSON.stringify(transitionCounterTickets(parseCounterTickets(expectedRaw), {
+    kind: 'save', basket: { ...input, customer: 'Other tab' },
+  })), writes = 0, lockName = '', lockMode = ''
+  const retained = raw
+  const storage = {
+    getItem: key => key === COUNTER_TICKETS_KEY ? raw : null,
+    setItem: (_key, value) => { writes++; raw = value },
+  }
+  const locks = { request: async (name, options, callback) => { lockName = name; lockMode = options.mode; return callback() } }
+  await assert.rejects(
+    mutateCounterTickets(storage, locks, expectedRaw, null, { kind: 'begin_checkout', orderId: 'ORD-STALE' }),
+    error => error instanceof ticketModule.CounterTicketStalePrewriteError
+      && error.code === 'counter_ticket_stale_prewrite'
+      && error.message === ticketModule.COUNTER_TICKET_STALE_PREWRITE_MESSAGE,
+  )
+  assert.equal(lockName, 'supermega:shop:order-draft:reset')
+  assert.equal(lockMode, 'exclusive')
+  assert.equal(writes, 0)
+  assert.equal(raw, retained)
+})
+
+test('reset, malformed, lower, equal, other mutation and context changes remain generic without a write', async () => {
+  const expectedRaw = JSON.stringify(saved())
+  const higherRaw = JSON.stringify(transitionCounterTickets(parseCounterTickets(expectedRaw), {
+    kind: 'save', basket: { ...input, customer: 'Other tab' },
+  }))
+  const sameRevisionRaw = JSON.stringify({ ...parseCounterTickets(expectedRaw), customer: 'Changed without revision' })
+  const lowerExpected = higherRaw
+  const cases = [
+    ['reset generation', expectedRaw, higherRaw, '1', { kind: 'begin_checkout', orderId: 'ORD-RESET' }, true],
+    ['malformed actual', expectedRaw, '{', null, { kind: 'begin_checkout', orderId: 'ORD-MALFORMED' }, true],
+    ['lower actual revision', lowerExpected, expectedRaw, null, { kind: 'begin_checkout', orderId: 'ORD-LOWER' }, true],
+    ['same revision changed bytes', expectedRaw, sameRevisionRaw, null, { kind: 'begin_checkout', orderId: 'ORD-EQUAL' }, true],
+    ['other ticket mutation', expectedRaw, higherRaw, null, { kind: 'save', basket: input }, true],
+    ['changed context', expectedRaw, higherRaw, null, { kind: 'begin_checkout', orderId: 'ORD-CONTEXT' }, false],
+  ]
+  for (const [label, expected, actual, reset, action, current] of cases) {
+    let raw = actual, writes = 0
+    const storage = { getItem: key => key === COUNTER_TICKETS_KEY ? raw : reset,
+      setItem: (_key, value) => { writes++; raw = value } }
+    const locks = { request: async (_name, _options, callback) => callback() }
+    await assert.rejects(mutateCounterTickets(storage, locks, expected, null, action, () => current),
+      error => error?.code !== 'counter_ticket_stale_prewrite', label)
+    assert.equal(writes, 0, label)
+    assert.equal(raw, actual, label)
+  }
+})
+
+test('unreadable storage, failed lock, unknown exception and unconfirmed save stay generic', async () => {
+  const expectedRaw = JSON.stringify(saved())
+  const action = { kind: 'begin_checkout', orderId: 'ORD-UNCERTAIN' }
+  for (const [label, storage, locks] of [
+    ['unreadable storage', { getItem: () => { throw new Error('unreadable') }, setItem: () => { throw new Error('unexpected write') } },
+      { request: async (_name, _options, callback) => callback() }],
+    ['failed lock', { getItem: key => key === COUNTER_TICKETS_KEY ? expectedRaw : null, setItem: () => { throw new Error('unexpected write') } },
+      { request: async () => { throw new Error('lock unavailable') } }],
+    ['unknown thrown value', { getItem: key => key === COUNTER_TICKETS_KEY ? expectedRaw : null, setItem: () => { throw new Error('unexpected write') } },
+      { request: async () => { throw 'unknown lock failure' } }],
+  ]) {
+    await assert.rejects(mutateCounterTickets(storage, locks, expectedRaw, null, action),
+      error => error?.code !== 'counter_ticket_stale_prewrite', label)
+  }
+  let raw = expectedRaw, writes = 0, unconfirmed = false
+  const storage = { getItem: key => key === COUNTER_TICKETS_KEY ? unconfirmed ? null : raw : null,
+    setItem: (_key, value) => { writes++; raw = value; unconfirmed = true } }
+  const locks = { request: async (_name, _options, callback) => callback() }
+  const session = createCounterTicketSession(storage, locks)
+  const beforeCommit = actualBeforeCommit(session, true, session.getSnapshot().state.revision)
+  assert.equal(await beforeCommit('ORD-UNCERTAIN'), false)
+  assert.equal(session.getSnapshot().prewriteFailure, null)
+  assert.equal(session.getSnapshot().blocked, true)
+  assert.equal(writes, 1)
+  assert.equal(parseCounterTickets(raw).checkoutOrderId, 'ORD-UNCERTAIN')
+})
+
+test('unavailable lock and previously secured command cannot claim a fresh no-sale outcome', async () => {
+  let raw = JSON.stringify(saved())
+  const storage = { getItem: key => key === COUNTER_TICKETS_KEY ? raw : null, setItem: (_key, value) => { raw = value } }
+  const unavailable = createCounterTicketSession(storage, null)
+  assert.equal(await actualBeforeCommit(unavailable, true, unavailable.getSnapshot().state.revision)('ORD-NOLOCK'), false)
+  assert.equal(unavailable.getSnapshot().prewriteFailure, null)
+  const locks = { request: async (_name, _options, callback) => callback() }
+  const session = createCounterTicketSession(storage, locks)
+  const beforeCommit = actualBeforeCommit(session, true, session.getSnapshot().state.revision)
+  assert.equal(await beforeCommit('ORD-SECURED'), true)
+  raw = JSON.stringify(transitionCounterTickets(parseCounterTickets(raw), { kind: 'resolve_checkout', orderId: 'ORD-SECURED' }))
+  assert.equal(await beforeCommit('ORD-SECURED'), false)
+  assert.equal(session.getSnapshot().prewriteFailure, null)
+})
+
+test('a dependency-thrown lookalike typed error never authorizes precise cashier wording', async () => {
+  for (const origin of ['lock', 'storage']) {
+    let raw = JSON.stringify(saved()), unreadable = false, writes = 0
+    const storage = {
+      getItem: key => {
+        if (unreadable) throw new ticketModule.CounterTicketStalePrewriteError()
+        return key === COUNTER_TICKETS_KEY ? raw : null
+      },
+      setItem: (_key, value) => { writes++; raw = value },
+    }
+    const locks = { request: async (_name, _options, callback) => {
+      if (origin === 'lock') throw new ticketModule.CounterTicketStalePrewriteError()
+      return callback()
+    } }
+    const session = createCounterTicketSession(storage, locks)
+    const beforeCommit = actualBeforeCommit(session, true, session.getSnapshot().state.revision)
+    unreadable = origin === 'storage'
+    assert.equal(await beforeCommit(`ORD-${origin}`), false, origin)
+    assert.equal(session.getSnapshot().prewriteFailure, null, origin)
+    assert.equal(session.getSnapshot().blocked, true, origin)
+    assert.equal(writes, 0, origin)
+  }
 })
