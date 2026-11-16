@@ -1235,3 +1235,60 @@ jobs:
             supermega-shop-windows-qa.zip.manifest
           if-no-files-found: error
           retention-days: 7
+
+  android-emulator-host-probe:
+    name: Android emulator host facts (informational; no QA acceptance)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Read host facts without starting Android
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          as_bool() { if "$@"; then printf true; else printf false; fi; }
+          kvm_present="$(as_bool test -e /dev/kvm)"
+          kvm_readable="$(as_bool test -r /dev/kvm)"
+          kvm_writable="$(as_bool test -w /dev/kvm)"
+
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          sdk_present=false
+          emulator_present=false
+          aosp_api35_x86_64_image_present=false
+          if [[ -n "$sdk_root" && -d "$sdk_root" ]]; then
+            sdk_present=true
+            emulator_present="$(as_bool test -x "$sdk_root/emulator/emulator")"
+            aosp_api35_x86_64_image_present="$(as_bool test -f "$sdk_root/system-images/android-35/default/x86_64/system.img")"
+          fi
+
+          online_cpus="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+          [[ "$online_cpus" =~ ^[0-9]{1,8}$ ]] || online_cpus=unknown
+          memory_kib="$(awk '/^MemTotal:/ { print $2; exit }' /proc/meminfo 2>/dev/null || true)"
+          if [[ "$memory_kib" =~ ^[0-9]{1,15}$ ]]; then
+            memory_mib="$((memory_kib / 1024))"
+          else
+            memory_mib=unknown
+          fi
+          free_disk_bytes="$(df -B1 --output=avail / 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true)"
+          if [[ "$free_disk_bytes" =~ ^[0-9]{1,18}$ ]]; then
+            free_disk_mib="$((free_disk_bytes / 1048576))"
+          else
+            free_disk_mib=unknown
+          fi
+
+          {
+            printf '%s\n' 'Informational host probe only. No emulator, APK, or installed QA was run.'
+            printf '%s\n' 'The separate GCP pilot requires at least 20 GiB free after OS packages; this probe does not establish pilot eligibility.'
+            printf '%s\n' '| Fact | Observation |' '| --- | --- |'
+            printf '| KVM device present | %s |\n' "$kvm_present"
+            printf '| KVM node readable | %s |\n' "$kvm_readable"
+            printf '| KVM node writable | %s |\n' "$kvm_writable"
+            printf '| Configured Android SDK root present | %s |\n' "$sdk_present"
+            printf '| Emulator executable present | %s |\n' "$emulator_present"
+            printf '| AOSP API 35 x86_64 system image present | %s |\n' "$aosp_api35_x86_64_image_present"
+            printf '| Online CPU count | %s |\n' "$online_cpus"
+            printf '| Total memory (MiB) | %s |\n' "$memory_mib"
+            printf '| Free root disk at probe start (MiB) | %s |\n' "$free_disk_mib"
+          } | tee "$GITHUB_STEP_SUMMARY"
