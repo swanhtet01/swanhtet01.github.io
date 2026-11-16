@@ -96,7 +96,7 @@ function expectedArtifactUrl(runId, artifactId) {
   return `https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/${runId}/artifacts/${artifactId}`
 }
 
-function readZipEntries(archiveBytes) {
+export function readZipEntries(archiveBytes) {
   const bytes = Buffer.from(archiveBytes || Buffer.alloc(0))
   if (!bytes.length || bytes.length > MAX_ARCHIVE_BYTES) throw new Error('zip_size_invalid')
   let eocd = -1
