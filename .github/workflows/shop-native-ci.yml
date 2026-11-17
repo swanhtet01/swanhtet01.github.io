@@ -1505,7 +1505,7 @@ jobs:
       github.event.pull_request.number == 752 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.action == 'synchronize' &&
-      github.event.before == '8048a26237d71fdbed2532560b7d570bf249f910' &&
+      github.event.before == '5f9b1f9bd26a015d5adcb79017b5d4c1e268f48f' &&
       github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1662,6 +1662,18 @@ jobs:
           fi
           [[ "$("$stat_bin" -Lc '%d:%i:%a:%u:%g' "$passwd_home")" == "$host_home_identity" ]] || {
             echo 'runner home mount identity changed after preflight'
+            exit 1
+          }
+
+          # Pinned Ubuntu Noble libpulse0 supplies emulator's libpulse.so.0.
+          libpulse_version='1:16.1+dfsg1-2ubuntu10.1'
+          if [[ ! -f /usr/lib/x86_64-linux-gnu/libpulse.so.0 ]]; then
+            sudo -n apt-get update -qq
+            sudo -n apt-get install -y --no-install-recommends --no-upgrade --no-remove "libpulse0=$libpulse_version"
+          fi
+          [[ -f /usr/lib/x86_64-linux-gnu/libpulse.so.0 &&
+             "$(dpkg-query -W -f='${Version}' libpulse0 2>/dev/null)" == "$libpulse_version" ]] || {
+            echo 'pinned libpulse.so.0 host prerequisite unavailable'
             exit 1
           }
 
