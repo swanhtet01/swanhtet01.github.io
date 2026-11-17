@@ -1505,7 +1505,7 @@ jobs:
       github.event.pull_request.number == 752 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.action == 'synchronize' &&
-      github.event.before == '736a529625667a6e4d558c5db460428fb7d32b9d' &&
+      github.event.before == '8048a26237d71fdbed2532560b7d570bf249f910' &&
       github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1877,6 +1877,33 @@ jobs:
           hint = 'unclassified'
           soname = 'none'
           shared_line_shape = 'none'
+          shared_prefix_form = 'none'
+          shared_payload_shape = 'none'
+
+          def package_executable(raw_prefix, binary):
+              try:
+                  root = os.path.dirname(binary)
+                  candidate = os.fsdecode(raw_prefix)
+                  if (not os.path.isabs(candidate) or
+                          root != os.path.realpath(root) or
+                          candidate != os.path.normpath(candidate) or
+                          candidate != os.path.realpath(candidate) or
+                          os.path.commonpath((root, candidate)) != root or
+                          candidate == root):
+                      return False
+                  parts = candidate[len(root) + 1:].split(os.sep)
+                  if not parts or any(part in ('', '.', '..') for part in parts):
+                      return False
+                  current = root
+                  for part in parts[:-1]:
+                      current = os.path.join(current, part)
+                      if not stat.S_ISDIR(os.lstat(current).st_mode):
+                          return False
+                  file_info = os.lstat(candidate)
+                  return stat.S_ISREG(file_info.st_mode) and bool(file_info.st_mode & 0o111)
+              except (OSError, ValueError):
+                  return False
+
           try:
               fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
               try:
@@ -1889,16 +1916,22 @@ jobs:
               finally:
                   os.close(fd)
               lines = data.splitlines()
-              if b'__SM_EMULATOR_EXEC_ATTEMPT__' in lines:
+              marker = b'__SM_EMULATOR_EXEC_ATTEMPT__'
+              marker_positions = [index for index, line in enumerate(lines) if line == marker]
+              if len(marker_positions) == 1:
                   stage = 'exec_attempt_reached'
-              prefix = os.fsencode(sys.argv[2]) + b': error while loading shared libraries: '
+              elif marker_positions:
+                  stage = 'exec_attempt_ambiguous'
+              binary = sys.argv[2]
+              binary_bytes = os.fsencode(binary)
+              delimiter = b': error while loading shared libraries: '
               suffix = b': cannot open shared object file: No such file or directory'
               valid_name = re.compile(rb'lib[A-Za-z0-9_+.-]{1,42}\.so(?:\.[0-9]{1,4}){0,3}')
               categories = set()
               shared_lines = 0
               observed_name = None
-              for line in lines:
-                  if line == b'__SM_EMULATOR_EXEC_ATTEMPT__':
+              for index, line in enumerate(lines):
+                  if line == marker:
                       continue
                   if len(line) > 1024:
                       categories.add('oversize_line')
@@ -1909,17 +1942,38 @@ jobs:
                       shared_lines += 1
                       if shared_lines > 1:
                           shared_line_shape = 'multiple_lines'
-                      elif not line.startswith(prefix):
-                          shared_line_shape = 'prefix_mismatch'
-                      elif not line.endswith(suffix):
-                          shared_line_shape = 'suffix_mismatch'
                       else:
-                          name = line[len(prefix):-len(suffix)]
-                          if valid_name.fullmatch(name) and b'..' not in name:
-                              observed_name = name.decode('ascii')
+                          if line.count(delimiter) != 1:
+                              shared_payload_shape = 'delimiter_mismatch'
+                          else:
+                              raw_prefix, raw_payload = line.split(delimiter, 1)
+                              if raw_prefix == binary_bytes:
+                                  shared_prefix_form = 'direct_emulator'
+                              elif raw_prefix == os.path.basename(binary_bytes):
+                                  shared_prefix_form = 'basename_only'
+                              elif package_executable(raw_prefix, binary):
+                                  shared_prefix_form = 'package_executable'
+                              else:
+                                  shared_prefix_form = 'unrecognized'
+                              if not raw_payload.endswith(suffix):
+                                  shared_payload_shape = 'suffix_mismatch'
+                              else:
+                                  name = raw_payload[:-len(suffix)]
+                                  if valid_name.fullmatch(name) and b'..' not in name:
+                                      shared_payload_shape = 'valid_name'
+                                      observed_name = name.decode('ascii')
+                                  else:
+                                      shared_payload_shape = 'invalid_name'
+                          if len(marker_positions) != 1:
+                              shared_line_shape = 'marker_mismatch'
+                          elif index < marker_positions[0]:
+                              shared_line_shape = 'before_marker'
+                          elif shared_prefix_form not in ('direct_emulator', 'package_executable'):
+                              shared_line_shape = 'prefix_mismatch'
+                          elif shared_payload_shape == 'valid_name':
                               shared_line_shape = 'recognized'
                           else:
-                              shared_line_shape = 'invalid_name'
+                              shared_line_shape = shared_payload_shape
                       continue
                   if b'no such file or directory' in lower or b'not found' in lower:
                       categories.add('missing_file_or_loader')
@@ -1931,7 +1985,8 @@ jobs:
                   hint = 'mixed_distinct'
               elif categories == {'shared_library'}:
                   hint = 'shared_library'
-                  if stage == 'exec_attempt_reached' and shared_lines == 1 and observed_name:
+                  if (stage == 'exec_attempt_reached' and shared_lines == 1 and
+                          shared_line_shape == 'recognized' and observed_name):
                       soname = observed_name
                   else:
                       hint = 'shared_library_unidentified'
@@ -1942,10 +1997,14 @@ jobs:
               hint = 'unavailable'
               soname = 'none'
               shared_line_shape = 'unavailable'
+              shared_prefix_form = 'unavailable'
+              shared_payload_shape = 'unavailable'
           print('emulator_version_stage=' + stage)
           print('emulator_version_output_hint=' + hint)
           print('emulator_version_observed_missing_soname=' + soname)
           print('emulator_version_observed_shared_line_shape=' + shared_line_shape)
+          print('emulator_version_observed_shared_prefix_form=' + shared_prefix_form)
+          print('emulator_version_observed_shared_payload_shape=' + shared_payload_shape)
           PYVERSION
             echo 'pinned emulator version attempt failed'
             exit 1
