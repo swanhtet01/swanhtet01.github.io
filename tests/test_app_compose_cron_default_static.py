@@ -16,7 +16,7 @@ COMPOSE = SOURCE / 'docker-compose.app.yml'
 DOCKERFILE = SOURCE / 'Dockerfile'
 API_ENTRY = SOURCE / 'api_app.py'
 CRON_SOURCE = SOURCE / 'supermega_runtime/cloud_runtime.py'
-BASE_CRON_SOURCE_SHA256 = '9721d47666fa1121e28a0980e37c0c3260aa23efed5a1b088236a54745cc17b0'
+BASE_CRON_SOURCE_SHA256 = 'c82abf785a8c14fd9ada30611b3ebbe2802a1a7f3c80d8cda81679afee766415'
 
 # Reject a default credential even if written as an environment interpolation.
 # An enabled scheduler is also excluded from this default-off example.
