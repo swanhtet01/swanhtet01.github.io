@@ -1505,7 +1505,7 @@ jobs:
       github.event.pull_request.number == 752 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.action == 'synchronize' &&
-      github.event.before == '3929187a8ef2cede6908137feaa0c2e8e09eccea' &&
+      github.event.before == '736a529625667a6e4d558c5db460428fb7d32b9d' &&
       github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1876,6 +1876,7 @@ jobs:
           stage = 'before_exec_attempt'
           hint = 'unclassified'
           soname = 'none'
+          shared_line_shape = 'none'
           try:
               fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
               try:
@@ -1906,10 +1907,19 @@ jobs:
                   if b'error while loading shared libraries:' in lower:
                       categories.add('shared_library')
                       shared_lines += 1
-                      if line.startswith(prefix) and line.endswith(suffix):
+                      if shared_lines > 1:
+                          shared_line_shape = 'multiple_lines'
+                      elif not line.startswith(prefix):
+                          shared_line_shape = 'prefix_mismatch'
+                      elif not line.endswith(suffix):
+                          shared_line_shape = 'suffix_mismatch'
+                      else:
                           name = line[len(prefix):-len(suffix)]
                           if valid_name.fullmatch(name) and b'..' not in name:
                               observed_name = name.decode('ascii')
+                              shared_line_shape = 'recognized'
+                          else:
+                              shared_line_shape = 'invalid_name'
                       continue
                   if b'no such file or directory' in lower or b'not found' in lower:
                       categories.add('missing_file_or_loader')
@@ -1931,9 +1941,11 @@ jobs:
               stage = 'unavailable'
               hint = 'unavailable'
               soname = 'none'
+              shared_line_shape = 'unavailable'
           print('emulator_version_stage=' + stage)
           print('emulator_version_output_hint=' + hint)
           print('emulator_version_observed_missing_soname=' + soname)
+          print('emulator_version_observed_shared_line_shape=' + shared_line_shape)
           PYVERSION
             echo 'pinned emulator version attempt failed'
             exit 1
