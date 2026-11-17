@@ -1505,7 +1505,7 @@ jobs:
       github.event.pull_request.number == 752 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.action == 'synchronize' &&
-      github.event.before == 'fa98aed359c862bfa7bd61e1aaea1ff2d28a4084' &&
+      github.event.before == '3929187a8ef2cede6908137feaa0c2e8e09eccea' &&
       github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1866,14 +1866,16 @@ jobs:
           offline_emulator -version > "$task_dir/version.out" 2>&1 || version_rc=$?
           if (( version_rc != 0 )); then
             printf 'emulator_version_attempt_exit=%s\n' "$version_rc"
-            "$python_bin" -I -B - "$task_dir/version.out" <<'PYVERSION'
+            "$python_bin" -I -B - "$task_dir/version.out" "$emulator_bin" <<'PYVERSION'
           import os
+          import re
           import stat
           import sys
 
           MAX = 65536
           stage = 'before_exec_attempt'
           hint = 'unclassified'
+          soname = 'none'
           try:
               fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
               try:
@@ -1885,26 +1887,53 @@ jobs:
                       raise ValueError('unavailable')
               finally:
                   os.close(fd)
-              if b'__SM_EMULATOR_EXEC_ATTEMPT__' in data.splitlines():
+              lines = data.splitlines()
+              if b'__SM_EMULATOR_EXEC_ATTEMPT__' in lines:
                   stage = 'exec_attempt_reached'
-              lower = data.lower()
-              classes = (
-                  ('shared_library', (b'error while loading shared libraries',
-                                      b'cannot open shared object file')),
-                  ('missing_file_or_loader', (b'no such file or directory',
-                                              b'not found')),
-                  ('permission', (b'permission denied', b'operation not permitted')),
-                  ('process_abort', (b'segmentation fault', b'aborted')),
-              )
-              matches = [name for name, terms in classes
-                         if any(term in lower for term in terms)]
-              hint = ('multiple_categories' if len(matches) > 1 else
-                      matches[0] if matches else 'unclassified')
+              prefix = os.fsencode(sys.argv[2]) + b': error while loading shared libraries: '
+              suffix = b': cannot open shared object file: No such file or directory'
+              valid_name = re.compile(rb'lib[A-Za-z0-9_+.-]{1,42}\.so(?:\.[0-9]{1,4}){0,3}')
+              categories = set()
+              shared_lines = 0
+              observed_name = None
+              for line in lines:
+                  if line == b'__SM_EMULATOR_EXEC_ATTEMPT__':
+                      continue
+                  if len(line) > 1024:
+                      categories.add('oversize_line')
+                      continue
+                  lower = line.lower()
+                  if b'error while loading shared libraries:' in lower:
+                      categories.add('shared_library')
+                      shared_lines += 1
+                      if line.startswith(prefix) and line.endswith(suffix):
+                          name = line[len(prefix):-len(suffix)]
+                          if valid_name.fullmatch(name) and b'..' not in name:
+                              observed_name = name.decode('ascii')
+                      continue
+                  if b'no such file or directory' in lower or b'not found' in lower:
+                      categories.add('missing_file_or_loader')
+                  elif b'permission denied' in lower or b'operation not permitted' in lower:
+                      categories.add('permission')
+                  elif b'segmentation fault' in lower or b'aborted' in lower:
+                      categories.add('process_abort')
+              if len(categories) > 1:
+                  hint = 'mixed_distinct'
+              elif categories == {'shared_library'}:
+                  hint = 'shared_library'
+                  if stage == 'exec_attempt_reached' and shared_lines == 1 and observed_name:
+                      soname = observed_name
+                  else:
+                      hint = 'shared_library_unidentified'
+              elif categories:
+                  hint = categories.pop()
           except (OSError, ValueError):
               stage = 'unavailable'
               hint = 'unavailable'
+              soname = 'none'
           print('emulator_version_stage=' + stage)
           print('emulator_version_output_hint=' + hint)
+          print('emulator_version_observed_missing_soname=' + soname)
           PYVERSION
             echo 'pinned emulator version attempt failed'
             exit 1
