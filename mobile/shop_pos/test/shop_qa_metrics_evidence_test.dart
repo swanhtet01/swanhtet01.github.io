@@ -131,14 +131,16 @@ void main() {
         'observe_pre_sale',
         'observe_post_sale',
       ]);
-      expect(
-        readback.map((record) => record.sequence).toList(),
-        <int>[5, 7, 9],
-      );
-      expect(
-        readback.map((record) => record.protocolVersion).toList(),
-        <int>[2, 2, 2],
-      );
+      expect(readback.map((record) => record.sequence).toList(), <int>[
+        5,
+        7,
+        9,
+      ]);
+      expect(readback.map((record) => record.protocolVersion).toList(), <int>[
+        2,
+        2,
+        2,
+      ]);
       expect(readback.map((record) => record.snapshotSha256).toList(), <String>[
         before.snapshotSha256,
         beforePre.snapshotSha256,
@@ -564,13 +566,12 @@ void main() {
   });
 }
 
-Future<void> _addFictionalProduct(ShopDatabase database) =>
-    database.addProduct(
-      id: 'private-product-row-value',
-      name: 'PRIVATE CUSTOMER PAYMENT RECEIPT CONTENT',
-      priceMmk: 1200,
-      openingStock: 3,
-    );
+Future<void> _addFictionalProduct(ShopDatabase database) => database.addProduct(
+  id: 'private-product-row-value',
+  name: 'PRIVATE CUSTOMER PAYMENT RECEIPT CONTENT',
+  priceMmk: 1200,
+  openingStock: 3,
+);
 
 Future<ShopQaMetricsObservation> _observe(
   ShopQaMetricsEvidenceStore store,

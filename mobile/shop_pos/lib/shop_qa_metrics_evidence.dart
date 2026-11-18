@@ -157,12 +157,12 @@ final class ShopQaMetricsEvidenceStore {
       final validNext = records.isEmpty
           ? step == 'observe_pre_product' || step == 'observe_restored_state'
           : records.length == 1
-              ? records.single.step == 'observe_pre_product' &&
-                  step == 'observe_pre_sale'
-              : records.length == 2 &&
-                  records.first.step == 'observe_pre_product' &&
-                  records.last.step == 'observe_pre_sale' &&
-                  step == 'observe_post_sale';
+          ? records.single.step == 'observe_pre_product' &&
+                step == 'observe_pre_sale'
+          : records.length == 2 &&
+                records.first.step == 'observe_pre_product' &&
+                records.last.step == 'observe_pre_sale' &&
+                step == 'observe_post_sale';
       if (!validNext) {
         throw StateError('shop_qa_metrics_sequence_invalid');
       }
