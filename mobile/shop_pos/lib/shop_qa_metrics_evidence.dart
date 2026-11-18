@@ -62,13 +62,14 @@ abstract interface class ShopQaMetricsEvidenceAuthority {
 final class ShopQaMetricsEvidenceStore {
   ShopQaMetricsEvidenceStore._(this._scope, this._authority);
 
-  static const contract = 'supermega.shop.synthetic-qa-metrics.v1';
-  static const protocolVersion = 1;
+  static const contract = 'supermega.shop.synthetic-qa-metrics.v2';
+  static const protocolVersion = 2;
   static const _maximumObservations = 3;
   static const _steps = <String, int>{
-    'observe_pre_sale': 4,
-    'observe_post_sale': 8,
-    'observe_restored_state': 23,
+    'observe_pre_product': 5,
+    'observe_pre_sale': 7,
+    'observe_post_sale': 9,
+    'observe_restored_state': 24,
   };
   static const _countKeys = <String>{
     'sales',
@@ -153,13 +154,16 @@ final class ShopQaMetricsEvidenceStore {
           records.any((record) => record.requestDigest == requestDigest)) {
         throw StateError('shop_qa_metrics_replay');
       }
-      if ((records.isEmpty &&
-              step != 'observe_pre_sale' &&
-              step != 'observe_restored_state') ||
-          (records.isNotEmpty &&
-              (records.first.step != 'observe_pre_sale' ||
-                  records.last.step != 'observe_pre_sale' ||
-                  step != 'observe_post_sale'))) {
+      final validNext = records.isEmpty
+          ? step == 'observe_pre_product' || step == 'observe_restored_state'
+          : records.length == 1
+              ? records.single.step == 'observe_pre_product' &&
+                  step == 'observe_pre_sale'
+              : records.length == 2 &&
+                  records.first.step == 'observe_pre_product' &&
+                  records.last.step == 'observe_pre_sale' &&
+                  step == 'observe_post_sale';
+      if (!validNext) {
         throw StateError('shop_qa_metrics_sequence_invalid');
       }
       if (records.isNotEmpty &&
@@ -273,11 +277,15 @@ final class ShopQaMetricsEvidenceStore {
     }
     final validProtocolShape =
         (records.length == 1 &&
-            (records.single.step == 'observe_pre_sale' ||
+            (records.single.step == 'observe_pre_product' ||
                 records.single.step == 'observe_restored_state')) ||
         (records.length == 2 &&
-            records.first.step == 'observe_pre_sale' &&
-            records.last.step == 'observe_post_sale');
+            records.first.step == 'observe_pre_product' &&
+            records.last.step == 'observe_pre_sale') ||
+        (records.length == 3 &&
+            records[0].step == 'observe_pre_product' &&
+            records[1].step == 'observe_pre_sale' &&
+            records[2].step == 'observe_post_sale');
     if (records.isNotEmpty && !validProtocolShape) {
       throw StateError('shop_qa_metrics_inventory_invalid');
     }

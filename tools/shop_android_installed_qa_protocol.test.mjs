@@ -24,6 +24,8 @@ const ENVELOPE = '3'.repeat(64)
 const TARGET = '4'.repeat(64)
 const CONTAINMENT = '5'.repeat(64)
 const SESSION = '0123456789abcdef0123456789abcdef'
+const PRODUCT_SELECTOR = 'shop.catalog.product.123e4567-e89b-42d3-a456-426614174000'
+const PRIVATE_ENVELOPE = 'files/synthetic-qa-v1/synthetic-evidence/SuperMega-Shop-SYNTHETIC-QA-20261103-000000-abcdef123456.smqa'
 const SHA64_PATTERN = /^[0-9a-f]{64}$/
 const TEST_START = Date.now() - 1_000
 
@@ -77,16 +79,13 @@ function samplePlan(overrides = {}) {
       receiptDelta: 1,
       outboxDelta: 1,
       onHandDelta: -1,
-      productSelector: 'shop.catalog.product.synthetic-product',
-      receiptBindingSha256: RECEIPT,
-      receiptRenderSha256: RENDER,
-      envelopeSha256: ENVELOPE,
+      openingStock: 3,
       priorSessionState: 'none',
       priorSessionNonce: null,
       recoveryReceiptSha256: null,
     },
     paths: {
-      privateEnvelope: 'files/synthetic-qa-v1/synthetic-evidence/SuperMega-Shop-SYNTHETIC-QA-20261103-000000-abcdef123456.smqa',
+      privateEvidenceRoot: 'files/synthetic-qa-v1/synthetic-evidence',
       privateReceiptSidecar: 'files/synthetic-qa-v1/synthetic-evidence/SuperMega-Shop-SYNTHETIC-QA-RECEIPTS-v1.json',
       stagingRoot: `supermega-shop-installed-qa/${SESSION}/`,
       stagedEnvelope: `supermega-shop-installed-qa/${SESSION}/evidence.smqa`,
@@ -96,8 +95,9 @@ function samplePlan(overrides = {}) {
   return { ...plan, ...overrides }
 }
 
-const PRE = Object.freeze({ sales: 0, stockMovements: 0, receipts: 0, outbox: 0, onHand: 3, shifts: 1 })
-const POST = Object.freeze({ sales: 1, stockMovements: 1, receipts: 1, outbox: 1, onHand: 2, shifts: 1 })
+const INITIAL = Object.freeze({ sales: 0, stockMovements: 0, receipts: 0, outbox: 0, onHand: 0, shifts: 0 })
+const PRE = Object.freeze({ sales: 0, stockMovements: 1, receipts: 0, outbox: 1, onHand: 3, shifts: 0 })
+const POST = Object.freeze({ sales: 1, stockMovements: 2, receipts: 1, outbox: 2, onHand: 2, shifts: 0 })
 
 function stepData(step, plan) {
   const p = plan.paths
@@ -126,40 +126,41 @@ function stepData(step, plan) {
       handoffDigest: plan.handoff.digest,
       debuggable: true, productionSigned: false,
     }
+    case 'observe_pre_product': return { ...INITIAL }
     case 'observe_pre_sale': return { ...PRE }
     case 'ui_start_new': return { acted: true, selectorsUsed: [s.startNew, s.startNewConfirm] }
-    case 'ui_create_product': return { acted: true, selectorsUsed: [s.emptyAdd, s.productName, s.productCategory, s.productPrice, s.productStock, s.barcodeReveal, s.barcode, s.productSave] }
-    case 'ui_commit_sale': return { acted: true, productSelector: e.productSelector, selectorsUsed: [s.cartReview, s.checkoutCash, s.cashGiven, s.cashConfirm, s.saleCompletion] }
+    case 'ui_create_product': return { acted: true, productSelector: PRODUCT_SELECTOR, selectorsUsed: [s.emptyAdd, s.productName, s.productCategory, s.productPrice, s.productStock, s.barcodeReveal, s.barcode, s.productSave] }
+    case 'ui_commit_sale': return { acted: true, productSelector: PRODUCT_SELECTOR, selectorsUsed: [PRODUCT_SELECTOR, s.cartReview, s.checkoutCash, s.cashGiven, s.cashConfirm, s.saleCompletion] }
     case 'observe_post_sale': return { ...POST }
     case 'ui_reprint_before_restart':
     case 'ui_reprint_after_restart':
     case 'ui_reprint_restored_receipt':
       return { acted: true, selectorsUsed: [s.openRecentSales, s.savedReceipt, s.savedReceiptReprint] }
-    case 'observe_receipt_before_restart': return receipt(1, p, e)
-    case 'observe_receipt_after_restart': return receipt(2, p, e)
+    case 'observe_receipt_before_restart': return receipt(1, p)
+    case 'observe_receipt_after_restart': return receipt(2, p)
     case 'ui_export_backup': return { acted: true, selectorsUsed: [s.backupPassword, s.backupPasswordConfirm, s.backupExport] }
-    case 'observe_restored_receipt': return receipt(1, p, e)
+    case 'observe_restored_receipt': return receipt(1, p)
     case 'force_stop':
     case 'reopen': return { completed: true, packageId: plan.handoff.artifact.applicationId }
     case 'export_private_evidence': return {
-      envelopePath: p.privateEnvelope, envelopeSha256: e.envelopeSha256,
+      envelopePath: PRIVATE_ENVELOPE, envelopeSha256: ENVELOPE,
       inventoryCount: 1, regularFile: true, symlink: false,
     }
     case 'stage_envelope_external':
     case 'verify_external_stage': return {
-      sourcePath: p.privateEnvelope, destinationPath: p.stagedEnvelope,
-      sourceSha256: e.envelopeSha256, destinationSha256: e.envelopeSha256,
+      sourcePath: PRIVATE_ENVELOPE, destinationPath: p.stagedEnvelope,
+      sourceSha256: ENVELOPE, destinationSha256: ENVELOPE,
       inventoryCount: 1, regularFile: true, symlink: false,
     }
     case 'clear_package_data': return { packageId: plan.handoff.artifact.applicationId, cleared: true }
     case 'observe_after_clear': return {
       privateSourceExists: false, receiptSidecarExists: false,
-      stagedExists: true, stagedSha256: e.envelopeSha256, stagedInventoryCount: 1,
+      stagedExists: true, stagedSha256: ENVELOPE, stagedInventoryCount: 1,
       stagedRegularFile: true, stagedSymlink: false,
     }
     case 'restore_envelope_to_fresh_profile': return {
-      sourcePath: p.stagedEnvelope, destinationPath: p.privateEnvelope,
-      sourceSha256: e.envelopeSha256, destinationSha256: e.envelopeSha256,
+      sourcePath: p.stagedEnvelope, destinationPath: PRIVATE_ENVELOPE,
+      sourceSha256: ENVELOPE, destinationSha256: ENVELOPE,
       regularFile: true, symlink: false,
     }
     case 'ui_restore_fresh_profile': return { acted: true, selectorsUsed: [s.restoreChoose, s.restorePassword, s.restoreConfirm] }
@@ -168,11 +169,11 @@ function stepData(step, plan) {
   }
 }
 
-function receipt(count, paths, expected) {
+function receipt(count, paths) {
   return {
     captureCount: count,
-    receiptBindingSha256: expected.receiptBindingSha256,
-    receiptRenderSha256: expected.receiptRenderSha256,
+    receiptBindingSha256: RECEIPT,
+    receiptRenderSha256: RENDER,
     sidecarPath: paths.privateReceiptSidecar,
   }
 }
@@ -252,11 +253,65 @@ test('canonical protocol proves one sale restart restore and cleanup with saniti
   assert.equal(result.artifact.runId, plan.handoff.artifact.runId)
   assert.equal(result.artifact.nativeTree, plan.handoff.artifact.nativeTree)
   assert.equal(result.artifact.handoffDigest, plan.handoff.digest)
-  assert.equal(result.receipts.length, 28)
+  assert.equal(result.receipts.length, 29)
+  assert.deepEqual(result.initialCounts, INITIAL)
+  assert.deepEqual(result.preSaleCounts, PRE)
   assert.equal(result.receipts.every((entry) => Object.keys(entry).sort().join(',') === 'acknowledgementSha256,durationMs,status,step'), true)
   assert.match(result.digest, SHA64_PATTERN)
   assert.equal(adapter.calls.at(-1).step, 'cleanup_and_release')
   assert.equal(adapter.calls.at(-1).reasonCode, 'completed')
+})
+
+test('fresh randomized receipt and backup hashes bind only after their first observation', async () => {
+  const plan = samplePlan()
+  const result = await runShopAndroidInstalledQaProtocol(plan, new FixtureAdapter(plan))
+  assert.deepEqual(result.observedHashes, {
+    receiptBindingSha256: RECEIPT,
+    receiptRenderSha256: RENDER,
+    envelopeSha256: ENVELOPE,
+  })
+  assert.equal(result.productSelector, PRODUCT_SELECTOR)
+  assert.equal(result.privateEnvelopePath, PRIVATE_ENVELOPE)
+})
+
+test('dynamic product and backup identities refuse malformed or changed observations', async (t) => {
+  const cases = [
+    ['missing product', 'ui_create_product', (data) => { data.productSelector = null }, 'shop_android_installed_qa_ui_observation_invalid'],
+    ['coerced product', 'ui_create_product', (data) => { data.productSelector = [PRODUCT_SELECTOR] }, 'shop_android_installed_qa_ui_observation_invalid'],
+    ['changed sale product', 'ui_commit_sale', (data) => { data.productSelector = 'shop.catalog.product.123e4567-e89b-42d3-a456-426614174001' }, 'shop_android_installed_qa_ui_observation_invalid'],
+    ['missing backup path', 'export_private_evidence', (data) => { data.envelopePath = null }, 'shop_android_installed_qa_private_export_invalid'],
+    ['coerced backup path', 'export_private_evidence', (data) => { data.envelopePath = [PRIVATE_ENVELOPE] }, 'shop_android_installed_qa_private_export_invalid'],
+    ['coerced backup digest', 'export_private_evidence', (data) => { data.envelopeSha256 = [ENVELOPE] }, 'shop_android_installed_qa_private_export_invalid'],
+    ['changed backup path', 'stage_envelope_external', (data) => { data.sourcePath = `${PRIVATE_ENVELOPE}.other` }, 'shop_android_installed_qa_stage_invalid'],
+    ['changed backup digest', 'verify_external_stage', (data) => { data.destinationSha256 = SHA_A }, 'shop_android_installed_qa_stage_invalid'],
+  ]
+  for (const [name, step, change, code] of cases) {
+    await t.test(name, async () => {
+      const plan = samplePlan()
+      const adapter = new FixtureAdapter(plan, { mutate(observation, request) {
+        if (request.step === step) change(observation.data)
+      } })
+      await expectCode(runShopAndroidInstalledQaProtocol(plan, adapter), code)
+    })
+  }
+})
+
+test('coerced first receipt digest cannot establish a runtime binding', async () => {
+  const plan = samplePlan()
+  const adapter = new FixtureAdapter(plan, { mutate(observation, request) {
+    if (request.step === 'observe_receipt_before_restart') {
+      observation.data.receiptBindingSha256 = [RECEIPT]
+    }
+  } })
+  await expectCode(runShopAndroidInstalledQaProtocol(plan, adapter), 'shop_android_installed_qa_receipt_binding_invalid')
+})
+
+test('predeclared randomized identity is rejected before any adapter action', async () => {
+  const plan = samplePlan()
+  plan.expected.envelopeSha256 = ENVELOPE
+  const adapter = new FixtureAdapter(plan)
+  await expectCode(runShopAndroidInstalledQaProtocol(plan, adapter), 'shop_android_installed_qa_expected_shape_invalid')
+  assert.equal(adapter.calls.length, 0)
 })
 
 test('artifact handoff profile signer manifest and package substitutions fail closed with cleanup', async (t) => {
@@ -317,7 +372,7 @@ test('validated handoff paths hashes and selectors are immutable across awaited 
   const adapter = new FixtureAdapter(plan, {
     mutate(observation, request) {
       if (request.step === 'observe_pre_sale') {
-        plan.expected.envelopeSha256 = SHA_A
+        plan.expected.saleDelta = 2
         plan.paths.stagedEnvelope = `${plan.paths.stagingRoot}substituted.smqa`
         plan.selectors.backupExport = 'shop.backup.substituted'
       }
@@ -468,7 +523,7 @@ test('pre and post sale deltas reject missing duplicate and wrong stock effects'
   const cases = [
     ['missing sale', 'sales', 0], ['duplicate sale', 'sales', 2],
     ['missing stock movement', 'stockMovements', 0], ['wrong on hand', 'onHand', 3],
-    ['duplicate outbox', 'outbox', 2], ['shift drift', 'shifts', 2],
+    ['duplicate outbox', 'outbox', 3], ['shift drift', 'shifts', 2],
   ]
   for (const [name, field, value] of cases) {
     await t.test(name, async () => {
@@ -479,6 +534,43 @@ test('pre and post sale deltas reject missing duplicate and wrong stock effects'
         },
       })
       await expectCode(runShopAndroidInstalledQaProtocol(plan, adapter), 'shop_android_installed_qa_sale_delta_invalid')
+    })
+  }
+})
+
+test('fresh Shop and product opening effects are checked before the sale', async (t) => {
+  const initialCases = [
+    ['old sale', 'sales', 1], ['old movement', 'stockMovements', 1],
+    ['old outbox', 'outbox', 1], ['old stock', 'onHand', 3], ['old shift', 'shifts', 1],
+  ]
+  for (const [name, field, value] of initialCases) {
+    await t.test(name, async () => {
+      const plan = samplePlan()
+      const adapter = new FixtureAdapter(plan, { mutate(observation, request) {
+        if (request.step === 'observe_pre_product') observation.data[field] = value
+      } })
+      await expectCode(runShopAndroidInstalledQaProtocol(plan, adapter),
+        'shop_android_installed_qa_initial_state_not_empty')
+    })
+  }
+  const creationCases = [
+    ['no opening movement', 'stockMovements', 0],
+    ['duplicate opening movement', 'stockMovements', 2],
+    ['missing catalog outbox', 'outbox', 0],
+    ['duplicate catalog outbox', 'outbox', 2],
+    ['wrong opening stock', 'onHand', 2],
+    ['sale before checkout', 'sales', 1],
+    ['receipt before checkout', 'receipts', 1],
+    ['shift side effect', 'shifts', 1],
+  ]
+  for (const [name, field, value] of creationCases) {
+    await t.test(name, async () => {
+      const plan = samplePlan()
+      const adapter = new FixtureAdapter(plan, { mutate(observation, request) {
+        if (request.step === 'observe_pre_sale') observation.data[field] = value
+      } })
+      await expectCode(runShopAndroidInstalledQaProtocol(plan, adapter),
+        'shop_android_installed_qa_product_creation_delta_invalid')
     })
   }
 })
@@ -551,18 +643,20 @@ test('clear removes private evidence while preserving exactly one staged envelop
   }
 })
 
-test('restored receipt resets sidecar count to one and retains immutable digests', async (t) => {
+test('reprint and restored receipt retain first-observed immutable digests', async (t) => {
   const cases = [
-    ['count restored', (data) => { data.captureCount = 2 }],
-    ['receipt changed', (data) => { data.receiptBindingSha256 = SHA_A }],
-    ['render changed', (data) => { data.receiptRenderSha256 = SHA_A }],
+    ['count restored', 'observe_restored_receipt', (data) => { data.captureCount = 2 }],
+    ['receipt changed after restart', 'observe_receipt_after_restart', (data) => { data.receiptBindingSha256 = SHA_A }],
+    ['render changed after restart', 'observe_receipt_after_restart', (data) => { data.receiptRenderSha256 = SHA_A }],
+    ['receipt changed after restore', 'observe_restored_receipt', (data) => { data.receiptBindingSha256 = SHA_A }],
+    ['render changed after restore', 'observe_restored_receipt', (data) => { data.receiptRenderSha256 = SHA_A }],
   ]
-  for (const [name, mutate] of cases) {
+  for (const [name, step, mutate] of cases) {
     await t.test(name, async () => {
       const plan = samplePlan()
       const adapter = new FixtureAdapter(plan, {
         mutate(observation, request) {
-          if (request.step === 'observe_restored_receipt') mutate(observation.data)
+          if (request.step === step) mutate(observation.data)
         },
       })
       await expectCode(runShopAndroidInstalledQaProtocol(plan, adapter), 'shop_android_installed_qa_receipt_binding_invalid')

@@ -34,12 +34,6 @@ void main() {
     database = ShopDatabase(NativeDatabase.memory());
     authority = await _TestMetricsAuthority.create();
     store = ShopQaMetricsEvidenceStore.forRuntime(scope, authority: authority);
-    await database.addProduct(
-      id: 'private-product-row-value',
-      name: 'PRIVATE CUSTOMER PAYMENT RECEIPT CONTENT',
-      priceMmk: 1200,
-      openingStock: 7,
-    );
   });
 
   tearDown(() async {
@@ -49,36 +43,77 @@ void main() {
   });
 
   test(
-    'records bound count-only snapshots without database side effects',
+    'records empty, stocked, and sold snapshots without database side effects',
     () async {
       final before = await database.readQaMetricsSnapshot();
+      expect(before.counts, <String, int>{
+        'sales': 0,
+        'stockMovements': 0,
+        'receipts': 0,
+        'outbox': 0,
+        'onHand': 0,
+        'shifts': 0,
+      });
+      final initial = await _observe(
+        store,
+        database,
+        step: 'observe_pre_product',
+        sequence: 5,
+        requestDigit: '5',
+      );
+      final afterInitial = await database.readQaMetricsSnapshot();
+      expect(initial.counts, before.counts);
+      expect(initial.snapshotSha256, before.snapshotSha256);
+      expect(afterInitial.snapshotSha256, before.snapshotSha256);
+      expect(await store.read(), hasLength(1));
+
+      await _addFictionalProduct(database);
+      final beforePre = await database.readQaMetricsSnapshot();
+      expect(beforePre.counts, <String, int>{
+        'sales': 0,
+        'stockMovements': 1,
+        'receipts': 0,
+        'outbox': 1,
+        'onHand': 3,
+        'shifts': 0,
+      });
       final pre = await _observe(
         store,
         database,
         step: 'observe_pre_sale',
-        sequence: 4,
-        requestDigit: '4',
+        sequence: 7,
+        requestDigit: '7',
       );
       final afterPre = await database.readQaMetricsSnapshot();
-      expect(pre.counts, before.counts);
-      expect(afterPre.snapshotSha256, before.snapshotSha256);
+      expect(pre.counts, beforePre.counts);
+      expect(pre.snapshotSha256, beforePre.snapshotSha256);
+      expect(afterPre.snapshotSha256, beforePre.snapshotSha256);
+      expect(await store.read(), hasLength(2));
 
       await database.recordCashSale(
         operationId: 'private-sale-operation',
         lines: const [
           ShopSaleLineInput(
             productId: 'private-product-row-value',
-            quantity: 2,
+            quantity: 1,
           ),
         ],
       );
       final beforePost = await database.readQaMetricsSnapshot();
+      expect(beforePost.counts, <String, int>{
+        'sales': 1,
+        'stockMovements': 2,
+        'receipts': 1,
+        'outbox': 2,
+        'onHand': 2,
+        'shifts': 0,
+      });
       final post = await _observe(
         store,
         database,
         step: 'observe_post_sale',
-        sequence: 8,
-        requestDigit: '5',
+        sequence: 9,
+        requestDigit: '9',
       );
       final afterPost = await database.readQaMetricsSnapshot();
 
@@ -88,9 +123,27 @@ void main() {
       // Opening stock and the sale are both immutable stock movements.
       expect(post.counts['stockMovements'], 2);
       expect(post.counts['receipts'], 1);
-      expect(post.counts['onHand'], 5);
+      expect(post.counts['onHand'], 2);
       expect(post.storeIdentitySha256, before.storeIdentitySha256);
-      expect(await store.read(), hasLength(2));
+      final readback = await store.read();
+      expect(readback.map((record) => record.step).toList(), <String>[
+        'observe_pre_product',
+        'observe_pre_sale',
+        'observe_post_sale',
+      ]);
+      expect(
+        readback.map((record) => record.sequence).toList(),
+        <int>[5, 7, 9],
+      );
+      expect(
+        readback.map((record) => record.protocolVersion).toList(),
+        <int>[2, 2, 2],
+      );
+      expect(readback.map((record) => record.snapshotSha256).toList(), <String>[
+        before.snapshotSha256,
+        beforePre.snapshotSha256,
+        beforePost.snapshotSha256,
+      ]);
 
       final encoded = await store.evidenceFile.readAsString();
       for (final forbidden in <String>[
@@ -113,9 +166,9 @@ void main() {
       await _observe(
         store,
         database,
-        step: 'observe_pre_sale',
-        sequence: 4,
-        requestDigit: '4',
+        step: 'observe_pre_product',
+        sequence: 5,
+        requestDigit: '5',
       );
       final restarted = ShopQaMetricsEvidenceStore.forRuntime(
         scope,
@@ -126,48 +179,48 @@ void main() {
         _observe(
           restarted,
           database,
-          step: 'observe_post_sale',
-          sequence: 8,
-          requestDigit: '4',
+          step: 'observe_pre_sale',
+          sequence: 7,
+          requestDigit: '5',
         ),
         throwsStateError,
       );
       await expectLater(
         restarted.observe(
           database: database,
-          protocolVersion: 1,
+          protocolVersion: 2,
           sessionNonce: '99999999999999999999999999999999',
-          requestDigest: '5' * 64,
-          targetId: _target,
-          authorityDigest: store.authorityDigest,
-          sequence: 8,
-          step: 'observe_post_sale',
-        ),
-        throwsStateError,
-      );
-      await expectLater(
-        restarted.observe(
-          database: database,
-          protocolVersion: 1,
-          sessionNonce: _session,
-          requestDigest: '5' * 64,
-          targetId: '9' * 64,
-          authorityDigest: store.authorityDigest,
-          sequence: 8,
-          step: 'observe_post_sale',
-        ),
-        throwsStateError,
-      );
-      await expectLater(
-        restarted.observe(
-          database: database,
-          protocolVersion: 1,
-          sessionNonce: _session,
           requestDigest: '6' * 64,
           targetId: _target,
+          authorityDigest: store.authorityDigest,
+          sequence: 7,
+          step: 'observe_pre_sale',
+        ),
+        throwsStateError,
+      );
+      await expectLater(
+        restarted.observe(
+          database: database,
+          protocolVersion: 2,
+          sessionNonce: _session,
+          requestDigest: '7' * 64,
+          targetId: '9' * 64,
+          authorityDigest: store.authorityDigest,
+          sequence: 7,
+          step: 'observe_pre_sale',
+        ),
+        throwsStateError,
+      );
+      await expectLater(
+        restarted.observe(
+          database: database,
+          protocolVersion: 2,
+          sessionNonce: _session,
+          requestDigest: '8' * 64,
+          targetId: _target,
           authorityDigest: '7' * 64,
-          sequence: 8,
-          step: 'observe_post_sale',
+          sequence: 7,
+          step: 'observe_pre_sale',
         ),
         throwsStateError,
       );
@@ -179,29 +232,60 @@ void main() {
       _observe(
         store,
         database,
+        step: 'observe_pre_product',
+        sequence: 4,
+        requestDigit: '4',
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      _observe(
+        store,
+        database,
         step: 'observe_post_sale',
-        sequence: 8,
-        requestDigit: '5',
+        sequence: 9,
+        requestDigit: '9',
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      _observe(
+        store,
+        database,
+        step: 'observe_pre_sale',
+        sequence: 7,
+        requestDigit: '7',
       ),
       throwsStateError,
     );
     await _observe(
       store,
       database,
-      step: 'observe_pre_sale',
-      sequence: 4,
-      requestDigit: '4',
+      step: 'observe_pre_product',
+      sequence: 5,
+      requestDigit: '5',
+    );
+    await expectLater(
+      _observe(
+        store,
+        database,
+        step: 'observe_post_sale',
+        sequence: 9,
+        requestDigit: '9',
+      ),
+      throwsStateError,
     );
     await expectLater(
       _observe(
         store,
         database,
         step: 'observe_restored_state',
-        sequence: 23,
+        sequence: 24,
         requestDigit: '8',
       ),
       throwsStateError,
     );
+    expect(await store.read(), hasLength(1));
   });
 
   test(
@@ -210,9 +294,9 @@ void main() {
       await _observe(
         store,
         database,
-        step: 'observe_pre_sale',
-        sequence: 4,
-        requestDigit: '4',
+        step: 'observe_pre_product',
+        sequence: 5,
+        requestDigit: '5',
       );
       final preRoot = jsonDecode(
         await store.evidenceFile.readAsString(),
@@ -223,7 +307,7 @@ void main() {
         store,
         database,
         step: 'observe_restored_state',
-        sequence: 23,
+        sequence: 24,
         requestDigit: '8',
       );
       final restoredRoot = jsonDecode(
@@ -247,9 +331,9 @@ void main() {
         _observe(
           store,
           database,
-          step: 'observe_pre_sale',
-          sequence: 4,
-          requestDigit: '4',
+          step: 'observe_pre_product',
+          sequence: 5,
+          requestDigit: '5',
         ).then((_) => true).catchError((Object _) => false),
     ]);
     expect(outcomes.where((accepted) => accepted), hasLength(1));
@@ -263,9 +347,9 @@ void main() {
       await _observe(
         store,
         database,
-        step: 'observe_pre_sale',
-        sequence: 4,
-        requestDigit: '4',
+        step: 'observe_pre_product',
+        sequence: 5,
+        requestDigit: '5',
       );
       final decoded = jsonDecode(
         await store.evidenceFile.readAsString(),
@@ -279,8 +363,8 @@ void main() {
       await _observe(
         store,
         database,
-        step: 'observe_pre_sale',
-        sequence: 4,
+        step: 'observe_pre_product',
+        sequence: 5,
         requestDigit: '6',
       );
       final digestTamper = jsonDecode(
@@ -316,9 +400,17 @@ void main() {
       await _observe(
         store,
         database,
+        step: 'observe_pre_product',
+        sequence: 5,
+        requestDigit: '5',
+      );
+      await _addFictionalProduct(database);
+      await _observe(
+        store,
+        database,
         step: 'observe_pre_sale',
-        sequence: 4,
-        requestDigit: '4',
+        sequence: 7,
+        requestDigit: '7',
       );
       await database.recordCashSale(
         operationId: 'restore-sale',
@@ -334,9 +426,10 @@ void main() {
         store,
         database,
         step: 'observe_post_sale',
-        sequence: 8,
-        requestDigit: '5',
+        sequence: 9,
+        requestDigit: '9',
       );
+      expect(await store.read(), hasLength(3));
       final archive = File('${temporary.path}/qa-metrics.smbak');
       await ShopBackup.exportEncrypted(
         database: database,
@@ -364,14 +457,17 @@ void main() {
         store,
         restored,
         step: 'observe_restored_state',
-        sequence: 23,
+        sequence: 24,
         requestDigit: '8',
       );
       expect(restoredObservation.snapshotSha256, source.snapshotSha256);
+      final restoredReadback = await store.read();
+      expect(restoredReadback, hasLength(1));
+      expect(restoredReadback.single.step, 'observe_restored_state');
     },
   );
 
-  test('production and malformed protocol bindings fail closed', () async {
+  test('production and legacy protocol bindings fail closed', () async {
     final production = await ShopRuntimeScope.resolve(
       ShopRuntimeProfile.production,
       configuration: ShopRuntimeConfiguration.resolve(
@@ -394,16 +490,60 @@ void main() {
     await expectLater(
       store.observe(
         database: database,
-        protocolVersion: 2,
+        protocolVersion: 1,
         sessionNonce: _session,
         requestDigest: '4' * 64,
         targetId: _target,
         authorityDigest: store.authorityDigest,
-        sequence: 4,
-        step: 'observe_pre_sale',
+        sequence: 5,
+        step: 'observe_pre_product',
       ),
       throwsStateError,
     );
+  });
+
+  test('legacy v1 contract tag is rejected in a v2 inventory', () async {
+    await _observe(
+      store,
+      database,
+      step: 'observe_pre_product',
+      sequence: 5,
+      requestDigit: '5',
+    );
+    final oldInventory = jsonDecode(
+      await store.evidenceFile.readAsString(),
+    ) as Map<String, dynamic>;
+    oldInventory['contract'] = 'supermega.shop.synthetic-qa-metrics.v1';
+    await store.evidenceFile.writeAsString(
+      jsonEncode(oldInventory),
+      flush: true,
+    );
+    await expectLater(store.read(), throwsStateError);
+  });
+
+  test('legacy v1 sidecar is not imported or deleted by v2', () async {
+    final legacyFile = File(
+      '${scope.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
+      'SuperMega-Shop-SYNTHETIC-QA-METRICS-v1.json',
+    );
+    final legacyContents = jsonEncode(<String, Object>{
+      'contract': 'supermega.shop.synthetic-qa-metrics.v1',
+      'profileId': scope.configuration.profileId,
+      'platformIdentity': scope.configuration.platformIdentity,
+      'observations': const <Object?>[],
+      'inventorySha256': _sha256Json(const <Object?>[]),
+    });
+    await legacyFile.writeAsString(legacyContents, flush: true);
+    expect(await store.read(), isEmpty);
+    await _observe(
+      store,
+      database,
+      step: 'observe_pre_product',
+      sequence: 5,
+      requestDigit: '5',
+    );
+    expect(await store.read(), hasLength(1));
+    expect(await legacyFile.readAsString(), legacyContents);
   });
 
   test('symlinked evidence destination fails closed', () async {
@@ -414,15 +554,23 @@ void main() {
       _observe(
         store,
         database,
-        step: 'observe_pre_sale',
-        sequence: 4,
-        requestDigit: '4',
+        step: 'observe_pre_product',
+        sequence: 5,
+        requestDigit: '5',
       ),
       throwsStateError,
     );
     expect(await outside.readAsString(), '{}');
   });
 }
+
+Future<void> _addFictionalProduct(ShopDatabase database) =>
+    database.addProduct(
+      id: 'private-product-row-value',
+      name: 'PRIVATE CUSTOMER PAYMENT RECEIPT CONTENT',
+      priceMmk: 1200,
+      openingStock: 3,
+    );
 
 Future<ShopQaMetricsObservation> _observe(
   ShopQaMetricsEvidenceStore store,
@@ -432,7 +580,7 @@ Future<ShopQaMetricsObservation> _observe(
   required String requestDigit,
 }) => store.observe(
   database: database,
-  protocolVersion: 1,
+  protocolVersion: 2,
   sessionNonce: _session,
   requestDigest: requestDigit * 64,
   targetId: _target,

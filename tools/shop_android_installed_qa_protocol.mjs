@@ -6,12 +6,15 @@ import {
 } from './shop_android_qa_handoff_validator.mjs'
 
 export const SHOP_ANDROID_INSTALLED_QA_PROTOCOL =
-  'supermega.shop.android-installed-qa-protocol.v2'
+  'supermega.shop.android-installed-qa-protocol.v4'
 
 const PACKAGE_ID = 'dev.supermega.supermega_shop.qa'
 const PROFILE_ID = 'synthetic_qa_v1'
+const PRIVATE_EVIDENCE_ROOT = 'files/synthetic-qa-v1/synthetic-evidence'
 const SHA64 = /^[0-9a-f]{64}$/
 const NONCE = /^[0-9a-f]{32,64}$/
+const PRODUCT_SELECTOR = /^shop\.catalog\.product\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const PRIVATE_ENVELOPE = /^files\/synthetic-qa-v1\/synthetic-evidence\/SuperMega-Shop-SYNTHETIC-QA-[0-9]{8}-[0-9]{6}-[a-f0-9]{12}\.smqa$/
 const SAFE_RELATIVE = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]+$/
 const FORBIDDEN_KEYS = new Set([
   'raw', 'rawdata', 'rawpayload', 'payload', 'row', 'rows', 'rowdata',
@@ -52,9 +55,10 @@ const STEP_DEFINITIONS = Object.freeze([
   ['recover_prior_session', 'recovery'],
   ['acquire_target_lock', 'lock'],
   ['verify_installed_artifact', 'artifact'],
-  ['observe_pre_sale', 'metrics_pre'],
   ['ui_start_new', 'ui_start'],
+  ['observe_pre_product', 'metrics_initial'],
   ['ui_create_product', 'ui_product'],
+  ['observe_pre_sale', 'metrics_pre'],
   ['ui_commit_sale', 'ui_sale'],
   ['observe_post_sale', 'metrics_post'],
   ['ui_reprint_before_restart', 'ui_reprint'],
@@ -81,8 +85,8 @@ const EXACT_KEYS = Object.freeze({
   plan: ['contract', 'sessionNonce', 'targetId', 'handoff', 'isolation', 'timing', 'expected', 'paths', 'selectors'],
   isolation: ['containmentId', 'adbHost', 'adbTcpipEnabled', 'adbListenAll', 'providerAccessFromApp', 'noEgress', 'loopbackOnly'],
   timing: ['sessionStartedAt', 'sessionDeadlineAt', 'maxStepDurationMs'],
-  expected: ['saleDelta', 'stockMovementDelta', 'receiptDelta', 'outboxDelta', 'onHandDelta', 'productSelector', 'receiptBindingSha256', 'receiptRenderSha256', 'envelopeSha256', 'priorSessionState', 'priorSessionNonce', 'recoveryReceiptSha256'],
-  paths: ['privateEnvelope', 'privateReceiptSidecar', 'stagingRoot', 'stagedEnvelope'],
+  expected: ['saleDelta', 'stockMovementDelta', 'receiptDelta', 'outboxDelta', 'onHandDelta', 'openingStock', 'priorSessionState', 'priorSessionNonce', 'recoveryReceiptSha256'],
+  paths: ['privateEvidenceRoot', 'privateReceiptSidecar', 'stagingRoot', 'stagedEnvelope'],
   common: ['contract', 'sessionNonce', 'targetId', 'sequence', 'step', 'requestDigest', 'previousAck', 'startedAt', 'completedAt', 'status', 'lockToken', 'data'],
   metrics: ['sales', 'stockMovements', 'receipts', 'outbox', 'onHand', 'shifts'],
 })
@@ -188,7 +192,8 @@ function validatePlan(plan, nowMillis) {
   for (const field of ['saleDelta', 'stockMovementDelta', 'receiptDelta', 'outboxDelta']) {
     if (plan.expected[field] !== 1) fail('shop_android_installed_qa_expected_delta_invalid')
   }
-  if (plan.expected.onHandDelta !== -1 || !['none', 'abandoned'].includes(plan.expected.priorSessionState)) {
+  if (plan.expected.onHandDelta !== -1 || plan.expected.openingStock !== 3
+      || !['none', 'abandoned'].includes(plan.expected.priorSessionState)) {
     fail('shop_android_installed_qa_expected_state_invalid')
   }
   if (plan.expected.priorSessionState === 'none') {
@@ -200,15 +205,8 @@ function validatePlan(plan, nowMillis) {
       || !SHA64.test(plan.expected.recoveryReceiptSha256 || '')) {
     fail('shop_android_installed_qa_expected_recovery_invalid')
   }
-  if (!/^shop\.catalog\.product\.[A-Za-z0-9_-]+$/.test(plan.expected.productSelector)) {
-    fail('shop_android_installed_qa_product_selector_invalid')
-  }
-  for (const field of ['receiptBindingSha256', 'receiptRenderSha256', 'envelopeSha256']) {
-    assertSha(plan.expected[field], `shop_android_installed_qa_${field}_invalid`)
-  }
   exactKeys(plan.paths, EXACT_KEYS.paths, 'shop_android_installed_qa_paths_shape_invalid')
-  assertSafePath(plan.paths.privateEnvelope, 'files/synthetic-qa-v1/synthetic-evidence/SuperMega-Shop-SYNTHETIC-QA-', 'shop_android_installed_qa_private_envelope_path_invalid')
-  if (!plan.paths.privateEnvelope.endsWith('.smqa')) fail('shop_android_installed_qa_private_envelope_path_invalid')
+  if (plan.paths.privateEvidenceRoot !== PRIVATE_EVIDENCE_ROOT) fail('shop_android_installed_qa_private_evidence_root_invalid')
   if (plan.paths.privateReceiptSidecar !== 'files/synthetic-qa-v1/synthetic-evidence/SuperMega-Shop-SYNTHETIC-QA-RECEIPTS-v1.json') {
     fail('shop_android_installed_qa_receipt_sidecar_path_invalid')
   }
@@ -301,8 +299,23 @@ function validateStep(kind, data, plan, state) {
         || data.debuggable !== true || data.productionSigned !== false) {
       fail('shop_android_installed_qa_artifact_substitution')
     }
+  } else if (kind === 'metrics_initial') {
+    state.initial = validateMetrics(data, 'shop_android_installed_qa_initial_metrics_invalid')
+    if (EXACT_KEYS.metrics.some((key) => state.initial[key] !== 0)) {
+      fail('shop_android_installed_qa_initial_state_not_empty')
+    }
   } else if (kind === 'metrics_pre') {
     state.pre = validateMetrics(data, 'shop_android_installed_qa_pre_metrics_invalid')
+    if (state.initial === null) fail('shop_android_installed_qa_initial_state_missing')
+    const creationDeltas = {
+      sales: 0, stockMovements: 1, receipts: 0, outbox: 1,
+      onHand: e.openingStock, shifts: 0,
+    }
+    for (const key of EXACT_KEYS.metrics) {
+      if (state.pre[key] - state.initial[key] !== creationDeltas[key]) {
+        fail('shop_android_installed_qa_product_creation_delta_invalid')
+      }
+    }
   } else if (kind === 'metrics_post') {
     state.post = validateMetrics(data, 'shop_android_installed_qa_post_metrics_invalid')
     const deltas = {
@@ -320,14 +333,23 @@ function validateStep(kind, data, plan, state) {
   } else if (kind === 'ui_start') {
     validateUi(data, [plan.selectors.startNew, plan.selectors.startNewConfirm])
   } else if (kind === 'ui_product') {
-    validateUi(data, [plan.selectors.emptyAdd, plan.selectors.productName,
+    exactData(data, ['acted', 'productSelector', 'selectorsUsed'], 'shop_android_installed_qa_ui_observation_invalid')
+    const expectedSelectors = [plan.selectors.emptyAdd, plan.selectors.productName,
       plan.selectors.productCategory, plan.selectors.productPrice,
       plan.selectors.productStock, plan.selectors.barcodeReveal,
-      plan.selectors.barcode, plan.selectors.productSave])
+      plan.selectors.barcode, plan.selectors.productSave]
+    if (data.acted !== true || typeof data.productSelector !== 'string'
+        || !PRODUCT_SELECTOR.test(data.productSelector)
+        || !Array.isArray(data.selectorsUsed)
+        || data.selectorsUsed.join('\n') !== expectedSelectors.join('\n')) {
+      fail('shop_android_installed_qa_ui_observation_invalid')
+    }
+    state.productSelector = data.productSelector
   } else if (kind === 'ui_sale') {
     exactData(data, ['acted', 'productSelector', 'selectorsUsed'], 'shop_android_installed_qa_ui_observation_invalid')
-    if (data.acted !== true || data.productSelector !== e.productSelector
-        || data.selectorsUsed.join('\n') !== [plan.selectors.cartReview, plan.selectors.checkoutCash,
+    if (data.acted !== true || !PRODUCT_SELECTOR.test(state.productSelector || '')
+        || data.productSelector !== state.productSelector || !Array.isArray(data.selectorsUsed)
+        || data.selectorsUsed.join('\n') !== [state.productSelector, plan.selectors.cartReview, plan.selectors.checkoutCash,
           plan.selectors.cashGiven, plan.selectors.cashConfirm, plan.selectors.saleCompletion].join('\n')) {
       fail('shop_android_installed_qa_ui_observation_invalid')
     }
@@ -340,34 +362,54 @@ function validateStep(kind, data, plan, state) {
   } else if (kind === 'receipt_one' || kind === 'receipt_two' || kind === 'receipt_restored') {
     exactData(data, ['captureCount', 'receiptBindingSha256', 'receiptRenderSha256', 'sidecarPath'], 'shop_android_installed_qa_receipt_observation_invalid')
     const expectedCount = kind === 'receipt_two' ? 2 : 1
-    if (data.captureCount !== expectedCount || data.receiptBindingSha256 !== e.receiptBindingSha256
-        || data.receiptRenderSha256 !== e.receiptRenderSha256
-        || data.sidecarPath !== p.privateReceiptSidecar) fail('shop_android_installed_qa_receipt_binding_invalid')
+    if (data.captureCount !== expectedCount || data.sidecarPath !== p.privateReceiptSidecar
+        || typeof data.receiptBindingSha256 !== 'string'
+        || typeof data.receiptRenderSha256 !== 'string'
+        || !SHA64.test(data.receiptBindingSha256) || !SHA64.test(data.receiptRenderSha256)) {
+      fail('shop_android_installed_qa_receipt_binding_invalid')
+    }
+    const bound = state.observedHashes
+    if (kind === 'receipt_one' && bound.receiptBindingSha256 === null) {
+      bound.receiptBindingSha256 = data.receiptBindingSha256
+      bound.receiptRenderSha256 = data.receiptRenderSha256
+    } else if (data.receiptBindingSha256 !== bound.receiptBindingSha256
+        || data.receiptRenderSha256 !== bound.receiptRenderSha256) {
+      fail('shop_android_installed_qa_receipt_binding_invalid')
+    }
   } else if (kind === 'lifecycle') {
     exactData(data, ['completed', 'packageId'], 'shop_android_installed_qa_lifecycle_invalid')
     if (data.completed !== true || data.packageId !== PACKAGE_ID) fail('shop_android_installed_qa_lifecycle_invalid')
   } else if (kind === 'private_export') {
     exactData(data, ['envelopePath', 'envelopeSha256', 'inventoryCount', 'regularFile', 'symlink'], 'shop_android_installed_qa_private_export_invalid')
-    if (data.envelopePath !== p.privateEnvelope || data.envelopeSha256 !== e.envelopeSha256
+    if (typeof data.envelopePath !== 'string' || typeof data.envelopeSha256 !== 'string'
+        || !PRIVATE_ENVELOPE.test(data.envelopePath) || !SHA64.test(data.envelopeSha256)
         || data.inventoryCount !== 1 || data.regularFile !== true || data.symlink !== false) fail('shop_android_installed_qa_private_export_invalid')
+    if (state.observedHashes.envelopeSha256 !== null || state.privateEnvelopePath !== null) fail('shop_android_installed_qa_private_export_invalid')
+    state.privateEnvelopePath = data.envelopePath
+    state.observedHashes.envelopeSha256 = data.envelopeSha256
   } else if (kind === 'stage') {
     exactData(data, ['sourcePath', 'destinationPath', 'sourceSha256', 'destinationSha256', 'inventoryCount', 'regularFile', 'symlink'], 'shop_android_installed_qa_stage_invalid')
-    if (data.sourcePath !== p.privateEnvelope || data.destinationPath !== p.stagedEnvelope
-        || data.sourceSha256 !== e.envelopeSha256 || data.destinationSha256 !== e.envelopeSha256
+    const envelopeSha256 = state.observedHashes.envelopeSha256
+    if (data.sourcePath !== state.privateEnvelopePath || data.destinationPath !== p.stagedEnvelope
+        || !SHA64.test(envelopeSha256 || '')
+        || data.sourceSha256 !== envelopeSha256 || data.destinationSha256 !== envelopeSha256
         || data.inventoryCount !== 1 || data.regularFile !== true || data.symlink !== false) fail('shop_android_installed_qa_stage_invalid')
   } else if (kind === 'clear') {
     exactData(data, ['packageId', 'cleared'], 'shop_android_installed_qa_clear_invalid')
     if (data.packageId !== PACKAGE_ID || data.cleared !== true) fail('shop_android_installed_qa_clear_invalid')
   } else if (kind === 'cleared') {
     exactData(data, ['privateSourceExists', 'receiptSidecarExists', 'stagedExists', 'stagedSha256', 'stagedInventoryCount', 'stagedRegularFile', 'stagedSymlink'], 'shop_android_installed_qa_clear_observation_invalid')
+    const envelopeSha256 = state.observedHashes.envelopeSha256
     if (data.privateSourceExists !== false || data.receiptSidecarExists !== false
-        || data.stagedExists !== true || data.stagedSha256 !== e.envelopeSha256
+        || !SHA64.test(envelopeSha256 || '') || data.stagedExists !== true || data.stagedSha256 !== envelopeSha256
         || data.stagedInventoryCount !== 1 || data.stagedRegularFile !== true
         || data.stagedSymlink !== false) fail('shop_android_installed_qa_clear_observation_invalid')
   } else if (kind === 'restore_copy') {
     exactData(data, ['sourcePath', 'destinationPath', 'sourceSha256', 'destinationSha256', 'regularFile', 'symlink'], 'shop_android_installed_qa_restore_copy_invalid')
-    if (data.sourcePath !== p.stagedEnvelope || data.destinationPath !== p.privateEnvelope
-        || data.sourceSha256 !== e.envelopeSha256 || data.destinationSha256 !== e.envelopeSha256
+    const envelopeSha256 = state.observedHashes.envelopeSha256
+    if (data.sourcePath !== p.stagedEnvelope || data.destinationPath !== state.privateEnvelopePath
+        || !SHA64.test(envelopeSha256 || '')
+        || data.sourceSha256 !== envelopeSha256 || data.destinationSha256 !== envelopeSha256
         || data.regularFile !== true || data.symlink !== false) fail('shop_android_installed_qa_restore_copy_invalid')
   } else fail('shop_android_installed_qa_step_kind_invalid')
 }
@@ -502,7 +544,9 @@ export async function runShopAndroidInstalledQaProtocol(inputPlan, adapter) {
   const state = {
     previousAck: '0'.repeat(64), lockToken: null,
     lastCompletedAt: Date.parse(plan.timing.sessionStartedAt),
-    seenRequestDigests: new Set(), pre: null, post: null, restored: null,
+    seenRequestDigests: new Set(), initial: null, pre: null, post: null, restored: null,
+    productSelector: null, privateEnvelopePath: null,
+    observedHashes: { receiptBindingSha256: null, receiptRenderSha256: null, envelopeSha256: null },
     identity: identityFromHandoff(handoff), operationOutcome: 'NOT_APPLICABLE',
   }
   const receipts = []
@@ -577,6 +621,11 @@ export async function runShopAndroidInstalledQaProtocol(inputPlan, adapter) {
       handoffDigest: state.identity.handoffDigest,
     },
     counts: state.restored,
+    initialCounts: state.initial,
+    preSaleCounts: state.pre,
+    productSelector: state.productSelector,
+    privateEnvelopePath: state.privateEnvelopePath,
+    observedHashes: { ...state.observedHashes },
     receipts: [...receipts, cleanupReceipt],
   }
   return Object.freeze({ ...result, digest: sha256(result) })

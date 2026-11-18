@@ -24,8 +24,13 @@ const RENDER = '2'.repeat(64)
 const ENVELOPE = Buffer.from('SMQA synthetic encrypted evidence')
 const APK_BYTES = Buffer.from('synthetic android qa apk fixture')
 const ENVELOPE_SHA = createHash('sha256').update(ENVELOPE).digest('hex')
-const PRE = { sales: 0, stockMovements: 0, receipts: 0, outbox: 0, onHand: 3, shifts: 1 }
-const POST = { sales: 1, stockMovements: 1, receipts: 1, outbox: 1, onHand: 2, shifts: 1 }
+const PRODUCT_SELECTOR = 'shop.catalog.product.123e4567-e89b-42d3-a456-426614174000'
+const PRIVATE_EVIDENCE_ROOT = 'files/synthetic-qa-v1/synthetic-evidence'
+const PRIVATE_ENVELOPE = `${PRIVATE_EVIDENCE_ROOT}/SuperMega-Shop-SYNTHETIC-QA-20261103-000000-abcdef123456.smqa`
+const METRICS_SIDECAR = `${PRIVATE_EVIDENCE_ROOT}/SuperMega-Shop-SYNTHETIC-QA-METRICS-v2.json`
+const INITIAL = { sales: 0, stockMovements: 0, receipts: 0, outbox: 0, onHand: 0, shifts: 0 }
+const PRE = { sales: 0, stockMovements: 1, receipts: 0, outbox: 1, onHand: 3, shifts: 0 }
+const POST = { sales: 1, stockMovements: 2, receipts: 1, outbox: 2, onHand: 2, shifts: 0 }
 
 function plan() {
   const handoff = assessShopAndroidQaHandoff(
@@ -47,13 +52,11 @@ function plan() {
     },
     expected: {
       saleDelta: 1, stockMovementDelta: 1, receiptDelta: 1, outboxDelta: 1,
-      onHandDelta: -1, productSelector: 'shop.catalog.product.synthetic-product',
-      receiptBindingSha256: RECEIPT, receiptRenderSha256: RENDER,
-      envelopeSha256: ENVELOPE_SHA, priorSessionState: 'none',
+      onHandDelta: -1, openingStock: 3, priorSessionState: 'none',
       priorSessionNonce: null, recoveryReceiptSha256: null,
     },
     paths: {
-      privateEnvelope: 'files/synthetic-qa-v1/synthetic-evidence/SuperMega-Shop-SYNTHETIC-QA-20261103-000000-abcdef123456.smqa',
+      privateEvidenceRoot: PRIVATE_EVIDENCE_ROOT,
       privateReceiptSidecar: 'files/synthetic-qa-v1/synthetic-evidence/SuperMega-Shop-SYNTHETIC-QA-RECEIPTS-v1.json',
       stagingRoot: `supermega-shop-installed-qa/${SESSION}/`,
       stagedEnvelope: `supermega-shop-installed-qa/${SESSION}/evidence.smqa`,
@@ -69,6 +72,7 @@ function ok(stdout = '') {
 function uiDocument(state) {
   return Object.values(SHOP_ANDROID_INSTALLED_QA_SELECTORS)
     .map((id) => `<node resource-id="${id}" state="${state}"/>`).join('')
+    + (state >= 20 ? `<node resource-id="${PRODUCT_SELECTOR}" state="${state}"/>` : '')
 }
 
 class FakeExecutor {
@@ -81,6 +85,9 @@ class FakeExecutor {
     this.receipts = 0
     this.uiDumps = 0
     this.device = device
+    this.device.rootPresent ??= false
+    this.device.envelopePresent ??= false
+    this.device.sidecarPresent ??= false
     this.sensitiveIoContract = 'supermega.shop.android-installed-qa-sensitive-executor.v1'
     this.lockReleaseContract = 'supermega.shop.android-installed-qa-lock-release.v1'
   }
@@ -155,6 +162,8 @@ class FakeExecutor {
       return ok(Buffer.from(APK_BYTES))
     }
     if (tail[0] === 'exec-out' && tail.includes('cat') && tail.at(-1).endsWith('.json')) {
+      this.device.rootPresent = true
+      this.device.sidecarPresent = true
       this.receipts += 1
       const count = this.receipts === 1 ? 1 : (this.receipts === 2 ? 2 : 1)
       const captures = [{ captureCount: count, language: 'en',
@@ -169,18 +178,48 @@ class FakeExecutor {
       const root = tail[tail.indexOf('find') + 1]
       return root.startsWith('/data/local/tmp')
         ? ok(`${this.plan.paths.stagedEnvelope.replace(/^/, '/data/local/tmp/')}\n`)
-        : ok(`${this.plan.paths.privateEnvelope}\n${this.plan.paths.privateReceiptSidecar}\n`)
+        : ok(`${this.device.envelopePresent ? `${PRIVATE_ENVELOPE}\n` : ''}${this.device.sidecarPresent ? `${this.plan.paths.privateReceiptSidecar}\n` : ''}${METRICS_SIDECAR}\n`)
     }
     if (tail.includes('sha256sum')) return ok(`${ENVELOPE_SHA}  staged\n`)
     if (tail.includes('test') && tail.includes('-L')) return { ...ok(), exitCode: 1 }
+    if (tail.includes('test') && tail.includes('-d') && tail.at(-1) === PRIVATE_EVIDENCE_ROOT) {
+      return { ...ok(), exitCode: this.device.rootPresent ? 0 : 1 }
+    }
+    if (tail.includes('test') && tail.includes('-f') && tail.at(-1) === PRIVATE_ENVELOPE) {
+      return { ...ok(), exitCode: this.device.envelopePresent ? 0 : 1 }
+    }
     if (tail.includes('test') && tail.includes('-e') && tail.at(-1) === lockPath) {
       return { ...ok(), exitCode: this.device.lockOwner ? 0 : 1 }
     }
+    if (tail.includes('test') && tail.includes('-e') && tail.at(-1) === PRIVATE_EVIDENCE_ROOT) {
+      return { ...ok(), exitCode: this.device.rootPresent ? 0 : 1 }
+    }
+    if (tail.includes('test') && tail.includes('-e') && tail.at(-1) === PRIVATE_ENVELOPE) {
+      return { ...ok(), exitCode: this.device.envelopePresent ? 0 : 1 }
+    }
+    if (tail.includes('test') && tail.includes('-e') && tail.at(-1) === this.plan.paths.privateReceiptSidecar) {
+      return { ...ok(), exitCode: this.device.sidecarPresent ? 0 : 1 }
+    }
     if (tail.includes('test') && tail.includes('-e')) return { ...ok(), exitCode: 1 }
-    if (tail.includes('pm') && tail.includes('clear')) return ok('Success\n')
+    if (tail.includes('pm') && tail.includes('clear')) {
+      this.device.rootPresent = false
+      this.device.envelopePresent = false
+      this.device.sidecarPresent = false
+      return ok('Success\n')
+    }
+    if (tail[0] === 'exec-out' && tail.includes('mkdir') && tail.at(-1) === PRIVATE_EVIDENCE_ROOT) {
+      this.device.rootPresent = true
+      return ok()
+    }
     if (tail[0] === 'exec-in' && tail.includes('tee')) {
       assert.deepEqual(options.input, ENVELOPE)
+      if (tail.at(-1) === PRIVATE_ENVELOPE) this.device.envelopePresent = true
       return ok(Buffer.from(ENVELOPE))
+    }
+    if (tail[0] === 'exec-out' && tail.includes('rm') && tail.includes('-f')) {
+      if (tail.includes(PRIVATE_ENVELOPE)) this.device.envelopePresent = false
+      if (tail.includes(this.plan.paths.privateReceiptSidecar)) this.device.sidecarPresent = false
+      return ok()
     }
     return ok()
   }
@@ -189,8 +228,9 @@ class FakeExecutor {
 function dependencies(source, overrides = {}) {
   const executor = overrides.executor ?? new FakeExecutor(source)
   let metricCount = 0
+  const uiActions = []
   return {
-    plan: source, serial: SERIAL, apkPath: '/authorized/app-qa-debug.apk', executor,
+    plan: source, serial: SERIAL, apkPath: '/authorized/app-qa-debug.apk', executor, uiActions,
     clock: { now: () => Date.now() },
     authorizationVerifier: overrides.authorizationVerifier ?? (async () => ({
       authorized: true, targetId: TARGET, containmentId: CONTAINMENT,
@@ -206,12 +246,20 @@ function dependencies(source, overrides = {}) {
     metricsObserver: overrides.metricsObserver ?? { observe: async ({ requestDigest, authorityDigest }) => {
       metricCount += 1
       return { requestDigest, authorityDigest,
-        counts: metricCount === 1 ? { ...PRE } : { ...POST } }
+        counts: metricCount === 1 ? { ...INITIAL }
+          : (metricCount === 2 ? { ...PRE } : { ...POST }) }
     } },
     uiDriver: overrides.uiDriver ?? { act: async ({ selector, requestDigest, authorityDigest,
-      beforeUiDigest }) => ({ acted: true, selector, requestDigest, authorityDigest,
-      beforeUiDigest, afterUiDigest: createHash('sha256')
-        .update(uiDocument(executor.uiDumps + 1)).digest('hex') }) },
+      beforeUiDigest }) => {
+      uiActions.push(selector)
+      if (selector === source.selectors.backupExport) {
+        executor.device.rootPresent = true
+        executor.device.envelopePresent = true
+      }
+      return { acted: true, selector, requestDigest, authorityDigest,
+        beforeUiDigest, afterUiDigest: createHash('sha256')
+          .update(uiDocument(executor.uiDumps + 1)).digest('hex') }
+    } },
   }
 }
 
@@ -222,6 +270,15 @@ test('fake authorized target completes protocol without executing a real tool', 
   const result = await runShopAndroidInstalledQaProtocol(source, adapter)
   assert.equal(result.status, 'PASS')
   assert.deepEqual(result.counts, POST)
+  assert.deepEqual(result.initialCounts, INITIAL)
+  assert.deepEqual(result.preSaleCounts, PRE)
+  assert.equal(result.productSelector, PRODUCT_SELECTOR)
+  assert.equal(result.privateEnvelopePath, PRIVATE_ENVELOPE)
+  assert.deepEqual(result.observedHashes, {
+    receiptBindingSha256: RECEIPT, receiptRenderSha256: RENDER, envelopeSha256: ENVELOPE_SHA,
+  })
+  assert.equal(deps.uiActions.indexOf(PRODUCT_SELECTOR) + 1,
+    deps.uiActions.indexOf(source.selectors.cartReview))
   assert.match(adapter.lockToken, LOCK)
   assert.ok(deps.executor.calls.every((call) =>
     ['adb', 'apkanalyzer', 'apksigner', 'sha256sum', 'ss'].includes(call.command)))
@@ -310,6 +367,70 @@ test('artifact and UI identifier substitutions never reach a claimed pass', asyn
   } })
   await assert.rejects(runShopAndroidInstalledQaProtocol(source,
     new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: missingSelector }))))
+})
+
+test('new product identity must appear once after save and be the tapped sale item', async (t) => {
+  const productNode = `<node resource-id="${PRODUCT_SELECTOR}" state="20"/>`
+  for (const [name, change] of [
+    ['missing', (body) => body.replace(/<node resource-id="shop\.catalog\.product\.[^"]+"[^>]*\/>/g, '')],
+    ['duplicate', (body) => body.includes('shop.catalog.product.') ? `${body}${productNode}` : body],
+    ['malformed', (body) => body.replace(PRODUCT_SELECTOR, 'shop.catalog.product.unbound')],
+    ['preexisting', (body) => body.includes('shop.catalog.product.') ? body : `${body}${productNode}`],
+  ]) {
+    await t.test(name, async () => {
+      const source = plan()
+      const executor = new FakeExecutor(source, { mutate(result, command, args) {
+        if (command === 'adb' && args.includes('uiautomator')) return ok(change(result.stdout))
+      } })
+      const uiDriver = { act: async ({ selector, requestDigest, authorityDigest, beforeUiDigest }) => ({
+        acted: true, selector, requestDigest, authorityDigest, beforeUiDigest,
+        afterUiDigest: createHash('sha256').update(change(uiDocument(executor.uiDumps + 1))).digest('hex'),
+      }) }
+      await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+        new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor, uiDriver }))),
+      (error) => error.code === 'shop_android_adb_product_selector_invalid')
+    })
+  }
+})
+
+test('private export binds exactly one regular QA envelope and refuses unbound cleanup', async (t) => {
+  const other = `${PRIVATE_EVIDENCE_ROOT}/SuperMega-Shop-SYNTHETIC-QA-20261103-000001-abcdef123456.smqa`
+  for (const [name, change] of [
+    ['missing', () => `${METRICS_SIDECAR}\n`],
+    ['duplicate', (body) => `${body}${other}\n`],
+    ['foreign', (body) => `${body}${PRIVATE_EVIDENCE_ROOT}/unexpected.bin\n`],
+    ['malformed', (body) => body.replace(PRIVATE_ENVELOPE, `${PRIVATE_EVIDENCE_ROOT}/unreviewed.smqa`)],
+  ]) {
+    await t.test(name, async () => {
+      const source = plan()
+      const executor = new FakeExecutor(source, { mutate(result, command, args) {
+        if (command === 'adb' && args.includes('find')
+            && args.includes(PRIVATE_EVIDENCE_ROOT)) return ok(change(result.stdout))
+      } })
+      await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+        new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor }))))
+      assert.equal(executor.calls.some((call) => call.args.includes('rm')
+        && call.args.includes(PRIVATE_ENVELOPE)), false)
+    })
+  }
+  const source = plan()
+  const symlink = new FakeExecutor(source, { mutate(result, command, args) {
+    if (command === 'adb' && args.includes('test') && args.includes('-L')
+        && args.includes(PRIVATE_ENVELOPE)) return ok()
+  } })
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: symlink }))))
+  assert.equal(symlink.calls.some((call) => call.args.includes('rm')
+    && call.args.includes(PRIVATE_ENVELOPE)), false)
+
+  const rootLink = new FakeExecutor(source, { mutate(result, command, args) {
+    if (command === 'adb' && args.includes('test') && args.includes('-L')
+        && args.includes(PRIVATE_EVIDENCE_ROOT)) return ok()
+  } })
+  await assert.rejects(runShopAndroidInstalledQaProtocol(source,
+    new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: rootLink }))))
+  assert.equal(rootLink.calls.some((call) => call.args.includes('rm')
+    && call.args.includes(PRIVATE_ENVELOPE)), false)
 })
 
 test('installed bytes, split inventory, and exact single signer are all bound', async () => {
@@ -423,8 +544,9 @@ test('receipt root privacy and post-clean absence are fail-closed', async () => 
     new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: leakedReceipt }))))
 
   const remains = new FakeExecutor(source, { mutate(result, command, args) {
-    if (command === 'adb' && args.includes('test') && args.includes('-e')
-        && args.some((arg) => arg.endsWith('.smqa'))) return ok()
+    if (command === 'adb' && args.includes('rm') && args.includes(PRIVATE_ENVELOPE)) {
+      remains.device.envelopePresent = true
+    }
   } })
   await assert.rejects(runShopAndroidInstalledQaProtocol(source,
     new ShopAndroidInstalledQaAdbAdapter(dependencies(source, { executor: remains }))),

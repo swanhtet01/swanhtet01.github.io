@@ -14,7 +14,7 @@ const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
 const shopQaLoopbackReceiptEvidenceFileName =
     'SuperMega-Shop-SYNTHETIC-QA-RECEIPTS-v1.json';
 const shopQaMetricsEvidenceFileName =
-    'SuperMega-Shop-SYNTHETIC-QA-METRICS-v1.json';
+    'SuperMega-Shop-SYNTHETIC-QA-METRICS-v2.json';
 
 ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(
   ShopRuntimeScope? runtimeScope, {
