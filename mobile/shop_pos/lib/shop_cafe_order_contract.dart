@@ -823,6 +823,7 @@ void _validateLines(
   if (lines.isEmpty || lines.length > 100) _invalid('lines');
   final ids = <String>{};
   for (final line in lines) {
+    CafeOrderLine.fromJson(line.toJson());
     if (!ids.add(line.id)) _invalid('duplicate_line_id');
     line.totalMmk();
     final modifierKeys = <String>{};

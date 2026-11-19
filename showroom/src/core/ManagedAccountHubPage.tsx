@@ -4,6 +4,7 @@ import { Link, Navigate } from 'react-router'
 import { approvedAppDownloads } from './approved-app-downloads'
 import { managedAccountHubLoginPath } from './account-routes'
 import { PageHeading } from './CoreShell'
+import { formatManagedInvoiceMinor } from './format-managed-invoice-minor'
 import type { ManagedAccountBilling, ManagedBillingInvoice } from './managed-account-billing'
 import { useCurrentManagedPortalAccess } from './managed-portal-access-context'
 import { currentManagedIdentity, loadManagedAccountBilling } from './managed-trial'
@@ -13,20 +14,6 @@ type BillingLoad =
   | { status: 'unavailable' }
   | { status: 'ready'; value: ManagedAccountBilling }
   | { status: 'error'; message: string }
-
-function formatMinor(invoice: ManagedBillingInvoice, value: number) {
-  const amount = value / 10 ** invoice.exponent
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: invoice.currency,
-      minimumFractionDigits: invoice.exponent,
-      maximumFractionDigits: invoice.exponent,
-    }).format(amount)
-  } catch {
-    return `${invoice.currency} ${amount.toLocaleString('en-US')}`
-  }
-}
 
 function paymentCopy(invoice: ManagedBillingInvoice) {
   if (invoice.paymentState === 'pending_manual_verification') {
@@ -127,7 +114,7 @@ export function ManagedAccountHubPage() {
           {summary.invoices.length === 0 ? <p className="empty-state" role="status">No invoices are available for this company.</p> : <div className="account-billing-list">
             {summary.invoices.map((invoice) => <article className="account-billing-row" key={invoice.invoiceId}>
               <div><strong>{invoice.invoiceId}</strong><span>Due {invoice.dueDate}</span></div>
-              <div><strong>{formatMinor(invoice, invoice.outstandingMinor)}</strong><span>{paymentCopy(invoice)}</span></div>
+              <div><strong>{formatManagedInvoiceMinor(invoice, invoice.outstandingMinor)}</strong><span>{paymentCopy(invoice)}</span></div>
             </article>)}
           </div>}
           {summary.excluded.length ? <p role="status">{summary.excluded.length} billing record{summary.excluded.length === 1 ? '' : 's'} could not be shown safely.</p> : null}

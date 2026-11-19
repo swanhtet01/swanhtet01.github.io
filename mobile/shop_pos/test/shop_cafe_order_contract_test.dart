@@ -208,6 +208,48 @@ void main() {
       );
     }
   });
+  test('typed order refuses a remark its saved reader cannot reopen', () {
+    final acceptedRemark = List<String>.filled(120, '🙂').join();
+    final refusedRemark = List<String>.filled(121, '🙂').join();
+    expect(acceptedRemark.runes.length, 120);
+    expect(acceptedRemark.length, 240);
+    expect(refusedRemark.runes.length, 121);
+    expect(refusedRemark.length, 242);
+
+    final valid = applyCafeOrderCommand(
+      null,
+      CafeOrderCommand(
+        id: 'valid-remark-command',
+        ticketId: 'valid-remark-ticket',
+        expectedVersion: 0,
+        lines: [line('valid-remark-line', remark: acceptedRemark)],
+      ),
+      catalog,
+    );
+    expect(
+      CafeOrderTicket.fromJson(valid.toJson()).lines.single.remark,
+      acceptedRemark,
+    );
+    expect(
+      () => applyCafeOrderCommand(
+        null,
+        CafeOrderCommand(
+          id: 'refused-remark-command',
+          ticketId: 'refused-remark-ticket',
+          expectedVersion: 0,
+          lines: [line('refused-remark-line', remark: refusedRemark)],
+        ),
+        catalog,
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'cafe_order_remark',
+        ),
+      ),
+    );
+  });
   test('split evidence round trips and rejects a changed partition', () {
     CafeOrderLine localLine(String id) => CafeOrderLine.local(
       id: id,
