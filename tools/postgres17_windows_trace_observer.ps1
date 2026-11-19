@@ -128,7 +128,7 @@ if ($scriptPath -ne $expectedScript -or
   (Get-CanonicalTextSha256 $parserPath) -ne $probePolicy.parserSha256) {
   Fail 'observer_probe_source_identity_mismatch'
 }
-$git = 'C:\Program Files\Git\cmd\git.exe'
+$git = 'C:\Program Files\Git\bin\git.exe'
 Assert-RegularFile $git 'observer_probe_git_missing' | Out-Null
 $head = (& $git -C $root rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $head -ne $ExactSha) { Fail 'observer_probe_source_head_mismatch' }

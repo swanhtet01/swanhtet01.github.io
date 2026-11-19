@@ -171,6 +171,17 @@ test('observer PowerShell conditions continue before a new line', async () => {
   assert.equal(source.match(/\r?\n[\t ]+-(?:or|and)\b/g)?.length ?? 0, 0)
 })
 
+test('observer uses the fixed checkout Git location without PATH or fallback discovery', async () => {
+  const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
+  const assignments = [...source.matchAll(/^[\t ]*\$git[\t ]*=[\t ]*(.+)$/gm)].map((match) => match[1])
+  assert.deepEqual(assignments, [String.raw`'C:\Program Files\Git\bin\git.exe'`])
+  assert.match(source, /Assert-RegularFile \$git 'observer_probe_git_missing'/)
+  assert.ok(source.indexOf("Assert-RegularFile $git 'observer_probe_git_missing'")
+    < source.indexOf('$head = (& $git -C $root rev-parse HEAD)'))
+  assert.doesNotMatch(source, /C:\\Program Files\\Git\\cmd\\git\.exe/i)
+  assert.doesNotMatch(source, /(?:Get-Command|where(?:\.exe)?)\s+git(?:\.exe)?\b|\$env:PATH\b/i)
+})
+
 test('observer probe policy binds exact source and remains non-authoritative', async () => {
   const root = new URL('../', import.meta.url)
   const [policyBytes, scriptBytes, profileBytes, parserBytes] = await Promise.all([
