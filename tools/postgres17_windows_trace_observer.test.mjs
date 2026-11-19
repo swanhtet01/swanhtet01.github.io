@@ -131,6 +131,16 @@ test('separate PR observer is label-gated, exact-head, non-authoritative and inv
     "github.event.pull_request.base.ref == 'codex/shop-main-integration-20261022'",
   ]) assert.ok(workflow.includes(guard), guard)
   assert.match(workflow, /EXACT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/)
+  const jobEnv = workflow.match(/^    env:\n(?:(?:      [^\n]*)\n)*/m)?.[0] ?? ''
+  assert.doesNotMatch(jobEnv, /runner\.temp/)
+  for (const name of [
+    'Run non-authoritative observer probe only',
+    'Verify sanitized observer evidence',
+  ]) {
+    const step = workflow.split(`      - name: ${name}\n`)[1]?.split('\n      - name: ')[0]
+    assert.ok(step, name)
+    assert.match(step, /^        env:\n          EVIDENCE_OUTPUT: \$\{\{ runner\.temp \}\}\\supermega-sanitized-evidence$/m)
+  }
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/)
   assert.match(workflow, /persist-credentials: false/)
   assert.match(workflow, /observer_pr_checkout_sha_mismatch/)

@@ -27,7 +27,6 @@ jobs:
     env:
       EXACT_SHA: ${{ github.event.pull_request.head.sha }}
       REPOSITORY_ROOT: ${{ github.workspace }}
-      EVIDENCE_OUTPUT: ${{ runner.temp }}\supermega-sanitized-evidence
     steps:
       - name: Validate exact PR head
         shell: pwsh
@@ -46,6 +45,8 @@ jobs:
           if (git status --porcelain=v1 --untracked-files=all) { throw 'observer_pr_checkout_not_clean' }
       - name: Run non-authoritative observer probe only
         shell: pwsh
+        env:
+          EVIDENCE_OUTPUT: ${{ runner.temp }}\supermega-sanitized-evidence
         run: |
           & ./tools/postgres17_windows_trace_observer.ps1 `
             -Mode Probe `
@@ -54,6 +55,8 @@ jobs:
             -OutputDirectory $env:EVIDENCE_OUTPUT
       - name: Verify sanitized observer evidence
         shell: pwsh
+        env:
+          EVIDENCE_OUTPUT: ${{ runner.temp }}\supermega-sanitized-evidence
         run: node tools/postgres17_windows_evidence_contract.mjs $env:EVIDENCE_OUTPUT observer-probe $env:EXACT_SHA
       - name: Upload sanitized observer evidence only
         if: success()
