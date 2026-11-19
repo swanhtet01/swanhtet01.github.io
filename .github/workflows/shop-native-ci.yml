@@ -762,6 +762,10 @@ jobs:
       - name: Build Android debug APK
         run: flutter build apk --debug --no-pub --flavor production
 
+      - name: Verify compiled Android production backup policy
+        working-directory: ${{ github.workspace }}
+        run: python3 tools/verify_shop_android_apk_backup.py --profile production --apk mobile/shop_pos/build/app/outputs/flutter-apk/app-production-debug.apk
+
       - name: Record Android debug APK checksum
         run: |
           cd build/app/outputs/flutter-apk
@@ -999,6 +1003,10 @@ jobs:
           rm -f "$manifest_xml"
           rm -f app-qa-debug.apk.files.txt
           trap - EXIT
+
+      - name: Verify compiled Android QA backup policy
+        working-directory: ${{ github.workspace }}
+        run: python3 tools/verify_shop_android_apk_backup.py --profile qa --apk app-qa-debug.apk
 
       - name: Verify Android QA debug signature
         working-directory: ${{ github.workspace }}

@@ -77,6 +77,54 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
 })
 
+test('both built Android flavors must pass the compiled backup check before retention', () => {
+  const productionStep = [
+    '      - name: Verify compiled Android production backup policy',
+    '        working-directory: ${{ github.workspace }}',
+    '        run: python3 tools/verify_shop_android_apk_backup.py --profile production --apk mobile/shop_pos/build/app/outputs/flutter-apk/app-production-debug.apk',
+  ].join('\n')
+  const qaStep = [
+    '      - name: Verify compiled Android QA backup policy',
+    '        working-directory: ${{ github.workspace }}',
+    '        run: python3 tools/verify_shop_android_apk_backup.py --profile qa --apk app-qa-debug.apk',
+  ].join('\n')
+  assert.ok(workflow.includes(productionStep), 'production APK check must be a real step')
+  assert.ok(workflow.includes(qaStep), 'QA APK check must be a real step')
+
+  for (const [mutated, expected] of [
+    [workflow.replace(productionStep, ''), 'android_production_compiled_backup_policy_not_verified'],
+    [workflow.replace(qaStep, ''), 'android_qa_compiled_backup_policy_not_verified'],
+    [workflow.replace(productionStep, productionStep.replace('--profile production', '--profile qa')),
+      'android_production_compiled_backup_policy_not_verified'],
+    [workflow.replace(qaStep, qaStep.replace('--profile qa', '--profile production')),
+      'android_qa_compiled_backup_policy_not_verified'],
+    [workflow.replace(productionStep, productionStep.replace('app-production-debug.apk', 'app-qa-debug.apk')),
+      'android_production_compiled_backup_policy_not_verified'],
+    [workflow.replace(qaStep, qaStep.replace('app-qa-debug.apk', 'app-production-debug.apk')),
+      'android_qa_compiled_backup_policy_not_verified'],
+    [workflow.replace(productionStep, productionStep.replace('        run:', '        if: false\n        run:')),
+      'android_production_compiled_backup_policy_not_verified'],
+    [workflow.replace(qaStep, qaStep.replace('        run:', '        continue-on-error: true\n        run:')),
+      'android_qa_compiled_backup_policy_not_verified'],
+    [workflow.replace(productionStep, `${productionStep}\n\n${productionStep}`),
+      'android_production_compiled_backup_policy_not_verified'],
+    [workflow.replace(qaStep, `${qaStep}\n\n${qaStep}`),
+      'android_qa_compiled_backup_policy_not_verified'],
+  ]) {
+    const result = verifyShopNativeCiContract(mutated, gradleWrapper, actualTestPaths)
+    assert.ok(result.failures.includes(expected), expected)
+  }
+
+  const productionEarly = workflow.replace(productionStep, '')
+    .replace('      - name: Build Android debug APK', `${productionStep}\n\n      - name: Build Android debug APK`)
+  assert.ok(verifyShopNativeCiContract(productionEarly, gradleWrapper, actualTestPaths)
+    .failures.includes('android_production_compiled_backup_policy_not_verified_order'))
+  const qaLate = workflow.replace(qaStep, '')
+    .replace('      - name: Hash Android QA artifact', `${qaStep}\n\n      - name: Hash Android QA artifact`)
+  assert.ok(verifyShopNativeCiContract(qaLate, gradleWrapper, actualTestPaths)
+    .failures.includes('android_qa_compiled_backup_policy_not_verified_order'))
+})
+
 test('visual capture remains bounded and reports its terminal status', () => {
   for (const [token, failure] of [
     [

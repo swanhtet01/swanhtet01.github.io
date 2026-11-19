@@ -171,6 +171,33 @@ function requirePattern(source, pattern, failure, failures) {
   if (!pattern.test(source)) failures.push(failure)
 }
 
+function workflowJob(source, name) {
+  const marker = `\n  ${name}:`
+  const start = source.indexOf(marker)
+  if (start < 0) return ''
+  const remainder = source.slice(start + marker.length)
+  const next = remainder.search(/\n  [a-z][a-z0-9-]*:/)
+  return next < 0 ? remainder : remainder.slice(0, next)
+}
+
+function requireAndroidBackupStep(job, name, command, before, after, failure, failures) {
+  const marker = `\n      - name: ${name}\n`
+  const occurrences = job.split(marker).length - 1
+  const start = job.indexOf(marker)
+  const next = start < 0 ? -1 : job.indexOf('\n      - name:', start + marker.length)
+  const block = start < 0 ? '' : job.slice(start, next < 0 ? undefined : next)
+  const expected = `${marker}        working-directory: \${{ github.workspace }}\n        run: ${command}\n`
+  if (occurrences !== 1 || block.trimEnd() !== expected.trimEnd()) {
+    failures.push(failure)
+    return
+  }
+  const beforeIndex = job.indexOf(`\n      - name: ${before}\n`)
+  const afterIndex = job.indexOf(`\n      - name: ${after}\n`)
+  if (beforeIndex < 0 || afterIndex < 0 || beforeIndex >= start || start >= afterIndex) {
+    failures.push(`${failure}_order`)
+  }
+}
+
 function literalBlockValues(source, key) {
   const lines = source.split(/\r?\n/)
   const matches = []
@@ -355,6 +382,25 @@ function checkoutDisablesCredentialPersistence(step) {
 
 export function verifyShopNativeCiContract(source, gradleWrapperSource = '', actualTestPaths = null) {
   const failures = []
+
+  requireAndroidBackupStep(
+    workflowJob(source, 'android'),
+    'Verify compiled Android production backup policy',
+    'python3 tools/verify_shop_android_apk_backup.py --profile production --apk mobile/shop_pos/build/app/outputs/flutter-apk/app-production-debug.apk',
+    'Build Android debug APK',
+    'Record Android debug APK checksum',
+    'android_production_compiled_backup_policy_not_verified',
+    failures,
+  )
+  requireAndroidBackupStep(
+    workflowJob(source, 'android-qa'),
+    'Verify compiled Android QA backup policy',
+    'python3 tools/verify_shop_android_apk_backup.py --profile qa --apk app-qa-debug.apk',
+    'Inspect Android QA identity',
+    'Verify Android QA debug signature',
+    'android_qa_compiled_backup_policy_not_verified',
+    failures,
+  )
 
   const flutterVersionPins = source.match(new RegExp(`flutter-version: '${FLUTTER_VERSION.replaceAll('.', '\\.')}'`, 'g')) ?? []
   if (flutterVersionPins.length !== 6) failures.push('flutter_sdk_not_exactly_pinned_for_all_native_jobs')
