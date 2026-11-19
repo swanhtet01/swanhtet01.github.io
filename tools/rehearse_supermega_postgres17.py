@@ -188,6 +188,7 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "hq/research/postgres17-windows-bootstrap-policy.json",
     "hq/research/postgres17-process-image.wprp",
     ".github/workflows/postgres17-windows-evidence.yml",
+    ".github/workflows/postgres17-pr-observer-probe.yml",
     "tests/test_postgres17_rehearsal_contract.py",
 ))))
 CURRENT_ACCOUNT_CHECKS = (

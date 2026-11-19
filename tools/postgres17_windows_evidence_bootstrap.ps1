@@ -244,7 +244,7 @@ try {
   $env:SUPERMEGA_AUTHENTICODE_TARGET = $downloadPath
   $inspector = Join-Path $root 'tools\inspect_windows_authenticode.ps1'
   $observationText = & 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
-    -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $inspector
+    -NoLogo -NoProfile -NonInteractive -File $inspector
   if ($LASTEXITCODE -ne 0) { Fail 'bootstrap_authenticode_inspection_failed' }
   $observation = $observationText | ConvertFrom-Json
   if ($observation.artifactBytes -ne $policy.installer.bytes

@@ -46,7 +46,7 @@ function Inspect-SignedTool([string]$Path, [string]$Inspector, [string]$Required
   $env:SUPERMEGA_AUTHENTICODE_TARGET = $Path
   try {
     $text = & 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
-      -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $Inspector
+      -NoLogo -NoProfile -NonInteractive -File $Inspector
     if ($LASTEXITCODE -ne 0) { Fail 'observer_probe_tool_signature_invalid' }
   } finally {
     Remove-Item Env:\SUPERMEGA_AUTHENTICODE_TARGET -ErrorAction SilentlyContinue

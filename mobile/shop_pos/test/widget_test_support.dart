@@ -5714,6 +5714,13 @@ void registerWidgetTests(WidgetTestPartition partition) {
           await tester.tap(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'));
           await tester.pumpAndSettle();
           if (width <= 820) {
+            final search = tester.widget<TextField>(
+              find.byKey(const ValueKey('shop-sale-search-field')),
+            );
+            expect(
+              search.decoration?.hintText,
+              myanmar ? 'ရှာ / စကင်ဖတ်' : 'Search name, barcode or SKU',
+            );
             final catalog = find.byKey(const ValueKey('shop-split-catalog'));
             final basket = find.byKey(const ValueKey('shop-split-basket'));
             expect(catalog, findsOneWidget);
@@ -5764,6 +5771,51 @@ void registerWidgetTests(WidgetTestPartition partition) {
           );
           expect(lineTotal.data, myanmar ? '၅,၀၀၀ ကျပ်' : '5,000 MMK');
           expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      }
+    });
+
+    testWidgets('tablet Sell hint stays visible with enlarged text', (
+      tester,
+    ) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.view.physicalSize = const Size(820, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      for (final myanmar in [false, true]) {
+        final database = ShopDatabase(NativeDatabase.memory());
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        try {
+          await tester.pumpWidget(
+            ShopApp(
+              testOnlyAllowMissingRuntimeScope: true,
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://app.supermega.dev',
+              initialMyanmar: myanmar,
+            ),
+          );
+          await tester.pumpAndSettle();
+          final search = tester.widget<TextField>(
+            find.byKey(const ValueKey('shop-sale-search-field')),
+          );
+          expect(
+            search.decoration?.hintText,
+            myanmar ? 'ရှာ / စကင်ဖတ်' : 'Search or scan',
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 1));
           await database.close();

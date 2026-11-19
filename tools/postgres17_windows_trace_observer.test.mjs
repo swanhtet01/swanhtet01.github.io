@@ -10,6 +10,7 @@ import {
   verifyEvidenceDirectory,
 } from './postgres17_windows_evidence_contract.mjs'
 import { correlateTraceXml } from './postgres17_windows_trace_parser.mjs'
+import { implementationPaths } from '../kernel/database-rehearsal-evidence.mjs'
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const exactSha = 'b'.repeat(40)
@@ -110,6 +111,49 @@ test('manual workflow exposes an exact-SHA observer probe without automatic trig
   assert.match(workflow, /postgres17-observer-probe\.json/)
   assert.match(workflow, /retention-days: 7/)
   assert.doesNotMatch(workflow, /secrets\./)
+})
+
+test('separate PR observer is label-gated, exact-head, non-authoritative and inventoried', async () => {
+  const path = '.github/workflows/postgres17-pr-observer-probe.yml'
+  const workflow = await readFile(new URL(`../${path}`, import.meta.url), 'utf8')
+  assert.ok(implementationPaths.includes(path))
+  assert.match(workflow, /^on:\n  pull_request:\n    types: \[labeled\]$/m)
+  assert.doesNotMatch(workflow, /^  (push|schedule|workflow_dispatch):/m)
+  assert.match(workflow, /^permissions:\n  contents: read$/m)
+  for (const guard of [
+    "github.event.pull_request.number == 752",
+    "github.event.label.name == 'pg17-observer-probe'",
+    "github.event.pull_request.state == 'open'",
+    'github.event.pull_request.draft == true',
+    'github.event.pull_request.head.repo.full_name == github.repository',
+    'github.event.pull_request.base.repo.full_name == github.repository',
+    "github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'",
+    "github.event.pull_request.base.ref == 'codex/shop-main-integration-20261022'",
+  ]) assert.ok(workflow.includes(guard), guard)
+  assert.match(workflow, /EXACT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/)
+  assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/)
+  assert.match(workflow, /persist-credentials: false/)
+  assert.match(workflow, /observer_pr_checkout_sha_mismatch/)
+  assert.match(workflow, /observer_pr_checkout_not_clean/)
+  assert.match(workflow, /postgres17_windows_trace_observer\.ps1/)
+  assert.match(workflow, /-Mode Probe/)
+  assert.match(workflow, /postgres17_windows_evidence_contract\.mjs \$env:EVIDENCE_OUTPUT observer-probe \$env:EXACT_SHA/)
+  assert.match(workflow, /path: \$\{\{ runner\.temp \}\}\\supermega-sanitized-evidence\\postgres17-observer-probe\.json/)
+  assert.match(workflow, /if-no-files-found: error/)
+  assert.match(workflow, /retention-days: 7/)
+  assert.doesNotMatch(workflow, /(?:secrets\.|id-token:|setup-node|evidence_bootstrap|postgres17-rehearsal|postgres17-stage1|postgres17-stage2|ExecutionPolicy)/i)
+  for (const uses of workflow.matchAll(/^\s*uses:\s*([^\s]+)$/gm)) {
+    assert.match(uses[1], /@[0-9a-f]{40}$/)
+  }
+})
+
+test('observer inspector obeys host script policy and retains refusal and cleanup', async () => {
+  const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
+  assert.ok(source.includes("& 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' `"))
+  assert.match(source, /-NoLogo -NoProfile -NonInteractive -File \$Inspector/)
+  assert.doesNotMatch(source, /-ExecutionPolicy\b/i)
+  assert.ok(source.includes("if ($LASTEXITCODE -ne 0) { Fail 'observer_probe_tool_signature_invalid' }"))
+  assert.ok(source.includes('Remove-Item Env:\\SUPERMEGA_AUTHENTICODE_TARGET -ErrorAction SilentlyContinue'))
 })
 
 test('observer probe policy binds exact source and remains non-authoritative', async () => {

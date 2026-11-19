@@ -146,6 +146,15 @@ test('manual workflow is exact-SHA, read-only, pinned, credential-free, and neve
   assert.match(workflow, /EXACT_SHA: \$\{\{ inputs\.exact_sha \}\}/)
 })
 
+test('bootstrap inspector obeys host script policy and retains refusal and cleanup', async () => {
+  const source = await readFile(new URL('./postgres17_windows_evidence_bootstrap.ps1', import.meta.url), 'utf8')
+  assert.ok(source.includes("& 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' `"))
+  assert.match(source, /-NoLogo -NoProfile -NonInteractive -File \$inspector/)
+  assert.doesNotMatch(source, /-ExecutionPolicy\b/i)
+  assert.ok(source.includes("if ($LASTEXITCODE -ne 0) { Fail 'bootstrap_authenticode_inspection_failed' }"))
+  assert.ok(source.includes('Remove-Item Env:\\SUPERMEGA_AUTHENTICODE_TARGET -ErrorAction SilentlyContinue'))
+})
+
 test('bootstrap policy pins exact installer and documented service-free flags but remains disabled', async () => {
   const policy = JSON.parse(await readFile(new URL('../hq/research/postgres17-windows-bootstrap-policy.json', import.meta.url)))
   assert.equal(policy.status, 'pending-closure-observer')

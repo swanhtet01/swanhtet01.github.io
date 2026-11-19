@@ -2331,11 +2331,14 @@ class _ShopHomeState extends State<ShopHome> {
     }
   }
 
-  String _searchHint(List<ShopProduct> products) {
+  String _searchHint(List<ShopProduct> products, double fieldWidth) {
     if (products.isEmpty) {
       return shopCopy(widget.myanmar, 'Scan a barcode', 'ဘားကုဒ် ဖတ်ပါ');
     }
-    if (MediaQuery.sizeOf(context).width < 420) {
+    final compactField = widget.myanmar ? fieldWidth < 560 : fieldWidth < 400;
+    if (MediaQuery.sizeOf(context).width < 420 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+        compactField) {
       return shopCopy(widget.myanmar, 'Search or scan', 'ရှာ / စကင်ဖတ်');
     }
     return shopCopy(
@@ -2365,37 +2368,39 @@ class _ShopHomeState extends State<ShopHome> {
       }
       return KeyEventResult.ignored;
     },
-    child: TextField(
-      key: const ValueKey('shop-sale-search-field'),
-      controller: _search,
-      focusNode: _searchFocus,
-      autofocus: defaultTargetPlatform == TargetPlatform.windows,
-      onChanged: (_) => setState(() {}),
-      // Keyboard scanners submit with Enter. Keep an already active scan field
-      // ready for the next item without opening a keyboard on an idle tablet.
-      onEditingComplete: () {},
-      onSubmitted: (value) => _acceptScannedCode(value, products),
-      decoration: InputDecoration(
-        isDense: MediaQuery.sizeOf(context).width < 380,
-        contentPadding: MediaQuery.sizeOf(context).width < 380
-            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
-            : null,
-        prefixIcon: const Icon(Icons.search),
-        hintText: _searchHint(products),
-        suffixIcon: _search.text.isEmpty
-            ? null
-            : IconButton(
-                tooltip: shopCopy(
-                  widget.myanmar,
-                  'Clear search',
-                  'ရှာဖွေမှုဖျက်ရန်',
+    child: LayoutBuilder(
+      builder: (context, constraints) => TextField(
+        key: const ValueKey('shop-sale-search-field'),
+        controller: _search,
+        focusNode: _searchFocus,
+        autofocus: defaultTargetPlatform == TargetPlatform.windows,
+        onChanged: (_) => setState(() {}),
+        // Keyboard scanners submit with Enter. Keep an already active scan field
+        // ready for the next item without opening a keyboard on an idle tablet.
+        onEditingComplete: () {},
+        onSubmitted: (value) => _acceptScannedCode(value, products),
+        decoration: InputDecoration(
+          isDense: MediaQuery.sizeOf(context).width < 380,
+          contentPadding: MediaQuery.sizeOf(context).width < 380
+              ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+              : null,
+          prefixIcon: const Icon(Icons.search),
+          hintText: _searchHint(products, constraints.maxWidth),
+          suffixIcon: _search.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: shopCopy(
+                    widget.myanmar,
+                    'Clear search',
+                    'ရှာဖွေမှုဖျက်ရန်',
+                  ),
+                  onPressed: () {
+                    _search.clear();
+                    setState(() {});
+                  },
+                  icon: const Icon(Icons.close),
                 ),
-                onPressed: () {
-                  _search.clear();
-                  setState(() {});
-                },
-                icon: const Icon(Icons.close),
-              ),
+        ),
       ),
     ),
   );
