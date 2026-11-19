@@ -53,11 +53,11 @@ function Inspect-SignedTool([string]$Path, [string]$Inspector, [string]$Required
   }
   $observation = $text | ConvertFrom-Json
   $organizationPattern = '(^|, )O=' + [Regex]::Escape($RequiredOrganization) + '(,|$)'
-  if ($observation.signatureStatus -ne 'Valid'
-    -or $observation.signatureType -ne 'Authenticode'
-    -or @($observation.ekuOids) -notcontains '1.3.6.1.5.5.7.3.3'
-    -or $observation.signerSubject -notmatch $organizationPattern
-    -or $observation.artifactSha256 -ne (Get-Sha256 $Path)) {
+  if ($observation.signatureStatus -ne 'Valid' -or
+    $observation.signatureType -ne 'Authenticode' -or
+    @($observation.ekuOids) -notcontains '1.3.6.1.5.5.7.3.3' -or
+    $observation.signerSubject -notmatch $organizationPattern -or
+    $observation.artifactSha256 -ne (Get-Sha256 $Path)) {
     Fail 'observer_probe_tool_signature_invalid'
   }
   return [ordered]@{
@@ -96,36 +96,36 @@ $output = [System.IO.Path]::GetFullPath($OutputDirectory)
 $policyPath = Join-Path $root 'hq\research\postgres17-windows-bootstrap-policy.json'
 $policy = Read-RegularJson $policyPath
 $probePolicy = $policy.closureObserver.capabilityProbe
-if ($null -eq $probePolicy -or $probePolicy.status -ne 'source-only'
-  -or $probePolicy.contract -ne 'supermega.windows-process-image-observer-probe.v1'
-  -or $probePolicy.captureMethod -ne 'windows-wpr-etw-process-image-probe-v1'
-  -or $probePolicy.authoritative -ne $false
-  -or $probePolicy.wprPath -ne 'C:\Windows\System32\wpr.exe'
-  -or $probePolicy.tracerptPath -ne 'C:\Windows\System32\tracerpt.exe'
-  -or $probePolicy.probeParentExecutablePath -ne 'C:\Windows\System32\cmd.exe'
-  -or $probePolicy.probeExecutablePath -ne 'C:\Windows\System32\where.exe'
-  -or $probePolicy.requiredSignerOrganization -ne 'Microsoft Corporation'
-  -or $probePolicy.requiresEventsLost -ne 0 -or $probePolicy.requiresBuffersLost -ne 0
-  -or $probePolicy.requiresProcessEvent -ne $true
-  -or $probePolicy.requiresImageEvent -ne $true
-  -or $probePolicy.requiresProcessEndEvent -ne $true
-  -or $probePolicy.requiresStableProcessKey -ne $true
-  -or $probePolicy.requiresParentChildCorrelation -ne $true
-  -or $probePolicy.requiresExitStatus -ne $true
-  -or $probePolicy.requiresFullImagePath -ne $true
-  -or $probePolicy.requiresModuleEvent -ne $true
-  -or $probePolicy.requiresCompleteOrdering -ne $true
-  -or $probePolicy.requiresDrain -ne $true) {
+if ($null -eq $probePolicy -or $probePolicy.status -ne 'source-only' -or
+  $probePolicy.contract -ne 'supermega.windows-process-image-observer-probe.v1' -or
+  $probePolicy.captureMethod -ne 'windows-wpr-etw-process-image-probe-v1' -or
+  $probePolicy.authoritative -ne $false -or
+  $probePolicy.wprPath -ne 'C:\Windows\System32\wpr.exe' -or
+  $probePolicy.tracerptPath -ne 'C:\Windows\System32\tracerpt.exe' -or
+  $probePolicy.probeParentExecutablePath -ne 'C:\Windows\System32\cmd.exe' -or
+  $probePolicy.probeExecutablePath -ne 'C:\Windows\System32\where.exe' -or
+  $probePolicy.requiredSignerOrganization -ne 'Microsoft Corporation' -or
+  $probePolicy.requiresEventsLost -ne 0 -or $probePolicy.requiresBuffersLost -ne 0 -or
+  $probePolicy.requiresProcessEvent -ne $true -or
+  $probePolicy.requiresImageEvent -ne $true -or
+  $probePolicy.requiresProcessEndEvent -ne $true -or
+  $probePolicy.requiresStableProcessKey -ne $true -or
+  $probePolicy.requiresParentChildCorrelation -ne $true -or
+  $probePolicy.requiresExitStatus -ne $true -or
+  $probePolicy.requiresFullImagePath -ne $true -or
+  $probePolicy.requiresModuleEvent -ne $true -or
+  $probePolicy.requiresCompleteOrdering -ne $true -or
+  $probePolicy.requiresDrain -ne $true) {
   Fail 'observer_probe_policy_invalid'
 }
 $scriptPath = [System.IO.Path]::GetFullPath($PSCommandPath)
 $expectedScript = [System.IO.Path]::GetFullPath((Join-Path $root $probePolicy.scriptPath))
 $profilePath = [System.IO.Path]::GetFullPath((Join-Path $root $probePolicy.profilePath))
 $parserPath = [System.IO.Path]::GetFullPath((Join-Path $root $probePolicy.parserPath))
-if ($scriptPath -ne $expectedScript
-  -or (Get-CanonicalTextSha256 $scriptPath) -ne $probePolicy.scriptSha256
-  -or (Get-CanonicalTextSha256 $profilePath) -ne $probePolicy.profileSha256
-  -or (Get-CanonicalTextSha256 $parserPath) -ne $probePolicy.parserSha256) {
+if ($scriptPath -ne $expectedScript -or
+  (Get-CanonicalTextSha256 $scriptPath) -ne $probePolicy.scriptSha256 -or
+  (Get-CanonicalTextSha256 $profilePath) -ne $probePolicy.profileSha256 -or
+  (Get-CanonicalTextSha256 $parserPath) -ne $probePolicy.parserSha256) {
   Fail 'observer_probe_source_identity_mismatch'
 }
 $git = 'C:\Program Files\Git\cmd\git.exe'
@@ -207,17 +207,17 @@ try {
     'processEndObserved', 'processEventObserved', 'stableProcessKeyObserved',
     'parentChildCorrelationObserved', 'exitStatusObserved', 'fullImagePathObserved',
     'moduleEventObserved', 'completeOrderingObserved') | Sort-Object
-  if (($correlationProperties -join "`0") -ne ($expectedCorrelationProperties -join "`0")
-    -or $correlation.contract -ne 'supermega.windows-process-image-correlation.v2'
-    -or $correlation.processEventObserved -ne $true
-    -or $correlation.imageEventObserved -ne $true
-    -or $correlation.processEndObserved -ne $true
-    -or $correlation.stableProcessKeyObserved -ne $true
-    -or $correlation.parentChildCorrelationObserved -ne $true
-    -or $correlation.exitStatusObserved -ne $true
-    -or $correlation.fullImagePathObserved -ne $true
-    -or $correlation.moduleEventObserved -ne $true
-    -or $correlation.completeOrderingObserved -ne $true) {
+  if (($correlationProperties -join "`0") -ne ($expectedCorrelationProperties -join "`0") -or
+    $correlation.contract -ne 'supermega.windows-process-image-correlation.v2' -or
+    $correlation.processEventObserved -ne $true -or
+    $correlation.imageEventObserved -ne $true -or
+    $correlation.processEndObserved -ne $true -or
+    $correlation.stableProcessKeyObserved -ne $true -or
+    $correlation.parentChildCorrelationObserved -ne $true -or
+    $correlation.exitStatusObserved -ne $true -or
+    $correlation.fullImagePathObserved -ne $true -or
+    $correlation.moduleEventObserved -ne $true -or
+    $correlation.completeOrderingObserved -ne $true) {
     Fail 'observer_probe_trace_correlation_failed'
   }
   $processObserved = $correlation.processEventObserved

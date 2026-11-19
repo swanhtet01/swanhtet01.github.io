@@ -166,6 +166,11 @@ test('observer inspector obeys host script policy and retains refusal and cleanu
   assert.ok(source.includes('Remove-Item Env:\\SUPERMEGA_AUTHENTICODE_TARGET -ErrorAction SilentlyContinue'))
 })
 
+test('observer PowerShell conditions continue before a new line', async () => {
+  const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
+  assert.equal(source.match(/\r?\n[\t ]+-(?:or|and)\b/g)?.length ?? 0, 0)
+})
+
 test('observer probe policy binds exact source and remains non-authoritative', async () => {
   const root = new URL('../', import.meta.url)
   const [policyBytes, scriptBytes, profileBytes, parserBytes] = await Promise.all([
