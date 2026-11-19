@@ -92,6 +92,32 @@ class CompiledBackupPolicyTest(unittest.TestCase):
                 ).replace(b"@xml/shop_data_extraction_rules", b"@0x7f0a0002")
                 verify_decoded(profile, numeric, legacy, modern, ids, package)
 
+    def test_aosp_unresolved_refs_require_same_compiled_resource_ids(self) -> None:
+        tree, table = valid_compiled()
+        for profile in APK_NAMES:
+            with self.subTest(profile=profile):
+                ids, package = verify_compiled_refs(profile, tree, table)
+                manifest, legacy, modern = valid_xml(profile)
+                decoded = manifest.replace(
+                    b"@xml/shop_backup_rules", b"@ref/0x7f0a0001"
+                ).replace(
+                    b"@xml/shop_data_extraction_rules", b"@ref/0x7f0a0002"
+                )
+                self.check_rejected(
+                    "shop_backup_merged_legacy_reference_invalid",
+                    profile,
+                    (decoded, legacy, modern),
+                )
+                verify_decoded(profile, decoded, legacy, modern, ids, package)
+                for old, new, code in (
+                    (b"@ref/0x7f0a0001", b"@ref/0x7f0a0011", "shop_backup_merged_legacy_reference_invalid"),
+                    (b"@ref/0x7f0a0002", b"@ref/0x7f0a0012", "shop_backup_merged_modern_reference_invalid"),
+                ):
+                    with self.assertRaisesRegex(BackupPolicyError, f"^{code}$"):
+                        verify_decoded(
+                            profile, decoded.replace(old, new), legacy, modern, ids, package
+                        )
+
     def test_compiled_boolean_requires_false_even_with_false_raw_text(self) -> None:
         tree, table = valid_compiled()
         for changed in (

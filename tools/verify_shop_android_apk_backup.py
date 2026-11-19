@@ -229,7 +229,7 @@ def reference_matches(
         return True
     if ids is None or name not in ids or value is None:
         return False
-    return value.lower() == "@0x" + ids[name]
+    return value.lower() == "@0x" + ids[name] or value == "@ref/0x" + ids[name]
 
 
 def check_exclusions(section: ET.Element, code: str) -> None:
