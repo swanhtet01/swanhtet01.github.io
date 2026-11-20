@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { resolve, win32 } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -8,11 +8,32 @@ const HEADER_GUID = '68fdd900-4a3e-11d1-84f4-0000f80464e3'
 const localName = (name) => name.split(':').at(-1)
 const boundedCount = (count) => count >= 9 ? '9plus' : String(count)
 const headerCount = (count) => count >= 2 ? '2plus' : String(count)
+const UNBOUND_HEADER_SHAPE = 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound'
 
 function fail(code) {
   const error = new Error(code)
   error.code = code
   throw error
+}
+
+// Diagnostic input status is deliberately independent of the proof parser.
+// It emits only a fixed enum; neither bytes, paths, nor exception text leave.
+async function readDiagnosticInput(path, maximum) {
+  const resolved = resolve(path)
+  let item
+  try { item = await lstat(resolved) }
+  catch (error) {
+    return { status: error?.code === 'ENOENT' ? 'missing' : 'unreadable' }
+  }
+  if (!item.isFile() || item.isSymbolicLink()) return { status: 'nonregular' }
+  if (item.size < 1) return { status: 'empty' }
+  if (item.size > maximum) return { status: 'oversize' }
+  let bytes
+  try { bytes = await readFile(resolved) }
+  catch { return { status: 'unreadable' } }
+  if (bytes.length < 1) return { status: 'empty' }
+  if (bytes.length > maximum) return { status: 'oversize' }
+  return { status: 'bounded', bytes }
 }
 
 // This is a diagnostic code, not a loss-counter parser. It never includes
@@ -457,18 +478,19 @@ async function main() {
   }
   if (process.argv[2] === '--loss-header-shape') {
     if (process.argv.length !== 5) fail('observer_probe_loss_summary_arguments_invalid')
-    const bytes = await readFile(resolve(process.argv[3]))
-    if (bytes.length < 1 || bytes.length > MAX_SUMMARY_BYTES) {
-      fail('observer_probe_loss_summary_unsafe')
+    const summary = await readDiagnosticInput(process.argv[3], MAX_SUMMARY_BYTES)
+    const xml = await readDiagnosticInput(process.argv[4], MAX_XML_BYTES)
+    let summaryShape = 'candidateLines=unbound;patterns=unbound'
+    if (summary.status === 'bounded') {
+      try { summaryShape = lossCounterLineShapes(summary.bytes.toString('utf8')).slice(3) }
+      catch { summary.status = 'unsafe' }
     }
-    const xmlBytes = await readFile(resolve(process.argv[4]))
-    if (xmlBytes.length < 1 || xmlBytes.length > MAX_XML_BYTES) {
-      fail('observer_probe_trace_xml_unsafe')
+    let header = UNBOUND_HEADER_SHAPE
+    if (xml.status === 'bounded') {
+      try { header = eventTraceHeaderShape(xml.bytes.toString('utf8')) }
+      catch { /* The bounded XML did not have a trustworthy header shape. */ }
     }
-    let header
-    try { header = eventTraceHeaderShape(xmlBytes.toString('utf8')) }
-    catch { header = 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound' }
-    process.stdout.write(`${lossCounterLineShapes(bytes.toString('utf8'))};${header}\n`)
+    process.stdout.write(`v3;summaryInput=${summary.status};${summaryShape};xmlInput=${xml.status};${header}\n`)
     return
   }
   if (process.argv.length !== 5) fail('observer_probe_trace_parser_arguments_invalid')

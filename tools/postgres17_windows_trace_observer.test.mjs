@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -419,7 +419,7 @@ test('loss and header diagnostic CLI emits fixed shapes, no source text or secre
     assert.equal(result.status, 0)
     assert.equal(result.stderr, '')
     assert.equal(result.stdout.trim(),
-      'v2;candidateLines=2;patterns=BLFCD:1,ELFCD:1;'
+      'v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=bounded;'
       + 'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=both')
     assert.doesNotMatch(result.stdout, /Private|secret|password|Users|merchant|[A-Z]:\\/i)
     await writeFile(xmlPath, '<Events>')
@@ -430,7 +430,43 @@ test('loss and header diagnostic CLI emits fixed shapes, no source text or secre
     assert.equal(malformed.status, 0)
     assert.equal(malformed.stderr, '')
     assert.equal(malformed.stdout.trim(),
-      'v2;candidateLines=2;patterns=BLFCD:1,ELFCD:1;'
+      'v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=bounded;'
+      + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
+
+    await rm(xmlPath)
+    const missingXml = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url)),
+      '--loss-header-shape', summaryPath, xmlPath,
+    ], { encoding: 'utf8' })
+    assert.equal(missingXml.status, 0)
+    assert.equal(missingXml.stderr, '')
+    assert.equal(missingXml.stdout.trim(),
+      'v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=missing;'
+      + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
+
+    const oversized = await open(xmlPath, 'w')
+    try { await oversized.truncate(64 * 1024 * 1024 + 1) }
+    finally { await oversized.close() }
+    const oversizedXml = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url)),
+      '--loss-header-shape', summaryPath, xmlPath,
+    ], { encoding: 'utf8' })
+    assert.equal(oversizedXml.status, 0)
+    assert.equal(oversizedXml.stderr, '')
+    assert.equal(oversizedXml.stdout.trim(),
+      'v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=oversize;'
+      + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
+    assert.doesNotMatch(oversizedXml.stdout, /Private|secret|password|Users|merchant|[A-Z]:\\/i)
+
+    await rm(summaryPath)
+    const missingSummary = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url)),
+      '--loss-header-shape', summaryPath, xmlPath,
+    ], { encoding: 'utf8' })
+    assert.equal(missingSummary.status, 0)
+    assert.equal(missingSummary.stderr, '')
+    assert.equal(missingSummary.stdout.trim(),
+      'v3;summaryInput=missing;candidateLines=unbound;patterns=unbound;xmlInput=oversize;'
       + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
   } finally {
     await rm(directory, { recursive: true, force: true })
@@ -472,13 +508,27 @@ test('missing loss counters remain fail closed after bounded shape diagnostic', 
   assert.ok(proof >= 0 && missing > proof && diagnostic > missing && refusal > diagnostic
     && zeroCheck > refusal && correlation > zeroCheck)
   assert.match(source, /\$shapeLines\.Count -eq 1/)
-  assert.match(source, /\$shapeLines\[0\] -cmatch '\^v2;/)
+  assert.match(source, /\$shapeLines\[0\] -cmatch '\^v3;summaryInput=/)
   assert.match(source, /Write-Warning \('observer_probe_loss_header_shape:' \+ \$shapeLines\[0\]\) -WarningAction Continue/)
-  assert.match(source, /catch \{\s*Write-Warning 'observer_probe_loss_header_shape_unavailable' -WarningAction Continue\s*\}/)
+  assert.match(source, /observer_probe_loss_header_shape_unavailable:parser_failed/)
+  assert.match(source, /observer_probe_loss_header_shape_unavailable:format_invalid/)
+  assert.match(source, /catch \{\s*Write-Warning 'observer_probe_loss_header_shape_unavailable:invocation_failed' -WarningAction Continue\s*\}/)
   assert.doesNotMatch(source, /Write-(?:Warning|Host|Output)\s+\$summaryText/)
   assert.doesNotMatch(source, /Write-(?:Warning|Host|Output)\s+\$traceXmlPath/)
   assert.match(source, /\$lossProofStatus -ceq 'unavailable' -or \$eventsLost -eq \$null/)
   assert.match(source, /\$lossProofStatus -cne 'zero' -or \$eventsLost -ne 0/)
+})
+
+test('PowerShell diagnostic gate accepts fixed input states and refuses extra text', async () => {
+  const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
+  const pattern = /\$shapeLines\[0\] -cmatch '([^']+)'/.exec(source)?.[1]
+  assert.ok(pattern)
+  const gate = new RegExp(pattern)
+  const header = 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound'
+  assert.match(`v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=oversize;${header}`, gate)
+  assert.match(`v3;summaryInput=missing;candidateLines=unbound;patterns=unbound;xmlInput=missing;${header}`, gate)
+  assert.doesNotMatch(`v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1;xmlInput=C:\\Users\\Private;${header}`, gate)
+  assert.doesNotMatch(`v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1;xmlInput=oversize;${header};raw=private`, gate)
 })
 
 test('loss proof rejects duplicate exact or alias counters before zero check', async () => {

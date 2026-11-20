@@ -229,11 +229,15 @@ try {
       $shapeLines = @(& $node $parserPath --loss-header-shape $summaryPath $traceXmlPath)
       $shapeExitCode = $LASTEXITCODE
       if ($shapeExitCode -eq 0 -and $shapeLines.Count -eq 1 -and
-        $shapeLines[0] -cmatch '^v2;candidateLines=(?:[0-8]|9plus);patterns=(?:none|[EBXU][LODU][FRU][CQXSU][DN]:(?:[1-8]|9plus)(?:,[EBXU][LODU][FRU][CQXSU][DN]:(?:[1-8]|9plus))*);headerTyped=(?:0|1|2plus|invalid);typeSite=(?:unbound|task|type|other|ambiguous);headerGuid=(?:0|1|2plus|invalid);headerJoint=(?:0|1|2plus|invalid);provider=(?:unbound|ambiguous|missing|match|other);end=(?:unbound|missing|ambiguous|zero|decimal|hex|iso|other);fields=(?:unbound|ambiguous|none|events|buffers|both)$') {
+        $shapeLines[0] -cmatch '^v3;summaryInput=(?:bounded|missing|empty|oversize|nonregular|unreadable|unsafe);candidateLines=(?:unbound|[0-8]|9plus);patterns=(?:unbound|none|[EBXU][LODU][FRU][CQXSU][DN]:(?:[1-8]|9plus)(?:,[EBXU][LODU][FRU][CQXSU][DN]:(?:[1-8]|9plus))*);xmlInput=(?:bounded|missing|empty|oversize|nonregular|unreadable);headerTyped=(?:0|1|2plus|invalid);typeSite=(?:unbound|task|type|other|ambiguous);headerGuid=(?:0|1|2plus|invalid);headerJoint=(?:0|1|2plus|invalid);provider=(?:unbound|ambiguous|missing|match|other);end=(?:unbound|missing|ambiguous|zero|decimal|hex|iso|other);fields=(?:unbound|ambiguous|none|events|buffers|both)$') {
         Write-Warning ('observer_probe_loss_header_shape:' + $shapeLines[0]) -WarningAction Continue
+      } elseif ($shapeExitCode -ne 0) {
+        Write-Warning 'observer_probe_loss_header_shape_unavailable:parser_failed' -WarningAction Continue
+      } else {
+        Write-Warning 'observer_probe_loss_header_shape_unavailable:format_invalid' -WarningAction Continue
       }
     } catch {
-      Write-Warning 'observer_probe_loss_header_shape_unavailable' -WarningAction Continue
+      Write-Warning 'observer_probe_loss_header_shape_unavailable:invocation_failed' -WarningAction Continue
     }
     Fail 'observer_probe_loss_counter_unavailable'
   }

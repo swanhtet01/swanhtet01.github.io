@@ -145,9 +145,9 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   bool _busy = false;
   String? _message;
 
-  void _showValidationMessage(String message) {
+  void _showMessage(String message) {
     setState(() => _message = message);
-    // The message follows the Save As button in a lazy ListView. On a short
+    // The message follows the save button in a lazy ListView. On a short
     // window it otherwise exists below the viewport with no visible feedback.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -180,7 +180,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   Future<void> _export() async {
     if (_busy) return;
     if (!widget.backupSavingAllowed) {
-      _showValidationMessage(
+      _showMessage(
         shopCopy(
           widget.myanmar,
           'External backup files are unavailable in this synthetic preview.',
@@ -191,7 +191,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
     }
     final password = _password.text;
     if (password.runes.length < 12) {
-      _showValidationMessage(
+      _showMessage(
         shopCopy(
           widget.myanmar,
           'Use a password of at least 12 characters.',
@@ -201,7 +201,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
       return;
     }
     if (password != _confirmation.text) {
-      _showValidationMessage(
+      _showMessage(
         shopCopy(
           widget.myanmar,
           'The passwords do not match.',
@@ -245,8 +245,8 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
       if (!mounted) return;
       _password.clear();
       _confirmation.clear();
-      setState(() {
-        _message = result == ShopBackupExportResult.saved
+      _showMessage(
+        result == ShopBackupExportResult.saved
             ? shopCopy(
                 widget.myanmar,
                 runtimeScope?.configuration.isSyntheticQa == true
@@ -260,19 +260,19 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                 widget.myanmar,
                 'Save cancelled. No new backup file was saved.',
                 'သိမ်းဆည်းမှုကို ပယ်ဖျက်လိုက်သည်။ အရန်ကူးဖိုင်အသစ် မသိမ်းခဲ့ပါ။',
-              );
-      });
+              ),
+      );
     } catch (_) {
       if (!mounted) return;
       _password.clear();
       _confirmation.clear();
-      setState(() {
-        _message = shopCopy(
+      _showMessage(
+        shopCopy(
           widget.myanmar,
           'Could not finish the export. Your Shop records were not changed. Check your files before trying again.',
           'အရန်ကူးဖိုင် ထုတ်ယူမှု မပြီးဆုံးပါ။ Shop မှတ်တမ်းများ မပြောင်းလဲပါ။ ထပ်မံမကြိုးစားမီ ဖိုင်များကို စစ်ဆေးပါ။',
-        );
-      });
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -43,6 +43,56 @@ final _widgetCorrectionReceiptVerifier = ShopCorrectionReceiptVerifier({
   _widgetCorrectionKeyId: _widgetCorrectionPublicKey,
 });
 
+Future<List<FlutterErrorDetails>> _captureFlutterErrors(
+  Future<void> Function() action,
+) async {
+  final previousOnError = FlutterError.onError;
+  if (previousOnError == null) {
+    throw StateError(
+      'Flutter test error handler missing before layout capture',
+    );
+  }
+  final reportedErrors = <FlutterErrorDetails>[];
+  FlutterError.onError = (details) {
+    reportedErrors.add(details);
+    previousOnError(details);
+  };
+  try {
+    await action();
+  } finally {
+    FlutterError.onError = previousOnError;
+  }
+  return reportedErrors;
+}
+
+String _boundedRenderOrigin(List<FlutterErrorDetails> reportedErrors) {
+  final lines = reportedErrors
+      .where(
+        (details) =>
+            details.exception.toString().contains('RenderFlex overflowed'),
+      )
+      .expand((details) {
+        final lines = details.toString().split('\n');
+        final heading = lines.indexWhere(
+          (line) => line.contains('The relevant error-causing widget'),
+        );
+        return <String>[
+          for (var index = 0; index < lines.length; index++)
+            if ((heading >= 0 && index == heading + 1) ||
+                lines[index].contains('creator:') ||
+                lines[index].contains('The relevant error-causing widget') ||
+                lines[index].contains('The specific RenderFlex') ||
+                lines[index].contains('constraints:') ||
+                lines[index].contains('size:'))
+              lines[index],
+        ];
+      })
+      .take(8)
+      .map((line) => line.length > 500 ? line.substring(0, 500) : line)
+      .join(' | ');
+  return lines.isEmpty ? 'unavailable' : lines;
+}
+
 Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
   (widget) =>
       widget is Semantics &&
@@ -5928,8 +5978,10 @@ void registerWidgetTests(WidgetTestPartition partition) {
                 reason:
                     'Catalog before adding item: MY=$myanmar scale=$textScale',
               );
-              await tester.tap(row);
-              await tester.pumpAndSettle();
+              final reportedErrors = await _captureFlutterErrors(() async {
+                await tester.tap(row);
+                await tester.pumpAndSettle();
+              });
               final summary = find.byKey(
                 const ValueKey('shop-checkout-summary'),
               );
@@ -5954,7 +6006,8 @@ void registerWidgetTests(WidgetTestPartition partition) {
                 tester.takeException(),
                 isNull,
                 reason:
-                    'Basket after adding item: MY=$myanmar scale=$textScale',
+                    'Basket after adding item: MY=$myanmar scale=$textScale; '
+                    'renderOrigin=${_boundedRenderOrigin(reportedErrors)}',
               );
             } finally {
               await tester.pumpWidget(const SizedBox.shrink());

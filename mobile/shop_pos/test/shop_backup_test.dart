@@ -1717,40 +1717,39 @@ void main() {
     await tester.enterText(find.byType(TextField).at(0), _password);
     await tester.enterText(find.byType(TextField).at(1), _password);
 
-    final saveButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
-    );
-    expect(saveButton.onPressed, isNotNull);
-    final evidenceSaved = await tester.runAsync(() async {
-      await tester.tap(
-        find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
-      );
-      final deadline = DateTime.now().add(const Duration(seconds: 60));
-      while (DateTime.now().isBefore(deadline)) {
-        final files = await evidenceFiles();
-        if (files.any(
-          (file) => !baseline.any((old) => old.path == file.path),
-        )) {
-          return true;
-        }
-        if (exportCalled || saveAsCalled) return false;
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
-      return false;
+    tester.view.physicalSize = const Size(390, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
     });
-    expect(
-      evidenceSaved,
-      isTrue,
-      reason: 'The UI export did not save app-private QA evidence within 60s.',
+    await tester.pump();
+    final listScroll = find.byType(Scrollable).first;
+    final saveFinder = find.widgetWithText(
+      FilledButton,
+      'Save synthetic QA evidence',
     );
-    await _pumpUntil(
-      tester,
-      find.textContaining('Synthetic QA recovery evidence saved'),
+    await tester.scrollUntilVisible(saveFinder, 160, scrollable: listScroll);
+    final saveButton = tester.widget<FilledButton>(saveFinder);
+    expect(saveButton.onPressed, isNotNull);
+    tester.state<ScrollableState>(listScroll).position.jumpTo(0);
+    await tester.pump();
+    expect(tester.state<ScrollableState>(listScroll).position.pixels, 0);
+    // Await the real UI handler through file publication and cleanup. A new
+    // filename alone does not mean that export has completed successfully.
+    final exportFromButton = saveButton.onPressed! as Future<void> Function();
+    await tester.runAsync(
+      () => exportFromButton().timeout(const Duration(seconds: 60)),
     );
-    expect(
-      find.textContaining('Synthetic QA recovery evidence saved'),
-      findsOneWidget,
+    await tester.pumpAndSettle();
+    final successMessage = find.textContaining(
+      'Synthetic QA recovery evidence saved',
     );
+    expect(successMessage, findsOneWidget);
+    final viewport = tester.getRect(find.byType(ListView).first);
+    final message = tester.getRect(successMessage);
+    expect(message.top, greaterThanOrEqualTo(viewport.top));
+    expect(message.bottom, lessThanOrEqualTo(viewport.bottom));
     expect(exportCalled, isFalse);
     expect(saveAsCalled, isFalse);
     final after = await tester.runAsync(evidenceFiles);
