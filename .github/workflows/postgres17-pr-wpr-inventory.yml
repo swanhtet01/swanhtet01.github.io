@@ -62,6 +62,7 @@ jobs:
           }
           $digest = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($digest -cne '35450e9f8006147b90e08fefc137215356bdd9df1d4116a4205f6caca5058d62') {
+            Write-Output ('inventory_script_observed bytes={0} sha256={1}' -f [int64]$item.Length, $digest)
             throw 'inventory_script_digest_mismatch'
           }
       - name: Collect pinned WPR metadata only

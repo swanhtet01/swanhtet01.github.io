@@ -10,6 +10,7 @@ const observerBytes = await readFile(new URL(
 const observer = observerBytes.toString('utf8')
 const scriptBytes = await readFile(new URL('./postgres17_wpr_capability_inventory.ps1', import.meta.url))
 const script = scriptBytes.toString('utf8')
+const attributes = await readFile(new URL('../.gitattributes', import.meta.url), 'utf8')
 const policy = JSON.parse(await readFile(new URL(
   '../hq/research/postgres17-windows-bootstrap-policy.json', import.meta.url), 'utf8'))
 
@@ -117,8 +118,25 @@ test('inventory workflow has only bounded metadata steps and no observer route',
 
 test('metadata reader is pinned, bounded, and has no WPR execution', () => {
   const digest = createHash('sha256').update(scriptBytes).digest('hex')
+  const attributeLine = 'tools/postgres17_wpr_capability_inventory.ps1 text eol=lf\n'
+  assert.ok([attributeLine, attributeLine.replace('\n', '\r\n')].includes(attributes))
+  assert.equal(scriptBytes.length, 6286)
+  assert.equal(scriptBytes.includes(13), false)
   assert.equal(digest, '35450e9f8006147b90e08fefc137215356bdd9df1d4116a4205f6caca5058d62')
   assert.ok(workflow.includes(digest))
+  const crlfBytes = Buffer.from(script.replaceAll('\n', '\r\n'), 'utf8')
+  assert.equal(crlfBytes.length, 6455)
+  assert.equal(createHash('sha256').update(crlfBytes).digest('hex'),
+    '1d89eb64ed8c80191760be196518bb04e3d4c5f9d7c0dec4ed611897ce048142')
+  const alteredBytes = Buffer.from(scriptBytes)
+  alteredBytes[0] ^= 1
+  const pinned = (bytes) => createHash('sha256').update(bytes).digest('hex') === digest
+  assert.equal(pinned(scriptBytes), true)
+  assert.equal(pinned(crlfBytes), false)
+  assert.equal(pinned(alteredBytes), false)
+  assert.match(workflow,
+    /Write-Output \('inventory_script_observed bytes=\{0\} sha256=\{1\}' -f \[int64\]\$item\.Length, \$digest\)/)
+  assert.match(workflow, /throw 'inventory_script_digest_mismatch'/)
   assert.ok(script.includes(`$wprPath = '${policy.closureObserver.capabilityProbe.wprPath}'`))
   assert.match(script, /\$maxHashBytes = 134217728/)
   assert.match(script, /if \(\$json\.Length -gt 8192\)/)
