@@ -71,10 +71,10 @@ if ($null -ne $timestampCertificate) {
 
 $itemAfter = Get-Item -LiteralPath $itemBefore.FullName -Force
 $hashAfter = Get-Sha256Hex -Path $itemAfter.FullName
-if ($itemAfter.PSIsContainer
-  -or (($itemAfter.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
-  -or [int64]$itemAfter.Length -ne $bytesBefore
-  -or $hashAfter -ne $hashBefore) {
+if ($itemAfter.PSIsContainer -or
+  (($itemAfter.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+  [int64]$itemAfter.Length -ne $bytesBefore -or
+  $hashAfter -ne $hashBefore) {
   throw 'artifact_changed_during_inspection'
 }
 
