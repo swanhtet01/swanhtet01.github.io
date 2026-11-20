@@ -166,6 +166,46 @@ test('observer inspector obeys host script policy and retains refusal and cleanu
   assert.ok(source.includes('Remove-Item Env:\\SUPERMEGA_AUTHENTICODE_TARGET -ErrorAction SilentlyContinue'))
 })
 
+test('observer source restricts hardlink and Catalog rules to four pinned System32 tools', async () => {
+  const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
+  const guard = source.split('function Assert-PinnedSystemTool(')[1]
+    ?.split('function Inspect-SignedTool(')[0]
+  const signature = source.split('function Inspect-SignedTool(')[1]
+    ?.split('function Try-ReadLossCounter(')[0]
+  assert.ok(guard)
+  assert.ok(signature)
+  const paths = [...guard.matchAll(/'C:\\Windows\\System32\\([^']+)'/g)].map((match) => match[1])
+  assert.deepEqual(paths, ['wpr.exe', 'tracerpt.exe', 'cmd.exe', 'where.exe'])
+  for (const refusal of [
+    '-not [System.IO.File]::Exists($Path)',
+    '$item.FullName -ine $Path',
+    '$item.PSIsContainer',
+    '$item.Length -lt 1',
+    '($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0',
+    "$item.LinkType -cne 'HardLink'",
+  ]) assert.ok(guard.includes(refusal), refusal)
+  for (const check of [
+    "Assert-PinnedSystemTool $Path 'observer_probe_tool_signature_invalid'",
+    "observation.contract -cne 'supermega.windows-authenticode-observation.v1'",
+    "observation.signatureStatus -cne 'Valid'",
+    "observation.signatureType -cnotin @('Authenticode', 'Catalog')",
+    "@($observation.ekuOids) -notcontains '1.3.6.1.5.5.7.3.3'",
+    '$observation.signerSubject -notmatch $organizationPattern',
+    '$observation.artifactFileName -ine $item.Name',
+    '[int64]$observation.artifactBytes -ne [int64]$item.Length',
+    '$observation.artifactSha256 -ne (Get-Sha256 $Path)',
+  ]) assert.ok(signature.includes(check), check)
+  for (const [variable, code] of [
+    ['$wpr', 'observer_probe_wpr_missing'],
+    ['$tracerpt', 'observer_probe_tracerpt_missing'],
+    ['$probeParentExecutable', 'observer_probe_parent_executable_missing'],
+    ['$probeExecutable', 'observer_probe_executable_missing'],
+  ]) assert.ok(source.includes(`Assert-PinnedSystemTool ${variable} '${code}'`))
+  assert.ok(source.includes("Assert-RegularFile $git 'observer_probe_git_missing'"))
+  assert.ok(source.includes("Assert-RegularFile $inspector 'observer_probe_inspector_missing'"))
+  assert.ok(source.includes("Assert-RegularFile $parserPath 'observer_probe_parser_missing'"))
+})
+
 test('observer PowerShell conditions continue before a new line', async () => {
   const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
   assert.equal(source.match(/\r?\n[\t ]+-(?:or|and)\b/g)?.length ?? 0, 0)

@@ -44,7 +44,7 @@
       "captureMethod": "windows-wpr-etw-process-image-probe-v1",
       "authoritative": false,
       "scriptPath": "tools/postgres17_windows_trace_observer.ps1",
-      "scriptSha256": "1ddeb606722180166be96f645e5df83db99f91494a514653fdf21dd294d28a01",
+      "scriptSha256": "9b189ce4371bfb86304853af34a73eefa17a3ee432bc8e466f1469969a4261b3",
       "parserPath": "tools/postgres17_windows_trace_parser.mjs",
       "parserSha256": "0fe486d7267b63e37dc0fa839b188cdf50fb1c1bb684bd26e50b70b555054d43",
       "profilePath": "hq/research/postgres17-process-image.wprp",

@@ -42,7 +42,20 @@ function Assert-RegularFile([string]$Path, [string]$Code) {
   if ($item.LinkType -or $item.PSIsContainer -or $item.Length -lt 1) { Fail $Code }
   return $item
 }
+function Assert-PinnedSystemTool([string]$Path, [string]$Code) {
+  if ($Path -notin @('C:\Windows\System32\wpr.exe',
+      'C:\Windows\System32\tracerpt.exe',
+      'C:\Windows\System32\cmd.exe',
+      'C:\Windows\System32\where.exe') -or
+    -not [System.IO.File]::Exists($Path)) { Fail $Code }
+  $item = Get-Item -LiteralPath $Path -Force
+  if ($item.FullName -ine $Path -or $item.PSIsContainer -or $item.Length -lt 1 -or
+    ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+    ($item.LinkType -and $item.LinkType -cne 'HardLink')) { Fail $Code }
+  return $item
+}
 function Inspect-SignedTool([string]$Path, [string]$Inspector, [string]$RequiredOrganization) {
+  Assert-PinnedSystemTool $Path 'observer_probe_tool_signature_invalid' | Out-Null
   $env:SUPERMEGA_AUTHENTICODE_TARGET = $Path
   try {
     $text = & 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
@@ -52,11 +65,15 @@ function Inspect-SignedTool([string]$Path, [string]$Inspector, [string]$Required
     Remove-Item Env:\SUPERMEGA_AUTHENTICODE_TARGET -ErrorAction SilentlyContinue
   }
   $observation = $text | ConvertFrom-Json
+  $item = Assert-PinnedSystemTool $Path 'observer_probe_tool_signature_invalid'
   $organizationPattern = '(^|, )O=' + [Regex]::Escape($RequiredOrganization) + '(,|$)'
-  if ($observation.signatureStatus -ne 'Valid' -or
-    $observation.signatureType -ne 'Authenticode' -or
+  if ($observation.contract -cne 'supermega.windows-authenticode-observation.v1' -or
+    $observation.signatureStatus -cne 'Valid' -or
+    $observation.signatureType -cnotin @('Authenticode', 'Catalog') -or
     @($observation.ekuOids) -notcontains '1.3.6.1.5.5.7.3.3' -or
     $observation.signerSubject -notmatch $organizationPattern -or
+    $observation.artifactFileName -ine $item.Name -or
+    [int64]$observation.artifactBytes -ne [int64]$item.Length -or
     $observation.artifactSha256 -ne (Get-Sha256 $Path)) {
     Fail 'observer_probe_tool_signature_invalid'
   }
@@ -140,10 +157,10 @@ $tracerpt = $probePolicy.tracerptPath
 $probeParentExecutable = $probePolicy.probeParentExecutablePath
 $probeExecutable = $probePolicy.probeExecutablePath
 $inspector = Join-Path $root 'tools\inspect_windows_authenticode.ps1'
-Assert-RegularFile $wpr 'observer_probe_wpr_missing' | Out-Null
-Assert-RegularFile $tracerpt 'observer_probe_tracerpt_missing' | Out-Null
-Assert-RegularFile $probeParentExecutable 'observer_probe_parent_executable_missing' | Out-Null
-Assert-RegularFile $probeExecutable 'observer_probe_executable_missing' | Out-Null
+Assert-PinnedSystemTool $wpr 'observer_probe_wpr_missing' | Out-Null
+Assert-PinnedSystemTool $tracerpt 'observer_probe_tracerpt_missing' | Out-Null
+Assert-PinnedSystemTool $probeParentExecutable 'observer_probe_parent_executable_missing' | Out-Null
+Assert-PinnedSystemTool $probeExecutable 'observer_probe_executable_missing' | Out-Null
 Assert-RegularFile $inspector 'observer_probe_inspector_missing' | Out-Null
 Assert-RegularFile $parserPath 'observer_probe_parser_missing' | Out-Null
 $nodePaths = @(Get-Command node.exe -CommandType Application -All -ErrorAction Stop |
