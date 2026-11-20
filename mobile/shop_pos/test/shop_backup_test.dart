@@ -19,6 +19,7 @@ import 'package:supermega_shop/shop_cafe_order_contract.dart';
 import 'package:supermega_shop/shop_cafe_order_store.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
+import 'package:supermega_shop/shop_qa_evidence_store.dart';
 import 'package:supermega_shop/shop_runtime_profile.dart';
 import 'package:supermega_shop/shop_runtime_scope.dart';
 import 'package:supermega_shop/shop_startup.dart';
@@ -1652,10 +1653,41 @@ void main() {
     );
   });
 
-  testWidgets('synthetic QA export screen requires a scoped evidence store', (
+  testWidgets('synthetic QA export screen saves only app-private evidence', (
     tester,
   ) async {
     var exportCalled = false;
+    var saveAsCalled = false;
+    final evidenceRoot = syntheticQaScope.syntheticEvidenceRoot!;
+    Future<List<File>> evidenceFiles() async => evidenceRoot
+        .list(followLinks: false)
+        .where((entry) => entry is File && entry.path.endsWith('.smqa'))
+        .cast<File>()
+        .toList();
+    final before = await evidenceFiles();
+    final supportedHost = Platform.isAndroid || Platform.isWindows;
+
+    if (!supportedHost) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopBackupExportScreen(
+            database: database,
+            myanmar: false,
+            runtimeScope: syntheticQaScope,
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField).at(0), _password);
+      await tester.enterText(find.byType(TextField).at(1), _password);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
+            )
+            .onPressed,
+        isNull,
+      );
+    }
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1663,6 +1695,13 @@ void main() {
           database: database,
           myanmar: false,
           runtimeScope: syntheticQaScope,
+          qaEvidenceStore: supportedHost
+              ? null
+              : ShopQaEvidenceStore.forTest(syntheticQaScope),
+          saveArchive: (_, _) async {
+            saveAsCalled = true;
+            return 'must-not-save';
+          },
           exportAction: (_) async {
             exportCalled = true;
             return ShopBackupExportResult.saved;
@@ -1676,8 +1715,31 @@ void main() {
     final saveButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
     );
-    expect(saveButton.onPressed, isNull);
+    expect(saveButton.onPressed, isNotNull);
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
+    );
+    await _pumpUntil(
+      tester,
+      find.textContaining('Synthetic QA recovery evidence saved'),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Synthetic QA recovery evidence saved'),
+      findsOneWidget,
+    );
     expect(exportCalled, isFalse);
+    expect(saveAsCalled, isFalse);
+    final after = await evidenceFiles();
+    expect(after, hasLength(before.length + 1));
+    final newFiles = after.where(
+      (file) => !before.any((old) => old.path == file.path),
+    );
+    expect(newFiles, hasLength(1));
+    final evidence = newFiles.single;
+    expect(evidence.parent.absolute.path, evidenceRoot.absolute.path);
+    expect((await evidence.readAsBytes()).sublist(0, 4), ascii.encode('SMQA'));
+    await evidence.delete();
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });

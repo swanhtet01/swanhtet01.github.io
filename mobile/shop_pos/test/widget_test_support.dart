@@ -5498,10 +5498,8 @@ void registerWidgetTests(WidgetTestPartition partition) {
       await tester.pumpAndSettle();
 
       expect(find.text('Tea'), findsOneWidget);
-      expect(
-        (await database.readActiveProducts()).single.barcode,
-        '0012345678905',
-      );
+      final createdProduct = (await database.readActiveProducts()).single;
+      expect(createdProduct.barcode, '0012345678905');
       await tester.tap(find.byTooltip('Add to sale'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Review sale'));
@@ -5539,7 +5537,7 @@ void registerWidgetTests(WidgetTestPartition partition) {
       final savedReceipt = (await database.readRecentSales()).single;
       final newerReceipt = await database.recordCashSale(
         operationId: 'newer-same-total-receipt',
-        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        lines: [ShopSaleLineInput(productId: createdProduct.id, quantity: 1)],
       );
       expect(newerReceipt.totalMmk, savedReceipt.totalMmk);
       await tester.tap(
