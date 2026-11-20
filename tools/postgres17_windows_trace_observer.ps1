@@ -216,6 +216,16 @@ try {
   $buffersLost = Try-ReadLossCounter $summaryText 'BuffersLost'
   if ($buffersLost -eq $null) { $buffersLost = Try-ReadLossCounter $summaryText 'Buffers Lost' }
   if ($eventsLost -eq $null -or $buffersLost -eq $null) {
+    try {
+      $shapeLines = @(& $node $parserPath --loss-counter-shape $summaryPath)
+      $shapeExitCode = $LASTEXITCODE
+      if ($shapeExitCode -eq 0 -and $shapeLines.Count -eq 1 -and
+        $shapeLines[0] -cmatch '^v1;candidateLines=[0-9];more=(?:yes|no);patterns=(?:none|[EBXU][LODU][FRU][CQXSU][DN](?:,[EBXU][LODU][FRU][CQXSU][DN]){0,7})$') {
+        Write-Warning ('observer_probe_loss_counter_shape:' + $shapeLines[0]) -WarningAction Continue
+      }
+    } catch {
+      Write-Warning 'observer_probe_loss_counter_shape_unavailable' -WarningAction Continue
+    }
     Fail 'observer_probe_loss_counter_unavailable'
   }
   if ($eventsLost -ne 0 -or $buffersLost -ne 0) { Fail 'observer_probe_trace_loss_detected' }

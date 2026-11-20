@@ -1,15 +1,20 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   validateObserverProbe,
   verifyEvidenceDirectory,
 } from './postgres17_windows_evidence_contract.mjs'
-import { correlateTraceXml } from './postgres17_windows_trace_parser.mjs'
+import {
+  correlateTraceXml,
+  lossCounterLineShapes,
+} from './postgres17_windows_trace_parser.mjs'
 import { implementationPaths } from '../kernel/database-rehearsal-evidence.mjs'
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
@@ -157,6 +162,22 @@ test('separate PR observer is label-gated, exact-head, non-authoritative and inv
   }
 })
 
+test('PR observer parses the exact checkout before running WPR', async () => {
+  const workflow = await readFile(new URL(
+    '../.github/workflows/postgres17-pr-observer-probe.yml', import.meta.url), 'utf8')
+  const clean = workflow.indexOf('      - name: Verify clean exact source\n')
+  const parse = workflow.indexOf('      - name: Validate checked-out observer PowerShell syntax\n')
+  const execute = workflow.indexOf('      - name: Run non-authoritative observer probe only\n')
+  assert.ok(clean >= 0 && clean < parse && parse < execute)
+  const step = workflow.slice(parse, execute)
+  assert.match(step, /^        shell: powershell$/m)
+  assert.match(step, /Join-Path -Path \$env:REPOSITORY_ROOT -ChildPath 'tools\/postgres17_windows_trace_observer\.ps1' -ErrorAction Stop/)
+  assert.match(step, /\[System\.Management\.Automation\.Language\.Parser\]::ParseFile\(\$source, \[ref\]\$tokens, \[ref\]\$parseErrors\)/)
+  assert.match(step, /\$null -eq \$ast -or \$null -eq \$parseErrors -or \$parseErrors\.Count -ne 0/)
+  assert.match(step, /catch \{\n            throw 'observer_pr_script_parse_invalid'\n          \}/)
+  assert.doesNotMatch(step, /(?:Write-(?:Host|Output|Error)|ConvertTo-Json|Format-List|Start-Process|&\s*\$source|ExecutionPolicy)/i)
+})
+
 test('observer inspector obeys host script policy and retains refusal and cleanup', async () => {
   const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
   assert.ok(source.includes("& 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' `"))
@@ -240,6 +261,63 @@ test('observer probe policy binds exact source and remains non-authoritative', a
   assert.equal(policy.closureObserver.status, 'pending')
   assert.equal(policy.closureObserver.command, null)
   assert.equal(policy.approval.status, 'pending')
+})
+
+test('loss summary diagnostic uses fixed shapes, never counter values', () => {
+  const zero = 'Events Lost: 0\r\nBuffers Lost: 0\r\n'
+  const nonzero = 'Events Lost: 8\r\nBuffers Lost: 3\r\n'
+  assert.equal(lossCounterLineShapes(zero),
+    'v1;candidateLines=2;more=no;patterns=ELFCD,BLFCD')
+  assert.equal(lossCounterLineShapes(nonzero), lossCounterLineShapes(zero))
+  assert.equal(lossCounterLineShapes('Lost Events = 7\nLost Buffers = 2'),
+    'v1;candidateLines=2;more=no;patterns=ELRQD,BLRQD')
+  assert.equal(lossCounterLineShapes('Trace summary\nNo counters here'),
+    'v1;candidateLines=0;more=no;patterns=none')
+  assert.equal(lossCounterLineShapes('Events Lost: ???\n'),
+    'v1;candidateLines=1;more=no;patterns=ELFCN')
+  assert.equal(lossCounterLineShapes(`Events Lost: ${'x'.repeat(513)}`),
+    'v1;candidateLines=1;more=no;patterns=UUUUN')
+  assert.throws(() => lossCounterLineShapes('x'.repeat(65537)),
+    /observer_probe_loss_summary_unsafe/)
+  assert.throws(() => lossCounterLineShapes('Events Lost: 0\0secret'),
+    /observer_probe_loss_summary_unsafe/)
+})
+
+test('loss summary diagnostic CLI emits no source text or secret-like input', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-loss-shape-'))
+  try {
+    const path = join(directory, 'summary.txt')
+    await writeFile(path,
+      'Events Lost: 0 C:\\Users\\Private\\secret-file password=do-not-print\n'
+      + 'Buffers Lost: 0\n')
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url)),
+      '--loss-counter-shape', path,
+    ], { encoding: 'utf8' })
+    assert.equal(result.status, 0)
+    assert.equal(result.stderr, '')
+    assert.equal(result.stdout.trim(),
+      'v1;candidateLines=2;more=no;patterns=ELFCD,BLFCD')
+    assert.doesNotMatch(result.stdout, /Private|secret|password|Users|[A-Z]:\\/i)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('missing loss counters remain fail closed after bounded shape diagnostic', async () => {
+  const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
+  const missing = source.indexOf('if ($eventsLost -eq $null -or $buffersLost -eq $null) {')
+  const diagnostic = source.indexOf('$node $parserPath --loss-counter-shape $summaryPath', missing)
+  const refusal = source.indexOf("Fail 'observer_probe_loss_counter_unavailable'", diagnostic)
+  const zeroCheck = source.indexOf("Fail 'observer_probe_trace_loss_detected'", refusal)
+  const correlation = source.indexOf('$node $parserPath $traceXmlPath', zeroCheck)
+  assert.ok(missing >= 0 && diagnostic > missing && refusal > diagnostic
+    && zeroCheck > refusal && correlation > zeroCheck)
+  assert.match(source, /\$shapeLines\.Count -eq 1/)
+  assert.match(source, /\$shapeLines\[0\] -cmatch '\^v1;/)
+  assert.match(source, /Write-Warning \('observer_probe_loss_counter_shape:' \+ \$shapeLines\[0\]\) -WarningAction Continue/)
+  assert.match(source, /catch \{\s*Write-Warning 'observer_probe_loss_counter_shape_unavailable' -WarningAction Continue\s*\}/)
+  assert.doesNotMatch(source, /Write-(?:Warning|Host|Output)\s+\$summaryText/)
 })
 
 test('probe uses fixed signed Windows tools, explicit loss checks, and no PostgreSQL path', async () => {

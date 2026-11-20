@@ -127,10 +127,12 @@ class ShopBackupExportScreen extends StatefulWidget {
                   (saveArchive != null &&
                       scratchRoot != null &&
                       encryptedRoot != null)))) ||
-      (runtimeScope?.configuration.isSyntheticQa == true &&
-          runtimeScope?.capabilities.syntheticEvidence == true &&
-          ((qaEvidenceStore?.isBoundTo(runtimeScope!) ?? false) ||
-              (qaEvidenceStore == null && Platform.isAndroid)));
+      ShopQaEvidenceStore.availableForRuntime(
+        runtimeScope,
+        evidenceStore: qaEvidenceStore,
+        isAndroid: Platform.isAndroid,
+        isWindows: Platform.isWindows,
+      );
 
   @override
   State<ShopBackupExportScreen> createState() => _ShopBackupExportScreenState();

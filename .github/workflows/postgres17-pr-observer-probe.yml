@@ -43,6 +43,20 @@ jobs:
         run: |
           if ((git rev-parse HEAD).Trim() -cne $env:EXACT_SHA) { throw 'observer_pr_checkout_sha_mismatch' }
           if (git status --porcelain=v1 --untracked-files=all) { throw 'observer_pr_checkout_not_clean' }
+      - name: Validate checked-out observer PowerShell syntax
+        shell: powershell
+        run: |
+          try {
+            $source = Join-Path -Path $env:REPOSITORY_ROOT -ChildPath 'tools/postgres17_windows_trace_observer.ps1' -ErrorAction Stop
+            $tokens = $null
+            $parseErrors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($source, [ref]$tokens, [ref]$parseErrors)
+            if ($null -eq $ast -or $null -eq $parseErrors -or $parseErrors.Count -ne 0) {
+              throw 'observer_pr_script_parse_invalid'
+            }
+          } catch {
+            throw 'observer_pr_script_parse_invalid'
+          }
       - name: Run non-authoritative observer probe only
         shell: pwsh
         env:

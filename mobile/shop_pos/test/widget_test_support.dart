@@ -5536,24 +5536,98 @@ void registerWidgetTests(WidgetTestPartition partition) {
         find.byKey(const ValueKey('shop-sale-completion-view')),
         findsOneWidget,
       );
+      final savedReceipt = (await database.readRecentSales()).single;
+      final newerReceipt = await database.recordCashSale(
+        operationId: 'newer-same-total-receipt',
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      );
+      expect(newerReceipt.totalMmk, savedReceipt.totalMmk);
       await tester.tap(
         find.bySemanticsIdentifier('shop.sale-completion.view-receipt'),
       );
       await tester.pumpAndSettle();
       expect(find.text('Recent sales'), findsOneWidget);
-      expect(find.text('2,500 MMK'), findsOneWidget);
-      expect(find.bySemanticsIdentifier('shop.recent-sale.0'), findsOneWidget);
-      await tester.tap(find.bySemanticsIdentifier('shop.recent-sale.0'));
-      await tester.pumpAndSettle();
       expect(find.text('Sale details'), findsOneWidget);
       expect(find.bySemanticsIdentifier('shop.saved-receipt'), findsOneWidget);
+      expect(find.text(savedReceipt.id), findsOneWidget);
+      expect(find.text(newerReceipt.id), findsNothing);
       expect(
         find.bySemanticsIdentifier('shop.saved-receipt.reprint'),
         findsOneWidget,
       );
       expect(find.text('Tea × 1'), findsOneWidget);
+      expect(await database.countSales(), 2);
+      expect((await database.readActiveProducts()).single.onHand, 0);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('task shell opens the exact saved receipt on repeat visits', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 3,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sell'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('shop-catalog-row:tea')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Cash sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Complete sale'));
+        await tester.pumpAndSettle();
+
+        final savedReceipt = (await database.readRecentSales()).single;
+        final newerReceipt = await database.recordCashSale(
+          operationId: 'newer-task-shell-receipt',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect(newerReceipt.totalMmk, savedReceipt.totalMmk);
+        await tester.tap(
+          find.byKey(const ValueKey('shop-sale-completion-view')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Sale details'), findsOneWidget);
+        expect(find.text(savedReceipt.id), findsOneWidget);
+        expect(find.text(newerReceipt.id), findsNothing);
+
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sell'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('shop-sale-completion-view')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Sale details'), findsOneWidget);
+        expect(find.text(savedReceipt.id), findsOneWidget);
+        expect(await database.countSales(), 2);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
     });
 
     testWidgets('desktop first use shows one focused setup workspace', (
@@ -5777,6 +5851,94 @@ void registerWidgetTests(WidgetTestPartition partition) {
         }
       }
     });
+
+    testWidgets(
+      'held-sale desktop catalog keeps its product controls visible',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        tester.view.physicalSize = const Size(1269, 716);
+        tester.view.devicePixelRatio = 1;
+        for (final myanmar in [false, true]) {
+          for (final textScale in [1.0, 1.4]) {
+            tester.platformDispatcher.textScaleFactorTestValue = textScale;
+            final database = ShopDatabase(NativeDatabase.memory());
+            try {
+              await database.addProduct(
+                id: 'tea',
+                name: 'Tea',
+                category: 'Drinks',
+                priceMmk: 2500,
+                openingStock: 3,
+              );
+              await database.saveCounterSaleDraft(
+                operationId: 'held-catalog',
+                quantities: const {'tea': 1},
+              );
+              await database.holdCounterSaleDraft(
+                id: 'held-catalog-ticket',
+                name: 'Customer May',
+                operationId: 'held-catalog',
+              );
+              await tester.pumpWidget(
+                ShopApp(
+                  testOnlyAllowMissingRuntimeScope: true,
+                  database: database,
+                  authClient: null,
+                  apiBaseUrl: 'https://app.supermega.dev',
+                  initialMyanmar: myanmar,
+                ),
+              );
+              await tester.pumpAndSettle();
+              await tester.tap(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'));
+              await tester.pumpAndSettle();
+
+              final catalog = find.byKey(const ValueKey('shop-split-catalog'));
+              final row = find.byKey(const ValueKey('shop-catalog-row:tea'));
+              final add = find.byKey(const ValueKey('shop-add-affordance:tea'));
+              final price = find.text(myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK');
+              final stock = find.text(myanmar ? '၃ ကျန်' : '3 left');
+              expect(catalog, findsOneWidget);
+              expect(
+                find.byKey(const ValueKey('shop-held-sales-open')),
+                findsOneWidget,
+              );
+              expect(
+                find.byKey(const ValueKey('shop-category-filters')),
+                findsOneWidget,
+              );
+              expect(row, findsOneWidget);
+              expect(price, findsOneWidget);
+              expect(stock, findsOneWidget);
+              final catalogRect = tester.getRect(catalog);
+              final rowRect = tester.getRect(row);
+              expect(rowRect.top, greaterThan(catalogRect.top));
+              expect(
+                rowRect.bottom,
+                lessThanOrEqualTo(catalogRect.bottom - 16),
+              );
+              expect(
+                tester.getRect(add).bottom,
+                lessThanOrEqualTo(catalogRect.bottom - 16),
+              );
+              expect(tester.getRect(price).overlaps(rowRect), isTrue);
+              expect(tester.getRect(stock).overlaps(rowRect), isTrue);
+              await tester.tap(row);
+              await tester.pumpAndSettle();
+              expect((await database.readCounterSaleDraft())?.quantities, {
+                'tea': 1,
+              });
+              expect(tester.takeException(), isNull);
+            } finally {
+              await tester.pumpWidget(const SizedBox.shrink());
+              await tester.pump(const Duration(milliseconds: 1));
+              await database.close();
+            }
+          }
+        }
+      },
+    );
 
     testWidgets('tablet Sell hint stays visible with enlarged text', (
       tester,

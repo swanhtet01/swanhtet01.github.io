@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { implementationEvidence } from './record_postgres17_rehearsal.mjs'
-import { buildSanitizedProof, validateSanitizedProof } from '../kernel/database-rehearsal-evidence.mjs'
+import { buildSanitizedProof, rehearsalMigrations, validateSanitizedProof } from '../kernel/database-rehearsal-evidence.mjs'
 
 import {
   COMPANY_CAPACITY_CLAIM_CONTRACT,
@@ -1064,7 +1064,7 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === databaseImplementationPaths.filter((path) => path.startsWith('supabase/migrations/')).length
+  && databaseRehearsal.migration?.count === rehearsalMigrations.length
   && databaseRehearsal.migration?.schemaVersion === 14
   && databaseRehearsal.migration?.productionValidatorReady === true
   && Object.keys(databaseRehearsal.checks || {}).length === 79

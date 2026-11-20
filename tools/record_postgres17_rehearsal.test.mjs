@@ -509,6 +509,19 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.ok(runner.paths.includes('tools/private_trial_v14_contract.py'))
   assert.ok(runner.paths.includes('tests/test_shop_correction_postgres_v14_contract.py'))
 })
+
+test('HQ checks applied migrations without treating source-only migrations as applied', async () => {
+  const hq = await readFile('tools/verify_hq_contract.mjs', 'utf8')
+  const countGuard = hq.match(/&& (databaseRehearsal\.migration\?\.count === [^\n]+)/)?.[1]
+  assert.ok(countGuard, 'HQ must retain an explicit migration-count guard')
+  const checkCount = new Function(
+    'databaseRehearsal', 'databaseImplementationPaths', 'rehearsalMigrations',
+    `return ${countGuard}`,
+  )
+  assert.equal(sourceMigrationNames.length, migrationNames.length + sourceOnlyMigrations.length)
+  assert.equal(checkCount({ migration: { count: migrationNames.length } }, implementation.paths, migrationNames), true)
+  assert.equal(checkCount({ migration: { count: sourceMigrationNames.length } }, implementation.paths, migrationNames), false)
+})
 const expectedToolchain = {
   contract: 'supermega.postgres17-toolchain-receipt-evidence.v1',
   profileId: 'synthetic-profile',

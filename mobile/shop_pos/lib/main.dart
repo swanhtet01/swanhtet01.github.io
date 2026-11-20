@@ -29,6 +29,7 @@ import 'shop_connected_application_boundary.dart';
 import 'shop_database.dart';
 import 'shop_installed_qa_selectors.dart';
 import 'shop_models.dart';
+import 'shop_qa_evidence_store.dart';
 import 'shop_runtime_profile.dart';
 import 'shop_runtime_scope.dart';
 import 'shop_staff_authorization.dart';
@@ -215,6 +216,8 @@ class _ShopAppState extends State<ShopApp> {
   int _workspaceTab = 0;
   int _todayRefreshToken = 0;
   int _salesRefreshToken = 0;
+  int _savedReceiptRequest = 0;
+  ShopSaleReceipt? _savedReceiptToOpen;
   int _addProductRequest = 0;
   bool _counterOpened = false;
   bool _salesOpened = false;
@@ -328,6 +331,7 @@ class _ShopAppState extends State<ShopApp> {
     if (index != 1) FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _workspaceTab = index;
+      _savedReceiptToOpen = null;
       if (index == 0) _todayRefreshToken++;
       if (index == 1) _counterOpened = true;
       if (index == 2) {
@@ -341,6 +345,14 @@ class _ShopAppState extends State<ShopApp> {
   }
 
   Future<void> _openSales(BuildContext context) async => _selectTask(2);
+
+  void _openSavedReceipt(ShopSaleReceipt receipt) {
+    _selectTask(2);
+    setState(() {
+      _savedReceiptToOpen = receipt;
+      _savedReceiptRequest++;
+    });
+  }
 
   Future<void> _openStock(BuildContext context) async => _selectTask(3);
 
@@ -686,6 +698,7 @@ class _ShopAppState extends State<ShopApp> {
                                       onLanguageChanged: _setLanguage,
                                       onToday: _showToday,
                                       onSales: () => _selectTask(2),
+                                      onSavedReceipt: _openSavedReceipt,
                                       onStock: () => _selectTask(3),
                                       embeddedTaskShell: true,
                                       workspaceContentWidth:
@@ -705,6 +718,8 @@ class _ShopAppState extends State<ShopApp> {
                                           _correctionAuthorizer,
                                       embeddedTaskShell: true,
                                       refreshToken: _salesRefreshToken,
+                                      savedReceiptToOpen: _savedReceiptToOpen,
+                                      savedReceiptRequest: _savedReceiptRequest,
                                     )
                                   else
                                     const SizedBox.shrink(),
@@ -809,6 +824,7 @@ class ShopHome extends StatefulWidget {
     this.correctionAuthorizer,
     this.onToday,
     this.onSales,
+    this.onSavedReceipt,
     this.onStock,
     this.embeddedTaskShell = false,
     this.workspaceContentWidth,
@@ -841,6 +857,7 @@ class ShopHome extends StatefulWidget {
   final ShopCorrectionAuthorizer? correctionAuthorizer;
   final VoidCallback? onToday;
   final VoidCallback? onSales;
+  final ValueChanged<ShopSaleReceipt>? onSavedReceipt;
   final VoidCallback? onStock;
   final bool embeddedTaskShell;
   final double? workspaceContentWidth;
@@ -931,6 +948,10 @@ class _ShopHomeState extends State<ShopHome> {
   PendingWalletCheckout? _pendingWalletCheckout;
   _SelectedMemberCard? _selectedMemberCard;
   _SaleCompletion? _saleCompletion;
+  final GlobalKey _catalogControlsKey = GlobalKey();
+  int? _catalogControlsSignature;
+  int? _activeCatalogControlsSignature;
+  double? _catalogControlsHeight;
   List<HeldSaleTicket> _heldTickets = const [];
   XFile? _recoveredMenuPhoto;
   final _thumbnailFutures = <String, Future<Uint8List?>>{};
@@ -1539,7 +1560,11 @@ class _ShopHomeState extends State<ShopHome> {
                                                     catalogWidth:
                                                         constraints.maxWidth,
                                                   ),
-                                                  child: _catalog(products),
+                                                  child: _catalog(
+                                                    products,
+                                                    catalogWidth:
+                                                        constraints.maxWidth,
+                                                  ),
                                                 ),
                                               ),
                                         ),
@@ -1884,7 +1909,7 @@ class _ShopHomeState extends State<ShopHome> {
                     identifier: 'shop.sale-completion.view-receipt',
                     child: TextButton.icon(
                       key: const ValueKey('shop-sale-completion-view'),
-                      onPressed: _openRecentSales,
+                      onPressed: () => _openSavedReceipt(receipt),
                       icon: const Icon(Icons.receipt_long_outlined),
                       label: Text(
                         shopCopy(
@@ -1960,6 +1985,39 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
+  int _catalogControlsLayoutSignature(
+    List<ShopProduct> products,
+    double catalogWidth,
+  ) => Object.hash(
+    catalogWidth,
+    widget.myanmar,
+    MediaQuery.textScalerOf(context).scale(1),
+    products.isEmpty,
+    _heldTickets.length,
+    _catalogCategories(products).isNotEmpty,
+    products.any((product) => _favoriteProductIds.contains(product.id)),
+    _favoritesOnly,
+  );
+
+  void _measureCatalogControls(int signature) {
+    _activeCatalogControlsSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _activeCatalogControlsSignature != signature) return;
+      final box = _catalogControlsKey.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      final height = box.size.height;
+      if (_catalogControlsSignature == signature &&
+          _catalogControlsHeight != null &&
+          (_catalogControlsHeight! - height).abs() < 0.5) {
+        return;
+      }
+      setState(() {
+        _catalogControlsSignature = signature;
+        _catalogControlsHeight = height;
+      });
+    });
+  }
+
   double _catalogHeight(
     List<ShopProduct> products,
     double maxHeight, {
@@ -1973,36 +2031,60 @@ class _ShopHomeState extends State<ShopHome> {
     // Burmese's three-line product rows need the same vertical budget as EN.
     // A shorter estimate clips the last row while empty tablet space remains.
     const rowHeight = 96.0;
-    // Compact tablet headers wrap product actions into a second line. Give
-    // that header its own height before allocating the scrollable product row.
-    final headerHeight = catalogWidth < 500 ? 324.0 : 148.0;
+    // The controls can wrap in Burmese and may include a category strip or a
+    // held-sale action. Use a provisional compact budget for the first frame,
+    // then the measured fixed controls on later frames.
+    final signature = _catalogControlsLayoutSignature(products, catalogWidth);
+    final hasFilters =
+        _catalogCategories(products).isNotEmpty ||
+        _favoritesOnly ||
+        products.any((product) => _favoriteProductIds.contains(product.id));
+    final controlsHeight =
+        _catalogControlsSignature == signature && _catalogControlsHeight != null
+        ? _catalogControlsHeight! + 32
+        : (catalogWidth < 500 ? 324.0 : 148.0) * textScale +
+              (hasFilters ? 60.0 : 0.0) +
+              (_heldTickets.isNotEmpty ? 56.0 * textScale : 0.0) +
+              32.0;
+    final emptyHeight = controlsHeight + rowHeight * textScale;
     final desiredHeight = matchingCount == 0
-        ? 360.0
-        : headerHeight + matchingCount * rowHeight * textScale;
+        ? (emptyHeight > 360 ? emptyHeight : 360.0)
+        : controlsHeight + matchingCount * rowHeight * textScale;
     return desiredHeight.clamp(0.0, maxHeight).toDouble();
   }
 
-  Widget _catalog(List<ShopProduct> products) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          _catalogHeader(products),
-          const SizedBox(height: 12),
-          _searchField(products),
-          _categoryFilters(products),
-          if (_heldTickets.isNotEmpty) _heldSalesAction(),
-          const SizedBox(height: 8),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) =>
-                  _productList(products, catalogWidth: constraints.maxWidth),
+  Widget _catalog(List<ShopProduct> products, {required double catalogWidth}) {
+    _measureCatalogControls(
+      _catalogControlsLayoutSignature(products, catalogWidth),
+    );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Column(
+              key: _catalogControlsKey,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _catalogHeader(products),
+                const SizedBox(height: 12),
+                _searchField(products),
+                _categoryFilters(products),
+                if (_heldTickets.isNotEmpty) _heldSalesAction(),
+                const SizedBox(height: 8),
+              ],
             ),
-          ),
-        ],
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) =>
+                    _productList(products, catalogWidth: constraints.maxWidth),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _heldSalesAction() => Align(
     alignment: Alignment.centerLeft,
@@ -5342,6 +5424,27 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
+  void _openSavedReceipt(ShopSaleReceipt receipt) {
+    if (widget.onSavedReceipt case final open?) {
+      open(receipt);
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => RecentSalesScreen(
+          database: widget.database,
+          myanmar: widget.myanmar,
+          runtimeScope: widget.runtimeScope,
+          testOnlyAllowMissingRuntimeScope:
+              widget.testOnlyAllowMissingRuntimeScope,
+          correctionAuthorizer: widget.correctionAuthorizer,
+          savedReceiptToOpen: receipt,
+          savedReceiptRequest: 1,
+        ),
+      ),
+    );
+  }
+
   void _openSettings() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (_) => ShopSettingsScreen(
@@ -6168,8 +6271,11 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                   ),
                   const Divider(height: 1),
                   if (_runtimeCapabilities.externalFileSaving ||
-                      (_runtimeCapabilities.syntheticEvidence &&
-                          Platform.isAndroid))
+                      ShopQaEvidenceStore.availableForRuntime(
+                        widget.runtimeScope,
+                        isAndroid: Platform.isAndroid,
+                        isWindows: Platform.isWindows,
+                      ))
                     _SetupTile(
                       icon: Icons.file_download_outlined,
                       title: shopCopy(

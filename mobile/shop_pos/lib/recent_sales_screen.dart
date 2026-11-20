@@ -23,6 +23,8 @@ class RecentSalesScreen extends StatefulWidget {
     this.testOnlyAllowMissingRuntimeScope = false,
     this.embeddedTaskShell = false,
     this.refreshToken = 0,
+    this.savedReceiptToOpen,
+    this.savedReceiptRequest = 0,
     super.key,
   }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
@@ -37,6 +39,8 @@ class RecentSalesScreen extends StatefulWidget {
   final bool testOnlyAllowMissingRuntimeScope;
   final bool embeddedTaskShell;
   final int refreshToken;
+  final ShopSaleReceipt? savedReceiptToOpen;
+  final int savedReceiptRequest;
 
   @override
   State<RecentSalesScreen> createState() => _RecentSalesScreenState();
@@ -55,6 +59,33 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
       ReceiptReprintService(runtimeScope: widget.runtimeScope);
   bool _reprinting = false;
   bool _openingCorrection = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleSavedReceipt();
+  }
+
+  void _scheduleSavedReceipt() {
+    final receipt = widget.savedReceiptToOpen;
+    if (receipt == null) return;
+    final request = widget.savedReceiptRequest;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.savedReceiptRequest != request ||
+          widget.savedReceiptToOpen?.id != receipt.id) {
+        return;
+      }
+      unawaited(
+        _showSale(
+          receipt,
+          stillRequested: () =>
+              widget.savedReceiptRequest == request &&
+              widget.savedReceiptToOpen?.id == receipt.id,
+        ),
+      );
+    });
+  }
 
   Future<ShopManagedWorkspaceBinding?> _correctionBinding() async {
     final authorizer = widget.correctionAuthorizer;
@@ -90,6 +121,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   void didUpdateWidget(RecentSalesScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshToken != widget.refreshToken) _sales = _readPage();
+    if (oldWidget.savedReceiptRequest != widget.savedReceiptRequest) {
+      _scheduleSavedReceipt();
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -592,11 +626,14 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     ),
   };
 
-  Future<void> _showSale(ShopSaleReceipt sale) async {
+  Future<void> _showSale(
+    ShopSaleReceipt sale, {
+    bool Function()? stillRequested,
+  }) async {
     final correctionBinding = sale.reversal == null
         ? await _correctionBinding()
         : null;
-    if (!mounted) return;
+    if (!mounted || (stillRequested != null && !stillRequested())) return;
     final soldTimeLabel = shopCopy(
       widget.myanmar,
       sale.reversal == null ? 'Sold' : 'Original sale',

@@ -9,10 +9,10 @@ import 'shop_backup.dart';
 import 'shop_database.dart';
 import 'shop_runtime_scope.dart';
 
-/// Android synthetic-QA-only transport for encrypted recovery evidence.
+/// Android and Windows synthetic-QA transport for encrypted recovery evidence.
 ///
 /// The files remain inside the QA application's private support directory. A
-/// test operator may copy them with Android's debug-only `run-as` boundary;
+/// test operator may copy Android evidence with the debug-only `run-as` boundary;
 /// Shop never requests broad storage access or opens a system file picker.
 /// The integrity tag uses a public synthetic-test key and only detects an
 /// accidental profile/build mismatch. It is not production authentication.
@@ -26,8 +26,8 @@ final class ShopQaEvidenceStore {
         runtimeScope.syntheticEvidenceRoot == null) {
       throw StateError('shop_qa_evidence_scope_required');
     }
-    if (!Platform.isAndroid && !allowNonAndroidForTest) {
-      throw UnsupportedError('shop_qa_evidence_android_only');
+    if (!supportsCurrentPlatform && !allowNonAndroidForTest) {
+      throw UnsupportedError('shop_qa_evidence_platform_unavailable');
     }
   }
 
@@ -39,6 +39,25 @@ final class ShopQaEvidenceStore {
       ShopQaEvidenceStore._(runtimeScope, allowNonAndroidForTest: true);
 
   static const contract = 'supermega.shop.synthetic-qa-evidence.v1';
+  static bool get supportsCurrentPlatform =>
+      Platform.isAndroid || Platform.isWindows;
+
+  /// The normal QA path is app-private on Android and Windows. A bound store
+  /// may be supplied by local tests on another host without enabling a picker.
+  static bool availableForRuntime(
+    ShopRuntimeScope? scope, {
+    ShopQaEvidenceStore? evidenceStore,
+    required bool isAndroid,
+    required bool isWindows,
+  }) {
+    if (scope?.configuration.isSyntheticQa != true ||
+        scope?.capabilities.syntheticEvidence != true ||
+        scope?.capabilities.externalFileSaving != false) {
+      return false;
+    }
+    return evidenceStore?.isBoundTo(scope!) ?? (isAndroid || isWindows);
+  }
+
   static const formatVersion = 1;
   static const fileExtension = '.smqa';
   static const _magic = <int>[0x53, 0x4d, 0x51, 0x41]; // SMQA
@@ -157,8 +176,8 @@ final class ShopQaEvidenceStore {
         runtimeScope.capabilities.externalFileSaving) {
       throw StateError('shop_qa_evidence_scope_required');
     }
-    if (!Platform.isAndroid && !_allowNonAndroidForTest) {
-      throw UnsupportedError('shop_qa_evidence_android_only');
+    if (!supportsCurrentPlatform && !_allowNonAndroidForTest) {
+      throw UnsupportedError('shop_qa_evidence_platform_unavailable');
     }
   }
 

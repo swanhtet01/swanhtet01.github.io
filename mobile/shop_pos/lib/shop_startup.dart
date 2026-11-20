@@ -161,11 +161,12 @@ class _ShopStartupState extends State<ShopStartup> {
   bool get _externalFileSavingAllowed =>
       widget.runtimeScope?.capabilities.externalFileSaving ??
       widget.allowTestFileAccessWithoutScope;
-  bool get _qaEvidenceAvailable =>
-      widget.runtimeScope?.configuration.isSyntheticQa == true &&
-      widget.runtimeScope?.capabilities.syntheticEvidence == true &&
-      ((widget.qaEvidenceStore?.isBoundTo(widget.runtimeScope!) ?? false) ||
-          (widget.qaEvidenceStore == null && Platform.isAndroid));
+  bool get _qaEvidenceAvailable => ShopQaEvidenceStore.availableForRuntime(
+    widget.runtimeScope,
+    evidenceStore: widget.qaEvidenceStore,
+    isAndroid: Platform.isAndroid,
+    isWindows: Platform.isWindows,
+  );
   bool get _backupRestoreAvailable =>
       _externalFileSavingAllowed || _qaEvidenceAvailable;
 

@@ -3,12 +3,52 @@ import { resolve, win32 } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const MAX_XML_BYTES = 64 * 1024 * 1024
+const MAX_SUMMARY_BYTES = 64 * 1024
 const localName = (name) => name.split(':').at(-1)
 
 function fail(code) {
   const error = new Error(code)
   error.code = code
   throw error
+}
+
+// This is a diagnostic code, not a loss-counter parser. It never includes
+// summary text or the value of a counter, and cannot authorize probe evidence.
+export function lossCounterLineShapes(summary) {
+  if (typeof summary !== 'string' || !summary
+    || Buffer.byteLength(summary) > MAX_SUMMARY_BYTES || summary.includes('\0')) {
+    fail('observer_probe_loss_summary_unsafe')
+  }
+  const shapes = []
+  let candidateLines = 0
+  for (const line of summary.split(/\r?\n/)) {
+    const event = /events?/i.exec(line)
+    const buffer = /buffers?/i.exec(line)
+    const lost = /lost/i.exec(line)
+    const loss = /loss/i.exec(line)
+    const dropped = /dropp?ed/i.exec(line)
+    if (!event && !buffer && !lost && !loss && !dropped) continue
+    candidateLines = Math.min(candidateLines + 1, 9)
+    if (shapes.length === 8) continue
+    if (line.length > 512) {
+      shapes.push('UUUUN')
+      continue
+    }
+    const role = event && buffer ? 'X' : event ? 'E' : buffer ? 'B' : 'U'
+    const term = lost ? 'L' : loss ? 'O' : dropped ? 'D' : 'U'
+    const roleMatch = event && buffer ? (event.index < buffer.index ? event : buffer)
+      : event ?? buffer
+    const termMatch = lost ?? loss ?? dropped
+    const order = !roleMatch || !termMatch ? 'U'
+      : roleMatch.index < termMatch.index ? 'F' : 'R'
+    const tailStart = Math.max(roleMatch ? roleMatch.index + roleMatch[0].length : 0,
+      termMatch ? termMatch.index + termMatch[0].length : 0)
+    const tail = line.slice(tailStart)
+    const separator = /^\s*:/.test(tail) ? 'C' : /^\s*=/.test(tail) ? 'Q'
+      : /^[^<]{0,32}[<>]/.test(tail) ? 'X' : /^\s+/.test(tail) ? 'S' : 'U'
+    shapes.push(`${role}${term}${order}${separator}${/\d/.test(tail) ? 'D' : 'N'}`)
+  }
+  return `v1;candidateLines=${candidateLines};more=${candidateLines > 8 ? 'yes' : 'no'};patterns=${shapes.join(',') || 'none'}`
 }
 
 function parseAttributes(source) {
@@ -254,6 +294,15 @@ export function correlateTraceXml(xml, expectedParentPath, expectedChildPath) {
 }
 
 async function main() {
+  if (process.argv[2] === '--loss-counter-shape') {
+    if (process.argv.length !== 4) fail('observer_probe_loss_summary_arguments_invalid')
+    const bytes = await readFile(resolve(process.argv[3]))
+    if (bytes.length < 1 || bytes.length > MAX_SUMMARY_BYTES) {
+      fail('observer_probe_loss_summary_unsafe')
+    }
+    process.stdout.write(`${lossCounterLineShapes(bytes.toString('utf8'))}\n`)
+    return
+  }
   if (process.argv.length !== 5) fail('observer_probe_trace_parser_arguments_invalid')
   const xmlPath = resolve(process.argv[2])
   const bytes = await readFile(xmlPath)
