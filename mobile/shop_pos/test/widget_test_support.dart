@@ -5995,6 +5995,27 @@ void registerWidgetTests(WidgetTestPartition partition) {
               expect(summary, findsOneWidget);
               expect(total, findsOneWidget);
               expect(tester.getSize(member).width, greaterThanOrEqualTo(48));
+              final actions = find.byKey(const ValueKey('shop-cart-actions'));
+              expect(actions, findsOneWidget);
+              final actionBounds = tester.getRect(actions);
+              final basketBounds = tester.getRect(
+                find.byKey(const ValueKey('shop-split-basket')),
+              );
+              expect(
+                actionBounds.left,
+                greaterThanOrEqualTo(basketBounds.left),
+              );
+              expect(actionBounds.right, lessThanOrEqualTo(basketBounds.right));
+              for (final key in ['shop-hold-sale', 'shop-clear-sale']) {
+                final action = find.byKey(ValueKey(key));
+                expect(action, findsOneWidget);
+                final bounds = tester.getRect(action);
+                expect(bounds.height, greaterThanOrEqualTo(48));
+                expect(bounds.left, greaterThanOrEqualTo(actionBounds.left));
+                expect(bounds.right, lessThanOrEqualTo(actionBounds.right));
+                expect(bounds.top, greaterThanOrEqualTo(actionBounds.top));
+                expect(bounds.bottom, lessThanOrEqualTo(actionBounds.bottom));
+              }
               expect(
                 tester.getRect(total).right,
                 lessThanOrEqualTo(tester.getRect(summary).right),

@@ -1,14 +1,16 @@
-import { lstat, readFile } from 'node:fs/promises'
+import { lstat, open, readFile } from 'node:fs/promises'
 import { resolve, win32 } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const MAX_XML_BYTES = 64 * 1024 * 1024
+const MAX_XML_PREFIX_BYTES = 256 * 1024
 const MAX_SUMMARY_BYTES = 64 * 1024
 const HEADER_GUID = '68fdd900-4a3e-11d1-84f4-0000f80464e3'
 const localName = (name) => name.split(':').at(-1)
 const boundedCount = (count) => count >= 9 ? '9plus' : String(count)
 const headerCount = (count) => count >= 2 ? '2plus' : String(count)
 const UNBOUND_HEADER_SHAPE = 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound'
+const UNBOUND_PREFIX_SHAPE = 'prefixTyped=invalid;prefixTypeSite=unbound;prefixGuid=invalid;prefixJoint=invalid;prefixProvider=unbound;prefixEnd=unbound;prefixFields=unbound'
 
 function fail(code) {
   const error = new Error(code)
@@ -34,6 +36,44 @@ async function readDiagnosticInput(path, maximum) {
   if (bytes.length < 1) return { status: 'empty' }
   if (bytes.length > maximum) return { status: 'oversize' }
   return { status: 'bounded', bytes }
+}
+
+const xmlSizeBand = (size) => size <= MAX_XML_BYTES ? 'within64'
+  : size <= 128 * 1024 * 1024 ? 'over64to128'
+    : size <= 256 * 1024 * 1024 ? 'over128to256'
+      : size <= 512 * 1024 * 1024 ? 'over256to512' : 'over512'
+
+// Oversized tracerpt XML is never admitted as proof. Read only a fixed prefix
+// to learn whether the documented first header is even rendered by this image.
+async function readXmlDiagnosticInput(path) {
+  const resolved = resolve(path)
+  let item
+  try { item = await lstat(resolved) }
+  catch (error) {
+    return { status: error?.code === 'ENOENT' ? 'missing' : 'unreadable', band: 'unbound' }
+  }
+  if (!item.isFile() || item.isSymbolicLink()) return { status: 'nonregular', band: 'unbound' }
+  if (item.size < 1) return { status: 'empty', band: 'unbound' }
+  if (item.size <= MAX_XML_BYTES) {
+    const input = await readDiagnosticInput(resolved, MAX_XML_BYTES)
+    return { ...input, band: input.status === 'bounded' ? 'within64' : 'unbound' }
+  }
+  let file
+  try {
+    file = await open(resolved, 'r')
+    const opened = await file.stat()
+    if (!opened.isFile() || opened.size !== item.size) {
+      return { status: 'unreadable', band: 'unbound' }
+    }
+    const prefix = Buffer.alloc(MAX_XML_PREFIX_BYTES)
+    const { bytesRead } = await file.read(prefix, 0, prefix.length, 0)
+    if (bytesRead !== prefix.length) return { status: 'unreadable', band: 'unbound' }
+    return { status: 'oversize', band: xmlSizeBand(opened.size), prefix: prefix.toString('utf8') }
+  } catch {
+    return { status: 'unreadable', band: 'unbound' }
+  } finally {
+    if (file) await file.close()
+  }
 }
 
 // This is a diagnostic code, not a loss-counter parser. It never includes
@@ -328,6 +368,38 @@ export function eventTraceHeaderShape(xml) {
     + `;provider=${provider};end=${end};fields=${fields}`
 }
 
+// Diagnostic only: a complete first Event inside 256 KiB can reveal tracerpt's
+// rendering. This does not validate the rest of the file, loss, or drain.
+export function eventTraceHeaderPrefixShape(prefix) {
+  if (typeof prefix !== 'string' || !prefix
+    || Buffer.byteLength(prefix) > MAX_XML_PREFIX_BYTES) {
+    fail('observer_probe_trace_prefix_unsafe')
+  }
+  const unbound = (status) => `prefixEvent=${status};${UNBOUND_PREFIX_SHAPE}`
+  const opener = /<((?:[A-Za-z_][\w.-]*:)?Event)(?=[\s>])/g
+  const first = opener.exec(prefix)
+  const before = prefix.slice(0, first?.index ?? prefix.length)
+  if (/<!|&|\0/.test(before)) return unbound('unsafe')
+  if (!first) return unbound('not_in_prefix')
+  const openEnd = prefix.indexOf('>', first.index)
+  if (openEnd < 0) return unbound('truncated')
+  const escapedName = first[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const closing = new RegExp(`</${escapedName}\\s*>`, 'g')
+  closing.lastIndex = openEnd + 1
+  const last = closing.exec(prefix)
+  if (!last) return unbound('truncated')
+  opener.lastIndex = openEnd + 1
+  if ((opener.exec(prefix)?.index ?? Infinity) < last.index) return unbound('invalid')
+  const fragment = prefix.slice(first.index, closing.lastIndex)
+  let header
+  try { header = eventTraceHeaderShape(`<Events>${fragment}</Events>`) }
+  catch { return unbound('invalid') }
+  return `prefixEvent=complete;${header.replace('headerTyped=', 'prefixTyped=')
+    .replace('typeSite=', 'prefixTypeSite=').replace('headerGuid=', 'prefixGuid=')
+    .replace('headerJoint=', 'prefixJoint=').replace('provider=', 'prefixProvider=')
+    .replace('end=', 'prefixEnd=').replace('fields=', 'prefixFields=')}`
+}
+
 function parseTimestamp(system) {
   const created = one(system, 'TimeCreated')
   const raw = created.attributes.SystemTime
@@ -479,18 +551,22 @@ async function main() {
   if (process.argv[2] === '--loss-header-shape') {
     if (process.argv.length !== 5) fail('observer_probe_loss_summary_arguments_invalid')
     const summary = await readDiagnosticInput(process.argv[3], MAX_SUMMARY_BYTES)
-    const xml = await readDiagnosticInput(process.argv[4], MAX_XML_BYTES)
+    const xml = await readXmlDiagnosticInput(process.argv[4])
     let summaryShape = 'candidateLines=unbound;patterns=unbound'
     if (summary.status === 'bounded') {
       try { summaryShape = lossCounterLineShapes(summary.bytes.toString('utf8')).slice(3) }
       catch { summary.status = 'unsafe' }
     }
     let header = UNBOUND_HEADER_SHAPE
+    let prefix = `prefixEvent=not_needed;${UNBOUND_PREFIX_SHAPE}`
     if (xml.status === 'bounded') {
       try { header = eventTraceHeaderShape(xml.bytes.toString('utf8')) }
       catch { /* The bounded XML did not have a trustworthy header shape. */ }
+    } else if (xml.status === 'oversize') {
+      try { prefix = eventTraceHeaderPrefixShape(xml.prefix) }
+      catch { prefix = `prefixEvent=invalid;${UNBOUND_PREFIX_SHAPE}` }
     }
-    process.stdout.write(`v3;summaryInput=${summary.status};${summaryShape};xmlInput=${xml.status};${header}\n`)
+    process.stdout.write(`v4;summaryInput=${summary.status};${summaryShape};xmlInput=${xml.status};xmlSizeBand=${xml.band};${prefix};${header}\n`)
     return
   }
   if (process.argv.length !== 5) fail('observer_probe_trace_parser_arguments_invalid')

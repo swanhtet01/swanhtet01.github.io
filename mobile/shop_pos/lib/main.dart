@@ -3069,8 +3069,11 @@ class _ShopHomeState extends State<ShopHome> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             if (_cart.isNotEmpty)
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                key: const ValueKey('shop-cart-actions'),
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
+                runSpacing: 4,
                 children: [
                   if (!compactCart && _pendingWalletCheckout == null)
                     TextButton.icon(

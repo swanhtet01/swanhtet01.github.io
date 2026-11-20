@@ -13,6 +13,7 @@ import {
 } from './postgres17_windows_evidence_contract.mjs'
 import {
   correlateTraceXml,
+  eventTraceHeaderPrefixShape,
   eventTraceHeaderShape,
   lossCounterLineShapes,
   lossSummaryStatus,
@@ -321,6 +322,19 @@ const headerEvent = (guid = headerGuid, task = 'EventTrace_Header', end =
   + `${end}</EventData></Event>`
 const headerTrace = (event = headerEvent()) => `<Events>${event}</Events>`
 
+test('bounded first-event prefix reports shape but never loss proof', () => {
+  const exact = 'prefixEvent=complete;prefixTyped=1;prefixTypeSite=task;prefixGuid=1;'
+    + 'prefixJoint=1;prefixProvider=match;prefixEnd=iso;prefixFields=both'
+  assert.equal(eventTraceHeaderPrefixShape(headerTrace()), exact)
+  assert.equal(eventTraceHeaderPrefixShape(headerTrace(headerEvent().replace(
+    '<Data Name="EventsLost">0</Data>', '<Data Name="EventsLost">9</Data>'))), exact)
+  assert.match(eventTraceHeaderPrefixShape('<Events>'), /^prefixEvent=not_in_prefix;/)
+  assert.match(eventTraceHeaderPrefixShape('<Events><Event><System>'), /^prefixEvent=truncated;/)
+  assert.match(eventTraceHeaderPrefixShape('<!DOCTYPE Events>' + headerTrace()),
+    /^prefixEvent=unsafe;/)
+  assert.equal(lossSummaryStatus('Events Lost: 0\nBuffers reported: 0'), 'unavailable')
+})
+
 test('XML header diagnostic requires one explicit type and matching GUID in the same event', () => {
   const expected = 'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=both'
   assert.equal(eventTraceHeaderShape(headerTrace()), expected)
@@ -402,6 +416,11 @@ test('XML header diagnostic classifies EndTime and counter field shape without v
   assert.throws(() => eventTraceHeaderShape('<Events>'), /xml_invalid/)
 })
 
+const unboundPrefix = (state) => `prefixEvent=${state};prefixTyped=invalid;prefixTypeSite=unbound;`
+  + 'prefixGuid=invalid;prefixJoint=invalid;prefixProvider=unbound;prefixEnd=unbound;prefixFields=unbound;'
+const unboundHeader = 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;'
+  + 'headerJoint=invalid;provider=unbound;end=unbound;fields=unbound'
+
 test('loss and header diagnostic CLI emits fixed shapes, no source text or secret-like input', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-loss-shape-'))
   try {
@@ -419,7 +438,8 @@ test('loss and header diagnostic CLI emits fixed shapes, no source text or secre
     assert.equal(result.status, 0)
     assert.equal(result.stderr, '')
     assert.equal(result.stdout.trim(),
-      'v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=bounded;'
+      'v4;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=bounded;xmlSizeBand=within64;'
+      + unboundPrefix('not_needed')
       + 'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=both')
     assert.doesNotMatch(result.stdout, /Private|secret|password|Users|merchant|[A-Z]:\\/i)
     await writeFile(xmlPath, '<Events>')
@@ -430,8 +450,8 @@ test('loss and header diagnostic CLI emits fixed shapes, no source text or secre
     assert.equal(malformed.status, 0)
     assert.equal(malformed.stderr, '')
     assert.equal(malformed.stdout.trim(),
-      'v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=bounded;'
-      + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
+      'v4;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=bounded;xmlSizeBand=within64;'
+      + unboundPrefix('not_needed') + unboundHeader)
 
     await rm(xmlPath)
     const missingXml = spawnSync(process.execPath, [
@@ -441,8 +461,8 @@ test('loss and header diagnostic CLI emits fixed shapes, no source text or secre
     assert.equal(missingXml.status, 0)
     assert.equal(missingXml.stderr, '')
     assert.equal(missingXml.stdout.trim(),
-      'v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=missing;'
-      + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
+      'v4;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=missing;xmlSizeBand=unbound;'
+      + unboundPrefix('not_needed') + unboundHeader)
 
     const oversized = await open(xmlPath, 'w')
     try { await oversized.truncate(64 * 1024 * 1024 + 1) }
@@ -454,9 +474,42 @@ test('loss and header diagnostic CLI emits fixed shapes, no source text or secre
     assert.equal(oversizedXml.status, 0)
     assert.equal(oversizedXml.stderr, '')
     assert.equal(oversizedXml.stdout.trim(),
-      'v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=oversize;'
-      + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
+      'v4;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=oversize;xmlSizeBand=over64to128;'
+      + unboundPrefix('unsafe') + unboundHeader)
     assert.doesNotMatch(oversizedXml.stdout, /Private|secret|password|Users|merchant|[A-Z]:\\/i)
+
+    const firstEvent = headerTrace(headerEvent().replace('</EventData>',
+      '<Data Name="Private">sensitive-merchant-data</Data></EventData>'))
+    const largeXml = await open(xmlPath, 'r+')
+    try { await largeXml.write(Buffer.from(firstEvent), 0, Buffer.byteLength(firstEvent), 0) }
+    finally { await largeXml.close() }
+    const prefixShape = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url)),
+      '--loss-header-shape', summaryPath, xmlPath,
+    ], { encoding: 'utf8' })
+    assert.equal(prefixShape.status, 0)
+    assert.equal(prefixShape.stderr, '')
+    assert.equal(prefixShape.stdout.trim(),
+      'v4;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=oversize;xmlSizeBand=over64to128;'
+      + 'prefixEvent=complete;prefixTyped=1;prefixTypeSite=task;prefixGuid=1;'
+      + 'prefixJoint=1;prefixProvider=match;prefixEnd=iso;prefixFields=both;'
+      + unboundHeader)
+    assert.doesNotMatch(prefixShape.stdout, /Private|secret|password|Users|merchant|[A-Z]:\\|sensitive/i)
+
+    const truncatedXml = await open(xmlPath, 'r+')
+    try {
+      const incomplete = Buffer.from('<Events><Event><System>')
+      await truncatedXml.truncate(0)
+      await truncatedXml.write(incomplete, 0, incomplete.length, 0)
+      await truncatedXml.truncate(64 * 1024 * 1024 + 1)
+    }
+    finally { await truncatedXml.close() }
+    const truncatedPrefix = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url)),
+      '--loss-header-shape', summaryPath, xmlPath,
+    ], { encoding: 'utf8' })
+    assert.match(truncatedPrefix.stdout, /;prefixEvent=truncated;/)
+    assert.doesNotMatch(truncatedPrefix.stdout, /sensitive|Private|merchant/i)
 
     await rm(summaryPath)
     const missingSummary = spawnSync(process.execPath, [
@@ -466,8 +519,8 @@ test('loss and header diagnostic CLI emits fixed shapes, no source text or secre
     assert.equal(missingSummary.status, 0)
     assert.equal(missingSummary.stderr, '')
     assert.equal(missingSummary.stdout.trim(),
-      'v3;summaryInput=missing;candidateLines=unbound;patterns=unbound;xmlInput=oversize;'
-      + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
+      'v4;summaryInput=missing;candidateLines=unbound;patterns=unbound;xmlInput=oversize;xmlSizeBand=over64to128;'
+      + unboundPrefix('truncated') + unboundHeader)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -508,7 +561,7 @@ test('missing loss counters remain fail closed after bounded shape diagnostic', 
   assert.ok(proof >= 0 && missing > proof && diagnostic > missing && refusal > diagnostic
     && zeroCheck > refusal && correlation > zeroCheck)
   assert.match(source, /\$shapeLines\.Count -eq 1/)
-  assert.match(source, /\$shapeLines\[0\] -cmatch '\^v3;summaryInput=/)
+  assert.match(source, /\$shapeLines\[0\] -cmatch '\^v4;summaryInput=/)
   assert.match(source, /Write-Warning \('observer_probe_loss_header_shape:' \+ \$shapeLines\[0\]\) -WarningAction Continue/)
   assert.match(source, /observer_probe_loss_header_shape_unavailable:parser_failed/)
   assert.match(source, /observer_probe_loss_header_shape_unavailable:format_invalid/)
@@ -525,10 +578,10 @@ test('PowerShell diagnostic gate accepts fixed input states and refuses extra te
   assert.ok(pattern)
   const gate = new RegExp(pattern)
   const header = 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound'
-  assert.match(`v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=oversize;${header}`, gate)
-  assert.match(`v3;summaryInput=missing;candidateLines=unbound;patterns=unbound;xmlInput=missing;${header}`, gate)
-  assert.doesNotMatch(`v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1;xmlInput=C:\\Users\\Private;${header}`, gate)
-  assert.doesNotMatch(`v3;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1;xmlInput=oversize;${header};raw=private`, gate)
+  assert.match(`v4;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1,ELFCD:1;xmlInput=oversize;xmlSizeBand=over64to128;${unboundPrefix('not_in_prefix')}${header}`, gate)
+  assert.match(`v4;summaryInput=missing;candidateLines=unbound;patterns=unbound;xmlInput=missing;xmlSizeBand=unbound;${unboundPrefix('not_needed')}${header}`, gate)
+  assert.doesNotMatch(`v4;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1;xmlInput=C:\\Users\\Private;xmlSizeBand=unbound;${unboundPrefix('not_needed')}${header}`, gate)
+  assert.doesNotMatch(`v4;summaryInput=bounded;candidateLines=2;patterns=BLFCD:1;xmlInput=oversize;xmlSizeBand=over64to128;${unboundPrefix('not_in_prefix')}${header};raw=private`, gate)
 })
 
 test('loss proof rejects duplicate exact or alias counters before zero check', async () => {

@@ -1,0 +1,93 @@
+name: Shop Windows UI Automation host capability (non-authoritative)
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shop-windows-uia-capability-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  capability:
+    name: Harmless Windows UIA session proof
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'shop-windows-uia-capability' &&
+      github.event.pull_request.number == 752 &&
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.base.ref == 'codex/shop-main-integration-20261022' &&
+      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the immutable PR head without retained credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify event head and prove UI Automation on a harmless fixture
+        id: probe
+        shell: powershell
+        env:
+          SHOP_UIA_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -cne $env:SHOP_UIA_EXPECTED_HEAD) {
+            throw 'uia_capability_checkout_head_mismatch'
+          }
+          foreach ($path in @(
+            'tools/shop_windows_uia_capability.ps1',
+            'tools/shop_windows_uia_fixture.ps1'
+          )) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw 'uia_capability_fixed_script_missing'
+            }
+          }
+          & .\tools\shop_windows_uia_capability.ps1
+
+      - name: Retain only the harmless fixture proof
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: shop-windows-uia-capability-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ steps.probe.outputs.evidence_dir }}/fixture-window.png
+            ${{ steps.probe.outputs.evidence_dir }}/result.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Remove only this job's retained fixture proof
+        if: always()
+        shell: powershell
+        env:
+          SHOP_UIA_EVIDENCE_DIR: ${{ steps.probe.outputs.evidence_dir }}
+          SHOP_UIA_OWNER_NONCE: ${{ steps.probe.outputs.owner_nonce }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:SHOP_UIA_EVIDENCE_DIR) -or
+              $env:SHOP_UIA_OWNER_NONCE -cnotmatch '^[a-f0-9]{32}$') { return }
+          $root = [System.IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\')
+          $owned = [System.IO.Path]::GetFullPath($env:SHOP_UIA_EVIDENCE_DIR)
+          $expected = Join-Path $root ('shop-uia-capability-evidence-' + $env:SHOP_UIA_OWNER_NONCE)
+          if ($owned -cne $expected -or
+              -not $owned.StartsWith($root + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'uia_capability_evidence_scope_mismatch'
+          }
+          $ownedEntry = Get-Item -LiteralPath $owned -Force -ErrorAction Stop
+          if (($ownedEntry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'uia_capability_evidence_reparse_point'
+          }
+          $marker = Join-Path $owned 'owner.txt'
+          if (-not (Test-Path -LiteralPath $marker -PathType Leaf) -or
+              (Get-Content -LiteralPath $marker -Raw) -cne $env:SHOP_UIA_OWNER_NONCE) {
+            throw 'uia_capability_evidence_owner_mismatch'
+          }
+          Remove-Item -LiteralPath $owned -Recurse -Force
+          if (Test-Path -LiteralPath $owned) { throw 'uia_capability_evidence_cleanup_failed' }
