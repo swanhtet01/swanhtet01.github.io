@@ -77,6 +77,23 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
 })
 
+test('held-sale layout runs as a bounded isolated gate before Flutter shards', () => {
+  const firstSale = '      - name: Check first-sale widget in isolation\n'
+  const heldSale = [
+    '      - name: Check held-sale desktop catalog in isolation',
+    "        run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_checkout_test.dart --plain-name 'held-sale desktop catalog keeps its product controls visible' --reporter expanded --timeout 60s",
+  ].join('\n')
+  const shards = '      - name: Run isolated Flutter test shards\n'
+  assert.equal(workflow.split(heldSale).length - 1, 1)
+  assert.notEqual(workflow.indexOf(firstSale), -1)
+  assert.notEqual(workflow.indexOf(shards), -1)
+  assert.ok(workflow.indexOf(firstSale) < workflow.indexOf(heldSale))
+  assert.ok(workflow.indexOf(heldSale) < workflow.indexOf(shards))
+  const nextStep = workflow.indexOf('\n      - name:', workflow.indexOf(heldSale) + heldSale.length)
+  const block = workflow.slice(workflow.indexOf(heldSale), nextStep)
+  assert.doesNotMatch(block, /continue-on-error:|\n        if:/)
+})
+
 test('both built Android flavors must pass the compiled backup check before retention', () => {
   const productionStep = [
     '      - name: Verify compiled Android production backup policy',

@@ -86,14 +86,19 @@ function Inspect-SignedTool([string]$Path, [string]$Inspector, [string]$Required
   }
 }
 function Try-ReadLossCounter([string]$Text, [string]$Name) {
-  $escaped = [Regex]::Escape($Name)
-  foreach ($pattern in @(
-      "(?im)^\s*$escaped\s*[:=]\s*(\d+)\s*$",
-      "(?is)<$escaped>\s*(\d+)\s*</$escaped>")) {
-    $match = [Regex]::Match($Text, $pattern)
-    if ($match.Success) { return [int64]$match.Groups[1].Value }
-  }
-  return $null
+  if ($Name -cnotin @('Events', 'Buffers')) { return $null }
+  $lineLabel = if ($Name -ceq 'Events') { 'Events(?:Lost| Lost)' }
+    else { 'Buffers(?:Lost| Lost)' }
+  $xmlLabel = $Name + 'Lost'
+  $lineMatches = [Regex]::Matches($Text,
+    "(?im)^[ \t]*${lineLabel}[ \t]*[:=][ \t]*(\d+)[ \t]*$")
+  $xmlMatches = [Regex]::Matches($Text,
+    "(?is)<${xmlLabel}>[ \t]*(\d+)[ \t]*</${xmlLabel}>")
+  if (($lineMatches.Count + $xmlMatches.Count) -ne 1) { return $null }
+  $value = if ($lineMatches.Count -eq 1) { $lineMatches[0].Groups[1].Value }
+    else { $xmlMatches[0].Groups[1].Value }
+  try { return [int64]::Parse($value, [System.Globalization.CultureInfo]::InvariantCulture) }
+  catch { return $null }
 }
 function Assert-SanitizedEvidence([string]$Path) {
   $item = Get-Item -LiteralPath $Path -Force
@@ -211,24 +216,30 @@ try {
   if ($LASTEXITCODE -ne 0) { Fail 'observer_probe_trace_parse_failed' }
   $parsed = $true
   $summaryText = [System.IO.File]::ReadAllText($summaryPath)
-  $eventsLost = Try-ReadLossCounter $summaryText 'EventsLost'
-  if ($eventsLost -eq $null) { $eventsLost = Try-ReadLossCounter $summaryText 'Events Lost' }
-  $buffersLost = Try-ReadLossCounter $summaryText 'BuffersLost'
-  if ($buffersLost -eq $null) { $buffersLost = Try-ReadLossCounter $summaryText 'Buffers Lost' }
-  if ($eventsLost -eq $null -or $buffersLost -eq $null) {
+  $lossProofLines = @(& $node $parserPath --loss-summary-proof $summaryPath)
+  $lossProofExitCode = $LASTEXITCODE
+  $lossProofStatus = if ($lossProofExitCode -eq 0 -and $lossProofLines.Count -eq 1 -and
+    $lossProofLines[0] -cin @('zero', 'nonzero', 'unavailable')) {
+    $lossProofLines[0]
+  } else { 'unavailable' }
+  $eventsLost = Try-ReadLossCounter $summaryText 'Events'
+  $buffersLost = Try-ReadLossCounter $summaryText 'Buffers'
+  if ($lossProofStatus -ceq 'unavailable' -or $eventsLost -eq $null -or $buffersLost -eq $null) {
     try {
-      $shapeLines = @(& $node $parserPath --loss-counter-shape $summaryPath)
+      $shapeLines = @(& $node $parserPath --loss-header-shape $summaryPath $traceXmlPath)
       $shapeExitCode = $LASTEXITCODE
       if ($shapeExitCode -eq 0 -and $shapeLines.Count -eq 1 -and
-        $shapeLines[0] -cmatch '^v1;candidateLines=[0-9];more=(?:yes|no);patterns=(?:none|[EBXU][LODU][FRU][CQXSU][DN](?:,[EBXU][LODU][FRU][CQXSU][DN]){0,7})$') {
-        Write-Warning ('observer_probe_loss_counter_shape:' + $shapeLines[0]) -WarningAction Continue
+        $shapeLines[0] -cmatch '^v2;candidateLines=(?:[0-8]|9plus);patterns=(?:none|[EBXU][LODU][FRU][CQXSU][DN]:(?:[1-8]|9plus)(?:,[EBXU][LODU][FRU][CQXSU][DN]:(?:[1-8]|9plus))*);headerTyped=(?:0|1|2plus|invalid);typeSite=(?:unbound|task|type|other|ambiguous);headerGuid=(?:0|1|2plus|invalid);headerJoint=(?:0|1|2plus|invalid);provider=(?:unbound|ambiguous|missing|match|other);end=(?:unbound|missing|ambiguous|zero|decimal|hex|iso|other);fields=(?:unbound|ambiguous|none|events|buffers|both)$') {
+        Write-Warning ('observer_probe_loss_header_shape:' + $shapeLines[0]) -WarningAction Continue
       }
     } catch {
-      Write-Warning 'observer_probe_loss_counter_shape_unavailable' -WarningAction Continue
+      Write-Warning 'observer_probe_loss_header_shape_unavailable' -WarningAction Continue
     }
     Fail 'observer_probe_loss_counter_unavailable'
   }
-  if ($eventsLost -ne 0 -or $buffersLost -ne 0) { Fail 'observer_probe_trace_loss_detected' }
+  if ($lossProofStatus -cne 'zero' -or $eventsLost -ne 0 -or $buffersLost -ne 0) {
+    Fail 'observer_probe_trace_loss_detected'
+  }
   $correlationText = & $node $parserPath $traceXmlPath $probeParentExecutable $copiedProbePath
   if ($LASTEXITCODE -ne 0) { Fail 'observer_probe_trace_correlation_failed' }
   $correlation = $correlationText | ConvertFrom-Json

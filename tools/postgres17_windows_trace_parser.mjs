@@ -4,7 +4,10 @@ import { pathToFileURL } from 'node:url'
 
 const MAX_XML_BYTES = 64 * 1024 * 1024
 const MAX_SUMMARY_BYTES = 64 * 1024
+const HEADER_GUID = '68fdd900-4a3e-11d1-84f4-0000f80464e3'
 const localName = (name) => name.split(':').at(-1)
+const boundedCount = (count) => count >= 9 ? '9plus' : String(count)
+const headerCount = (count) => count >= 2 ? '2plus' : String(count)
 
 function fail(code) {
   const error = new Error(code)
@@ -19,7 +22,7 @@ export function lossCounterLineShapes(summary) {
     || Buffer.byteLength(summary) > MAX_SUMMARY_BYTES || summary.includes('\0')) {
     fail('observer_probe_loss_summary_unsafe')
   }
-  const shapes = []
+  const shapes = new Map()
   let candidateLines = 0
   for (const line of summary.split(/\r?\n/)) {
     const event = /events?/i.exec(line)
@@ -28,27 +31,60 @@ export function lossCounterLineShapes(summary) {
     const loss = /loss/i.exec(line)
     const dropped = /dropp?ed/i.exec(line)
     if (!event && !buffer && !lost && !loss && !dropped) continue
-    candidateLines = Math.min(candidateLines + 1, 9)
-    if (shapes.length === 8) continue
+    candidateLines += 1
+    let shape
     if (line.length > 512) {
-      shapes.push('UUUUN')
-      continue
+      shape = 'UUUUN'
+    } else {
+      const role = event && buffer ? 'X' : event ? 'E' : buffer ? 'B' : 'U'
+      const term = lost ? 'L' : loss ? 'O' : dropped ? 'D' : 'U'
+      const roleMatch = event && buffer ? (event.index < buffer.index ? event : buffer)
+        : event ?? buffer
+      const termMatch = lost ?? loss ?? dropped
+      const order = !roleMatch || !termMatch ? 'U'
+        : roleMatch.index < termMatch.index ? 'F' : 'R'
+      const tailStart = Math.max(roleMatch ? roleMatch.index + roleMatch[0].length : 0,
+        termMatch ? termMatch.index + termMatch[0].length : 0)
+      const tail = line.slice(tailStart)
+      const separator = /^\s*:/.test(tail) ? 'C' : /^\s*=/.test(tail) ? 'Q'
+        : /^[^<]{0,32}[<>]/.test(tail) ? 'X' : /^\s+/.test(tail) ? 'S' : 'U'
+      shape = `${role}${term}${order}${separator}${/\d/.test(tail) ? 'D' : 'N'}`
     }
-    const role = event && buffer ? 'X' : event ? 'E' : buffer ? 'B' : 'U'
-    const term = lost ? 'L' : loss ? 'O' : dropped ? 'D' : 'U'
-    const roleMatch = event && buffer ? (event.index < buffer.index ? event : buffer)
-      : event ?? buffer
-    const termMatch = lost ?? loss ?? dropped
-    const order = !roleMatch || !termMatch ? 'U'
-      : roleMatch.index < termMatch.index ? 'F' : 'R'
-    const tailStart = Math.max(roleMatch ? roleMatch.index + roleMatch[0].length : 0,
-      termMatch ? termMatch.index + termMatch[0].length : 0)
-    const tail = line.slice(tailStart)
-    const separator = /^\s*:/.test(tail) ? 'C' : /^\s*=/.test(tail) ? 'Q'
-      : /^[^<]{0,32}[<>]/.test(tail) ? 'X' : /^\s+/.test(tail) ? 'S' : 'U'
-    shapes.push(`${role}${term}${order}${separator}${/\d/.test(tail) ? 'D' : 'N'}`)
+    shapes.set(shape, (shapes.get(shape) ?? 0) + 1)
   }
-  return `v1;candidateLines=${candidateLines};more=${candidateLines > 8 ? 'yes' : 'no'};patterns=${shapes.join(',') || 'none'}`
+  const histogram = [...shapes].sort(([left], [right]) => left.localeCompare(right))
+    .map(([shape, count]) => `${shape}:${boundedCount(count)}`)
+  return `v2;candidateLines=${boundedCount(candidateLines)};patterns=${histogram.join(',') || 'none'}`
+}
+
+// The summary proof accepts only the two already-supported label forms. A
+// second exact counter or a differently shaped loss label makes the summary
+// ambiguous, even if one supported counter says zero. Only fixed statuses
+// leave this function; counter values and summary text never do.
+export function lossSummaryStatus(summary) {
+  if (typeof summary !== 'string' || !summary
+    || Buffer.byteLength(summary) > MAX_SUMMARY_BYTES || summary.includes('\0')) {
+    fail('observer_probe_loss_summary_unsafe')
+  }
+  const accepted = []
+  const values = []
+  for (const role of ['Events', 'Buffers']) {
+    const line = new RegExp(`^[ \\t]*${role}(?:Lost| Lost)[ \\t]*[:=][ \\t]*(\\d+)[ \\t]*$`, 'gim')
+    const tag = new RegExp(`<${role}Lost>[ \\t]*(\\d+)[ \\t]*</${role}Lost>`, 'gis')
+    const matches = [...summary.matchAll(line), ...summary.matchAll(tag)]
+    if (matches.length !== 1) return 'unavailable'
+    accepted.push({ index: matches[0].index, length: matches[0][0].length })
+    values.push(matches[0][1])
+  }
+  let remaining = summary
+  for (const { index, length } of accepted.sort((a, b) => b.index - a.index)) {
+    remaining = remaining.slice(0, index) + remaining.slice(index + length)
+  }
+  // Do not guess which of the many unrecognized word orders is authoritative.
+  // Even a split-line loss label or prose about loss is competing evidence
+  // unless it was one of the two exact counters removed above.
+  if (/lost|loss|dropp?ed/i.test(remaining)) return 'unavailable'
+  return values.every((value) => /^0+$/.test(value)) ? 'zero' : 'nonzero'
 }
 
 function parseAttributes(source) {
@@ -153,6 +189,122 @@ function allDescendants(node, name, result = []) {
     allDescendants(child, name, result)
   }
   return result
+}
+
+function eventDescendants(event, name, result = []) {
+  for (const child of event.children) {
+    if (child.name === 'Event') continue
+    if (child.name === name) result.push(child)
+    eventDescendants(child, name, result)
+  }
+  return result
+}
+
+function headerTypeMarkers(event) {
+  let count = 0
+  let site = 'unbound'
+  const visit = (node) => {
+    if (node !== event && node.name === 'Event') return
+    const markerCount = Number(node.name === 'EventTrace_Header')
+      + Object.values(node.attributes).filter((value) => value === 'EventTrace_Header').length
+      + Number(node.text.trim() === 'EventTrace_Header')
+    if (markerCount) {
+      const location = node.name === 'Task' ? 'task'
+        : ['Event', 'Type', 'EventType'].includes(node.name) ? 'type' : 'other'
+      site = site === 'unbound' ? location : site === location ? site : 'ambiguous'
+      count += markerCount
+      // Conflicting Task representations are not a unique type marker.
+      if (node.name === 'Task' && [node.attributes.Name, node.attributes.Value, node.text.trim()]
+        .filter((value) => typeof value === 'string' && value.length > 0).length > 1) {
+        count += 1
+      }
+    }
+    for (const child of node.children) visit(child)
+  }
+  visit(event)
+  return { count, site: count === 1 ? site : count === 0 ? 'unbound' : 'ambiguous' }
+}
+
+// This only describes shapes seen in tracerpt XML. The actual EventTrace_Header
+// encoding is not yet known. "typed" counts exact literal markers anywhere in
+// an Event; the bounded site reports where one was found. Even a synthetic
+// "match" cannot prove drain or authorize a loss counter. No values or XML leave.
+export function eventTraceHeaderShape(xml) {
+  if (typeof xml !== 'string' || xml.includes('\0')) fail('observer_probe_trace_xml_unsafe')
+  const document = parseXml(xml)
+  const events = allDescendants(document, 'Event')
+  let typed = 0
+  let guid = 0
+  let joint = 0
+  let uniqueTypedEvent = null
+  let uniqueTypeSite = 'unbound'
+  let uniqueGuidEvent = null
+  for (const event of events) {
+    const systems = children(event, 'System')
+    const markers = headerTypeMarkers(event)
+    const typeMarkers = markers.count
+    const providers = systems.flatMap((system) => children(system, 'Provider'))
+    const matchingProviders = providers.filter((provider) =>
+      typeof provider.attributes.Guid === 'string'
+      && provider.attributes.Guid.replace(/^\{(.*)\}$/, '$1').toLowerCase() === HEADER_GUID)
+    typed += typeMarkers
+    guid += matchingProviders.length
+    if (typeMarkers === 1) {
+      uniqueTypedEvent = event
+      uniqueTypeSite = markers.site
+    }
+    if (matchingProviders.length === 1 && systems.length === 1 && providers.length === 1) {
+      uniqueGuidEvent = event
+    }
+    if (typeMarkers === 1 && matchingProviders.length === 1 && systems.length === 1
+      && providers.length === 1) {
+      joint += 1
+    }
+  }
+
+  let provider = 'unbound'
+  if (typed === 1 && uniqueTypedEvent) {
+    const systems = children(uniqueTypedEvent, 'System')
+    const providers = systems.flatMap((system) => children(system, 'Provider'))
+    provider = systems.length !== 1 || providers.length > 1 ? 'ambiguous'
+      : providers.length === 0 || !providers[0].attributes.Guid ? 'missing'
+        : providers[0].attributes.Guid.replace(/^\{(.*)\}$/, '$1').toLowerCase()
+          === HEADER_GUID ? 'match' : 'other'
+  }
+
+  let end = 'unbound'
+  let fields = 'unbound'
+  // A unique provider-GUID event can describe field presence even when tracerpt
+  // represents the documented type in an unknown way. It remains diagnostic.
+  if (guid === 1 && uniqueGuidEvent) {
+    const named = (name) => [
+      ...eventDescendants(uniqueGuidEvent, 'Data').filter((node) => node.attributes.Name === name),
+      ...eventDescendants(uniqueGuidEvent, name),
+    ]
+    const eventLoss = named('EventsLost')
+    const bufferLoss = named('BuffersLost')
+    fields = eventLoss.length > 1 || bufferLoss.length > 1 ? 'ambiguous'
+      : eventLoss.length && bufferLoss.length ? 'both'
+        : eventLoss.length ? 'events' : bufferLoss.length ? 'buffers' : 'none'
+    const endNodes = named('EndTime')
+    if (endNodes.length === 0) end = 'missing'
+    else if (endNodes.length > 1) end = 'ambiguous'
+    else {
+      const values = [endNodes[0].attributes.Value, endNodes[0].text.trim()]
+        .filter((value) => typeof value === 'string' && value.length > 0)
+      if (values.length > 1) end = 'ambiguous'
+      else if (values.length === 0) end = 'other'
+      else if (/^(?:0+|0x0+)$/i.test(values[0])) end = 'zero'
+      else if (/^[1-9]\d*$/.test(values[0])) end = 'decimal'
+      else if (/^0x[0-9a-f]+$/i.test(values[0])) end = 'hex'
+      else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(values[0])
+        && Number.isFinite(Date.parse(values[0]))) end = 'iso'
+      else end = 'other'
+    }
+  }
+  const typeSite = typed === 1 ? uniqueTypeSite : typed === 0 ? 'unbound' : 'ambiguous'
+  return `headerTyped=${headerCount(typed)};typeSite=${typeSite};headerGuid=${headerCount(guid)};headerJoint=${headerCount(joint)}`
+    + `;provider=${provider};end=${end};fields=${fields}`
 }
 
 function parseTimestamp(system) {
@@ -294,13 +446,29 @@ export function correlateTraceXml(xml, expectedParentPath, expectedChildPath) {
 }
 
 async function main() {
-  if (process.argv[2] === '--loss-counter-shape') {
+  if (process.argv[2] === '--loss-summary-proof') {
     if (process.argv.length !== 4) fail('observer_probe_loss_summary_arguments_invalid')
     const bytes = await readFile(resolve(process.argv[3]))
     if (bytes.length < 1 || bytes.length > MAX_SUMMARY_BYTES) {
       fail('observer_probe_loss_summary_unsafe')
     }
-    process.stdout.write(`${lossCounterLineShapes(bytes.toString('utf8'))}\n`)
+    process.stdout.write(`${lossSummaryStatus(bytes.toString('utf8'))}\n`)
+    return
+  }
+  if (process.argv[2] === '--loss-header-shape') {
+    if (process.argv.length !== 5) fail('observer_probe_loss_summary_arguments_invalid')
+    const bytes = await readFile(resolve(process.argv[3]))
+    if (bytes.length < 1 || bytes.length > MAX_SUMMARY_BYTES) {
+      fail('observer_probe_loss_summary_unsafe')
+    }
+    const xmlBytes = await readFile(resolve(process.argv[4]))
+    if (xmlBytes.length < 1 || xmlBytes.length > MAX_XML_BYTES) {
+      fail('observer_probe_trace_xml_unsafe')
+    }
+    let header
+    try { header = eventTraceHeaderShape(xmlBytes.toString('utf8')) }
+    catch { header = 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound' }
+    process.stdout.write(`${lossCounterLineShapes(bytes.toString('utf8'))};${header}\n`)
     return
   }
   if (process.argv.length !== 5) fail('observer_probe_trace_parser_arguments_invalid')

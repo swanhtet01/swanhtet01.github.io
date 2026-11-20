@@ -3209,7 +3209,9 @@ class _ShopHomeState extends State<ShopHome> {
                   ],
                 );
               }
-              if (constraints.maxWidth < 320) {
+              // The member action and the full amount need separate lines in
+              // a narrow basket, especially with enlarged Burmese text.
+              if (constraints.maxWidth < 420) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

@@ -118,6 +118,9 @@ jobs:
       - name: Check first-sale widget in isolation
         run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_checkout_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
 
+      - name: Check held-sale desktop catalog in isolation
+        run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_checkout_test.dart --plain-name 'held-sale desktop catalog keeps its product controls visible' --reporter expanded --timeout 60s
+
       - name: Check first-run restore in isolation
         run: timeout --signal=TERM --kill-after=10s 60s flutter test test/shop_backup_test.dart --plain-name 'fresh install restores before Shop opens' --reporter expanded --timeout 45s
 
@@ -849,6 +852,10 @@ jobs:
       - name: Generate Windows production identity
         working-directory: ${{ github.workspace }}
         run: node tools/generate_shop_build_identity.mjs --platform windows --profile production
+
+      - name: Check app-private synthetic QA export widget on Windows
+        timeout-minutes: 3
+        run: flutter test --no-pub test/shop_backup_test.dart --plain-name 'synthetic QA export screen saves only app-private evidence' --reporter expanded
 
       - name: Prove backup restore and no-replace behavior on Windows
         run: flutter test test/shop_backup_test.dart --reporter expanded --timeout 2m

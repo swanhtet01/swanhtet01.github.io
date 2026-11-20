@@ -1664,7 +1664,12 @@ void main() {
         .where((entry) => entry is File && entry.path.endsWith('.smqa'))
         .cast<File>()
         .toList();
-    final before = await evidenceFiles();
+    // Directory and SQLite/crypto work needs the real async zone. Awaiting
+    // Directory.list in the widget test's fake async zone can deadlock before
+    // the export screen is even built.
+    final before = await tester.runAsync(evidenceFiles);
+    expect(before, isNotNull);
+    final baseline = before!;
     final supportedHost = Platform.isAndroid || Platform.isWindows;
 
     if (!supportedHost) {
@@ -1716,33 +1721,58 @@ void main() {
       find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
     );
     expect(saveButton.onPressed, isNotNull);
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
+    final evidenceSaved = await tester.runAsync(() async {
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
+      );
+      final deadline = DateTime.now().add(const Duration(seconds: 60));
+      while (DateTime.now().isBefore(deadline)) {
+        final files = await evidenceFiles();
+        if (files.any(
+          (file) => !baseline.any((old) => old.path == file.path),
+        )) {
+          return true;
+        }
+        if (exportCalled || saveAsCalled) return false;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      return false;
+    });
+    expect(
+      evidenceSaved,
+      isTrue,
+      reason: 'The UI export did not save app-private QA evidence within 60s.',
     );
     await _pumpUntil(
       tester,
       find.textContaining('Synthetic QA recovery evidence saved'),
     );
-    await tester.pumpAndSettle();
     expect(
       find.textContaining('Synthetic QA recovery evidence saved'),
       findsOneWidget,
     );
     expect(exportCalled, isFalse);
     expect(saveAsCalled, isFalse);
-    final after = await evidenceFiles();
-    expect(after, hasLength(before.length + 1));
-    final newFiles = after.where(
-      (file) => !before.any((old) => old.path == file.path),
+    final after = await tester.runAsync(evidenceFiles);
+    expect(after, isNotNull);
+    expect(after, hasLength(baseline.length + 1));
+    final newFiles = after!.where(
+      (file) => !baseline.any((old) => old.path == file.path),
     );
     expect(newFiles, hasLength(1));
     final evidence = newFiles.single;
     expect(evidence.parent.absolute.path, evidenceRoot.absolute.path);
-    expect((await evidence.readAsBytes()).sublist(0, 4), ascii.encode('SMQA'));
-    await evidence.delete();
+    final evidenceBytes = await tester.runAsync(evidence.readAsBytes);
+    expect(evidenceBytes, isNotNull);
+    expect(evidenceBytes!.sublist(0, 4), ascii.encode('SMQA'));
+    final removed = await tester.runAsync(() async {
+      await evidence.delete();
+      return !await evidence.exists();
+    });
+    expect(removed, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test(
     'synthetic QA startup rejects before invoking the external picker',

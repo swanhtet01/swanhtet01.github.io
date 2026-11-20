@@ -5922,12 +5922,40 @@ void registerWidgetTests(WidgetTestPartition partition) {
               );
               expect(tester.getRect(price).overlaps(rowRect), isTrue);
               expect(tester.getRect(stock).overlaps(rowRect), isTrue);
+              expect(
+                tester.takeException(),
+                isNull,
+                reason:
+                    'Catalog before adding item: MY=$myanmar scale=$textScale',
+              );
               await tester.tap(row);
               await tester.pumpAndSettle();
+              final summary = find.byKey(
+                const ValueKey('shop-checkout-summary'),
+              );
+              final total = find.descendant(
+                of: summary,
+                matching: find.text(myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK'),
+              );
+              final member = find.byKey(
+                const ValueKey('shop-select-member-card'),
+              );
+              expect(summary, findsOneWidget);
+              expect(total, findsOneWidget);
+              expect(tester.getSize(member).width, greaterThanOrEqualTo(48));
+              expect(
+                tester.getRect(total).right,
+                lessThanOrEqualTo(tester.getRect(summary).right),
+              );
               expect((await database.readCounterSaleDraft())?.quantities, {
                 'tea': 1,
               });
-              expect(tester.takeException(), isNull);
+              expect(
+                tester.takeException(),
+                isNull,
+                reason:
+                    'Basket after adding item: MY=$myanmar scale=$textScale',
+              );
             } finally {
               await tester.pumpWidget(const SizedBox.shrink());
               await tester.pump(const Duration(milliseconds: 1));

@@ -13,7 +13,9 @@ import {
 } from './postgres17_windows_evidence_contract.mjs'
 import {
   correlateTraceXml,
+  eventTraceHeaderShape,
   lossCounterLineShapes,
+  lossSummaryStatus,
 } from './postgres17_windows_trace_parser.mjs'
 import { implementationPaths } from '../kernel/database-rehearsal-evidence.mjs'
 
@@ -267,38 +269,193 @@ test('loss summary diagnostic uses fixed shapes, never counter values', () => {
   const zero = 'Events Lost: 0\r\nBuffers Lost: 0\r\n'
   const nonzero = 'Events Lost: 8\r\nBuffers Lost: 3\r\n'
   assert.equal(lossCounterLineShapes(zero),
-    'v1;candidateLines=2;more=no;patterns=ELFCD,BLFCD')
+    'v2;candidateLines=2;patterns=BLFCD:1,ELFCD:1')
   assert.equal(lossCounterLineShapes(nonzero), lossCounterLineShapes(zero))
   assert.equal(lossCounterLineShapes('Lost Events = 7\nLost Buffers = 2'),
-    'v1;candidateLines=2;more=no;patterns=ELRQD,BLRQD')
+    'v2;candidateLines=2;patterns=BLRQD:1,ELRQD:1')
   assert.equal(lossCounterLineShapes('Trace summary\nNo counters here'),
-    'v1;candidateLines=0;more=no;patterns=none')
+    'v2;candidateLines=0;patterns=none')
   assert.equal(lossCounterLineShapes('Events Lost: ???\n'),
-    'v1;candidateLines=1;more=no;patterns=ELFCN')
+    'v2;candidateLines=1;patterns=ELFCN:1')
   assert.equal(lossCounterLineShapes(`Events Lost: ${'x'.repeat(513)}`),
-    'v1;candidateLines=1;more=no;patterns=UUUUN')
+    'v2;candidateLines=1;patterns=UUUUN:1')
+  assert.equal(lossCounterLineShapes(`${Array(10).fill('Event 123').join('\n')}\nBuffers Lost: 0`),
+    'v2;candidateLines=9plus;patterns=BLFCD:1,EUUSD:9plus')
+  assert.equal(lossCounterLineShapes('EventsLost: 0\nEvents Lost: 9\nBuffersLost: 0'),
+    lossCounterLineShapes('EventsLost: 9\nEvents Lost: 0\nBuffersLost: 9'))
   assert.throws(() => lossCounterLineShapes('x'.repeat(65537)),
     /observer_probe_loss_summary_unsafe/)
   assert.throws(() => lossCounterLineShapes('Events Lost: 0\0secret'),
     /observer_probe_loss_summary_unsafe/)
 })
 
-test('loss summary diagnostic CLI emits no source text or secret-like input', async () => {
+test('loss proof refuses competing labels even beside supported zero counters', () => {
+  const zero = 'Events Lost: 0\nBuffersLost=0\n'
+  assert.equal(lossSummaryStatus(zero), 'zero')
+  assert.equal(lossSummaryStatus('<EventsLost>0</EventsLost>\n<BuffersLost>0</BuffersLost>'), 'zero')
+  assert.equal(lossSummaryStatus('Events Lost: 1\nBuffersLost=0'), 'nonzero')
+  for (const summary of [
+    'Events Lost: 0\nLost Events: 5\nBuffersLost=0',
+    'Events Lost: 0\nLost 5 Events\nBuffersLost=0',
+    'Events Lost: 0\nBuffersLost=0\nLost\nEvents: 5',
+    'Events Lost: 0\nEvents Dropped: 5\nBuffersLost=0',
+    'Events Lost: 0\nEvents 5 dropped\nBuffersLost=0',
+    'Events Lost: 0\nEvents Lost: 9\nBuffersLost=0',
+    'Events Lost: 0\nEventsLost=0\nBuffersLost=0',
+    '<EventsLost>0</EventsLost>\n<EventsLost>9</EventsLost>\n<BuffersLost>0</BuffersLost>',
+    'Events Lost: 0\nBuffers Lost: 0\nLost Buffers: 4',
+    'Events Lost: 0\nBuffersLost=0\n<BuffersLoss>4</BuffersLoss>',
+    'Events Lost: 0\nBuffersLost=0\n<EventsLost Value="4"/>',
+    'Events Lost: 0\nBuffersLost=0\nEvents Lost: ???',
+    'Events Lost: 0\nBuffers Lost: ???',
+    'Events Lost: 0\nBuffersLost=0\nLoss summary is unknown',
+  ]) assert.equal(lossSummaryStatus(summary), 'unavailable', summary)
+  assert.equal(lossSummaryStatus('no loss counters here'), 'unavailable')
+})
+
+const headerGuid = '{68fdd900-4a3e-11d1-84f4-0000f80464e3}'
+const headerEvent = (guid = headerGuid, task = 'EventTrace_Header', end =
+  '<Data Name="EndTime">2026-11-20T00:00:00Z</Data>') =>
+  `<Event><System><Provider Guid="${guid}"/><Task Name="${task}"/></System>`
+  + `<EventData><Data Name="EventsLost">0</Data><Data Name="BuffersLost">0</Data>`
+  + `${end}</EventData></Event>`
+const headerTrace = (event = headerEvent()) => `<Events>${event}</Events>`
+
+test('XML header diagnostic requires one explicit type and matching GUID in the same event', () => {
+  const expected = 'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=both'
+  assert.equal(eventTraceHeaderShape(headerTrace()), expected)
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent().replace(
+    '<Data Name="EventsLost">0</Data>', '<Data Name="EventsLost">77</Data>'))), expected)
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent('{00000000-0000-0000-0000-000000000000}'))),
+    'headerTyped=1;typeSite=task;headerGuid=0;headerJoint=0;provider=other;end=unbound;fields=unbound')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent().replace(
+    `<Provider Guid="${headerGuid}"/>`, '<Provider/>'))),
+    'headerTyped=1;typeSite=task;headerGuid=0;headerJoint=0;provider=missing;end=unbound;fields=unbound')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent().replace(
+    `<Provider Guid="${headerGuid}"/>`,
+    `<Provider Guid="${headerGuid}"/><Provider Guid="{00000000-0000-0000-0000-000000000000}"/>`))),
+    'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=0;provider=ambiguous;end=unbound;fields=unbound')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent(headerGuid, 'Process'))),
+    'headerTyped=0;typeSite=unbound;headerGuid=1;headerJoint=0;provider=unbound;end=iso;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent().replace(
+    '<Task Name="EventTrace_Header"/>', '<EventID>0</EventID>'))),
+    'headerTyped=0;typeSite=unbound;headerGuid=1;headerJoint=0;provider=unbound;end=iso;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent()
+    .replace('<Event>', '<Event Type="EventTrace_Header">')
+    .replace('<Task Name="EventTrace_Header"/>', '<Task/>'))),
+    'headerTyped=1;typeSite=type;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent().replace(
+    '<Task Name="EventTrace_Header"/>', '<Type>EventTrace_Header</Type>'))),
+    'headerTyped=1;typeSite=type;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent().replace(
+    '<Task Name="EventTrace_Header"/>', '<Task Name="EventTrace_Header" Value="Process"/>'))),
+    'headerTyped=2plus;typeSite=ambiguous;headerGuid=1;headerJoint=0;provider=unbound;end=iso;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent()
+    .replace('<Task Name="EventTrace_Header"/>', '<Task/>')
+    .replace('</EventData>', '<Data Name="EventTrace_Header">opaque</Data></EventData>'))),
+    'headerTyped=1;typeSite=other;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent()
+    .replace('<Task Name="EventTrace_Header"/>',
+      '<Task Name="EventTrace_Header"/><Task Name="EventTrace_Header"/>'))),
+  'headerTyped=2plus;typeSite=ambiguous;headerGuid=1;headerJoint=0;provider=unbound;end=iso;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent()
+    .replace('<Task Name="EventTrace_Header"/>',
+      '<Task Name="EventTrace_Header">Process</Task>'))),
+  'headerTyped=2plus;typeSite=ambiguous;headerGuid=1;headerJoint=0;provider=unbound;end=iso;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent() + headerEvent())),
+    'headerTyped=2plus;typeSite=ambiguous;headerGuid=2plus;headerJoint=2plus;provider=unbound;end=unbound;fields=unbound')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent(headerGuid, 'Process')
+    + headerEvent('{00000000-0000-0000-0000-000000000000}'))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=0;provider=other;end=iso;fields=both')
+})
+
+test('XML header diagnostic classifies EndTime and counter field shape without values', () => {
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent(headerGuid,
+    'EventTrace_Header', ''))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=missing;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent(headerGuid,
+    'EventTrace_Header', '<Data Name="EndTime">0</Data>'))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=zero;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent(headerGuid,
+    'EventTrace_Header', '<Data Name="EndTime">123456</Data>'))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=decimal;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent(headerGuid,
+    'EventTrace_Header', '<Data Name="EndTime">nonsense</Data>'))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=other;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent(headerGuid,
+    'EventTrace_Header', '<Data Name="EndTime">1</Data><Data Name="EndTime">2</Data>'))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=ambiguous;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent(headerGuid,
+    'EventTrace_Header', '<Data Name="EndTime" Value="1">2</Data>'))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=ambiguous;fields=both')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent().replace(
+    '<Data Name="BuffersLost">0</Data>', ''))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=events')
+  assert.equal(eventTraceHeaderShape(headerTrace(headerEvent().replace(
+    '<Data Name="BuffersLost">0</Data>', '<Data Name="BuffersLost">0</Data><Data Name="BuffersLost">0</Data>'))),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=ambiguous')
+  assert.equal(eventTraceHeaderShape(headerTrace(
+    `<Event><System><Provider Guid="${headerGuid}"/><Task Name="EventTrace_Header"/></System>`
+    + `<Payload>${headerEvent('{00000000-0000-0000-0000-000000000000}', 'Process')}</Payload></Event>`)),
+  'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=missing;fields=none')
+  assert.throws(() => eventTraceHeaderShape('<!DOCTYPE Events><Events/>'), /xml_unsafe/)
+  assert.throws(() => eventTraceHeaderShape('<Events>'), /xml_invalid/)
+})
+
+test('loss and header diagnostic CLI emits fixed shapes, no source text or secret-like input', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-loss-shape-'))
   try {
-    const path = join(directory, 'summary.txt')
-    await writeFile(path,
+    const summaryPath = join(directory, 'summary.txt')
+    const xmlPath = join(directory, 'trace.xml')
+    await writeFile(summaryPath,
       'Events Lost: 0 C:\\Users\\Private\\secret-file password=do-not-print\n'
       + 'Buffers Lost: 0\n')
+    await writeFile(xmlPath, headerTrace(headerEvent()
+      .replace('</EventData>', '<Data Name="Private">sensitive-merchant-data</Data></EventData>')))
     const result = spawnSync(process.execPath, [
       fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url)),
-      '--loss-counter-shape', path,
+      '--loss-header-shape', summaryPath, xmlPath,
     ], { encoding: 'utf8' })
     assert.equal(result.status, 0)
     assert.equal(result.stderr, '')
     assert.equal(result.stdout.trim(),
-      'v1;candidateLines=2;more=no;patterns=ELFCD,BLFCD')
-    assert.doesNotMatch(result.stdout, /Private|secret|password|Users|[A-Z]:\\/i)
+      'v2;candidateLines=2;patterns=BLFCD:1,ELFCD:1;'
+      + 'headerTyped=1;typeSite=task;headerGuid=1;headerJoint=1;provider=match;end=iso;fields=both')
+    assert.doesNotMatch(result.stdout, /Private|secret|password|Users|merchant|[A-Z]:\\/i)
+    await writeFile(xmlPath, '<Events>')
+    const malformed = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url)),
+      '--loss-header-shape', summaryPath, xmlPath,
+    ], { encoding: 'utf8' })
+    assert.equal(malformed.status, 0)
+    assert.equal(malformed.stderr, '')
+    assert.equal(malformed.stdout.trim(),
+      'v2;candidateLines=2;patterns=BLFCD:1,ELFCD:1;'
+      + 'headerTyped=invalid;typeSite=unbound;headerGuid=invalid;headerJoint=invalid;provider=unbound;end=unbound;fields=unbound')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('loss proof CLI returns only fixed statuses and refuses an unsupported competing label', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-loss-proof-'))
+  try {
+    const summaryPath = join(directory, 'summary.txt')
+    const parser = fileURLToPath(new URL('./postgres17_windows_trace_parser.mjs', import.meta.url))
+    for (const [source, expected] of [
+      ['Events Lost: 0\nBuffers Lost: 0', 'zero'],
+      ['Events Lost: 5\nBuffers Lost: 0', 'nonzero'],
+      ['Events Lost: 0\nLost Events: 5\nBuffers Lost: 0', 'unavailable'],
+      ['Events Lost: 0\nBuffers Lost: 0\nC:\\Users\\Private\\secret-file', 'zero'],
+    ]) {
+      await writeFile(summaryPath, source)
+      const result = spawnSync(process.execPath, [parser, '--loss-summary-proof', summaryPath],
+        { encoding: 'utf8' })
+      assert.equal(result.status, 0)
+      assert.equal(result.stderr, '')
+      assert.equal(result.stdout, `${expected}\n`)
+      assert.doesNotMatch(result.stdout, /Private|secret|Users|[A-Z]:\\/i)
+    }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -306,18 +463,35 @@ test('loss summary diagnostic CLI emits no source text or secret-like input', as
 
 test('missing loss counters remain fail closed after bounded shape diagnostic', async () => {
   const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
-  const missing = source.indexOf('if ($eventsLost -eq $null -or $buffersLost -eq $null) {')
-  const diagnostic = source.indexOf('$node $parserPath --loss-counter-shape $summaryPath', missing)
+  const missing = source.indexOf("if ($lossProofStatus -ceq 'unavailable' -or $eventsLost -eq $null -or $buffersLost -eq $null) {")
+  const proof = source.indexOf('$node $parserPath --loss-summary-proof $summaryPath')
+  const diagnostic = source.indexOf('$node $parserPath --loss-header-shape $summaryPath $traceXmlPath', missing)
   const refusal = source.indexOf("Fail 'observer_probe_loss_counter_unavailable'", diagnostic)
   const zeroCheck = source.indexOf("Fail 'observer_probe_trace_loss_detected'", refusal)
   const correlation = source.indexOf('$node $parserPath $traceXmlPath', zeroCheck)
-  assert.ok(missing >= 0 && diagnostic > missing && refusal > diagnostic
+  assert.ok(proof >= 0 && missing > proof && diagnostic > missing && refusal > diagnostic
     && zeroCheck > refusal && correlation > zeroCheck)
   assert.match(source, /\$shapeLines\.Count -eq 1/)
-  assert.match(source, /\$shapeLines\[0\] -cmatch '\^v1;/)
-  assert.match(source, /Write-Warning \('observer_probe_loss_counter_shape:' \+ \$shapeLines\[0\]\) -WarningAction Continue/)
-  assert.match(source, /catch \{\s*Write-Warning 'observer_probe_loss_counter_shape_unavailable' -WarningAction Continue\s*\}/)
+  assert.match(source, /\$shapeLines\[0\] -cmatch '\^v2;/)
+  assert.match(source, /Write-Warning \('observer_probe_loss_header_shape:' \+ \$shapeLines\[0\]\) -WarningAction Continue/)
+  assert.match(source, /catch \{\s*Write-Warning 'observer_probe_loss_header_shape_unavailable' -WarningAction Continue\s*\}/)
   assert.doesNotMatch(source, /Write-(?:Warning|Host|Output)\s+\$summaryText/)
+  assert.doesNotMatch(source, /Write-(?:Warning|Host|Output)\s+\$traceXmlPath/)
+  assert.match(source, /\$lossProofStatus -ceq 'unavailable' -or \$eventsLost -eq \$null/)
+  assert.match(source, /\$lossProofStatus -cne 'zero' -or \$eventsLost -ne 0/)
+})
+
+test('loss proof rejects duplicate exact or alias counters before zero check', async () => {
+  const source = await readFile(new URL('./postgres17_windows_trace_observer.ps1', import.meta.url), 'utf8')
+  const reader = source.split('function Try-ReadLossCounter(')[1]
+    ?.split('function Assert-SanitizedEvidence(')[0]
+  assert.ok(reader)
+  assert.match(reader, /\[Regex\]::Matches\(\$Text,/)
+  assert.match(reader, /\(\$lineMatches\.Count \+ \$xmlMatches\.Count\) -ne 1/)
+  assert.doesNotMatch(reader, /\[Regex\]::Match\(\$Text,/)
+  assert.match(source, /Try-ReadLossCounter \$summaryText 'Events'/)
+  assert.match(source, /Try-ReadLossCounter \$summaryText 'Buffers'/)
+  assert.doesNotMatch(source, /Try-ReadLossCounter \$summaryText 'Events Lost'/)
 })
 
 test('probe uses fixed signed Windows tools, explicit loss checks, and no PostgreSQL path', async () => {
