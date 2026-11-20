@@ -278,6 +278,22 @@ test('probe uses fixed signed Windows tools, explicit loss checks, and no Postgr
   ]) assert.equal(source.includes(forbidden), false, forbidden)
   assert.doesNotMatch(source, /Process\.\{0,4096\}/)
   assert.doesNotMatch(source, /Image\.\{0,4096\}/)
+  const pinnedProbePathCheck = source.indexOf(
+    "probeExecutablePath -ne 'C:\\Windows\\System32\\where.exe'",
+  )
+  const basenamePattern = source.indexOf(
+    '$probePattern = [System.IO.Path]::GetFileName($probeExecutable)',
+  )
+  assert.ok(pinnedProbePathCheck >= 0 && basenamePattern > pinnedProbePathCheck)
+  assert.ok(source.includes(
+    '$probeWorkingDirectory = [System.IO.Path]::GetDirectoryName($probeExecutable)',
+  ))
+  assert.ok(source.includes(
+    String.raw`$probeCommand = ('""{0}" /Q "{1}""' -f $copiedProbePath, $probePattern)`,
+  ))
+  assert.ok(source.includes(
+    '    -WorkingDirectory $probeWorkingDirectory `\n',
+  ))
 })
 
 test('production parser accepts one stable start, image, and end lifetime', () => {

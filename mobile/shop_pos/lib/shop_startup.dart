@@ -26,6 +26,9 @@ typedef ShopCloseFailureObserver = void Function(
   StackTrace stackTrace,
 );
 
+Future<void> _verifyRuntimeStoreInIsolate(String databasePath) =>
+    Isolate.run(() => ShopBackup.verifyRuntimeStore(File(databasePath)));
+
 /// Stops external users of SQLite before closing the database. Coordinator
 /// cleanup gets one bounded retry. If it remains uncertain, SQLite stays open
 /// and the failure is reported rather than risking a live listener using a
@@ -234,10 +237,7 @@ class _ShopStartupState extends State<ShopStartup> {
       if (await _databaseFile.length() > 0) {
         final verifier = widget.verifyDatabaseFile;
         if (verifier == null) {
-          final databasePath = _databaseFile.path;
-          await Isolate.run(
-            () => ShopBackup.verifyRuntimeStore(File(databasePath)),
-          );
+          await _verifyRuntimeStoreInIsolate(_databaseFile.path);
         } else {
           await verifier(_databaseFile);
         }

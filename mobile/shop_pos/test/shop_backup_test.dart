@@ -4172,7 +4172,6 @@ void main() {
             return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
           },
           closeDatabase: closeRecorder.call,
-          verifyDatabaseFile: _verifyStartupDatabase,
           databaseFactory: _openStartupDatabase,
           verifyOpenedDatabase: databaseVerifier.call,
         ),

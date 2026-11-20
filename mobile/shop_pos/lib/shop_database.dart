@@ -20547,6 +20547,7 @@ class ShopDatabase extends _$ShopDatabase {
               Variable<String>(line.productId),
               Variable<int>(2000000000 - line.quantity),
             ],
+            updates: {shopProducts},
           );
           if (changed != 1) {
             throw StateError(
@@ -21436,6 +21437,7 @@ class ShopDatabase extends _$ShopDatabase {
             Variable<int>(requiredOnHand),
             Variable<int>(walletSnapshots == null ? 0 : 1),
           ],
+          updates: {shopProducts},
         );
         if (changedRows != 1) {
           throw StateError('Not enough stock for $productName.');

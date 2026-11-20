@@ -8530,6 +8530,101 @@ END
       }
     });
 
+    testWidgets('mounted Stock follows sale and authorized restock once', (
+      tester,
+    ) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase.memory(),
+        correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+        testOnlyAllowUnconsumedAuthorization: true,
+      );
+      try {
+        await _attachWidgetWorkspace(database);
+        await database.addProduct(
+          id: 'stock-stream-tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 10,
+        );
+        await database.openManagedTestCashShift(
+          operationId: 'stock-stream-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+        await tester.pumpWidget(
+          MaterialApp(home: StockScreen(database: database, myanmar: false)),
+        );
+        await _settleStock(tester);
+        expect(find.text('10 in stock'), findsOneWidget);
+
+        const lines = [
+          ShopSaleLineInput(productId: 'stock-stream-tea', quantity: 1),
+        ];
+        final sale = await database.recordManagedTestCashSale(
+          operationId: 'stock-stream-sale',
+          lines: lines,
+        );
+        expect((await database.readActiveProducts()).single.onHand, 9);
+        await _settleStock(tester);
+        expect(find.text('9 in stock'), findsOneWidget);
+        expect(find.text('10 in stock'), findsNothing);
+        final saleMovements = await database.countStockMovements();
+        final saleOutbox = await database.countOutboxOperations();
+        final saleRetry = await database.recordManagedTestCashSale(
+          operationId: 'stock-stream-sale',
+          lines: lines,
+        );
+        expect(saleRetry.id, sale.id);
+        expect((await database.readActiveProducts()).single.onHand, 9);
+        expect(await database.countSales(), 1);
+        expect(await database.countStockMovements(), saleMovements);
+        expect(await database.countOutboxOperations(), saleOutbox);
+        await _settleStock(tester);
+        expect(find.text('9 in stock'), findsOneWidget);
+
+        final command = await database.previewFullSaleReversal(
+          operationId: 'stock-stream-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Customer returned the full sale',
+          confirmCashReturned: true,
+        );
+        final authorization = await _widgetCorrectionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'stock-stream-reversal-receipt',
+        );
+        final reversal = await database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        );
+        expect((await database.readActiveProducts()).single.onHand, 10);
+        expect(await database.countStockMovements(), saleMovements + 1);
+        expect(await database.countOutboxOperations(), saleOutbox + 1);
+        await _settleStock(tester);
+        expect(find.text('10 in stock'), findsOneWidget);
+        expect(find.text('9 in stock'), findsNothing);
+
+        final reversalRetry = await database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        );
+        expect(reversalRetry.id, reversal.id);
+        expect((await database.readActiveProducts()).single.onHand, 10);
+        expect(await database.countSales(), 1);
+        expect(await database.countStockMovements(), saleMovements + 1);
+        expect(await database.countOutboxOperations(), saleOutbox + 1);
+        await _settleStock(tester);
+        expect(find.text('10 in stock'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    });
+
     testWidgets('Stock switches mounted catalogs with its database', (
       tester,
     ) async {

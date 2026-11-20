@@ -194,9 +194,12 @@ try {
   & $wpr -start "$profilePath!SuperMegaProcessImage" -filemode
   if ($LASTEXITCODE -ne 0) { Fail 'observer_probe_trace_start_failed' }
   $traceStarted = $true
-  $probeCommand = ('""{0}" /Q "{1}""' -f $copiedProbePath, $probeExecutable)
+  $probePattern = [System.IO.Path]::GetFileName($probeExecutable)
+  $probeWorkingDirectory = [System.IO.Path]::GetDirectoryName($probeExecutable)
+  $probeCommand = ('""{0}" /Q "{1}""' -f $copiedProbePath, $probePattern)
   $probeProcess = Start-Process -FilePath $probeParentExecutable `
     -ArgumentList @('/d', '/s', '/c', $probeCommand) `
+    -WorkingDirectory $probeWorkingDirectory `
     -NoNewWindow -PassThru -Wait
   $probeExitCode = [int]$probeProcess.ExitCode
   if ($probeExitCode -ne 0) { Fail 'observer_probe_process_failed' }
