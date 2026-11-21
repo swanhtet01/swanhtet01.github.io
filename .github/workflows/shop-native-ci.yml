@@ -1517,22 +1517,124 @@ jobs:
     name: Android emulator 37.2.13 acceleration (no AVD or APK)
     if: >-
       github.event_name == 'pull_request' &&
-      github.event.pull_request.number == 752 &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.action == 'synchronize' &&
-      github.event.before == '5f9b1f9bd26a015d5adcb79017b5d4c1e268f48f' &&
-      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031'
+      github.run_attempt == 1 &&
+      github.repository == 'swanhtet01/swanhtet01.github.io' &&
+      github.event.repository.private == false &&
+      github.actor_id == '98728123' &&
+      github.event.sender.id == 98728123 &&
+      github.event.pull_request.number == 752 &&
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.base.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'codex/shop-main-integration-20261022' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031' &&
+      github.event.before == '9cd2b6b32de1c5b875585446683e680b41c02545' &&
+      github.event.after == github.event.pull_request.head.sha
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions: {}
     steps:
+      - name: Admit one reviewed source successor before any package acquisition
+        id: source_admission
+        shell: bash
+        env:
+          EXPECTED_PREDECESSOR: 9cd2b6b32de1c5b875585446683e680b41c02545
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_AFTER: ${{ github.event.after }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_BEFORE" == "$EXPECTED_PREDECESSOR" &&
+             "$EVENT_AFTER" =~ ^[0-9a-f]{40}$ &&
+             "$EVENT_AFTER" == "$PR_HEAD" &&
+             ( "$WORKFLOW_SHA" == "$GITHUB_SHA" || "$WORKFLOW_SHA" == "$PR_HEAD" ) ]] || {
+            echo 'android_accel_source_context_invalid'
+            exit 1
+          }
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - "$PR_HEAD" "$EXPECTED_PREDECESSOR" <<'PYPR'
+          import json
+          import hashlib
+          import os
+          import ssl
+          import sys
+          import urllib.request
+
+          api = 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io'
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, fp, code, message, headers, newurl):
+                  raise ValueError('redirect_forbidden')
+          opener = urllib.request.build_opener(
+              urllib.request.ProxyHandler({}),
+              urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+              NoRedirect(),
+          )
+          def read_json(url):
+              request = urllib.request.Request(url, headers={
+                  'Accept': 'application/vnd.github+json',
+                  'User-Agent': 'supermega-android-accel-qualification',
+              })
+              with opener.open(request, timeout=10) as response:
+                  if response.status != 200 or response.geturl() != url:
+                      raise ValueError('provider_response_invalid')
+                  raw = response.read(65537)
+              if len(raw) > 65536:
+                  raise ValueError('provider_response_oversize')
+              return json.loads(raw)
+          def read_workflow(ref):
+              url = ('https://raw.githubusercontent.com/swanhtet01/'
+                     'swanhtet01.github.io/' + ref
+                     + '/.github/workflows/shop-native-ci.yml')
+              request = urllib.request.Request(url, headers={
+                  'Accept-Encoding': 'identity',
+                  'User-Agent': 'supermega-android-accel-qualification',
+              })
+              with opener.open(request, timeout=10) as response:
+                  if response.status != 200 or response.geturl() != url:
+                      raise ValueError('workflow_source_response_invalid')
+                  raw = response.read(131073)
+              if not 0 < len(raw) <= 131072 or b'\0' in raw:
+                  raise ValueError('workflow_source_shape_invalid')
+              return raw
+          try:
+              pr = read_json(api + '/pulls/752')
+              head, base = pr['head'], pr['base']
+              if not (pr['number'] == 752 and pr['state'] == 'open'
+                      and pr['draft'] is True and head['sha'] == sys.argv[1]
+                      and head['ref'] == 'codex/postgres17-provenance-integration-20261031'
+                      and base['ref'] == 'codex/shop-main-integration-20261022'
+                      and head['repo']['full_name'] == base['repo']['full_name']
+                      == 'swanhtet01/swanhtet01.github.io'
+                      and head['repo']['private'] is False
+                      and base['repo']['private'] is False):
+                  raise ValueError('provider_head_mismatch')
+              commit = read_json(api + '/git/commits/' + sys.argv[1])
+              if (commit['sha'] != sys.argv[1] or len(commit['parents']) != 1
+                      or commit['parents'][0]['sha'] != sys.argv[2]):
+                  raise ValueError('one_successor_commit_invalid')
+              source = read_workflow(sys.argv[1])
+              if source != read_workflow(os.environ['WORKFLOW_SHA']):
+                  raise ValueError('workflow_source_changed_by_merge')
+              blob = hashlib.sha1(b'blob ' + str(len(source)).encode('ascii')
+                                  + b'\0' + source).hexdigest()
+              digest = hashlib.sha256(source).hexdigest()
+              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                  output.write('workflow_blob=' + blob + '\n')
+                  output.write('workflow_sha256=' + digest + '\n')
+          except (KeyError, TypeError, ValueError, OSError, TimeoutError, json.JSONDecodeError):
+              raise SystemExit('android_accel_fresh_pr_readback_unavailable') from None
+          print('Current open draft and exact PR head verified; no package acquired')
+          PYPR
       - name: Verify pinned Google emulator and KVM acceleration
+        id: emulator_accel
         shell: bash
         run: |
           set -euo pipefail
           # Separate GitHub-hosted test pin; the historical GCP pilot retains 37.2.12.
           # Google's feed supplies SHA-1; observed SHA-256 is recorded only after download.
-          for tool in python3 getfacl setfacl sudo timeout grep cmp unshare setpriv env id tr mount mountpoint stat; do
+          for tool in python3 getfacl setfacl sudo timeout grep cmp unshare setpriv env id tr mount mountpoint stat dpkg-query; do
             command -v "$tool" >/dev/null || { echo "required host tool absent: $tool"; exit 1; }
           done
           [[ -c /dev/kvm && ! -L /dev/kvm ]] || { echo 'KVM character device absent'; exit 1; }
@@ -1680,17 +1782,33 @@ jobs:
             exit 1
           }
 
-          # Pinned Ubuntu Noble libpulse0 supplies emulator's libpulse.so.0.
+          # No runner package is installed for this qualification. The stock
+          # image must already contain the exact previously successful loader
+          # package; absence is a bounded host fact, not an install request.
           libpulse_version='1:16.1+dfsg1-2ubuntu10.1'
           if [[ ! -f /usr/lib/x86_64-linux-gnu/libpulse.so.0 ]]; then
-            sudo -n apt-get update -qq
-            sudo -n apt-get install -y --no-install-recommends --no-upgrade --no-remove "libpulse0=$libpulse_version"
-          fi
-          [[ -f /usr/lib/x86_64-linux-gnu/libpulse.so.0 &&
-             "$(dpkg-query -W -f='${Version}' libpulse0 2>/dev/null)" == "$libpulse_version" ]] || {
-            echo 'pinned libpulse.so.0 host prerequisite unavailable'
+            echo 'android_accel_preinstalled_libpulse_missing'
             exit 1
-          }
+          fi
+          if [[ "$(dpkg-query -W -f='${Status}:${Version}' libpulse0:amd64 2>/dev/null || true)" != "install ok installed:$libpulse_version" ]]; then
+            echo 'android_accel_preinstalled_libpulse_version_invalid'
+            exit 1
+          fi
+          "$python_bin" -I -B - <<'PYLIB'
+          from pathlib import Path
+          import stat
+
+          path = Path('/usr/lib/x86_64-linux-gnu/libpulse.so.0')
+          try:
+              resolved = path.resolve(strict=True)
+              details = resolved.stat()
+              if (resolved.parent != path.parent or not stat.S_ISREG(details.st_mode)
+                      or not 0 < details.st_size <= 16 * 1024 * 1024):
+                  raise ValueError('loader_shape_invalid')
+          except (OSError, ValueError):
+              raise SystemExit('android_accel_preinstalled_libpulse_shape_invalid') from None
+          print('preinstalled_libpulse_shape=valid')
+          PYLIB
 
           PYTHONDONTWRITEBYTECODE=1 python3 -B - "$task_dir" <<'PYARCH'
           import hashlib
@@ -1706,6 +1824,7 @@ jobs:
           URL = 'https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip'
           SIZE = 349658551
           SHA1 = 'f41f9e31eb5ca64926603c03265c50bbc0ff4172'
+          SHA256 = 'cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd'
           LICENSE_HASH = b'24333f8a63b6825ea9c5514f83c2829b004d1fee'
           GIB = 1024 ** 3
           WORK = Path(sys.argv[1])
@@ -1793,7 +1912,8 @@ jobs:
                           digest1.update(chunk)
                           digest256.update(chunk)
                           output.write(chunk)
-              require(count == SIZE and digest1.hexdigest() == SHA1)
+              require(count == SIZE and digest1.hexdigest() == SHA1
+                      and digest256.hexdigest() == SHA256)
 
               with zipfile.ZipFile(ARCHIVE) as source:
                   entries = source.infolist()
@@ -1848,6 +1968,8 @@ jobs:
               require(binary.is_file() and os.access(binary, os.X_OK))
               require(shutil.disk_usage(WORK).free >= 2 * GIB)
               ARCHIVE.unlink()
+              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                  output.write('archive_sha256=' + digest256.hexdigest() + '\n')
               print('pinned_emulator_version=37.2.13')
               print('official_archive_bytes=' + str(count))
               print('observed_archive_sha256=' + digest256.hexdigest())
@@ -2078,3 +2200,37 @@ jobs:
             exit 1
           }
           echo 'Pinned emulator 37.2.13 acceleration PASS; no AVD, APK or app ran'
+      - name: Record metadata-only qualification after cleanup
+        if: ${{ success() && steps.emulator_accel.outcome == 'success' }}
+        shell: bash
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_BLOB: ${{ steps.source_admission.outputs.workflow_blob }}
+          WORKFLOW_DIGEST: ${{ steps.source_admission.outputs.workflow_sha256 }}
+          ARCHIVE_SHA256: ${{ steps.emulator_accel.outputs.archive_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_HEAD" =~ ^[0-9a-f]{40}$ &&
+             ( "$WORKFLOW_SHA" == "$GITHUB_SHA" || "$WORKFLOW_SHA" == "$PR_HEAD" ) &&
+             "$WORKFLOW_BLOB" =~ ^[0-9a-f]{40}$ &&
+             "$WORKFLOW_DIGEST" =~ ^[0-9a-f]{64}$ &&
+             "$ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ &&
+             "${ImageVersion:-}" =~ ^[0-9]{8}\.[0-9]+\.[0-9]+$ ]] || {
+            echo 'android_accel_qualification_metadata_invalid'
+            exit 1
+          }
+          {
+            printf '%s\n' '### Android emulator acceleration qualification only'
+            printf '| Fact | Verified result |\n| --- | --- |\n'
+            printf '| PR head | `%s` |\n' "$PR_HEAD"
+            printf '| Workflow source commit | `%s` |\n' "$WORKFLOW_SHA"
+            printf '| PR merge SHA | `%s` |\n' "$GITHUB_SHA"
+            printf '| Workflow file | Git blob `%s`, SHA-256 `%s` |\n' "$WORKFLOW_BLOB" "$WORKFLOW_DIGEST"
+            printf '| Runner | `ubuntu-24.04`, image `%s` |\n' "$ImageVersion"
+            printf '| Official emulator | `37.2.13`, 349658551 bytes, Google SHA-1 pin `f41f9e31eb5ca64926603c03265c50bbc0ff4172`, matched prior-run SHA-256 pin `%s` |\n' "$ARCHIVE_SHA256"
+            printf '| libpulse0 | Exact `1:16.1+dfsg1-2ubuntu10.1` preinstalled package and file shape observed; no install, signer or CLI-necessity claim |\n'
+            printf '| Same-job KVM / private no-egress / accel-check / cleanup | PASS |\n'
+            printf '| AVD / APK / Shop app / installed acceptance | NOT RUN |\n'
+            printf '| PostgreSQL or release receipt | NONE |\n'
+          } >> "$GITHUB_STEP_SUMMARY"
