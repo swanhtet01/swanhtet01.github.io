@@ -1,9 +1,9 @@
 # Current private-chain rehearsal
 
-This document's v13 is the hosted PostgreSQL/Supabase `v13-self-serve`
-profile. It is independent of native Shop's committed green-anchor SQLite
-`user_version = 13` and the current uncommitted native schema-v14 security
-increment.
+The first section preserves the historical hosted PostgreSQL/Supabase
+`v13-self-serve` helper for baseline and adversarial checks. The authoritative
+full release rehearsal described below is the current PostgreSQL schema-v14
+contract. Both are independent of native Shop's SQLite `user_version`.
 
 Local execution only:
 
@@ -72,20 +72,138 @@ and [column privileges](https://supabase.com/docs/guides/database/postgres/colum
 
 ## Full release database rehearsal
 
-The source-owned release runner now applies the exact 23 private migrations
-through schema 13 plus durable attempt budgets. It retains all 56 prior product,
-approval, identity and recovery checks, then runs the same actual account/billing
-exercise above and the current recovery checks (74 behavior checks total). Both
-catalogs must pass the exact 33-name current validator matrix. Legacy helper
-defaults remain v11 solely for baseline/adversarial tests; the release entry
-explicitly selects `CURRENT_MIGRATIONS` and `v13-self-serve` for both fresh and
-restored databases.
+The source-owned release runner applies the exact 24 private migrations through
+schema 14 and the `v14-shop-correction` profile. It runs all 79 exact behavior
+and recovery checks. Both fresh and restored catalogs must pass the exact
+33-name current validator matrix. Legacy helper defaults remain solely for
+baseline and adversarial tests; the release entry explicitly selects
+`CURRENT_MIGRATIONS` and the current v14 profile for both databases.
 
 New receipt production is currently blocked before PostgreSQL starts because no
-reviewed provenance profile yet binds the historical archive to every loaded
-PostgreSQL/OpenSSL/Python dependency. The commands below are the intended flow
+reviewed provenance profile yet binds the verified installer and every separate
+PostgreSQL/OpenSSL/Python/Psycopg source to the complete runtime closure. The commands below are the intended flow
 only after that source-controlled profile is complete and independently reviewed;
 Linux and caller-supplied tool paths are not approved substitutes.
+
+The pending profile is recorded at
+`hq/research/postgres17-toolchain-profile.json`. Its `sources[]` and `bindings[]`
+model must authenticate each actual source independently and bind every executed,
+imported or non-system loaded file to that source. PostgreSQL, Python,
+Psycopg/native extensions and OpenSSL may not inherit one another's provenance.
+Synthetic fixtures prove tamper rejection but can never authorize a real
+recording. Until complete Windows source identities, file hashes, runtime-load
+closure, retained evidence digests and independent approval are present, the
+recorder fails before starting PostgreSQL.
+
+The verified PostgreSQL source candidate is EDB's official Windows x64
+`postgresql-17.11-5-windows-x64.exe`: 413,001,200 bytes, SHA-256
+`612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072`.
+Two read-only downloads matched those bytes and Microsoft Winget's independent
+manifest. Windows reported a valid embedded `Authenticode` signature, required
+code-signing EKU `1.3.6.1.5.5.7.3.3`, signer raw-DER SHA-256
+`558b34d97944a53cefc13c031ea46845be00f0b9bb87f47dc3110eaee07f82d3`
+and timestamp-certificate raw-DER SHA-256
+`2da09da7f4131f9fe72db6c5e6e9c9656755af043f1ea742cc0d2120e141ebfc`.
+The installer was not executed. The canonical observer still must emit and
+retain a digest-bound evidence file before the policy can be independently
+approved. A URL, filename, subject string or secondary checksum alone is never
+authority.
+
+The Node recorder is the sole receipt authority. It revalidates the canonical
+profile immediately before launch and after confirmed cleanup, launches the
+exact verified Python executable with verified PostgreSQL and OpenSSL paths,
+and reconstructs the sanitized receipt from the raw non-authoritative Python
+report plus current source/toolchain evidence. Direct Python output cannot mint
+an accepted receipt.
+
+The repository now contains a dedicated, manual-only Windows evidence bootstrap
+at `.github/workflows/postgres17-windows-evidence.yml`. It accepts an exact
+40-hex commit and refuses to run unless that commit is also the selected dispatch
+ref. Checkout uses read-only contents permission and does not persist GitHub
+credentials. There are no push, pull-request, schedule or automatic triggers.
+No workflow has been dispatched, so this is source-level capability only.
+
+The bootstrap has two deliberately separate stages:
+
+1. `capture` can produce only `supermega.postgres17-stage1-candidate.v1` with
+   `authoritative:false`. It cannot call the receipt recorder or create a
+   `supermega.hq.database-rehearsal.v3` receipt. It verifies the exact EDB
+   installer size, digest, Authenticode status/type, raw-DER signer, code-signing
+   EKU and timestamp, then deletes the downloaded bytes without executing them.
+   The service-free
+   `--extract-only 1 --mode unattended --unattendedmodeui none --prefix ...
+   --install_runtimes 0 --create_shortcuts 0` invocation is pinned to EDB's
+   authoritative command-line documentation digest. Execution still fails closed
+   because a dependency-free loss-aware Windows kernel process/image observer is
+   not yet committed and independently approved. Process-module polling is not a
+   substitute, so the committed workflow cannot yet enter stage 2.
+2. `rehearsal` never promotes a stage-1 artifact. It may run only after the exact
+   source commit separately contains a reviewed PostgreSQL publisher policy,
+   reviewed official-source registry policy, complete multi-source profile,
+   retained source-authentication evidence and complete no-drop load closure.
+   One reviewed loss-aware observer must start before extraction and remain active
+   over the actual profile-bound Node recorder, Python runner and both PostgreSQL
+   clusters, with no dropped events and complete descendant/module correlation.
+   The existing Node recorder remains the sole receipt authority and continues to
+   enforce the 24 migrations, both 33-check catalogs, all 79 behavior/recovery
+   checks, loopback TLS, reconstruction and cleanup.
+
+Official archives and wheels other than PostgreSQL use a discriminated
+`official-registry-artifact-v1` contract. It binds the official HTTPS host and
+exact artifact/metadata URLs, package, version, platform, filename, size, artifact
+digest, retained official metadata digest, source-controlled allowlist and two
+distinct normalized policy/evidence reviewers. The component methods are closed:
+
+- Python accepts only a retained and freshly reproduced Authenticode observation
+  for an exact official Windows installer. The independently reviewed registry
+  policy owns the signer, timestamp and code-signing EKU pins; no decorative
+  secondary policy identifier is accepted. No exact Python artifact is pinned yet.
+- Psycopg must parse the non-yanked official PyPI JSON record and bind both the
+  imported pure `psycopg` package and actual `psycopg_binary` wheel/ABI closure.
+- Node, Git and the PostgreSQL parent bundle must use reviewed exact official
+  Windows Authenticode artifacts.
+  Retained evidence is compared to a fresh dependency-free Windows observation;
+  registry JSON, a URL or a digest alone is insufficient.
+- OpenSSL must be an exact traversal-safe member of the one already authenticated
+  primary EDB PostgreSQL bundle with a complete entry manifest. Its parent source
+  ID, artifact digest, signer and timestamp must match the exact primary PostgreSQL
+  source verified for the profile; an unused alternate bundle or unofficial
+  standalone Windows OpenSSL binary is not accepted.
+
+Unsupported methods fail policy validation rather than falling back to opaque
+metadata or a generic digest. The currently committed registry policy records these
+requirements but contains no artifact identities, retained metadata or independent
+approvals, so it authorizes nothing.
+
+The workflow uploads only explicitly named sanitized JSON outputs, including the
+raw receipt required for reconstruction only after it passes the same size and
+secret-shape checks and a sanitized complete process/runtime/system-module
+closure projection bound to the receipt, raw report and cleanup summary, with
+seven-day retention. It never uploads installers,
+extracted binaries, credentials, passwords or row contents. Successful cleanup must show
+the service inventory unchanged, the selected port closed and the temporary
+runtime/data root removed; runner destruction is not cleanup evidence.
+
+Official package-manager metadata can bind downloaded bytes but cannot prove which
+short-lived processes, Python extensions or native modules executed. Polling
+`Process.Modules`, WMI or `tasklist` can miss transient loads and does not expose
+loss accounting. A future observer therefore needs an operating-system event
+source with explicit process/image loss counters, descendant correlation and a
+quiet drain, plus a separately bound Python import manifest. No source-local
+observer currently satisfies that contract; adding an unvalidated custom ETW
+binary would not improve the release evidence. This entire runtime-closure gate
+remains BLOCKED/NOT RUN pending a separately reviewed minimal Windows design.
+
+The reviewed trust boundary is a fresh, single-purpose isolated Windows x64
+runner with no concurrent or interactive same-user workload and no
+attacker-writable source/runtime directories. Hostile same-host mutation is out
+of scope for this minimal path; if it becomes a requirement, a separately
+approved immutable staging/execution-lock design must be restored. Pre/post
+hashing is not represented as protection against swap-execute-restore by a
+hostile same-user process. The remaining required evidence is the retained
+canonical Authenticode observation, complete authenticated multi-source
+bindings/load closure, materialized runtime inventory, Windows execution and
+independent profile approval.
 
 Then run once from an exact clean committed checkout, using the approved tools:
 

@@ -158,10 +158,12 @@ class CloudRuntimeTests(unittest.TestCase):
     @staticmethod
     def _success_payload(**overrides: object) -> dict[str, object]:
         return {
-            "status": "completed",
-            "processed_count": 2,
+            "status": "ready",
+            "claimed_count": 1,
+            "processed_count": 1,
+            "count": 1,
             "side_effects": {
-                "writes_performed": False,
+                "writes_performed": True,
                 "external_messages_sent": False,
             },
             **overrides,
@@ -656,7 +658,6 @@ class CloudRuntimeTests(unittest.TestCase):
         def worker_response(request: object) -> FakeWorkerResponse:
             return FakeWorkerResponse(self._success_payload_for_request(
                 request,
-                processed_count=3,
                 summary=(" completed\u0000 " * 300),
                 token="must-not-leak",
                 nested={"authorization": "Bearer must-not-leak", "safe": "kept"},
@@ -694,6 +695,67 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(request_headers["authorization"], f"Bearer {self.worker_secret}")
         self.assertEqual(request_headers["x-supermega-cron-token"], self.worker_secret)
         self.assertEqual(worker_request.full_url, self.worker_url)
+
+    def test_worker_count_report_accepts_zero_or_one_bounded_run(self) -> None:
+        for count in (0, 1):
+            with self.subTest(count=count):
+                def worker_response(request: object) -> FakeWorkerResponse:
+                    payload = self._success_payload_for_request(request)
+                    payload.update({
+                        "claimed_count": count,
+                        "processed_count": count,
+                        "count": count,
+                        "side_effects": {
+                            "writes_performed": bool(count),
+                            "external_messages_sent": False,
+                        },
+                    })
+                    accounting = dict(payload["budget_accounting"])
+                    accounting.update({
+                        "reserved_runs": count,
+                        "reserved_work_units": count,
+                        "consumed_runs": count,
+                        "consumed_work_units": count,
+                    })
+                    payload["budget_accounting"] = accounting
+                    return FakeWorkerResponse(payload)
+
+                with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=worker_response) as open_worker:
+                    with self._client() as client:
+                        response = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+
+                body = response.json()
+                self.assertEqual(body["status"], "accepted")
+                self.assertEqual(body["execution"], "hosted_runtime_forwarded")
+                self.assertEqual(body["budget_accounting"]["reserved_runs"], count)
+                self.assertEqual(body["budget_accounting"]["consumed_runs"], count)
+                self.assertEqual(body["worker_result"]["count"], count)
+                open_worker.assert_called_once()
+
+    def test_worker_count_report_rejects_absent_malformed_or_contradictory_counts(self) -> None:
+        missing = object()
+        for field in ("claimed_count", "processed_count", "count"):
+            for value in (missing, None, True, 1.0, "1", -1, 0, 2):
+                with self.subTest(field=field, value=repr(value)):
+                    def worker_response(request: object) -> FakeWorkerResponse:
+                        payload = self._success_payload_for_request(request)
+                        if value is missing:
+                            payload.pop(field)
+                        else:
+                            payload[field] = value
+                        return FakeWorkerResponse(payload)
+
+                    with patch("supermega_runtime.cloud_runtime._open_worker_request", side_effect=worker_response) as open_worker:
+                        with self._client() as client:
+                            response = client.get(QUEUE_CRON_PATH, headers={"authorization": "Bearer cron-secret"})
+
+                    body = response.json()
+                    self.assertEqual(body["status"], "degraded")
+                    self.assertEqual(body["execution"], "worker_response_invalid")
+                    self.assertEqual(body["worker_error"], "worker_run_counts_invalid")
+                    self.assertTrue(body["side_effects"]["worker_invoked"])
+                    self.assertIsNone(body["side_effects"].get("writes_performed"))
+                    open_worker.assert_called_once()
 
     def test_missing_side_effect_report_fails_closed(self) -> None:
         with patch(

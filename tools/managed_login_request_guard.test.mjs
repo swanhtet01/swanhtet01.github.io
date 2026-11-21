@@ -140,7 +140,7 @@ test('claim-code correction clears only claim-attributed errors', () => {
 })
 
 test('credential-error clearing is limited to sign-in fields, not account creation', () => {
-  const signupStart = source.indexOf('creatingAccount && !reviewReturnPath ? <form')
+  const signupStart = source.indexOf('accountCreationActive ? <form')
   const signupEnd = source.indexOf('managedReady && activating && publicPortalEntry', signupStart)
   const signup = source.slice(signupStart, signupEnd)
   assert.match(signup, /autoComplete="username"[^>]+onChange=\{\(event\) => setEmail\(event\.target\.value\)\}/)
@@ -177,6 +177,28 @@ test('review context blocks activation, registration and account-mode creation h
   await handler('requestAccount', context)(event)
   handler('chooseAccountMode', context)(true)
   assert.deepEqual(busyStates, [])
+})
+
+test('public portal context blocks registration even after account mode was previously selected', async () => {
+  const { context, busyStates } = fixture()
+  Object.assign(context, {
+    publicPortalEntry: true,
+    signupPolicy: { termsVersion: 'synthetic-v1' },
+    acceptedTermsVersion: 'synthetic-v1',
+    sentRequest: null,
+    cooldownUntil: 0,
+    createManagedAccount: () => assert.fail('public portal cannot self-enroll'),
+  })
+  await handler('requestAccount', context)(event)
+  assert.deepEqual(busyStates, [])
+})
+
+test('public portal transition closes a previously selected account-creation render state', () => {
+  assert.match(source, /const accountCreationActive = creatingAccount && !reviewReturnPath && !publicPortalEntry/)
+  assert.match(source, /managed-login-screen\$\{accountCreationActive \? ' signup-entry-screen' : ''\}/)
+  assert.match(source, /accountCreationActive \? 'Create your account\.' : 'Login'/)
+  assert.match(source, /: accountCreationActive \? <form aria-label="Create company account"/)
+  assert.doesNotMatch(source, /: creatingAccount && !reviewReturnPath \? <form aria-label="Create company account"/)
 })
 
 test('existing unassigned session follows the same reviewer recovery boundary on mount', async () => {

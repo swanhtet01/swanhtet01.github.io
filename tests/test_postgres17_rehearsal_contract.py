@@ -5,6 +5,9 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -26,7 +29,26 @@ def _load_rehearsal():
 
 
 class Postgres17RehearsalContractTests(unittest.TestCase):
-    def test_preflight_rejects_unapproved_platform_and_provenance_before_any_binary(self) -> None:
+    def test_isolated_python_import_preflight_uses_exact_script_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as caller:
+            environment = dict(os.environ)
+            environment["PYTHONPATH"] = str(Path(caller) / "untrusted")
+            result = subprocess.run(
+                [sys.executable, "-I", "-B", str(REHEARSAL), "--import-preflight"],
+                cwd=caller,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertTrue(report["isolated_imports"])
+        self.assertFalse(report["authoritative"])
+        self.assertTrue(report["cleanup_complete"])
+
+    def test_release_preflight_supports_canonical_windows_full_run(self) -> None:
         module = _load_rehearsal()
         adversarial_roots = (
             Path("/arbitrary/windows-zip"),
@@ -45,13 +67,52 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 version_probe.assert_not_called()
                 binary_probe.assert_not_called()
 
-        with patch.object(module, "_postgres_version") as version_probe, \
-             patch.object(module, "_binary") as binary_probe, \
-             patch.object(module.os, "name", "nt"):
-            report = module._release_preflight(Path(r"C:\untrusted\pgsql\bin"), Path("openssl.exe"))
-            self.assertEqual(report["error"], "postgres17_toolchain_provenance_unapproved")
-            version_probe.assert_not_called()
-            binary_probe.assert_not_called()
+        expected = {"ok": True, "ready": False, "status": "available"}
+        with patch.object(module.os, "name", "nt"), \
+                patch.object(module, "_preflight", return_value=expected) as binary_preflight:
+            self.assertEqual(module._release_preflight(
+                Path(r"C:\verified\pgsql\bin"), Path(r"C:\verified\openssl.exe")
+            ), expected)
+        binary_preflight.assert_called_once()
+
+    def test_direct_python_preflight_never_reaches_selected_tooling(self) -> None:
+        module = _load_rehearsal()
+        with patch.object(module, "_release_preflight") as release_preflight, \
+                patch.object(module, "_preflight") as binary_preflight, \
+                contextlib.redirect_stdout(io.StringIO()) as stdout:
+            code = module.main([
+                "--preflight",
+                "--postgres-bin", r"C:\untrusted\pgsql\bin",
+                "--openssl", r"C:\untrusted\openssl.exe",
+            ])
+        report = json.loads(stdout.getvalue())
+        self.assertEqual(code, 1)
+        self.assertEqual(report["error"], "postgres17_verified_toolchain_required")
+        self.assertTrue(report["cleanup_complete"])
+        release_preflight.assert_not_called()
+        binary_preflight.assert_not_called()
+
+    def test_direct_python_preflight_cannot_hide_behind_import_preflight(self) -> None:
+        module = _load_rehearsal()
+        with patch.object(module, "_isolated_import_preflight") as import_preflight, \
+                patch.object(module, "_release_preflight") as release_preflight, \
+                patch.object(module, "_preflight") as binary_preflight, \
+                contextlib.redirect_stdout(io.StringIO()) as stdout:
+            code = module.main(["--preflight", "--import-preflight"])
+        report = json.loads(stdout.getvalue())
+        self.assertEqual(code, 2)
+        self.assertEqual(report["error"], "postgres17_verified_toolchain_required")
+        self.assertTrue(report["cleanup_complete"])
+        import_preflight.assert_not_called()
+        release_preflight.assert_not_called()
+        binary_preflight.assert_not_called()
+
+    def test_raw_python_report_is_explicitly_non_authoritative(self) -> None:
+        source = REHEARSAL.read_text(encoding="utf-8")
+        self.assertIn("This runner emits non-authoritative behavior evidence", source)
+        self.assertNotIn("supermega.postgres17-python-authority.v1", source)
+        self.assertNotIn("read_inherited_request", source)
+        self.assertNotIn("verify_inherited_authority", source)
 
     def test_disposable_cluster_uses_only_tls_tcp_not_package_socket_directory(self) -> None:
         module = _load_rehearsal()
@@ -118,7 +179,11 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name != "20260711081300_public_legacy_baseline.sql"))
-        self.assertEqual(module.CURRENT_MIGRATIONS, observed)
+        self.assertEqual((*module.CURRENT_MIGRATIONS, *module.SOURCE_ONLY_MIGRATIONS), observed)
+        self.assertEqual(module.SOURCE_ONLY_MIGRATIONS, (
+            "20261101090000_private_trial_backend_v15_connected_site.sql",
+            "20261103090000_private_trial_backend_v16_connected_upload_batches.sql",
+        ))
 
     def test_account_restore_inventory_includes_website_review_history(self) -> None:
         from tools import rehearse_self_serve_v13 as account
@@ -252,7 +317,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertNotIn("fastapi.testclient", source.casefold())
         self.assertNotIn("httpx", source.casefold())
 
-    def test_unapproved_platform_returns_only_sanitized_evidence(self) -> None:
+    def test_direct_preflight_returns_only_sanitized_toolchain_rejection(self) -> None:
         module = _load_rehearsal()
         with tempfile.TemporaryDirectory() as temporary:
             missing_bin = Path(temporary) / "missing-bin"
@@ -270,7 +335,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 )
         self.assertEqual(return_code, 1)
         payload = json.loads(output.getvalue())
-        self.assertEqual(payload["error"], "postgres17_platform_unapproved")
+        self.assertEqual(payload["error"], "postgres17_verified_toolchain_required")
         self.assertFalse(payload["ok"])
         self.assertTrue(payload["cleanup_complete"])
         self.assertFalse(payload["secret_values_exposed"])
@@ -296,7 +361,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         module = _load_rehearsal()
         with patch.object(module.subprocess, "run") as git:
             with self.assertRaisesRegex(module.RehearsalFailure, "expected_head_required"):
-                module._source_identity(None)
+                module._source_identity(None, REHEARSAL)
             git.assert_not_called()
         with patch.object(
             module.subprocess,
@@ -307,21 +372,24 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             ),
         ):
             with self.assertRaisesRegex(module.RehearsalFailure, "source_identity_unavailable") as caught:
-                module._source_identity("a" * 40)
+                module._source_identity("a" * 40, REHEARSAL)
             self.assertNotIn("private source error", str(caught.exception))
         result = lambda text: SimpleNamespace(returncode=0, stdout=text)
         with patch.object(module.subprocess, "run", return_value=result(" M source.py")):
             with self.assertRaisesRegex(module.RehearsalFailure, "source_dirty"):
-                module._source_identity("a" * 40)
+                module._source_identity("a" * 40, REHEARSAL)
         with patch.object(module.subprocess, "run", side_effect=[result(""), result("b" * 40)]):
             with self.assertRaisesRegex(module.RehearsalFailure, "source_head_mismatch"):
-                module._source_identity("a" * 40)
+                module._source_identity("a" * 40, REHEARSAL)
         with tempfile.TemporaryDirectory() as folder, patch.object(module, "MIGRATION_DIRECTORY", Path(folder)), \
                 patch.object(module.subprocess, "run", side_effect=[result(""), result("a" * 40)]):
             with self.assertRaisesRegex(module.RehearsalFailure, "private_migration_inventory_mismatch"):
-                module._source_identity("a" * 40)
-        with patch.object(module.subprocess, "run", side_effect=[result(""), result("a" * 40), result("b" * 40)]):
-            identity = module._source_identity("a" * 40)
+                module._source_identity("a" * 40, REHEARSAL)
+        with patch.object(module.subprocess, "run", side_effect=[
+                result(""), result("a" * 40), result("b" * 40),
+        ]) as git:
+            identity = module._source_identity("a" * 40, REHEARSAL)
+        self.assertTrue(all(call.args[0][0] == str(REHEARSAL) for call in git.call_args_list))
         self.assertEqual(identity, {"head": "a" * 40, "tree": "b" * 40,
                                    "implementation_digest": module._implementation_digest()})
 
@@ -335,7 +403,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                     patch.object(module.subprocess, "run", side_effect=failure), \
                     patch.object(module, "_run_rehearsal") as run, \
                     contextlib.redirect_stdout(io.StringIO()) as stdout:
-                code = module.main(["--expected-head", "a" * 40])
+                code = module.main(["--expected-head", "a" * 40, "--git", str(REHEARSAL)])
             payload = json.loads(stdout.getvalue())
             self.assertEqual(code, 2)
             self.assertEqual(payload["error"], "source_identity_unavailable")
@@ -348,7 +416,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         result = lambda text: SimpleNamespace(returncode=0, stdout=text)
         with tempfile.TemporaryDirectory() as folder:
             migrations = Path(folder)
-            for name in module.CURRENT_MIGRATIONS:
+            for name in (*module.CURRENT_MIGRATIONS, *module.SOURCE_ONLY_MIGRATIONS):
                 (migrations / name).write_text("-- synthetic\n", encoding="utf-8")
             with patch.object(module, "MIGRATION_DIRECTORY", migrations), \
                     patch.object(module.subprocess, "run", side_effect=[
@@ -359,7 +427,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                         side_effect=OSError("private implementation path"),
                     ):
                 with self.assertRaisesRegex(module.RehearsalFailure, "source_identity_unavailable") as caught:
-                    module._source_identity("a" * 40)
+                    module._source_identity("a" * 40, REHEARSAL)
         self.assertNotIn("private", str(caught.exception))
 
     def test_existing_raw_output_stops_before_any_source_or_database_work(self):
@@ -437,7 +505,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         for pin in ('account_proof.exercise(', 'account_proof.snapshot(admin_database_url)',
                     'account_proof.snapshot(restore_admin_database_url)', 'restored_snapshot != private_snapshot',
                     'not ready.write_ready or not ready.premium_unlocked', 'except TrialRateLimited:',
-                    'expected_row_counts=row_counts', '_source_identity(source_identity["head"]) != source_identity'):
+                    'expected_row_counts=row_counts',
+                    '_source_identity(source_identity["head"], git_executable) != source_identity'):
             self.assertIn(pin, source)
 
     def test_workspace_cleanup_requires_known_stopped_state(self):
@@ -483,6 +552,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as parent:
             evidence = Path(parent) / "rehearsal.json"
+            postgres_bin = Path(parent) / "pgsql" / "bin"
+            openssl = postgres_bin / "openssl.exe"
             with patch.object(module, "_source_identity", return_value=source), \
                     patch.object(module, "_release_preflight", return_value={"ok": True}), \
                     patch.object(
@@ -493,6 +564,12 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 code = module.main([
                     "--expected-head",
                     source["head"],
+                    "--postgres-bin",
+                    str(postgres_bin),
+                    "--openssl",
+                    str(openssl),
+                    "--git",
+                    str(REHEARSAL),
                     "--evidence-file",
                     str(evidence),
                 ])

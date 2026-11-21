@@ -199,7 +199,7 @@ class _ShopCafeOrderScreenState extends State<ShopCafeOrderScreen> {
           );
         });
       }
-    } on ShopCafeInsufficientStockException catch (error) {
+    } on ShopStockUnavailableException catch (error) {
       if (mounted) {
         setState(() {
           final available = shopNumber(
@@ -211,8 +211,8 @@ class _ShopCafeOrderScreenState extends State<ShopCafeOrderScreen> {
             myanmar: widget.myanmar,
           );
           _error = _copy(
-            '${error.productName} has $available in stock, but this order needs $required. Edit or remove the item before taking cash.',
-            '${error.productName} လက်ကျန် $available ခုသာရှိပြီး ဤမှာစာတွင် $required ခုလိုပါသည်။ ငွေသားမယူမီ ပစ္စည်းကို ပြင်ပါ သို့မဟုတ် ဖယ်ပါ။',
+            '${error.productName} has $available available for this order, but it needs $required. Edit or remove the item before taking cash.',
+            'ဤမှာစာအတွက် ${error.productName} $available ခုသာ ရနိုင်ပြီး $required ခုလိုပါသည်။ ငွေသားမယူမီ ပစ္စည်းကို ပြင်ပါ သို့မဟုတ် ဖယ်ပါ။',
           );
         });
       }

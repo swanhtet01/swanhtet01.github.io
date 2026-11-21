@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
+import { hasPGliteRuntimeContract } from './verify_migration_verifier_runtime_contract.mjs'
 import { verifyPythonDependencyContract } from './verify_python_dependency_contract.mjs'
 
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
@@ -566,7 +567,10 @@ requireContract('real migration proof precedes every production candidate',
   && workflow.indexOf('node tools/verify_private_trial_migrations.mjs') < workflow.indexOf('Deploy isolated production candidate')
   && ciWorkflow.includes('node tools/verify_private_trial_migrations.mjs')
   && appWorkflow.includes('node tools/verify_private_trial_migrations.mjs')
-  && migrationVerifier.includes("from '@electric-sql/pglite'")
+  && workflow.includes('node --test tools/verify_migration_verifier_runtime_contract.test.mjs')
+  && ciWorkflow.includes('node --test tools/verify_migration_verifier_runtime_contract.test.mjs')
+  && appWorkflow.includes('node --test tools/verify_migration_verifier_runtime_contract.test.mjs')
+  && hasPGliteRuntimeContract(migrationVerifier)
   && migrationVerifier.includes('unsafe role rejected before foundation grants')
   && migrationVerifier.includes('hosted_postgres_17_proof_required: true'))
 requireContract('app guard remains non-mutating but runs API tests', appWorkflow.includes("- 'supermega_runtime/**'") && appWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && !/vercel@56\.1\.0\s+(?:deploy|promote|rollback)\b/.test(appWorkflow) && !appWorkflow.includes('VERCEL_TOKEN') && !/environment:\s*production/.test(appWorkflow))

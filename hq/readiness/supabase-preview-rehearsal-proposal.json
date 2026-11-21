@@ -54,12 +54,14 @@
     "failedBranchName": "security-rehearsal-24h-20260812"
   },
   "migrationPlan": {
-    "schemaVersion": 13,
-    "migrationCount": 24,
-    "privateMigrationCount": 23,
+    "schemaVersion": 14,
+    "schemaProfile": "v14-shop-correction",
+    "databaseContract": "supermega_private_trial_database_v14_shop_correction_v1",
+    "migrationCount": 25,
+    "privateMigrationCount": 24,
     "publicBaseline": "20260711081300_public_legacy_baseline.sql",
-    "finalMigration": "20260930010000_app_rls_initplan_optimization.sql",
-    "chainDigest": "sha256:d569fc4dfdad1d97b31c3684b991807ea258aa44b6cc0391e930cc4d13b00e2a",
+    "finalMigration": "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql",
+    "chainDigest": "sha256:0f104392f6c2926e17eb45d7ebc0cca1a01bc0433ce68169660067faef4577b7",
     "migrations": [
       {
         "name": "20260711081300_public_legacy_baseline.sql",
@@ -180,8 +182,23 @@
         "name": "20260930010000_app_rls_initplan_optimization.sql",
         "path": "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
         "digest": "sha256:eda938f781a7e854c9d83567600ad912bd07cadc27f4479b1bf7ee410d451a57"
+      },
+      {
+        "name": "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql",
+        "path": "supabase/migrations/20261024090000_private_trial_backend_v14_shop_correction_consumption.sql",
+        "digest": "sha256:a9c290ff1209467fc3d5b4d91a102394a55080c9f40930195b8cb36174c10db6"
       }
     ],
+    "sourceOnlyMigrationCount": 1,
+    "sourceOnlyChainDigest": "sha256:cf270272db701f1c2676c7466ec5bc8caf529a39b286bfc250a99c66b95f0b72",
+    "sourceOnlyMigrations": [
+      {
+        "name": "20261101090000_private_trial_backend_v15_connected_site.sql",
+        "path": "supabase/migrations/20261101090000_private_trial_backend_v15_connected_site.sql",
+        "digest": "sha256:ae18fa028ff8c0a7a4c1ddae097fb0ed2e851fc64044f0a95abd81dda67fd04b"
+      }
+    ],
+    "sourceInventoryDigest": "sha256:a3fcf0f1190f285686f04740ce207940379eae5e1a595894e49e813c26e9ec7e",
     "browserQuarantine": {
       "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
@@ -208,7 +225,7 @@
   "requiredEvidence": [
     "preview-branch-status-and-migration-list",
     "clean-empty-data-less-branch-confirmed",
-    "source-controlled-migration-chain-applied-through-v13",
+    "source-controlled-migration-chain-applied-through-v14",
     "durable-attempt-budget-restart-concurrency-and-restored-limit-proof",
     "website-review-recipient-isolation-entitlement-and-session-revocation",
     "website-review-and-feedback-nonempty-backup-restore",
@@ -262,23 +279,23 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:d569fc4dfdad1d97b31c3684b991807ea258aa44b6cc0391e930cc4d13b00e2a on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:0f104392f6c2926e17eb45d7ebc0cca1a01bc0433ce68169660067faef4577b7 on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
-      "digest": "sha256:0ec9f1a9760e7e36d8b5b8cb152ad8c5ed616ff9cdb962c135ca429290760542"
+      "digest": "sha256:c579bb65464b9b1741d1a0059b2ccc558919e5d885898a83f23e6abf91fa971b"
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:1f78a1f119c2d74228799f29178c4c3e7c371c8a2a6e704e7f2af3b19865a06f"
+      "digest": "sha256:6253ee5f757b2302cdf0ec075f9643ac5e954bc88d46ba277e92aad35df2565e"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
-      "digest": "sha256:a3a562c3baaf5fda8f9dc10637367699e11dee9ab6c12448c671e8a592b4a324"
+      "digest": "sha256:73be733843ab92adc633cf9e20a893bf82d253f09e54de250362bb416c427197"
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:31ace4c67db71d77a2555ec17cb806bf2c52c3905e334c91232f3831aa5bbcaf"
+      "digest": "sha256:b10ab1ebff37cc880e1fe2d33e45e5a61287e4fd13d34af2611426fecd20de40"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -301,5 +318,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:9c08d8589a77b4b14aeb221b1fddf84d25237a86ba6476b7ccc221e3b8fb2577"
+  "digest": "sha256:875c0c25c3b43c357c2521f8e0b3e16440b9eaf177e99eef1d2b744a8e18bd3e"
 }

@@ -21,6 +21,28 @@ void main() {
     modifiers: const [soy],
   );
   final catalog = {soy.key: soy};
+  test('order command bytes round trip strictly for connected projection', () {
+    final command = CafeOrderCommand(
+      id: 'connected-command',
+      ticketId: 'connected-ticket',
+      expectedVersion: 0,
+      lines: [line('connected-line')],
+      serviceContext: const CafeServiceContext(
+        areaLabel: 'Front',
+        tableLabel: 'T1',
+      ),
+    );
+    final restored = CafeOrderCommand.fromJson(
+      jsonDecode(jsonEncode(command.toJson())),
+    );
+    expect(restored.fingerprint, command.fingerprint);
+    expect(restored.serviceContext!.tableLabel, 'T1');
+    final extra = Map<String, Object>.from(command.toJson())..['extra'] = true;
+    expect(() => CafeOrderCommand.fromJson(extra), throwsFormatException);
+    final malformed = Map<String, Object>.from(command.toJson())
+      ..['expectedVersion'] = -1;
+    expect(() => CafeOrderCommand.fromJson(malformed), throwsFormatException);
+  });
   test('distinct same-product lines round trip with immutable snapshots', () {
     final command = CafeOrderCommand(
       id: 'cmd-1',
@@ -185,6 +207,48 @@ void main() {
         throwsFormatException,
       );
     }
+  });
+  test('typed order refuses a remark its saved reader cannot reopen', () {
+    final acceptedRemark = List<String>.filled(120, '🙂').join();
+    final refusedRemark = List<String>.filled(121, '🙂').join();
+    expect(acceptedRemark.runes.length, 120);
+    expect(acceptedRemark.length, 240);
+    expect(refusedRemark.runes.length, 121);
+    expect(refusedRemark.length, 242);
+
+    final valid = applyCafeOrderCommand(
+      null,
+      CafeOrderCommand(
+        id: 'valid-remark-command',
+        ticketId: 'valid-remark-ticket',
+        expectedVersion: 0,
+        lines: [line('valid-remark-line', remark: acceptedRemark)],
+      ),
+      catalog,
+    );
+    expect(
+      CafeOrderTicket.fromJson(valid.toJson()).lines.single.remark,
+      acceptedRemark,
+    );
+    expect(
+      () => applyCafeOrderCommand(
+        null,
+        CafeOrderCommand(
+          id: 'refused-remark-command',
+          ticketId: 'refused-remark-ticket',
+          expectedVersion: 0,
+          lines: [line('refused-remark-line', remark: refusedRemark)],
+        ),
+        catalog,
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'cafe_order_remark',
+        ),
+      ),
+    );
   });
   test('split evidence round trips and rejects a changed partition', () {
     CafeOrderLine localLine(String id) => CafeOrderLine.local(

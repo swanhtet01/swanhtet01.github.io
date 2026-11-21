@@ -1,0 +1,266 @@
+"""Unmounted feed-route checks with synthetic peers and SQL; no live ingress."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+import base64
+import json
+import unittest
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from supermega_runtime.connected_site_event_feed_router import (
+    create_connected_site_event_feed_router,
+)
+from supermega_runtime.connected_site_feed_signer import ConnectedSiteFeedSealer
+from supermega_runtime.connected_site_gateway import (
+    ConnectedSiteGatewayPrincipalResolver, GatewayPeerAttestation,
+)
+from supermega_runtime.connected_site_v15 import canonical_json, digest
+from tests.connected_site_signed_page_fixture import _signature
+from tests.test_connected_site_event_feed import _Script
+from tests.test_connected_site_event_read import _fixture, _resign
+from tests.test_connected_site_runtime import _Authorities
+from tests.test_connected_site_v15 import ISSUER, NOW
+from tests.v41_native_http_bridge_fixture import _key
+
+
+PATH = "/api/connected-site/v1/event-feed"
+
+
+def _app(*, enabled=True, signer_mode="valid", peer_active=True,
+         pin_seed=23, clock_rollback=False, protected_sealer=False,
+         clock_advancing=False, lease_expiry_ms=None, seal_delay_ms=0):
+    authority, lease, signed_request = _fixture()
+    if lease_expiry_ms is not None:
+        lease_unsigned = {key: value for key, value in lease.items()
+                          if key not in {"payloadDigest", "signature"}}
+        lease_unsigned["expiresAt"] = (
+            NOW + timedelta(milliseconds=lease_expiry_ms)
+        ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        lease = {**lease_unsigned, "payloadDigest": digest(lease_unsigned),
+                 "signature": ISSUER.sign(lease_unsigned)}
+        signed_request = _resign(signed_request, leaseDigest=lease["payloadDigest"])
+    event = {"synthetic": "private-event", "privateRemark": "must-not-leak"}
+    script = _Script(authority, lease, events=[
+        (1, digest(event), None, canonical_json(event)),
+    ])
+    if lease_expiry_ms is not None:
+        script.lease = (
+            *script.lease[:-1], NOW + timedelta(milliseconds=lease_expiry_ms),
+        )
+    provider = _Authorities(authority)
+
+    def peer(request):
+        if not peer_active:
+            return None
+        device = authority.devices["device-a"]
+        return GatewayPeerAttestation(
+            request=request, gateway_id="synthetic-gateway",
+            workspace_id=authority.workspace_id, site_id=authority.site_id,
+            device_id=device.device_id, client_fingerprint=device.client_fingerprint,
+            session_generation=device.session_generation, observed_at=NOW,
+        )
+
+    resolver = ConnectedSiteGatewayPrincipalResolver(
+        gateway_id="synthetic-gateway", load_attested_peer=peer,
+        authority_provider=provider, now=lambda: NOW,
+    )
+    clock_reads = 0
+
+    def trusted_now():
+        nonlocal clock_reads
+        clock_reads += 1
+        if clock_advancing:
+            return NOW + timedelta(milliseconds=clock_reads)
+        if seal_delay_ms and clock_reads > 1:
+            return NOW + timedelta(milliseconds=seal_delay_ms)
+        return NOW - timedelta(seconds=1) if clock_rollback and clock_reads > 1 else NOW
+
+    def sign(page, request, retained_lease):
+        if signer_mode == "raises":
+            raise RuntimeError("synthetic_signer_failed")
+        if signer_mode == "mutate-request":
+            request["requestNonce"] = "f" * 64
+        if signer_mode == "mutate-lease":
+            retained_lease["role"] = "owner"
+        if signer_mode == "mutate-lease-signature":
+            retained_lease["signature"] = "changed"
+        wire = page.to_wire()
+        issued = int(NOW.timestamp() * 1000)
+        proof = {
+            "contract": "supermega.connected-cloud-feed-proof.v1",
+            "protocolVersion": 1, "issuerKeyId": "feed_fixture",
+            "issuedAtMillis": issued, "expiresAtMillis": issued + 30000,
+            "workspaceId": wire["workspaceId"], "siteId": wire["siteId"],
+            "actorId": wire["actorId"], "actorRole": retained_lease["role"],
+            "deviceId": wire["deviceId"],
+            "authorityGeneration": wire["authorityGeneration"],
+            "revocationGeneration": wire["revocationGeneration"],
+            "authorityPayloadDigest": wire["authorityPayloadDigest"],
+            "leaseDigest": wire["leaseDigest"],
+            "requestDigest": wire["requestDigest"],
+            "requestNonce": request["requestNonce"],
+            "afterSequence": wire["afterSequence"],
+            "priorEventDigest": wire["priorEventDigest"],
+            "nextSequence": wire["nextSequence"],
+            "nextEventDigest": wire["nextEventDigest"],
+            "pageDigest": wire["pageDigest"],
+        }
+        sealed = {
+            "requestJson": canonical_json(request),
+            "pageJson": canonical_json(wire),
+            "proofJson": canonical_json({
+                **proof, "signature": _signature(23, proof),
+            }),
+        }
+        if signer_mode == "wrong-page":
+            sealed["pageJson"] = canonical_json({**wire, "siteId": "other"})
+        if signer_mode == "wrong-signature":
+            changed = json.loads(sealed["proofJson"])
+            changed["signature"] = _signature(24, proof)
+            sealed["proofJson"] = canonical_json(changed)
+        return sealed
+
+    class _SyntheticProtectedSigner:
+        key_id = "feed_fixture"
+
+        def sign(self, payload: bytes) -> str:
+            signature = _key(23)[0].sign(payload)
+            return base64.urlsafe_b64encode(signature).decode().rstrip("=")
+
+    app = FastAPI()
+    app.include_router(create_connected_site_event_feed_router(
+        connection_factory=script.connect, authority_provider=provider,
+        resolve_principal=resolver,
+        load_lease=lambda principal, request: lease,
+        seal_checked_page=(
+            ConnectedSiteFeedSealer(
+                signer=_SyntheticProtectedSigner(), trusted_now=trusted_now,
+                enabled=signer_mode != "disabled",
+            ) if protected_sealer else sign
+        ),
+        pinned_issuer_keys={"feed_fixture": _key(pin_seed)[1]},
+        trusted_now=trusted_now, runtime_enabled=enabled,
+    ))
+    return app, signed_request, script
+
+
+class EventFeedRouterTests(unittest.TestCase):
+    def test_protected_sealer_composes_with_checked_route_and_pinned_verifier(self):
+        app, request, _ = _app(protected_sealer=True)
+        response = TestClient(app).post(PATH, json=request)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.json()), {"requestJson", "pageJson", "proofJson"})
+        for mode, pin in (("disabled", 23), ("valid", 24)):
+            denied, signed_request, _ = _app(
+                protected_sealer=True, signer_mode=mode, pin_seed=pin,
+            )
+            self.assertNotEqual(TestClient(denied).post(PATH, json=signed_request).status_code, 200)
+
+    def test_protected_sealer_uses_the_transaction_checked_time_sample(self):
+        app, request, _ = _app(protected_sealer=True, clock_advancing=True)
+        self.assertEqual(TestClient(app).post(PATH, json=request).status_code, 200)
+
+    def test_protected_sealer_never_outlives_signed_lease(self):
+        capped, request, _ = _app(
+            protected_sealer=True, lease_expiry_ms=10000,
+        )
+        response = TestClient(capped).post(PATH, json=request)
+        self.assertEqual(response.status_code, 200)
+        proof = json.loads(response.json()["proofJson"])
+        self.assertEqual(
+            proof["expiresAtMillis"], int((NOW + timedelta(milliseconds=10000)).timestamp() * 1000),
+        )
+        expired, request, _ = _app(
+            protected_sealer=True, lease_expiry_ms=10000, seal_delay_ms=20000,
+        )
+        self.assertNotEqual(TestClient(expired).post(PATH, json=request).status_code, 200)
+
+    def test_disabled_and_unpaired_peer_never_read_sql(self):
+        for enabled, peer_active, expected in ((False, True, 503), (True, False, 401)):
+            app, request, script = _app(enabled=enabled, peer_active=peer_active)
+            with TestClient(app) as client:
+                response = client.post(PATH, json=request)
+            self.assertEqual(response.status_code, expected)
+            self.assertEqual(script.queries, [])
+
+    def test_current_signed_manager_gets_only_checked_bound_bytes(self):
+        app, request, script = _app()
+        with TestClient(app) as client:
+            response = client.post(PATH, json=request)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        sealed = response.json()
+        self.assertEqual(set(sealed), {"requestJson", "pageJson", "proofJson"})
+        self.assertEqual(sealed["requestJson"], canonical_json(request))
+        self.assertNotIn("must-not-leak", response.text)
+        self.assertTrue(any("for share" in sql for sql, _ in script.queries))
+        self.assertEqual(script.clock_reads, 3)
+
+    def test_identical_request_replay_then_signed_cursor_advance(self):
+        app, request, script = _app()
+        with TestClient(app) as client:
+            first = client.post(PATH, json=request)
+            replay = client.post(PATH, json=request)
+            self.assertEqual(first.status_code, 200, first.text)
+            self.assertEqual(replay.status_code, 200, replay.text)
+            self.assertEqual(replay.json(), first.json())
+            first_page = json.loads(first.json()["pageJson"])
+            self.assertEqual(first_page["nextSequence"], 1)
+            event_digest = first_page["nextEventDigest"]
+            # A signed cursor can advance only with the exact retained head.
+            script.prior = (event_digest,)
+            script.events = []
+            continued = _resign(
+                request, afterSequence=1, priorEventDigest=event_digest,
+            )
+            next_page = client.post(PATH, json=continued)
+            self.assertEqual(next_page.status_code, 200, next_page.text)
+            self.assertEqual(json.loads(next_page.json()["pageJson"])["nextSequence"], 1)
+            wrong_head = _resign(
+                request, afterSequence=1, priorEventDigest="f" * 64,
+            )
+            self.assertNotEqual(client.post(PATH, json=wrong_head).status_code, 200)
+
+    def test_ambient_duplicate_oversize_and_substituted_identity_fail(self):
+        app, request, _ = _app()
+        with TestClient(app) as client:
+            self.assertEqual(client.post(PATH, json=request,
+                                         headers={"Authorization": "Bearer synthetic"}).status_code, 400)
+            raw = canonical_json(request).replace(
+                '"contract":', '"contract":"duplicate","contract":', 1,
+            )
+            self.assertEqual(client.post(PATH, content=raw,
+                                         headers={"content-type": "application/json"}).status_code, 400)
+            self.assertEqual(client.post(PATH, content="x" * 70000).status_code, 413)
+            self.assertNotEqual(client.post(PATH, json={**request, "deviceId": "device-b"}).status_code, 200)
+            self.assertNotEqual(client.post(PATH, json={**request, "requestNonce": "f" * 64}).status_code, 200)
+            self.assertNotEqual(client.post(PATH, json=_resign(request, workspaceId="other")).status_code, 200)
+            stale = (NOW - timedelta(seconds=31)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            self.assertNotEqual(client.post(PATH, json=_resign(request, issuedAt=stale)).status_code, 200)
+
+    def test_revoked_sql_and_bad_or_failed_signer_never_return_page(self):
+        app, request, script = _app()
+        script.device = ("revoked", *script.device[1:])
+        with TestClient(app) as client:
+            self.assertNotEqual(client.post(PATH, json=request).status_code, 200)
+        for mode in ("wrong-page", "wrong-signature", "raises",
+                     "mutate-request", "mutate-lease", "mutate-lease-signature"):
+            app, request, _ = _app(signer_mode=mode)
+            with TestClient(app) as client:
+                response = client.post(PATH, json=request)
+            self.assertNotEqual(response.status_code, 200, mode)
+        for kwargs in ({"pin_seed": 24}, {"clock_rollback": True}):
+            app, request, _ = _app(**kwargs)
+            with TestClient(app) as client:
+                self.assertNotEqual(client.post(PATH, json=request).status_code, 200)
+        app, request, script = _app()
+        script.site = (True, 1, 99, script.site[3])
+        with TestClient(app) as client:
+            self.assertNotEqual(client.post(PATH, json=request).status_code, 200)
+
+
+if __name__ == "__main__":
+    unittest.main()

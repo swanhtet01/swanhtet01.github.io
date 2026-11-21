@@ -266,6 +266,30 @@ void main() {
     );
   });
 
+  test('rejects a zero-total sale with no lines', () {
+    final incomplete = _fixture(
+      shift: _shift(cashSalesCount: 2),
+      sales: [
+        ..._sales,
+        const ShopOperationalSale(
+          id: '000102',
+          paymentMethod: ShopOperationalPaymentMethod.cash,
+          totalMmk: 0,
+          createdAtMillis: 1792865500000,
+          lines: [],
+        ),
+      ],
+    );
+    expect(
+      () => exporter.encode(incomplete),
+      throwsA(_code('reference_sale_lines_required')),
+    );
+    expect(
+      () => exporter.preview(incomplete, ShopOperationalPreviewLocale.en),
+      throwsA(_code('reference_sale_lines_required')),
+    );
+  });
+
   test('requires closed shift and in-window operational events', () {
     expect(
       () => exporter.encode(_fixture(shift: _shift(isClosed: false))),
@@ -358,6 +382,51 @@ void main() {
     );
   });
 
+  test('rejects a zero-total reversal with no lines', () {
+    const zeroPricedSale = ShopOperationalSale(
+      id: '000102',
+      paymentMethod: ShopOperationalPaymentMethod.cash,
+      totalMmk: 0,
+      createdAtMillis: 1792865250000,
+      lines: [
+        ShopOperationalSaleLine(
+          id: '000102-1',
+          productId: '000003',
+          productName: 'Zero-price test item',
+          quantity: 1,
+          unitPriceMmk: 0,
+          lineTotalMmk: 0,
+        ),
+      ],
+    );
+    final incomplete = _fixture(
+      shift: _shift(cashSalesCount: 2, cashReversalCount: 2),
+      sales: [..._sales, zeroPricedSale],
+      reversals: [
+        ..._reversals,
+        const ShopOperationalReversal(
+          id: '000202',
+          saleId: '000102',
+          originalPaymentMethod: ShopOperationalPaymentMethod.cash,
+          originalTotalMmk: 0,
+          cashDrawerDeltaMmk: 0,
+          reason: 'Fictional correction',
+          authorizedActorLabel: 'Owner',
+          createdAtMillis: 1792865450000,
+          lines: [],
+        ),
+      ],
+    );
+    expect(
+      () => exporter.encode(incomplete),
+      throwsA(_code('reference_reversal_lines_required')),
+    );
+    expect(
+      () => exporter.preview(incomplete, ShopOperationalPreviewLocale.en),
+      throwsA(_code('reference_reversal_lines_required')),
+    );
+  });
+
   test('rejects reconciliation before the underlying reversal', () {
     expect(
       () => exporter.encode(
@@ -444,6 +513,7 @@ ShopOperationalShift _shift({
   int expectedCashMmk = 10000,
   int countedCashMmk = 10000,
   int cashDrawerOutflowMmk = 5000,
+  int cashReversalCount = 1,
   bool isClosed = true,
 }) => ShopOperationalShift(
   id: '000042',
@@ -455,7 +525,7 @@ ShopOperationalShift _shift({
   cashSalesTotalMmk: cashSalesTotalMmk,
   walletSalesCount: walletSalesCount,
   walletSalesTotalMmk: walletSalesTotalMmk,
-  cashReversalCount: 1,
+  cashReversalCount: cashReversalCount,
   cashReversalTotalMmk: 5000,
   expectedCashMmk: expectedCashMmk,
   countedCashMmk: countedCashMmk,

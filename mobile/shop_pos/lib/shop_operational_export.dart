@@ -386,6 +386,7 @@ final class ShopOperationalExporter {
         _fail('reference_linked_sale_outside_shift_window');
       }
       _money(sale.totalMmk, 'sale_total');
+      if (sale.lines.isEmpty) _fail('reference_sale_lines_required');
       var lineTotal = 0;
       for (final line in sale.lines) {
         _validateSaleLine(line);
@@ -811,6 +812,7 @@ void _validateReversal(ShopOperationalReversal reversal) {
       (!isCash && reversal.cashDrawerDeltaMmk != 0)) {
     _fail('reference_reversal_cash_effect_invalid');
   }
+  if (reversal.lines.isEmpty) _fail('reference_reversal_lines_required');
   var total = 0;
   for (final line in reversal.lines) {
     _text(line.id, 'reversal_line_id');

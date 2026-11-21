@@ -144,7 +144,7 @@ Authority: hq/portfolio.json agentOperatingModel + pilot-data/agent_team_system.
       +-- Managed backend (planned, currently isolated_demo):
             Supabase Postgres 17, project zvtzwcimpvvtkowflhda
             historical hosted schema v11; current hosted state not revalidated
-            local schema v13; hosted parity is unproven
+            local target schema v14; fresh PostgreSQL 17 proof pending
             prior quarantine audit retained as history, writes off until gates pass
             rehearsal flow: disposable preview branch, apply migrations,
             prove isolation/storage/recovery, delete after evidence
@@ -182,9 +182,11 @@ Stage 0 (now): one Supabase project, writes off, device-local trials only.
   the cheapest possible top-of-funnel and should be preserved.
 
 Stage 1: single project, per-tenant RLS. One database, tenant_id on every
-  row, RLS policies rehearsed locally (72 PostgreSQL 17 behavior checks,
-  33 catalog checks before and after restore, schema v13 including billing and
-  durable signup limits). Local proof does not establish hosted security.
+  row. The current schema v14 rehearsal contract requires 79 PostgreSQL 17
+  behavior checks and 33 catalog checks before and after restore, including
+  billing, durable signup limits and Shop correction consumption. The retained
+  accepted receipt is v13; the fresh v14 PostgreSQL 17 rehearsal is pending.
+  Source/unit proof does not establish PostgreSQL 17 or hosted security.
   Preview-branch rehearsal must prove the complete current migration chain,
   tenant isolation, session revocation, browser quarantine and recovery before
   production migration. All six hosted gates remain blocked: preview_rehearsal,
@@ -245,7 +247,7 @@ showroom CI run separately and fail CI on their own.
   no keys in the built artifact (verified by the public output gate).
 - Database: RLS on every managed table, browser roles denied, metadata
   quarantine for legacy public tables recorded in the historical v11 audit.
-  That observation is not current v13 proof and must be revalidated;
+  That observation is not current v14 proof and must be revalidated;
   production writes remain
   disabled until separate founder approval
   (production_activation gate).
@@ -271,7 +273,7 @@ artifact family supersedes them.
 Phase A -- prove the hosted spine (target: days 0-14)
 - After separate owner approval, execute the bounded rehearsal exactly as scoped
   in managed-pilot-readiness.json: create one preview branch, apply the complete
-  source-controlled migration chain, prove current v13 parity, browser quarantine,
+  source-controlled migration chain, prove current v14 parity, browser quarantine,
   hosted isolation / storage / recovery / session-revocation, capture evidence,
   and delete the branch (max lifetime 24h).
 - Trigger: rehearsal green -> propose production migration to the founder.

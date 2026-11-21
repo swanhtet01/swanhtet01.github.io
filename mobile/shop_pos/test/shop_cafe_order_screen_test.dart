@@ -1517,6 +1517,78 @@ void main() {
   );
 
   testWidgets(
+    'counter reservation reports usable cafe stock without changing effects',
+    (tester) async {
+      final database = await readyDatabase();
+      try {
+        await database.customUpdate(
+          "UPDATE shop_products SET on_hand = 1 WHERE id = 'coffee'",
+        );
+        await database.saveCounterSaleDraft(
+          operationId: 'reserved-counter-screen-sale',
+          quantities: const {'coffee': 1},
+        );
+        await database.beginPendingCashCheckout(
+          operationId: 'reserved-counter-screen-sale',
+          checkoutKind: 'counter',
+          subjectId: 'reserved-counter-screen-sale',
+        );
+        await openScreen(tester, database);
+        await addLine(tester);
+        final order =
+            (await database
+                    .customSelect('SELECT id FROM shop_cafe_orders')
+                    .getSingle())
+                .read<String>('id');
+        final movementsBefore = await database.countStockMovements();
+        final outboxBefore = await database.countOutboxOperations();
+
+        await tester.tap(find.byKey(ValueKey('cafe-complete:$order')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('cafe-complete-cash-confirm')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            'Coffee has 0 available for this order, but it needs 1. '
+            'Edit or remove the item before taking cash.',
+          ),
+          findsOneWidget,
+        );
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        expect(await database.countStockMovements(), movementsBefore);
+        expect(await database.countOutboxOperations(), outboxBefore);
+        expect(
+          (await database
+                  .customSelect('SELECT state FROM shop_cafe_orders')
+                  .getSingle())
+              .read<String>('state'),
+          'open',
+        );
+        expect(
+          await database.readPendingCashCheckout(
+            checkoutKind: 'counter',
+            subjectId: 'reserved-counter-screen-sale',
+          ),
+          isNotNull,
+        );
+        expect(
+          await database.readPendingCashCheckout(
+            checkoutKind: 'cafe',
+            subjectId: order,
+          ),
+          isNull,
+        );
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  testWidgets(
     'stale stock failure changes no sale stock proof or outbox state',
     (tester) async {
       final database = await readyDatabase();
@@ -1544,7 +1616,7 @@ void main() {
         expect(find.byKey(const ValueKey('cafe-error')), findsOneWidget);
         expect(
           find.text(
-            'Coffee has 0 in stock, but this order needs 1. '
+            'Coffee has 0 available for this order, but it needs 1. '
             'Edit or remove the item before taking cash.',
           ),
           findsOneWidget,
@@ -1602,7 +1674,7 @@ void main() {
 
         expect(
           find.text(
-            'Coffee has 1 in stock, but this order needs 2. '
+            'Coffee has 1 available for this order, but it needs 2. '
             'Edit or remove the item before taking cash.',
           ),
           findsOneWidget,
@@ -1652,7 +1724,7 @@ void main() {
 
       expect(
         find.textContaining(
-          'Coffee လက်ကျန် ၀ ခုသာရှိပြီး ဤမှာစာတွင် ၁ ခုလိုပါသည်။',
+          'ဤမှာစာအတွက် Coffee ၀ ခုသာ ရနိုင်ပြီး ၁ ခုလိုပါသည်။',
         ),
         findsOneWidget,
       );

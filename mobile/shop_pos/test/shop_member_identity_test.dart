@@ -16,7 +16,7 @@ void main() {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 22);
+        expect(database.schemaVersion, 42);
         final storeRef = await database.readStoreRef();
         expect(storeRef, matches(RegExp(r'^[0-9a-f]{64}$')));
         await expectLater(
@@ -526,7 +526,7 @@ void main() {
           await source.exportVerifiedLocalSnapshot(snapshot);
           final raw = sqlite3.open(snapshot.path);
           try {
-            _removeV17CorrectionConsumptionObjects(raw);
+            _removePostV15SchemaObjects(raw);
             for (final table in const [
               'shop_wallet_checkout_member_links',
               'shop_sale_member_links',
@@ -544,7 +544,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 22);
+            expect(upgraded.schemaVersion, 42);
             expect(await upgraded.countSales(), 1);
             expect(await upgraded.countStockMovements(), 2);
             expect(await upgraded.countOutboxOperations(), 2);
@@ -598,7 +598,7 @@ void main() {
           await source.exportVerifiedLocalSnapshot(snapshot);
           final raw = sqlite3.open(snapshot.path);
           try {
-            _removeV17CorrectionConsumptionObjects(raw);
+            _removePostV15SchemaObjects(raw);
             raw.execute(
               "UPDATE shop_products SET sku = 'smc1.legacy-merchant-code' "
               "WHERE id = 'legacy-prefix'",
@@ -620,7 +620,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 22);
+            expect(upgraded.schemaVersion, 42);
             final product = (await upgraded.readActiveProducts()).single;
             expect(product.sku, 'smc1.legacy-merchant-code');
             expect(product.onHand, 1);
@@ -694,7 +694,7 @@ void main() {
         await source.exportVerifiedLocalSnapshot(snapshot);
         final raw = sqlite3.open(snapshot.path);
         try {
-          _removeV17CorrectionConsumptionObjects(raw);
+          _removePostV15SchemaObjects(raw);
           raw.execute(
             "UPDATE shop_products SET sku = ?, archived = 1 "
             "WHERE id = 'legacy-collision'",
@@ -717,7 +717,7 @@ void main() {
         final upgraded = ShopDatabase(NativeDatabase(snapshot));
         try {
           await upgraded.verifyReadyForUse();
-          expect(upgraded.schemaVersion, 22);
+          expect(upgraded.schemaVersion, 42);
           expect(await upgraded.memberCardIdentificationAvailable(), isFalse);
           await _seedMember(
             upgraded,
@@ -824,7 +824,7 @@ void main() {
           await source.exportVerifiedLocalSnapshot(snapshot);
           final raw = sqlite3.open(snapshot.path);
           try {
-            _removeV17CorrectionConsumptionObjects(raw);
+            _removePostV15SchemaObjects(raw);
             for (final table in const [
               'shop_wallet_checkout_member_links',
               'shop_sale_member_links',
@@ -1482,7 +1482,136 @@ String _syntheticStaticMmqr() {
   return '$body${_crc16(utf8.encode(body))}';
 }
 
-void _removeV17CorrectionConsumptionObjects(Database connection) {
+void _removePostV15SchemaObjects(Database connection) {
+  for (final definitions in [
+    shopConnectedDeviceProfileSchemaDefinitionsV42(),
+    shopConnectedCloudFeedSchemaDefinitionsV41(),
+    shopConnectedCloudFeedSchemaDefinitionsV40(),
+    shopConnectedTrustedTimeClientSchemaDefinitionsV39(),
+    shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+  ]) {
+    for (final definition in definitions.entries.toList().reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      connection.execute(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
+  }
+  for (final definition
+      in shopConnectedTrustedTimeSchemaDefinitionsV37().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedAuthorityCheckpointSchemaDefinitionsV36().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedCloudProofSchemaDefinitionsV35().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedReplicaSchemaDefinitionsV33().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedReplicaSchemaDefinitionsV32().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedReservationSessionSchemaDefinitionsV31().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedAuthorityPayloadSchemaDefinitionsV30().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedEnvelopeSchemaDefinitionsV29().entries
+          .toList()
+          .reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
+  for (final definition
+      in shopConnectedSiteSchemaDefinitionsV28().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
   for (final definition
       in shopPendingCashCheckoutSchemaDefinitionsV21().entries

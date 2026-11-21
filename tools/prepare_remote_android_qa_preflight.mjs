@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT,
   SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT,
   validateShopAndroidQaHandoff,
 } from './prepare_shop_android_qa_handoff.mjs'
@@ -214,11 +215,14 @@ export function assessRemoteAndroidQaPreflight(
     addFailure(failures, 'acceptance_steps_invalid')
   }
 
-  if (verifiedPacket && (verifiedPacket.contract !== SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+  const capabilityAwareHandoff = verifiedPacket
+    && (verifiedPacket.contract === SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+      || verifiedPacket.contract === SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT)
+  if (verifiedPacket && (!capabilityAwareHandoff
     || hasBlockedCapability(verifiedPacket, 'encrypted_backup_restore'))) {
     addFailure(failures, 'artifact_encrypted_restore_unavailable')
   }
-  if (verifiedPacket && (verifiedPacket.contract !== SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+  if (verifiedPacket && (!capabilityAwareHandoff
     || hasBlockedCapability(verifiedPacket, 'external_file_export'))) {
     addFailure(failures, 'artifact_scoped_evidence_export_unavailable')
   }

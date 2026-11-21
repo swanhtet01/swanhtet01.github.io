@@ -1,17 +1,67 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
   SHOP_ANDROID_QA_CAPABILITIES,
   SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
   SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT,
+  SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT,
   SHOP_ANDROID_QA_EVIDENCE_CONTRACT,
   SHOP_ANDROID_QA_HANDOFF_CONTRACT,
   assessShopAndroidQaHandoff,
   sampleShopAndroidQaHandoffInput,
   validateShopAndroidQaHandoff,
 } from './prepare_shop_android_qa_handoff.mjs'
+import * as pureValidator from './shop_android_qa_handoff_validator.mjs'
+
+test('canonical handoff validator has a pure static import graph', async () => {
+  const source = await readFile(
+    new URL('./shop_android_qa_handoff_validator.mjs', import.meta.url),
+    'utf8',
+  )
+  const imports = [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)]
+    .map((match) => match[1])
+  assert.deepEqual(imports, ['node:crypto'])
+  for (const forbidden of [
+    'node:child_process', 'node:fs', 'node:path', 'node:url', 'node:zlib',
+    'fetch(', 'XMLHttpRequest',
+  ]) {
+    assert.equal(source.includes(forbidden), false, forbidden)
+  }
+})
+
+test('canonical handoff authority constants are deeply immutable', () => {
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_CAPABILITIES.push('substituted') },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_RUN_STEPS[0][1] = 'substituted' },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_DECLARED_CAPABILITIES[0].status = 'substituted' },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_REQUIRED_EVIDENCE_FIELDS[0] = 'substituted' },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_REQUIRED_BLOCKED_CAPABILITIES.pop() },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_CAPABILITY_AWARE_BLOCKED_CAPABILITIES.pop() },
+    TypeError,
+  )
+  assert.throws(
+    () => { pureValidator.SHOP_ANDROID_QA_EXPECTED_CLAIM_BOUNDARY.productionReady = true },
+    TypeError,
+  )
+})
 
 function resign(packet) {
   const body = { ...packet }
@@ -95,6 +145,58 @@ test('v2 binds scoped recovery capabilities without claiming installed acceptanc
   assert.ok(packet.blockedCapabilities.some((entry) =>
     entry.id === 'general_external_file_export'))
   assert.equal(validateShopAndroidQaHandoff(packet), packet)
+})
+
+test('v3 derives exact identity, capabilities and signing from canonical retained receipts', () => {
+  const packet = assessShopAndroidQaHandoff(
+    sampleShopAndroidQaHandoffInput({ canonicalAware: true }),
+  )
+  assert.equal(packet.contract, SHOP_ANDROID_QA_CANONICAL_HANDOFF_CONTRACT)
+  assert.equal(packet.status, 'ready_for_internal_install_run')
+  assert.equal(packet.artifact.identityInspection, 'canonical_manifest_and_receipts_verified')
+  assert.equal(packet.artifact.capabilityInspection, 'canonical_manifest_and_receipts_verified')
+  assert.equal(packet.artifact.applicationId, 'dev.supermega.supermega_shop.qa')
+  assert.equal(packet.artifact.signingClass, 'android_debug')
+  assert.equal(packet.artifact.signerCertificateSha256, '5'.repeat(64))
+  assert.equal(packet.artifact.apksignerBuildToolsVersion, '36.0.0')
+  assert.equal(packet.artifact.apksignerJarSha256, '8'.repeat(64))
+  assert.equal(packet.artifact.buildIdentitySha256, '9'.repeat(64))
+  assert.deepEqual(packet.artifact.abis, ['arm64-v8a', 'armeabi-v7a', 'x86_64'])
+  assert.equal(packet.artifact.productionSigned, false)
+  assert.equal(packet.artifact.promotionEligible, false)
+  assert.equal(validateShopAndroidQaHandoff(packet), packet)
+  assert.throws(
+    () => validateShopAndroidQaHandoff(resign({
+      ...packet,
+      artifact: { ...packet.artifact, signerCertificateSha256: '0'.repeat(64) },
+    })),
+    /shop_android_qa_handoff_canonical_(?:observation_invalid|manifest_mismatch)|shop_android_qa_handoff_artifact_identity_invalid/,
+  )
+})
+
+test('v3 rejects substituted, missing, or extra canonical receipt entries', () => {
+  for (const [override, failure] of [
+    [{ canonicalArchiveIdentityBytes: Buffer.from('{}') }, 'artifact_archive_receipt_digest_mismatch'],
+    [{ canonicalArchiveSigningBytes: Buffer.from('{}') }, 'artifact_archive_receipt_digest_mismatch'],
+    [{ canonicalArchiveToolchainBytes: Buffer.from('{}') }, 'artifact_archive_receipt_digest_mismatch'],
+    [{ canonicalOmitArchiveFile: 'app-qa-debug.apk.identity.json' }, 'artifact_archive_contents_invalid'],
+    [{ canonicalExtraArchiveEntry: ['unexpected.txt', Buffer.from('unexpected')] }, 'artifact_archive_contents_invalid'],
+  ]) {
+    const packet = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput({
+      canonicalAware: true,
+      ...override,
+    }))
+    assert.equal(packet.ok, false)
+    assert.ok(packet.failures.includes(failure), JSON.stringify(packet.failures))
+  }
+})
+
+test('legacy archives cannot add canonical sidecars without upgrading the manifest contract', () => {
+  const packet = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput({
+    canonicalExtraArchiveEntry: ['app-qa-debug.apk.identity.json', Buffer.from('{}')],
+  }))
+  assert.equal(packet.ok, false)
+  assert.ok(packet.failures.includes('artifact_archive_contents_invalid'))
 })
 
 test('old v1 artifact cannot be relabelled as recovery-capable', () => {

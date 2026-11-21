@@ -368,6 +368,8 @@ test('renders Markdown and verifies CLI packet without private values', async ()
     assert.equal(validateShopPilotDay0ReadinessPacket(generatedFromSavedReport), generatedFromSavedReport)
     const rejected = spawnSync(process.execPath, [
       resolve('tools/prepare_shop_pilot_day0_readiness_packet.mjs'),
+      '--launch-gate-report',
+      launchGateReportPath,
       '--baseline-worksheet',
       filledWorksheetPath,
     ], { encoding: 'utf8' })

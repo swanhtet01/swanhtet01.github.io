@@ -54,6 +54,16 @@ Known limits:
 Next owner and action:
 ```
 
+## Internal engineering workflow pilot
+
+For the next source-bound engineering work, use the task packet and evidence checks in
+[`docs/ENGINEERING-WORKFLOW-PILOT.md`](docs/ENGINEERING-WORKFLOW-PILOT.md).
+It adapts selected, pinned Superpowers and pstack practices to this repository's
+existing one-writer and release rules. It does not install a plugin, change the
+Agent Company runtime, or authorize automatic merge, publishing, or provider work.
+Keep this pilot separate from the capability routes above; add a permanent route
+only after real tasks show a measured benefit without weaker verification.
+
 ## Adding a capability
 
 Add a row only after the work has repeated and has a stable input, output, and

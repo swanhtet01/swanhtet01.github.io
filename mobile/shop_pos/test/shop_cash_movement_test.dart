@@ -448,6 +448,55 @@ Future<ShopCorrectionAuthorization> _authorization(
 void _downgradeEmptyV18ToV17(File store) {
   final connection = sqlite3.open(store.path);
   try {
+    for (final definitions in [
+      shopConnectedDeviceProfileSchemaDefinitionsV42(),
+      shopConnectedCloudFeedSchemaDefinitionsV41(),
+      shopConnectedCloudFeedSchemaDefinitionsV40(),
+      shopConnectedTrustedTimeClientSchemaDefinitionsV39(),
+      shopConnectedTrustedTimeIssuerSchemaDefinitionsV38(),
+      shopConnectedTrustedTimeSchemaDefinitionsV37(),
+      shopConnectedAuthorityCheckpointSchemaDefinitionsV36(),
+      shopConnectedCloudProofSchemaDefinitionsV35(),
+      shopConnectedReplicaSchemaDefinitionsV33(),
+      shopConnectedReplicaSchemaDefinitionsV32(),
+      shopConnectedReservationSessionSchemaDefinitionsV31(),
+      shopConnectedAuthorityPayloadSchemaDefinitionsV30(),
+    ]) {
+      for (final definition in definitions.entries.toList().reversed) {
+        final type = shopSchemaObjectTypeForDefinition(definition.value);
+        connection.execute(
+          'DROP ${type == 'table'
+              ? 'TABLE'
+              : type == 'index'
+              ? 'INDEX'
+              : 'TRIGGER'} ${definition.key}',
+        );
+      }
+    }
+    for (final definition
+        in shopConnectedEnvelopeSchemaDefinitionsV29().entries
+            .toList()
+            .reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      connection.execute(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
+    for (final definition
+        in shopConnectedSiteSchemaDefinitionsV28().entries.toList().reversed) {
+      final type = shopSchemaObjectTypeForDefinition(definition.value);
+      connection.execute(
+        'DROP ${type == 'table'
+            ? 'TABLE'
+            : type == 'index'
+            ? 'INDEX'
+            : 'TRIGGER'} IF EXISTS ${definition.key}',
+      );
+    }
     connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
     for (final definition
         in shopPendingCashCheckoutSchemaDefinitionsV21().entries
