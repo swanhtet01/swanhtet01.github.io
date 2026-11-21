@@ -1530,7 +1530,7 @@ jobs:
       github.event.pull_request.base.ref == 'codex/shop-main-integration-20261022' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031' &&
-      github.event.before == '9cd2b6b32de1c5b875585446683e680b41c02545' &&
+      github.event.before == '63e63157558a03896d55027dab926e22f631234f' &&
       github.event.after == github.event.pull_request.head.sha
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1540,7 +1540,7 @@ jobs:
         id: source_admission
         shell: bash
         env:
-          EXPECTED_PREDECESSOR: 9cd2b6b32de1c5b875585446683e680b41c02545
+          EXPECTED_PREDECESSOR: 63e63157558a03896d55027dab926e22f631234f
           EVENT_BEFORE: ${{ github.event.before }}
           EVENT_AFTER: ${{ github.event.after }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
@@ -1782,10 +1782,34 @@ jobs:
             exit 1
           }
 
-          # No runner package is installed for this qualification. The stock
-          # image must already contain the exact previously successful loader
-          # package; absence is a bounded host fact, not an install request.
+          # Install the fixed loader package only when absent. Reject a
+          # mismatched installed version or partial package state; verify the
+          # exact installed status and version again before qualification.
           libpulse_version='1:16.1+dfsg1-2ubuntu10.1'
+          # SUPERMEGA_EXACT_PULSE_BEGIN
+          libpulse_query_rc=0
+          libpulse_state="$(dpkg-query -W -f='${Status}:${Version}' libpulse0:amd64 2>/dev/null)" || libpulse_query_rc=$?
+          if [[ "$libpulse_query_rc" != 0 && !( "$libpulse_query_rc" == 1 && -z "$libpulse_state" ) ]]; then
+            echo 'android_accel_libpulse_query_failed'
+            exit 1
+          fi
+          if [[ "$libpulse_state" != "install ok installed:$libpulse_version" ]]; then
+            if [[ -n "$libpulse_state" && "$libpulse_state" != 'unknown ok not-installed:' ]]; then
+              echo 'android_accel_libpulse_existing_state_invalid'
+              exit 1
+            fi
+            sudo -n apt-get -o DPkg::Lock::Timeout=30 update
+            sudo -n env DEBIAN_FRONTEND=noninteractive apt-get \
+              -o DPkg::Lock::Timeout=30 --no-upgrade --no-remove \
+              --no-install-recommends --assume-yes install "libpulse0:amd64=$libpulse_version"
+          fi
+          libpulse_after_rc=0
+          libpulse_after="$(dpkg-query -W -f='${Status}:${Version}' libpulse0:amd64 2>/dev/null)" || libpulse_after_rc=$?
+          [[ "$libpulse_after_rc" == 0 && "$libpulse_after" == "install ok installed:$libpulse_version" ]] || {
+            echo 'android_accel_libpulse_provision_failed'
+            exit 1
+          }
+          # SUPERMEGA_EXACT_PULSE_END
           if [[ ! -f /usr/lib/x86_64-linux-gnu/libpulse.so.0 ]]; then
             echo 'android_accel_preinstalled_libpulse_missing'
             exit 1
@@ -2229,7 +2253,7 @@ jobs:
             printf '| Workflow file | Git blob `%s`, SHA-256 `%s` |\n' "$WORKFLOW_BLOB" "$WORKFLOW_DIGEST"
             printf '| Runner | `ubuntu-24.04`, image `%s` |\n' "$ImageVersion"
             printf '| Official emulator | `37.2.13`, 349658551 bytes, Google SHA-1 pin `f41f9e31eb5ca64926603c03265c50bbc0ff4172`, matched prior-run SHA-256 pin `%s` |\n' "$ARCHIVE_SHA256"
-            printf '| libpulse0 | Exact `1:16.1+dfsg1-2ubuntu10.1` preinstalled package and file shape observed; no install, signer or CLI-necessity claim |\n'
+            printf '| libpulse0 | Exact `1:16.1+dfsg1-2ubuntu10.1` package installed only when absent, then package/file shape checked; no independent signer or CLI-necessity claim |\n'
             printf '| Same-job KVM / private no-egress / accel-check / cleanup | PASS |\n'
             printf '| AVD / APK / Shop app / installed acceptance | NOT RUN |\n'
             printf '| PostgreSQL or release receipt | NONE |\n'
