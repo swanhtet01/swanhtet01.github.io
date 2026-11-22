@@ -2018,6 +2018,25 @@ class _ShopHomeState extends State<ShopHome> {
     });
   }
 
+  double _catalogControlsBudget(
+    List<ShopProduct> products, {
+    required double catalogWidth,
+  }) {
+    // Return inner controls only; each caller owns its outer padding.
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final signature = _catalogControlsLayoutSignature(products, catalogWidth);
+    final hasFilters =
+        _catalogCategories(products).isNotEmpty ||
+        _favoritesOnly ||
+        products.any((product) => _favoriteProductIds.contains(product.id));
+    return _catalogControlsSignature == signature &&
+            _catalogControlsHeight != null
+        ? _catalogControlsHeight!
+        : (catalogWidth < 500 ? 324.0 : 148.0) * textScale +
+              (hasFilters ? 60.0 : 0.0) +
+              (_heldTickets.isNotEmpty ? 56.0 * textScale : 0.0);
+  }
+
   double _catalogHeight(
     List<ShopProduct> products,
     double maxHeight, {
@@ -2031,21 +2050,8 @@ class _ShopHomeState extends State<ShopHome> {
     // Burmese's three-line product rows need the same vertical budget as EN.
     // A shorter estimate clips the last row while empty tablet space remains.
     const rowHeight = 96.0;
-    // The controls can wrap in Burmese and may include a category strip or a
-    // held-sale action. Use a provisional compact budget for the first frame,
-    // then the measured fixed controls on later frames.
-    final signature = _catalogControlsLayoutSignature(products, catalogWidth);
-    final hasFilters =
-        _catalogCategories(products).isNotEmpty ||
-        _favoritesOnly ||
-        products.any((product) => _favoriteProductIds.contains(product.id));
     final controlsHeight =
-        _catalogControlsSignature == signature && _catalogControlsHeight != null
-        ? _catalogControlsHeight! + 32
-        : (catalogWidth < 500 ? 324.0 : 148.0) * textScale +
-              (hasFilters ? 60.0 : 0.0) +
-              (_heldTickets.isNotEmpty ? 56.0 * textScale : 0.0) +
-              32.0;
+        _catalogControlsBudget(products, catalogWidth: catalogWidth) + 32;
     final emptyHeight = controlsHeight + rowHeight * textScale;
     final desiredHeight = matchingCount == 0
         ? (emptyHeight > 360 ? emptyHeight : 360.0)
@@ -2060,9 +2066,16 @@ class _ShopHomeState extends State<ShopHome> {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Column(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final controlsHeight = _catalogControlsBudget(
+              products,
+              catalogWidth: catalogWidth,
+            );
+            final useShortScroll =
+                constraints.hasBoundedHeight &&
+                constraints.maxHeight < controlsHeight + 48.0;
+            final controls = Column(
               key: _catalogControlsKey,
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2073,14 +2086,34 @@ class _ShopHomeState extends State<ShopHome> {
                 if (_heldTickets.isNotEmpty) _heldSalesAction(),
                 const SizedBox(height: 8),
               ],
-            ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) =>
-                    _productList(products, catalogWidth: constraints.maxWidth),
-              ),
-            ),
-          ],
+            );
+            if (useShortScroll) {
+              return CustomScrollView(
+                key: const ValueKey('shop-catalog-short-scroll'),
+                slivers: [
+                  SliverToBoxAdapter(child: controls),
+                  _productList(
+                    products,
+                    catalogWidth: constraints.maxWidth,
+                    asSliver: true,
+                  ),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                controls,
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => _productList(
+                      products,
+                      catalogWidth: constraints.maxWidth,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -2628,6 +2661,7 @@ class _ShopHomeState extends State<ShopHome> {
   Widget _productList(
     List<ShopProduct> products, {
     required double catalogWidth,
+    bool asSliver = false,
   }) {
     // The product pane, not the full window, determines row density. Keep
     // product details in one column when the basket narrows that pane.
@@ -2653,7 +2687,7 @@ class _ShopHomeState extends State<ShopHome> {
     final hasMatchesHiddenByFilter =
         visible.isEmpty && hiddenMatches.isNotEmpty;
     if (visible.isEmpty) {
-      return ListView(
+      final emptyList = ListView(
         padding: const EdgeInsets.all(24),
         children: [
           Column(
@@ -2775,8 +2809,14 @@ class _ShopHomeState extends State<ShopHome> {
           ),
         ],
       );
+      return asSliver
+          ? SliverPadding(
+              padding: const EdgeInsets.all(24),
+              sliver: SliverList(delegate: emptyList.childrenDelegate),
+            )
+          : emptyList;
     }
-    return ListView.separated(
+    final productList = ListView.separated(
       itemCount: visible.length,
       separatorBuilder: (_, _) =>
           const Divider(height: 1, indent: 16, endIndent: 16),
@@ -2971,6 +3011,9 @@ class _ShopHomeState extends State<ShopHome> {
         );
       },
     );
+    return asSliver
+        ? SliverList(delegate: productList.childrenDelegate)
+        : productList;
   }
 
   Widget _emptyCartPanel() => Align(

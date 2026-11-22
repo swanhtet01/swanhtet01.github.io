@@ -5,9 +5,9 @@ import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="491caffe25467d0df95b098058357f217c6b32f6"
-BASE_TREE="88d379edf90d205bda63204a93ea8166038f417b"
-BASE_NATIVE_TREE="00d3260efd16ed562e4b6f4109d3314c8c3e0a7b"
+BASE="651b07dda3659759f586f228948e5cac42502602"
+BASE_TREE="63e36fcaef4b38acbc6019e1e33992942ae17441"
+BASE_NATIVE_TREE="c5163469171c5f25792d9c496864d9ea4388bda1"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -20,7 +20,9 @@ LOCK_SHA="772540b8f7fee17c0e7a9f0185c0366775ce5d61f7c94a5ab894beeb69605ccb"
 # Diagnostic source head only. Full instrumented authority requires a separate review.
 SOURCE_WIDGET_ONLY=True
 WIDGET_TEST=APP/"test/widget_test_support.dart"
-WIDGET_TEST_SHA="9ddcd12e4419076c2eaaefa1e5d049e509e674f828e4d06af4005365c88e675c"
+WIDGET_TEST_SHA="5ead108573e7035f8a9b2ad59c5008803723d0b883d0b4af6ad401a081b50edc"
+MAIN=APP/"lib/main.dart"
+MAIN_SHA="df039755d0cdd9349bb66a5cc38b1764dd35e9212aa4168af3960f9a6a18d1b3"
 IMAGE="system-images;android-35;default;x86_64"
 TABLET_DEVICE_ID="medium_tablet"
 TABLET_DEVICE_NAME="Medium Tablet"
@@ -78,6 +80,7 @@ REPORT_KEYS={
 ALLOWED_CHANGED={
   "tools/run_shop_first_sale_integration.py",
   "mobile/shop_pos/test/widget_test_support.dart",
+  "mobile/shop_pos/lib/main.dart",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
 EMU_SIZE=350068887
@@ -1247,9 +1250,9 @@ def valid_sha(value):
     return type(value) is str and re.fullmatch("[0-9a-f]{64}",value) is not None
 
 def check_source(root):
-    need(all(valid_sha(v) for v in (TEST_SHA,PUB_SHA,LOCK_SHA,WIDGET_TEST_SHA,IMAGE_SHA256,
+    need(all(valid_sha(v) for v in (TEST_SHA,PUB_SHA,LOCK_SHA,WIDGET_TEST_SHA,MAIN_SHA,IMAGE_SHA256,
          IMAGE_ARCHIVE_SHA256,IMAGE_MANIFEST_SHA256)),"source_bindings_pending")
-    for path,digest in ((TEST,TEST_SHA),(PUB,PUB_SHA),(LOCK,LOCK_SHA),(WIDGET_TEST,WIDGET_TEST_SHA)):
+    for path,digest in ((TEST,TEST_SHA),(PUB,PUB_SHA),(LOCK,LOCK_SHA),(WIDGET_TEST,WIDGET_TEST_SHA),(MAIN,MAIN_SHA)):
         full=root/path
         need(full.is_file() and not full.is_symlink(),"source_file_invalid")
         run(["git","ls-files","--error-unmatch",str(path)],root,os.environ,10)

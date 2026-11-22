@@ -8571,6 +8571,62 @@ END
                 tester.getSize(receiptAction).shortestSide,
                 greaterThanOrEqualTo(48),
               );
+              final shortCatalog = find.byKey(
+                const ValueKey('shop-catalog-short-scroll'),
+              );
+              if (myanmar) {
+                expect(shortCatalog, findsOneWidget);
+              }
+              if (shortCatalog.evaluate().isNotEmpty) {
+                expect(shortCatalog, findsOneWidget);
+                final searchField = find.byKey(
+                  const ValueKey('shop-sale-search-field'),
+                );
+                final addAffordance = find.byKey(
+                  ValueKey('shop-add-affordance:${product.id}'),
+                );
+                for (final target in [searchField, addAffordance]) {
+                  await checkStage('simulated IME catalog access', () async {
+                    await tester.ensureVisible(target);
+                    await settle();
+                  });
+                  expect(target.hitTestable(), findsOneWidget);
+                  final viewportRect = tester.getRect(shortCatalog);
+                  final targetRect = tester.getRect(target);
+                  expect(viewportRect.height, greaterThanOrEqualTo(48));
+                  expect(
+                    targetRect.left,
+                    greaterThanOrEqualTo(viewportRect.left - 0.01),
+                  );
+                  expect(
+                    targetRect.top,
+                    greaterThanOrEqualTo(viewportRect.top - 0.01),
+                  );
+                  expect(
+                    targetRect.right,
+                    lessThanOrEqualTo(viewportRect.right + 0.01),
+                  );
+                  expect(
+                    targetRect.bottom,
+                    lessThanOrEqualTo(viewportRect.bottom + 0.01),
+                  );
+                  expectControlAboveSimulatedKeyboard(target);
+                }
+                expect(
+                  tester.getSize(addAffordance).shortestSide,
+                  greaterThanOrEqualTo(48),
+                );
+                expect(await database.countSales(), 1);
+                expect((await database.readActiveProducts()).single.onHand, 2);
+                expect(
+                  await database.countStockMovements(),
+                  stockMovementsBeforeSale + 1,
+                );
+                expect(
+                  (await database.readRecentSales()).single.id,
+                  savedReceiptId,
+                );
+              }
               expect(
                 find.textContaining(
                   myanmar ? 'ပရင်တာသို့ မပို့ရသေးပါ' : 'not sent to a printer',
