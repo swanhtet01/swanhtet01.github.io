@@ -4,8 +4,8 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="07f8867052f2a161913ca26fc2935bff3c0de3dd"
-BASE_TREE="be1824e1019a3ddebbc3b8dc0dd8e43cc73c549c"
+BASE="91053fadb9fb1e68f0feb63a98f992bedd7a80f0"
+BASE_TREE="812d023f486ed423b6abc25dcd62851c3ae29fa3"
 BASE_NATIVE_TREE="3401cfa0ba36f3ae06d0105fa4d0a04e200bb4fc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
@@ -1004,6 +1004,9 @@ def run_self_tests():
     registered_fs_cases=run_registered_emulator_filesystem_tests()
     need(registered_fs_cases==12,"offline_registered_fs_case_count")
     cases+=registered_fs_cases
+    home_fs_cases=run_android_home_environment_filesystem_tests()
+    need(home_fs_cases==4,"offline_android_home_case_count")
+    cases+=home_fs_cases
     print(json.dumps({"schema":"supermega.first_sale_runner_offline.v1",
                       "status":"passed","cases":cases},sort_keys=True,
                      separators=(",",":")))
@@ -1012,7 +1015,9 @@ def child_env(task,port,locale="setup"):
     name=locale or "setup"
     tmp=task/"tmp"/name
     avdhome=task/"avd-home"/name
-    for path in (tmp,avdhome,task/"pub-cache",task/"gradle",task/"android-user"/name):
+    legacyhome=task/"android-user"/name
+    prefshome=legacyhome/".android"
+    for path in (tmp,avdhome,task/"pub-cache",task/"gradle",legacyhome,prefshome):
         path.mkdir(parents=True,exist_ok=True,mode=0o700)
     keys=("PATH","HOME","RUNNER_TEMP","ANDROID_HOME","ANDROID_SDK_ROOT","JAVA_HOME",
           "FLUTTER_ROOT","HTTP_PROXY","HTTPS_PROXY","NO_PROXY","ALL_PROXY",
@@ -1021,8 +1026,8 @@ def child_env(task,port,locale="setup"):
     sdk=os.environ.get("ANDROID_SDK_ROOT") or os.environ.get("ANDROID_HOME")
     need(sdk and Path(sdk).is_dir() and not Path(sdk).is_symlink(),"android_sdk_missing")
     e.update({"ANDROID_HOME":sdk,"ANDROID_SDK_ROOT":sdk,
-      "ANDROID_SDK_HOME":str(task/"android-user"/name),
-      "ANDROID_USER_HOME":str(task/"android-user"/name),
+      "ANDROID_SDK_HOME":str(legacyhome),
+      "ANDROID_USER_HOME":str(prefshome),
       "ANDROID_AVD_HOME":str(avdhome),"GRADLE_USER_HOME":str(task/"gradle"),
       "PUB_CACHE":str(task/"pub-cache"),"TMPDIR":str(tmp),
       "ANDROID_ADB_SERVER_PORT":str(port),"CI":"true",
@@ -1033,6 +1038,32 @@ def child_env(task,port,locale="setup"):
       "ORG_GRADLE_PROJECT_SHOP_ANDROID_STORE_PASSWORD":"",
       "ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_PASSWORD":""})
     return e
+def run_android_home_environment_filesystem_tests():
+    # Android SDK compares SDK_HOME/.android with USER_HOME and rejects conflicts.
+    # Exercise our actual producer on private filesystem fixtures; never invoke SDK.
+    saved_env=dict(os.environ)
+    try:
+        with tempfile.TemporaryDirectory(prefix="shopqa-home-contract-") as temp:
+            root=Path(temp); sdk=root/"synthetic-sdk"; sdk.mkdir()
+            os.environ.clear()
+            os.environ.update({"ANDROID_HOME":str(sdk),"ANDROID_SDK_ROOT":str(sdk),
+                               "ANDROID_PREFS_ROOT":"untrusted-inherited-value",
+                               "JAVA_TOOL_OPTIONS":"untrusted-inherited-value"})
+            homes=[]; cases=0
+            for locale in ("setup","en","my"):
+                env=child_env(root/"task",19000,locale)
+                legacy=Path(env["ANDROID_SDK_HOME"])
+                current=Path(env["ANDROID_USER_HOME"])
+                need(legacy/".android"==current and legacy.is_dir() and current.is_dir()
+                     and current.is_relative_to(root/"task") and
+                     "ANDROID_PREFS_ROOT" not in env and "JAVA_TOOL_OPTIONS" not in env,
+                     "offline_android_home_contract")
+                homes.append(current); cases+=1
+            need(len(set(homes))==3,"offline_android_home_locale_isolation")
+            return cases+1
+    finally:
+        os.environ.clear(); os.environ.update(saved_env)
+
 def extract_checked(archive,dest,deadline):
     base=Path(dest).resolve()
     with zipfile.ZipFile(archive) as z:
