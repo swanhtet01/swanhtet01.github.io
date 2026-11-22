@@ -4,14 +4,14 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="fccb762548d6de7a6301acdaa53e5d6c6118f09c"
-BASE_TREE="07060d8a8c3a4a2725f94cce5cfc7470b1ea505b"
-BASE_NATIVE_TREE="14a26c0800cf6d198f79d54d6b661c162c933c48"
+BASE="310bac8a417bd423491a396cc3aa4e8ccf91855e"
+BASE_TREE="b6f7fc9078a22832e21bbd0fc5f259e3274ad762"
+BASE_NATIVE_TREE="dfe88271f72b523397793792f601769d3a2c3b41"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
 TEST=APP/"integration_test/first_sale_persistence_test.dart"
-TEST_SHA="97cd011a83642605690e23d592cb7dbae209df69144e46d46e66b557d97fc351"
+TEST_SHA="9967990406149a9cb09e5710ed55f1407b4cc9636e2c572358e52a74c22302fb"
 PUB=APP/"pubspec.yaml"
 PUB_SHA="228f2c2b2d1478d0546a80dbedf4c4393dd8d6700f01ff350b6ebe58a68c1f8a"
 LOCK=APP/"pubspec.lock"
@@ -74,28 +74,28 @@ ALLOWED_CHANGED={
   "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
   "tools/run_shop_first_sale_integration.py",
 }
-EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip"
-EMU_SIZE=349658551
-EMU_SHA="cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd"
-EMU_VERSION="37.2.13"
-EMU_BUILD_ID="16740729"
+EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
+EMU_SIZE=350068887
+EMU_SHA="a4405349d8a9c52136ab7861e5331dc40e85574bd91cb8889a298a2ff4c52e26"
+EMU_VERSION="37.3.10"
+EMU_BUILD_ID="16970787"
 EMU_METADATA_PATH="source.properties"
 EMU_METADATA_SIZE=103
 EMU_METADATA_LIMIT=4096
-EMU_METADATA_SHA256="f7562ee75ef359fc20b64727a0977c6306c6bac2dab60c8d7ced7c9e372a7cc7"
+EMU_METADATA_SHA256="399a3ad857aa3ba1d2983745f82d6c438221481c220c3bba0aec577adb313a03"
 EMU_METADATA_FIELDS={
     "Pkg.UserSrc":"false",
-    "Pkg.Revision":"37.2.13",
+    "Pkg.Revision":"37.3.10",
     "Pkg.Path":"emulator",
     "Pkg.Desc":"Android Emulator",
-    "Pkg.BuildId":"16740729",
+    "Pkg.BuildId":"16970787",
 }
 EMU_SOURCE_PROPERTIES=(
     b"Pkg.UserSrc=false\n"
-    b"Pkg.Revision=37.2.13\n"
+    b"Pkg.Revision=37.3.10\n"
     b"Pkg.Path=emulator\n"
     b"Pkg.Desc=Android Emulator\n"
-    b"Pkg.BuildId=16740729"
+    b"Pkg.BuildId=16970787"
 )
 PULSE="1:16.1+dfsg1-2ubuntu10.1"
 PULSE_QUERY_FORMAT="-f="+"$"+"{db:Status-Abbrev}\t"+"$"+"{Version}"
@@ -106,6 +106,7 @@ INTERNAL_FAILURE_PHASES=frozenset((
  "not_started","host_preflight","capacity_preflight","task_create","task_environment",
  "flutter_version","dependency_resolution","identity_prepare","identity_generate",
  "android_toolchain_validation","libpulse_query","libpulse_install","emulator_install",
+ "emulator_sdk_registration",
  "image_manifest","image_license","image_install","image_validation","post_sdk_capacity",
  "kvm_admission","acceleration_check","avd_prepare","test_running","locale_complete",
 ))
@@ -134,7 +135,7 @@ FALSE={"authority":False,"fullReleaseCandidate":False,"installedQa":False,"osPro
        "promotionEligible":False}
 
 CHILD_DIAGNOSTIC_OPERATIONS=frozenset((
-    "avdmanager_list_devices","avd_create","adb_start_server",
+    "sdkmanager_install_emulator","avdmanager_list_devices","avd_create","adb_start_server",
     "adb_wait_for_device","adb_boot_probe","adb_devices",
     "adb_set_font_scale","adb_read_display_size","adb_read_display_density",
     "adb_read_font_scale",
@@ -151,10 +152,37 @@ def child_failure_record(operation, exit_code):
     need(type(exit_code) is int and -255<=exit_code<=255,
          "child_exit_code_invalid")
     return {"operation":operation,"exitCode":exit_code}
-def child_failed_refusal(operation, exit_code):
+def avd_create_diagnostics(stdout,stderr):
+    # Hints only: never serialize SDK output, local paths, argv, or environment.
+    need(type(stdout) is bytes and type(stderr) is bytes and
+         len(stdout)+len(stderr)<=OUTPUT_LIMIT,"avd_diagnostic_output_invalid")
+    combined=(stdout+b"\n"+stderr).lower()
+    signals=[]
+    for label,marker in (
+        ("package_path_not_valid",b"package path is not valid"),
+        ("package_has_no_system_images",b"contains no system images. valid system image paths are:"),
+        ("device_not_found",b"no device found matching --device"),
+        ("avd_not_created",b"avd not created."),
+        ("emulator_package_missing",b'"emulator" package must be installed'),
+        ("emulator_package_missing",b"the android emulator is not installed."),
+        ("multiple_abis",b"this package has more than one abi."),
+        ("invalid_abi",b"invalid --abi "),
+        ("invalid_tag",b"invalid --tag "),
+        ("tools_directory_missing",b"the tools directory property is not set"),
+        ("working_directory_invalid",b"the working directory does not seem to be valid"),
+    ):
+        if marker in combined and label not in signals: signals.append(label)
+    return {"schema":"supermega.avd_create_diagnostic.v1",
+            "stdoutBytes":len(stdout),"stderrBytes":len(stderr),
+            "signals":signals or ["unclassified"],"rawOutputIncluded":False}
+
+def child_failed_refusal(operation, exit_code, *, stdout=None, stderr=None):
     if operation is None: return Refuse("child_failed")
-    return Refuse("child_failed",
-                  child_failure=child_failure_record(operation,exit_code))
+    child=child_failure_record(operation,exit_code)
+    if operation=="avd_create" and stdout is not None and stderr is not None:
+        child["avdDiagnostics"]=avd_create_diagnostics(stdout,stderr)
+    return Refuse("child_failed",child_failure=child)
+
 def libpulse_query_state(raw):
     expected=("ii \t"+PULSE).encode("ascii")
     if raw==expected: return "installed_exact"
@@ -191,6 +219,7 @@ def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capt
     if operation is not None:
         need(type(operation) is str and operation in CHILD_DIAGNOSTIC_OPERATIONS,
              "child_operation_invalid")
+    capture=capture or operation=="avd_create"
     p=subprocess.Popen(argv,cwd=str(cwd),env=env,
       stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
       stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
@@ -202,7 +231,11 @@ def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capt
         nonlocal stopped
         if stopped: return
         stopped=True
-        stop_group(p)
+        try: stop_group(p)
+        except BaseException:
+            RUN_PROGRESS["cleanupProven"]=False
+            RUN_PROGRESS["ownedChildCleanupUncertain"]=True
+            raise
     try:
         if input_data is not None:
             try:
@@ -245,12 +278,51 @@ def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capt
         for stream in (p.stdin,p.stdout,p.stderr):
             if stream is not None and not stream.closed: stream.close()
     if p.returncode not in accepted:
-        raise child_failed_refusal(operation,p.returncode)
+        raise child_failed_refusal(operation,p.returncode,stdout=bytes(out),stderr=bytes(err))
     if capture_pair: return bytes(out),bytes(err)
     return bytes(out) if capture else b""
 
+def run_child_diagnostic_process_tests():
+    # Disposable Python children only; no SDK/AVD/app/network invocation.
+    cases=0
+    fixtures=(
+        ("stderr", "Error: No device found matching --device private-device.","device_not_found"),
+        ("stdout", "Error: Package path is not valid. private-path", "package_path_not_valid"),
+        ("stderr", "unknown private diagnostic", "unclassified"),
+    )
+    for channel,message,expected in fixtures:
+        child_source="import sys;sys."+channel+".write("+repr(message)+");sys.exit(7)"
+        try:
+            run([sys.executable,"-I","-S","-c",child_source],Path.cwd(),{},5,
+                operation="avd_create")
+        except Refuse as error:
+            evidence=error.child_failure
+            need(str(error)=="child_failed" and evidence is not None and
+                 evidence["exitCode"]==7 and
+                 evidence["avdDiagnostics"]["signals"]==[expected] and
+                 evidence["avdDiagnostics"][channel+"Bytes"]==len(message.encode("ascii")) and
+                 "private" not in json.dumps(evidence),
+                 "offline_child_capture_refusal_invalid")
+        else: raise Refuse("offline_child_capture_expected_refusal")
+        cases+=1
+    result=run([sys.executable,"-I","-S","-c","print('synthetic-success')"],
+               Path.cwd(),{},5,operation="avd_create")
+    need(result==b"synthetic-success\n","offline_child_capture_success_changed")
+    return cases+1
+
 def git(root,*args):
     return run(["git",*args],root,os.environ,10,True).decode("ascii").strip()
+def source_identity_facts(root,head):
+    need(type(head) is str and re.fullmatch(r"[0-9a-f]{40}",head) is not None,
+         "source_current_head_invalid")
+    current_tree=git(root,"rev-parse",head+"^{tree}")
+    current_native=git(root,"rev-parse",head+":mobile/shop_pos")
+    need(all(type(value) is str and re.fullmatch(r"[0-9a-f]{40}",value) is not None
+             for value in (current_tree,current_native)),"source_current_tree_invalid")
+    return {"sourceCommit":head,"sourceTree":current_tree,
+            "nativeSourceTree":current_native,"sourceParent":BASE,
+            "sourceParentTree":BASE_TREE,"sourceParentNativeTree":BASE_NATIVE_TREE}
+
 def check_context(root):
     fixed={"QA_EVENT":"pull_request","QA_ACTION":"synchronize",
       "QA_REPOSITORY":"swanhtet01/swanhtet01.github.io","QA_REPOSITORY_ID":"1034056731",
@@ -560,6 +632,34 @@ def run_self_tests():
     encoded=json.dumps(valid,separators=(",",":")).encode()
     parse_report(REPORT_PREFIX.encode()+encoded+b"\n",b"","en")
     cases=2
+    saved_git=git
+    fixture_head="1"*40
+    fixture_tree="2"*40
+    fixture_native="3"*40
+    def fixture_git(_root,*args):
+        if args==("rev-parse",fixture_head+"^{tree}"): return fixture_tree
+        if args==("rev-parse",fixture_head+":mobile/shop_pos"): return fixture_native
+        raise Refuse("offline_source_identity_unexpected_query")
+    try:
+        globals()["git"]=fixture_git
+        identity=source_identity_facts(Path("."),fixture_head)
+        need(identity=={"sourceCommit":fixture_head,"sourceTree":fixture_tree,
+             "nativeSourceTree":fixture_native,"sourceParent":BASE,
+             "sourceParentTree":BASE_TREE,"sourceParentNativeTree":BASE_NATIVE_TREE}
+             and identity["sourceTree"]!=BASE_TREE
+             and identity["nativeSourceTree"]!=BASE_NATIVE_TREE,
+             "offline_source_identity_current_parent_confused")
+        cases+=1
+        for action,reason in (
+          (lambda:source_identity_facts(Path("."),"invalid"),"source_current_head_invalid"),
+          (lambda:(globals().__setitem__("git",lambda *_args:"invalid"),
+                   source_identity_facts(Path("."),fixture_head)),"source_current_tree_invalid")):
+            try: action()
+            except Refuse as error: need(str(error)==reason,"offline_source_identity_wrong_reason")
+            else: raise Refuse("offline_source_identity_expected_refusal")
+            cases+=1
+    finally:
+        globals()["git"]=saved_git
     compact_fixture={**tablet_fixture,
        "basketLayoutBeforeRotation":"compact","basketLayoutAfterRotation":"compact",
        "reviewTargetMinDpBeforeRotation":48.0,"reviewTargetMinDpAfterRotation":48.0}
@@ -639,6 +739,103 @@ def run_self_tests():
          and "secret" not in json.dumps(evidence),
          "offline_internal_failure_phase_fixture")
     cases+=1
+    diagnostic=avd_create_diagnostics(b"private-stdout-path",b"Error: Package path is not valid. private-stderr-path")
+    need(diagnostic=={"schema":"supermega.avd_create_diagnostic.v1",
+         "stdoutBytes":19,"stderrBytes":53,"signals":["package_path_not_valid"],
+         "rawOutputIncluded":False} and "private-" not in json.dumps(diagnostic),
+         "offline_avd_diagnostic_redacted")
+    cases+=1
+    markers=(
+        (b"CONTAINS NO SYSTEM IMAGES. VALID SYSTEM IMAGE PATHS ARE:","package_has_no_system_images"),
+        (b"No device found matching --device medium_tablet.","device_not_found"),
+        (b"AVD not created.","avd_not_created"),
+        (b'Error: "emulator" package must be installed!',"emulator_package_missing"),
+        (b"The Android Emulator is not installed.","emulator_package_missing"),
+        (b"This package has more than one ABI.","multiple_abis"),
+        (b"Invalid --abi x86_64 for the selected package.","invalid_abi"),
+        (b"Invalid --tag default for the selected package.","invalid_tag"),
+        (b"The tools directory property is not set", "tools_directory_missing"),
+        (b"The working directory does not seem to be valid: 'private-path'","working_directory_invalid"),
+        (b"unknown-private-error-value","unclassified"),
+        (b"", "unclassified"),
+    )
+    for raw,expected in markers:
+        need(avd_create_diagnostics(b"",raw)["signals"]==[expected],
+             "offline_avd_diagnostic_classification")
+        cases+=1
+    combined=avd_create_diagnostics(b"AVD not created.",b"Package path is not valid.")
+    need(combined["signals"]==["package_path_not_valid","avd_not_created"],
+         "offline_avd_diagnostic_multiple_signals")
+    cases+=1
+    for stdout,stderr in (("text",b""),(b"",bytearray()),(b"x"*(OUTPUT_LIMIT+1),b"")):
+        try: avd_create_diagnostics(stdout,stderr)
+        except Refuse as error: need(str(error)=="avd_diagnostic_output_invalid",
+                                     "offline_avd_diagnostic_wrong_reason")
+        else: raise Refuse("offline_avd_diagnostic_expected_refusal")
+        cases+=1
+    enriched=child_failed_refusal("avd_create",1,stdout=b"",stderr=b"AVD not created.")
+    need(enriched.child_failure["avdDiagnostics"]["signals"]==["avd_not_created"]
+         and str(enriched)=="child_failed","offline_avd_diagnostic_refusal")
+    cases+=1
+    ordinary=child_failed_refusal("adb_start_server",1,stdout=b"private",stderr=b"private")
+    need(ordinary.child_failure=={"operation":"adb_start_server","exitCode":1},
+         "offline_avd_diagnostic_operation_scope")
+    cases+=1
+    saved_progress=dict(RUN_PROGRESS)
+    saved_popen=subprocess.Popen
+    saved_stop_group=stop_group
+    class CleanupFixtureProcess:
+        stdin=None; stdout=None; stderr=None; returncode=1
+        def wait(self,timeout=None): return self.returncode
+    def uncertain_stop(_process): raise RuntimeError("private-cleanup-detail")
+    try:
+        globals()["RUN_PROGRESS"]={**saved_progress,"cleanupProven":True}
+        subprocess.Popen=lambda *_args,**_kwargs:CleanupFixtureProcess()
+        globals()["stop_group"]=uncertain_stop
+        try: run(["source-only-fixture"],Path("."),{},operation="adb_start_server")
+        except RuntimeError: pass
+        else: raise Refuse("offline_uncertain_cleanup_expected_failure")
+        need(RUN_PROGRESS.get("cleanupProven") is False and
+             RUN_PROGRESS.get("ownedChildCleanupUncertain") is True,
+             "offline_uncertain_cleanup_false_pass")
+        globals()["stop_group"]=lambda _process:None
+        CleanupFixtureProcess.returncode=0
+        run(["source-only-fixture"],Path("."),{},operation="adb_start_server")
+        need(RUN_PROGRESS.get("cleanupProven") is False and
+             RUN_PROGRESS.get("ownedChildCleanupUncertain") is True,
+             "offline_uncertain_cleanup_cleared_by_later_child")
+    finally:
+        subprocess.Popen=saved_popen
+        globals()["stop_group"]=saved_stop_group
+        globals()["RUN_PROGRESS"]=saved_progress
+    cases+=1
+    # Synthetic registration XML is a test fixture, never written by runtime setup.
+    metadata_fixture=(b'<repository xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+      b'<localPackage path="emulator"><type-details xsi:type="generic:genericDetailsType"/>'
+      b'<revision><major>37</major><minor>3</minor><micro>10</micro></revision>'
+      b'</localPackage></repository>')
+    need(parse_registered_emulator_metadata(metadata_fixture)=={
+      "package":"emulator","revision":EMU_VERSION,
+      "metadataScope":"sdkmanager_generated_registration_only"},
+      "offline_registered_metadata_positive")
+    cases+=1
+    invalid_registered_metadata=(
+      (b"","emulator_sdk_metadata_invalid"),
+      (None,"emulator_sdk_metadata_invalid"),
+      ("text","emulator_sdk_metadata_invalid"),
+      (b"<broken>","emulator_sdk_metadata_invalid"),
+      (metadata_fixture.replace(b'path="emulator"',b'path="platform-tools"'),"emulator_sdk_package_identity"),
+      (metadata_fixture.replace(b"<micro>10</micro>",b"<micro>9</micro>"),"emulator_sdk_package_identity"),
+      (metadata_fixture.replace(b"genericDetailsType",b"otherDetailsType"),"emulator_sdk_package_identity"),
+      (metadata_fixture.replace(b"</localPackage>",b"</localPackage><localPackage path='emulator'/>"),"emulator_sdk_package_identity"),
+      (b'<!DOCTYPE repository>'+metadata_fixture,"emulator_sdk_metadata_invalid"),
+      (b"x"*262145,"emulator_sdk_metadata_invalid"),
+    )
+    for raw,reason in invalid_registered_metadata:
+        try: parse_registered_emulator_metadata(raw)
+        except Refuse as error: need(str(error)==reason,"offline_registered_metadata_wrong_reason")
+        else: raise Refuse("offline_registered_metadata_expected_refusal")
+        cases+=1
     child=child_failure_record("avd_create",17)
     refusal=child_failed_refusal("avd_create",17)
     ordinary=child_failed_refusal(None,17)
@@ -670,8 +867,8 @@ def run_self_tests():
          "offline_emulator_metadata_positive")
     cases+=1
     metadata_cases=(
-        (EMU_SOURCE_PROPERTIES.replace(b"37.2.13",b"37.2.12"),"emulator_revision_invalid"),
-        (EMU_SOURCE_PROPERTIES.replace(b"16740729",b"16740728"),"emulator_revision_invalid"),
+        (EMU_SOURCE_PROPERTIES.replace(b"37.3.10",b"37.2.12"),"emulator_revision_invalid"),
+        (EMU_SOURCE_PROPERTIES.replace(b"16970787",b"16740728"),"emulator_revision_invalid"),
         (b"\n".join(line for line in EMU_SOURCE_PROPERTIES.splitlines()
                       if not line.startswith(b"Pkg.BuildId=")),"emulator_revision_invalid"),
         (EMU_SOURCE_PROPERTIES+b"\nPkg.Path=emulator","emulator_metadata_duplicate"),
@@ -740,6 +937,12 @@ def run_self_tests():
     fs_cases=run_emulator_metadata_filesystem_tests()
     need(fs_cases==6,"offline_emulator_metadata_fs_case_count")
     cases+=fs_cases
+    process_cases=run_child_diagnostic_process_tests()
+    need(process_cases==4,"offline_child_process_case_count")
+    cases+=process_cases
+    registered_fs_cases=run_registered_emulator_filesystem_tests()
+    need(registered_fs_cases==12,"offline_registered_fs_case_count")
+    cases+=registered_fs_cases
     print(json.dumps({"schema":"supermega.first_sale_runner_offline.v1",
                       "status":"passed","cases":cases},sort_keys=True,
                      separators=(",",":")))
@@ -905,10 +1108,7 @@ def run_emulator_metadata_filesystem_tests():
     return count
 
 def install_emulator(root,sdk,task,e,deadline):
-    stage=task/"pinned-emulator-sdk"
-    target=stage/"emulator"
     archive=task/"emulator.zip"
-    need(not stage.exists() and not stage.is_symlink(),"emulator_stage_conflict")
     import urllib.request
     try:
         req=urllib.request.Request(EMU_URL,headers={"User-Agent":"shop-first-sale-qa/1"})
@@ -922,9 +1122,24 @@ def install_emulator(root,sdk,task,e,deadline):
                 size+=len(b); need(size<=EMU_SIZE,"emulator_size")
                 h.update(b); f.write(b)
         need(size==EMU_SIZE and h.hexdigest()==EMU_SHA,"emulator_digest")
-        extract_checked(archive,stage,deadline)
     except Refuse: raise
     except Exception: raise Refuse("emulator_unavailable") from None
+    # AVD Manager reads default hardware definitions from the registered SDK package.
+    # Do not invent package.xml or execute a different/unverified installed emulator.
+    target=Path(sdk)/"emulator"
+    license_file=Path(sdk)/"licenses/android-sdk-license"
+    need(license_file.is_file() and not license_file.is_symlink(),
+         "android_license_not_preaccepted")
+    set_phase("emulator_sdk_registration")
+    if target.exists() or target.is_symlink():
+        need(target.is_dir() and not target.is_symlink(),"emulator_sdk_root_invalid")
+    else:
+        manager=Path(sdk)/"cmdline-tools/latest/bin/sdkmanager"
+        run([str(manager),"--sdk_root="+str(sdk),"--channel=0","--install","emulator"],
+            root,e,bounded_time(deadline,300),operation="sdkmanager_install_emulator")
+    registered=verify_registered_emulator(archive,target,deadline)
+    need(registered["verifiedVendorFiles"]==398 and
+         registered["verifiedVendorBytes"]==892942977,"emulator_sdk_archive_invalid")
     metadata=read_emulator_source_properties(target/EMU_METADATA_PATH,deadline)
     binary=target/"emulator"
     need(metadata["Pkg.Path"]=="emulator" and
@@ -940,6 +1155,171 @@ def xml_child(element,name):
 def xml_text(element,name,default=""):
     child=xml_child(element,name)
     return (child.text or "").strip() if child is not None else default
+
+def parse_registered_emulator_metadata(raw):
+    need(type(raw) is bytes and 0<len(raw)<=262144 and
+         b"<!DOCTYPE" not in raw.upper() and b"<!ENTITY" not in raw.upper(),
+         "emulator_sdk_metadata_invalid")
+    try: root=ET.fromstring(raw)
+    except ET.ParseError: raise Refuse("emulator_sdk_metadata_invalid") from None
+    local=[node for node in root.iter() if xml_name(node)=="localPackage"]
+    need(len(local)==1 and local[0].get("path")=="emulator",
+         "emulator_sdk_package_identity")
+    revision=xml_child(local[0],"revision")
+    details=xml_child(local[0],"type-details")
+    kind=details.get("{http://www.w3.org/2001/XMLSchema-instance}type","") if details is not None else ""
+    need(revision is not None and
+         tuple(xml_text(revision,key,"0") for key in ("major","minor","micro"))==
+             tuple(EMU_VERSION.split(".")) and
+         kind.split(":")[-1]=="genericDetailsType",
+         "emulator_sdk_package_identity")
+    return {"package":"emulator","revision":EMU_VERSION,
+            "metadataScope":"sdkmanager_generated_registration_only"}
+
+def read_registered_emulator_metadata(path):
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    try:
+        before=os.fstat(fd)
+        need(stat.S_ISREG(before.st_mode) and 0<before.st_size<=262144,
+             "emulator_sdk_metadata_invalid")
+        raw=bytearray()
+        while len(raw)<=262144:
+            chunk=os.read(fd,65536)
+            if not chunk: break
+            raw.extend(chunk)
+        after=os.fstat(fd)
+        need((before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)==
+             (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) and
+             len(raw)==before.st_size,"emulator_sdk_metadata_changed")
+    finally: os.close(fd)
+    return parse_registered_emulator_metadata(bytes(raw))
+
+def verify_registered_emulator(archive,target,deadline):
+    # This proves a byte comparison only. The caller separately pins the full archive.
+    need(target.is_dir() and not target.is_symlink(),"emulator_sdk_root_invalid")
+    root_info=os.stat(target,follow_symlinks=False)
+    with zipfile.ZipFile(archive) as z:
+        expected={}; seen=set(); expected_dirs={"."}; expanded=0
+        entries=z.infolist()
+        need(0<len(entries)<=12000,"emulator_sdk_archive_invalid")
+        for entry in entries:
+            name=entry.filename
+            parts=name.rstrip("/").split("/")
+            mode=(entry.external_attr>>16)&0xffff
+            need(not name.startswith("/") and "\\" not in name and ":" not in name
+                 and "\0" not in name and parts[0]=="emulator"
+                 and all(part not in ("",".","..") for part in parts)
+                 and stat.S_IFMT(mode) in (0,stat.S_IFREG,stat.S_IFDIR),
+                 "emulator_sdk_archive_invalid")
+            alias="/".join(parts).casefold()
+            need(alias not in seen,"emulator_sdk_archive_invalid"); seen.add(alias)
+            if entry.is_dir():
+                for count in range(2,len(parts)+1):
+                    expected_dirs.add("/".join(parts[1:count]))
+                continue
+            need(len(parts)>1,"emulator_sdk_archive_invalid")
+            rel="/".join(parts[1:]); expected[rel]=entry
+            expanded+=entry.file_size
+            need(expanded<=2*1024**3,"emulator_sdk_archive_invalid")
+            for count in range(2,len(parts)):
+                expected_dirs.add("/".join(parts[1:count]))
+        need({"emulator","source.properties","lib/hardware-properties.ini"}<=set(expected)
+             and "package.xml" not in expected,"emulator_sdk_archive_invalid")
+        files=set()
+        def walk_error(_error): raise Refuse("emulator_sdk_tree_unreadable")
+        for current,dirs,names in os.walk(target,topdown=True,followlinks=False,onerror=walk_error):
+            current_path=Path(current)
+            rel_dir="." if current_path==target else current_path.relative_to(target).as_posix()
+            need(rel_dir in expected_dirs,"emulator_sdk_unexpected_directory")
+            for dirname in dirs:
+                info=os.stat(current_path/dirname,follow_symlinks=False)
+                need(stat.S_ISDIR(info.st_mode) and info.st_dev==root_info.st_dev,
+                     "emulator_sdk_directory_invalid")
+            for filename in names:
+                path=current_path/filename
+                rel=path.relative_to(target).as_posix()
+                info=os.stat(path,follow_symlinks=False)
+                need(stat.S_ISREG(info.st_mode) and info.st_dev==root_info.st_dev,
+                     "emulator_sdk_file_invalid")
+                need(rel in expected or rel=="package.xml","emulator_sdk_unexpected_file")
+                need(rel not in files,"emulator_sdk_unexpected_file"); files.add(rel)
+        need(files==set(expected)|{"package.xml"},"emulator_sdk_member_set_incomplete")
+        for rel,entry in expected.items():
+            need(time.monotonic()<deadline,"job_budget")
+            digest=hashlib.sha256(); size=0
+            with z.open(entry) as source:
+                while True:
+                    need(time.monotonic()<deadline,"job_budget")
+                    chunk=source.read(1024*1024)
+                    if not chunk: break
+                    size+=len(chunk); need(size<=entry.file_size,"emulator_sdk_archive_invalid")
+                    digest.update(chunk)
+            need(size==entry.file_size and
+                 stable_file_digest(target/rel,size,deadline)==digest.hexdigest(),
+                 "emulator_sdk_vendor_file_mismatch")
+        metadata=read_registered_emulator_metadata(target/"package.xml")
+    return {**metadata,"verifiedVendorFiles":len(expected),"verifiedVendorBytes":expanded}
+
+def run_registered_emulator_filesystem_tests():
+    # Tiny synthetic ZIP/SDK trees only; no SDK Manager, emulator, AVD or network.
+    cases=0
+    fixture_xml=(b'<repository xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+      b'<localPackage path="emulator"><type-details xsi:type="generic:genericDetailsType"/>'
+      b'<revision><major>37</major><minor>3</minor><micro>10</micro></revision>'
+      b'</localPackage></repository>')
+    variants=("valid","tamper","extra","missing_vendor","wrong_revision",
+              "missing_metadata","root_link","file_link","extra_directory",
+              "oversize_metadata","foreign_archive_path","vendor_package_xml")
+    for variant in variants:
+        with tempfile.TemporaryDirectory(prefix="shop-sdk-emulator-fixture-") as temp:
+            fixture=Path(temp); target=fixture/"sdk-emulator"; target.mkdir()
+            (target/"lib").mkdir()
+            vendor={"emulator":b"SYNTHETIC_EMULATOR_BYTES\n",
+                    "source.properties":EMU_SOURCE_PROPERTIES,
+                    "lib/hardware-properties.ini":b"SYNTHETIC_HARDWARE_DEFINITIONS\n"}
+            for rel,data in vendor.items(): (target/rel).write_bytes(data)
+            (target/"package.xml").write_bytes(fixture_xml)
+            archive=fixture/"vendor.zip"
+            with zipfile.ZipFile(archive,"w") as z:
+                for rel,data in vendor.items(): z.writestr("emulator/"+rel,data)
+                if variant=="foreign_archive_path": z.writestr("other/file",b"x")
+                if variant=="vendor_package_xml": z.writestr("emulator/package.xml",fixture_xml)
+            expected=None; checked_target=target
+            if variant=="tamper":
+                (target/"emulator").write_bytes(b"synthetic_emulator_bytes\n")
+                expected="emulator_sdk_vendor_file_mismatch"
+            elif variant=="extra":
+                (target/"unexpected.bin").write_bytes(b"x"); expected="emulator_sdk_unexpected_file"
+            elif variant=="missing_vendor":
+                (target/"emulator").unlink(); expected="emulator_sdk_member_set_incomplete"
+            elif variant=="wrong_revision":
+                (target/"package.xml").write_bytes(fixture_xml.replace(b"<micro>10</micro>",b"<micro>9</micro>"))
+                expected="emulator_sdk_package_identity"
+            elif variant=="missing_metadata":
+                (target/"package.xml").unlink(); expected="emulator_sdk_member_set_incomplete"
+            elif variant=="root_link":
+                checked_target=fixture/"root-link"; checked_target.symlink_to(target,target_is_directory=True)
+                expected="emulator_sdk_root_invalid"
+            elif variant=="file_link":
+                outside=fixture/"outside"; outside.write_bytes(vendor["emulator"])
+                (target/"emulator").unlink(); (target/"emulator").symlink_to(outside)
+                expected="emulator_sdk_file_invalid"
+            elif variant=="extra_directory":
+                (target/"unexpected-dir").mkdir(); expected="emulator_sdk_unexpected_directory"
+            elif variant=="oversize_metadata":
+                (target/"package.xml").write_bytes(b"x"*262145); expected="emulator_sdk_metadata_invalid"
+            elif variant in ("foreign_archive_path","vendor_package_xml"):
+                expected="emulator_sdk_archive_invalid"
+            try:
+                result=verify_registered_emulator(archive,checked_target,time.monotonic()+10)
+            except Refuse as error:
+                need(expected is not None and str(error)==expected,
+                     "offline_registered_fs_wrong_reason")
+            else:
+                need(expected is None and result["verifiedVendorFiles"]==3 and
+                     result["revision"]==EMU_VERSION,"offline_registered_fs_false_pass")
+            cases+=1
+    return cases
 
 def verify_official_image_manifest(deadline):
     import urllib.request
@@ -1249,6 +1629,8 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
                 with socket.create_connection(("127.0.0.1",port),timeout=.5):
                     cleanup_ok=False
             except OSError: pass
+        if RUN_PROGRESS.get("ownedChildCleanupUncertain") is True:
+            cleanup_ok=False
         if not cleanup_ok:
             RUN_PROGRESS["cleanupProven"]=False
             raise Refuse("owned_cleanup_unproven")
@@ -1396,10 +1778,11 @@ def execute(root,head,lock):
             need(shutil.disk_usage(temp).free>=4*1024**3,"capacity_before_avd")
             results.append(run_locale(root,task,sdk,emu,adb,locale,deadline))
         need(file_sha(root/LOCK)==lock,"lock_changed")
-        result={"sourceCommit":head,"testSha256":TEST_SHA,"pubspecSha256":PUB_SHA,
+        result={**source_identity_facts(root,head),"testSha256":TEST_SHA,"pubspecSha256":PUB_SHA,
           "lockSha256":lock,"flutterVersion":"3.47.8","dartVersion":fv.get("dartSdkVersion"),
           "sdkmanagerVersion":sdkmanager_version,"emulatorVersion":EMU_VERSION,
-          "emulatorSha256":EMU_SHA,"systemImagePackage":IMAGE,
+          "emulatorSha256":EMU_SHA,"emulatorRegisteredSdkPackage":True,
+          "emulatorVendorFilesVerified":398,"systemImagePackage":IMAGE,
           "systemImageRevision":"2.0.0","systemImageManifestSha256":official["manifestSha256"],
           "systemImageArchiveSha256StaticPin":official["archiveSha256StaticPin"],
           "systemImageArchiveBytesStaticPin":official["archiveBytes"],
@@ -1415,7 +1798,9 @@ def execute(root,head,lock):
         try:
             if acl is not None: acl.close()
         except Exception: clean=False
-        if identity_preimage is not None:
+        uncertain_child=RUN_PROGRESS.get("ownedChildCleanupUncertain") is True
+        if uncertain_child: clean=False
+        if identity_preimage is not None and not uncertain_child:
             try:
                 restore_tracked_identity(identity,identity_preimage,identity_identity,identity_digest)
             except Exception: clean=False
@@ -1461,8 +1846,7 @@ def main():
     try:
         root=Path(__file__).resolve().parents[1]
         head=check_context(root); lock=check_source(root)
-        facts={"sourceCommit":head,"sourceParent":BASE,
-               "sourceTree":BASE_TREE,"nativeSourceTree":BASE_NATIVE_TREE,
+        facts={**source_identity_facts(root,head),
                "testSha256":TEST_SHA,"pubspecSha256":PUB_SHA,
                "lockSha256":lock,"systemImagePackage":IMAGE,
                "systemImageManifestSha256":IMAGE_MANIFEST_SHA256,

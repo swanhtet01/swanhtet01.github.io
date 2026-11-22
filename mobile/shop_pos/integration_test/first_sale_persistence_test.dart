@@ -178,9 +178,7 @@ void main() {
       final quantityAndPrice = find.descendant(
         of: basketRoot,
         matching: find.text(
-          shopMmk(2500, myanmar: myanmar) +
-              ' × ' +
-              shopNumber(1, myanmar: myanmar),
+          '${shopMmk(2500, myanmar: myanmar)} × ${shopNumber(1, myanmar: myanmar)}',
         ),
       );
       await waitFor(quantityAndPrice);
@@ -319,7 +317,7 @@ void main() {
       await beforeSale.close();
     }
 
-    final productRow = find.byKey(ValueKey('shop-catalog-row:' + productId));
+    final productRow = find.byKey(ValueKey('shop-catalog-row:$productId'));
     await tapOnce(productRow);
     final portraitBasketViewport = await waitForOrientation(
       productRow,
