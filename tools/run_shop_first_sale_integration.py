@@ -4,8 +4,8 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="9846d6ed43257a1a2bce77f47acedd1bf9217fea"
-BASE_TREE="ddb4846bcada4dc73442dfe5132f1aae9ad2548a"
+BASE="89514cafcac21654ab615fc0d7d1cc302bb1ec8b"
+BASE_TREE="2e340c9c498817847f79eb17d903b9572123a016"
 BASE_NATIVE_TREE="3401cfa0ba36f3ae06d0105fa4d0a04e200bb4fc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
