@@ -5,9 +5,9 @@ import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="884e41302953ceda2925a327552c8cde6977a533"
-BASE_TREE="569d9698a13ee21e00f6ab16547369d0827d805a"
-BASE_NATIVE_TREE="b3b6f30d079ae922d21e0026afe6e05e69884c36"
+BASE="c478e9da94e8a9d93f78c646b58437c5b7712b8b"
+BASE_TREE="a68a11fa59f3934a2d382d1d5e2c83dc25f85832"
+BASE_NATIVE_TREE="97fa0b4a86dd3c0782c42e3a4d464b7fc7d5ca12"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -17,6 +17,10 @@ PUB=APP/"pubspec.yaml"
 PUB_SHA="228f2c2b2d1478d0546a80dbedf4c4393dd8d6700f01ff350b6ebe58a68c1f8a"
 LOCK=APP/"pubspec.lock"
 LOCK_SHA="772540b8f7fee17c0e7a9f0185c0366775ce5d61f7c94a5ab894beeb69605ccb"
+# Diagnostic source head only. Full instrumented authority requires a separate review.
+SOURCE_WIDGET_ONLY=True
+WIDGET_TEST=APP/"test/widget_test_support.dart"
+WIDGET_TEST_SHA="5d1c285231676a1f0fed5eba5dbeb4226ca99242eeedeffdc3f17ef7acf2a23e"
 IMAGE="system-images;android-35;default;x86_64"
 TABLET_DEVICE_ID="medium_tablet"
 TABLET_DEVICE_NAME="Medium Tablet"
@@ -73,7 +77,8 @@ REPORT_KEYS={
 }
 ALLOWED_CHANGED={
   "tools/run_shop_first_sale_integration.py",
-  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
+  "mobile/shop_pos/test/widget_test_support.dart",
+  ".github/workflows/shop-first-sale-integration.yml",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
 EMU_SIZE=350068887
@@ -1243,9 +1248,9 @@ def valid_sha(value):
     return type(value) is str and re.fullmatch("[0-9a-f]{64}",value) is not None
 
 def check_source(root):
-    need(all(valid_sha(v) for v in (TEST_SHA,PUB_SHA,LOCK_SHA,IMAGE_SHA256,
+    need(all(valid_sha(v) for v in (TEST_SHA,PUB_SHA,LOCK_SHA,WIDGET_TEST_SHA,IMAGE_SHA256,
          IMAGE_ARCHIVE_SHA256,IMAGE_MANIFEST_SHA256)),"source_bindings_pending")
-    for path,digest in ((TEST,TEST_SHA),(PUB,PUB_SHA),(LOCK,LOCK_SHA)):
+    for path,digest in ((TEST,TEST_SHA),(PUB,PUB_SHA),(LOCK,LOCK_SHA),(WIDGET_TEST,WIDGET_TEST_SHA)):
         full=root/path
         need(full.is_file() and not full.is_symlink(),"source_file_invalid")
         run(["git","ls-files","--error-unmatch",str(path)],root,os.environ,10)
@@ -2997,6 +3002,7 @@ def restore_tracked_identity(identity,preimage,generated_identity,generated_dige
     need(identity.read_bytes()==preimage["bytes"],"identity_restore_mismatch")
 
 def execute(root,head,lock):
+    need(not SOURCE_WIDGET_ONLY,"instrumented_trial_not_admitted_source_widget_profile")
     global RUN_PROGRESS
     RUN_PROGRESS={"currentLocale":None,"phase":"not_started","attemptedLocales":[],"completedLocales":[],"cleanupProven":True,"cleanupFailureStages":[]}
     set_phase("host_preflight")
@@ -3189,6 +3195,8 @@ def main():
                "lockSha256":lock,"systemImagePackage":IMAGE,
                "systemImageManifestSha256":IMAGE_MANIFEST_SHA256,
                "systemImageArchiveSha256StaticPin":IMAGE_ARCHIVE_SHA256}
+        if SOURCE_WIDGET_ONLY:
+            facts["executionProfile"]="source_widget_only_v1"
         if args.preflight_only:
             output("preflight_passed",**facts)
         else:

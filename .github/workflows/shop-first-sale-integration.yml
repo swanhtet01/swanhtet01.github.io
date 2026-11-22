@@ -72,24 +72,23 @@ jobs:
           flutter-version: '3.47.8'
           cache: false
 
-      - name: Run one fresh English and Myanmar instrumented sale
-        timeout-minutes: 20
+      - name: Run exact synthetic in-memory tablet source regression
+        timeout-minutes: 8
+        working-directory: mobile/shop_pos
         env:
-          QA_EVENT: ${{ github.event_name }}
-          QA_ACTION: ${{ github.event.action }}
-          QA_REPOSITORY: ${{ github.repository }}
-          QA_REPOSITORY_ID: ${{ github.repository_id }}
-          QA_PR_NUMBER: ${{ github.event.pull_request.number }}
-          QA_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          QA_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          QA_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          QA_BASE_REPOSITORY_ID: ${{ github.event.pull_request.base.repo.id }}
-          QA_HEAD_REPOSITORY_ID: ${{ github.event.pull_request.head.repo.id }}
-          QA_DRAFT: ${{ github.event.pull_request.draft }}
-          QA_ACTOR_ID: ${{ github.actor_id }}
-          QA_SENDER_ID: ${{ github.event.sender.id }}
-          QA_SENDER_TYPE: ${{ github.event.sender.type }}
-          QA_ATTEMPT: ${{ github.run_attempt }}
-          QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          QA_RUN_ID: ${{ github.run_id }}
-        run: python3 tools/run_shop_first_sale_integration.py --run
+          SUPABASE_URL: ''
+          SUPABASE_PUBLISHABLE_KEY: ''
+          SHOP_API_BASE_URL: ''
+          SHOP_CONNECTED_ORDERS_ENABLED: ''
+        run: |
+          timeout --signal=TERM --kill-after=10s 180s flutter pub get --enforce-lockfile
+          dart format --output=none --set-exit-if-changed test/widget_test_support.dart
+          timeout --signal=TERM --kill-after=10s 180s flutter test --no-pub test/widget_checkout_test.dart --plain-name 'tablet first sale survives portrait to landscape in EN and MY' --reporter expanded --timeout 60s
+      - name: Verify source checkout remains clean
+        if: always()
+        run: test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Keep instrumented acceptance explicitly blocked
+        if: always()
+        run: |
+          printf '%s\n' '{"schema":"supermega.tablet_source_widget.v1","status":"instrumented_NOT_RUN_source_only","installedQa":false,"promotionEligible":false}'
+          exit 3
