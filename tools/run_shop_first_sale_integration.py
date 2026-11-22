@@ -4,9 +4,9 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="310bac8a417bd423491a396cc3aa4e8ccf91855e"
-BASE_TREE="b6f7fc9078a22832e21bbd0fc5f259e3274ad762"
-BASE_NATIVE_TREE="dfe88271f72b523397793792f601769d3a2c3b41"
+BASE="13332897b3a62caed1000c3eff9b6a45b9660513"
+BASE_TREE="0aaf1cbb3c35364c037eec2df0ea4ed1458b53fe"
+BASE_NATIVE_TREE="3401cfa0ba36f3ae06d0105fa4d0a04e200bb4fc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -71,7 +71,7 @@ REPORT_KEYS={
  "tabletEvidence"
 }
 ALLOWED_CHANGED={
-  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
+  ".github/workflows/shop-native-ci.yml",
   "tools/run_shop_first_sale_integration.py",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
@@ -159,6 +159,28 @@ def avd_create_diagnostics(stdout,stderr):
     combined=(stdout+b"\n"+stderr).lower()
     signals=[]
     for label,marker in (
+        ("userdata_source_missing",b"unable to find a 'userdata.img' file for abi"),
+        ("userdata_copy_failed",b"userdata.img' file in the avd folder"),
+        ("image_path_setup_failed",b"failed to set image path properties in the avd folder"),
+        ("sd_card_create_failed",b"failed to create the sd card"),
+        ("sd_card_create_failed",b"failed to create sdcard in the avd folder"),
+        ("sd_card_size_invalid",b"sd card size must be in the range"),
+        ("sd_card_size_invalid",b"unable to parse sd card size"),
+        ("base_device_incomplete",b"base device information incomplete or missing"),
+        ("avd_initialization_exception",b"exception during avdmanager initialization"),
+        ("avd_initialization_exception",b"an error occurred while creating avd"),
+        ("avd_system_image_missing",b"system image not found in"),
+        ("avd_system_image_outside_sdk",b"is not inside the sdk"),
+        ("unsupported_image_abi",b"is not supported by this version of the sdk tools"),
+        ("avd_cleanup_failed",b"failed to delete"),
+        ("avd_cow_flag_warning",b"failed 'chattr'"),
+        ("filesystem_access_denied",b"accessdeniedexception"),
+        ("filesystem_access_denied",b"permission denied"),
+        ("filesystem_path_missing",b"nosuchfileexception"),
+        ("filesystem_path_missing",b"filenotfoundexception"),
+        ("filesystem_io_exception",b"java.io.ioexception"),
+        ("filesystem_space_exhausted",b"no space left on device"),
+        ("android_location_exception",b"androidlocationsexception"),
         ("package_path_not_valid",b"package path is not valid"),
         ("package_has_no_system_images",b"contains no system images. valid system image paths are:"),
         ("device_not_found",b"no device found matching --device"),
@@ -762,6 +784,46 @@ def run_self_tests():
     for raw,expected in markers:
         need(avd_create_diagnostics(b"",raw)["signals"]==[expected],
              "offline_avd_diagnostic_classification")
+        cases+=1
+    sdk_failure_fixtures=(
+        (b"Unable to find a 'userdata.img' file for ABI x86_64 to copy into the AVD folder.","userdata_source_missing"),
+        (b"Unable to create 'userdata.img' file in the AVD folder.","userdata_copy_failed"),
+        (b"Unable to create '/private/path/userdata.img' file in the AVD folder.","userdata_copy_failed"),
+        (b"Failed to set image path properties in the AVD folder.","image_path_setup_failed"),
+        (b"Failed to create the SD card.","sd_card_create_failed"),
+        (b"Failed to create sdcard in the AVD folder.","sd_card_create_failed"),
+        (b"SD Card size must be in the range 9 MiB..1023 GiB.","sd_card_size_invalid"),
+        (b"Unable to parse SD Card size", "sd_card_size_invalid"),
+        (b"Base device information incomplete or missing.","base_device_incomplete"),
+        (b"Exception during AvdManager initialization: private-exception", "avd_initialization_exception"),
+        (b"An error occurred while creating AVD: private-exception", "avd_initialization_exception"),
+        (b"System image not found in /private/path.","avd_system_image_missing"),
+        (b"The selected system image (/private/path) is not inside the SDK.","avd_system_image_outside_sdk"),
+        (b"ABI private-abi is not supported by this version of the SDK Tools", "unsupported_image_abi"),
+        (b"Failed to delete /private/path: private-exception", "avd_cleanup_failed"),
+        (b"Failed 'chattr' for /private/path:", "avd_cow_flag_warning"),
+        (b"java.nio.file.AccessDeniedException: /private/path", "filesystem_access_denied"),
+        (b"Permission denied: /private/path", "filesystem_access_denied"),
+        (b"java.nio.file.NoSuchFileException: /private/path", "filesystem_path_missing"),
+        (b"java.io.FileNotFoundException: /private/path", "filesystem_path_missing"),
+        (b"java.io.IOException: private-reason", "filesystem_io_exception"),
+        (b"No space left on device /private/path", "filesystem_space_exhausted"),
+        (b"AndroidLocationsException: private-location", "android_location_exception"),
+    )
+    for raw,expected in sdk_failure_fixtures:
+        diagnostic=avd_create_diagnostics(raw,b"Error: AVD not created.")
+        need(diagnostic["signals"]==[expected,"avd_not_created"] and
+             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","rawOutputIncluded"} and
+             not diagnostic["rawOutputIncluded"] and "private-" not in json.dumps(diagnostic),
+             "offline_sdk_fixed_error_family")
+        cases+=1
+    for raw in (b"Error: access_token=unknown-value",b"Error: client_secret=unknown-value",
+                b"Error: /unrecognized path/ unknown-value",b"Error: unknown-value\x00\xff"):
+        diagnostic=avd_create_diagnostics(raw,b"")
+        need(diagnostic["signals"]==["unclassified"] and
+             "unknown-value" not in json.dumps(diagnostic) and
+             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","rawOutputIncluded"},
+             "offline_unknown_sdk_text_never_emitted")
         cases+=1
     combined=avd_create_diagnostics(b"AVD not created.",b"Package path is not valid.")
     need(combined["signals"]==["package_path_not_valid","avd_not_created"],
