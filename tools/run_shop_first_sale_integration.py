@@ -4,8 +4,8 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="91715ee3e1d5be6a967ea4fd72090f1d5f557b1c"
-BASE_TREE="6adbd994f17f6dbd590dcd356ff9a2ff21828681"
+BASE="c17383ac455ccda86e500a22afaa3ee58d18d760"
+BASE_TREE="777bc7639f0ff2bf67813c3a400f06710b65fd07"
 BASE_NATIVE_TREE="e783fe910fc381a4e93818088a27537c37ff8ffc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
@@ -238,6 +238,60 @@ def tablet_viewport_diagnostic(raw):
         record=data
     return {"status":"captured","value":record}
 
+def gradle_failure_signals(raw):
+    # Fixed hints only, called within the bounded Flutter diagnostic buffer.
+    signals=[]
+    for label,marker in (
+        ("gradle_dependency_resolution_failed",b"could not resolve all artifacts for configuration"),
+        ("gradle_dependency_resolution_failed",b"could not resolve all files for configuration"),
+        ("gradle_repository_resource_failed",b"could not get resource"),
+        ("gradle_dependency_download_failed",b"could not download"),
+        ("gradle_plugin_not_found",b"was not found in any of the following sources"),
+        ("gradle_settings_compilation_failed",b"could not compile settings file"),
+        ("gradle_project_configuration_failed",b"a problem occurred configuring"),
+        ("gradle_java_class_version_unsupported",b"unsupported class file major version"),
+        ("gradle_java_version_required",b"android gradle plugin requires java"),
+        ("gradle_java_home_invalid",b"java_home is set to an invalid directory"),
+        ("gradle_java_toolchain_missing",b"cannot find a java installation"),
+        ("gradle_java_toolchain_missing",b"no matching toolchains found"),
+        ("gradle_daemon_disappeared",b"gradle build daemon disappeared unexpectedly"),
+        ("gradle_daemon_start_failed",b"unable to start the daemon process"),
+        ("gradle_heap_exhausted",b"java heap space"),
+        ("gradle_heap_exhausted",b"gc overhead limit exceeded"),
+        ("gradle_heap_reservation_failed",b"could not reserve enough space"),
+        ("gradle_native_thread_failed",b"unable to create native thread"),
+        ("disk_no_space",b"no space left on device"),
+        ("disk_quota_exceeded",b"disk quota exceeded"),
+        ("android_sdk_license_missing",b"licenses have not been accepted"),
+        ("android_sdk_license_missing",b"licensenotacceptedexception"),
+        ("android_sdk_location_missing",b"sdk location not found"),
+        ("android_sdk_platform_missing",b"failed to find platform sdk with path"),
+        ("android_build_tools_missing",b"failed to find build tools revision"),
+        ("android_ndk_source_properties",b"[cxx1101]"),
+        ("android_resource_link_failed",b"android resource linking failed"),
+        ("kotlin_compilation_failed",b"compilation error. see log for more details"),
+        ("gradle_wrapper_checksum_failed",b"verification of gradle distribution failed"),
+        ("gradle_wrapper_download_failed",b"could not install gradle distribution"),
+        ("network_dns_failed",b"unknownhostexception"),
+        ("network_dns_failed",b"temporary failure in name resolution"),
+        ("network_connect_timeout",b"connect timed out"),
+        ("network_connect_timeout",b"connection timed out"),
+        ("network_read_timeout",b"read timed out"),
+        ("network_tls_failed",b"sslhandshakeexception"),
+        ("network_tls_failed",b"pkix path building failed"),
+        ("network_connection_reset",b"connection reset"),
+        ("gradle_minimum_version",b"minimum supported gradle version is"),
+        ("gradle_unknown_property",b"could not get unknown property"),
+        ("gradle_unknown_method",b"could not find method"),
+    ):
+        if marker in raw and label not in signals: signals.append(label)
+    for code in (400,401,403,404,407,408,429,500,502,503,504):
+        suffix=str(code).encode("ascii")
+        if (b"received status code "+suffix in raw or
+            b"http response code: "+suffix in raw):
+            signals.append("http_status_"+str(code))
+    return signals
+
 def flutter_drive_diagnostics(stdout,stderr):
     # Hints only: fixed labels and whitelisted source aliases/integers, never text.
     need(type(stdout) is bytes and type(stderr) is bytes and
@@ -266,6 +320,8 @@ def flutter_drive_diagnostics(stdout,stderr):
         if marker in combined: signals.append(label)
     if b"gradle task" in combined and b"failed with exit code" in combined:
         signals.append("gradle_task_failed")
+    if "gradle_build_failed" in signals or "gradle_task_failed" in signals:
+        signals.extend(gradle_failure_signals(combined))
     # A source location is diagnostic context, not evidence of causation or success.
     locations=[]
     for path,alias in (
@@ -1092,6 +1148,36 @@ def run_self_tests():
                                      "offline_tablet_numeric_input_reason")
         else: raise Refuse("offline_tablet_numeric_input_expected_refusal")
         cases+=1
+    gradle_banner=b"FAILURE: Build failed with an exception.\n"
+    gradle_composites=(
+        (b"Could not resolve all artifacts for configuration private-path. Could not resolve all files for configuration private-path. Could not get resource https://private/token. Received status code 429 from server.",
+         {"gradle_build_failed","gradle_dependency_resolution_failed","gradle_repository_resource_failed","http_status_429"}),
+        (b"LicenseNotAcceptedException: licenses have not been accepted private-sdk-path",
+         {"gradle_build_failed","android_sdk_license_missing"}),
+        (b"Gradle build daemon disappeared unexpectedly: java heap space; GC overhead limit exceeded private-log-path",
+         {"gradle_build_failed","gradle_daemon_disappeared","gradle_heap_exhausted"}),
+        (b"Unable to start the daemon process. Could not reserve enough space private-value",
+         {"gradle_build_failed","gradle_daemon_start_failed","gradle_heap_reservation_failed"}),
+        (b"[CXX1101] NDK at private-path did not have a source.properties file",
+         {"gradle_build_failed","android_ndk_source_properties"}),
+        (b"Could not download private-url. SSLHandshakeException: PKIX path building failed",
+         {"gradle_build_failed","gradle_dependency_download_failed","network_tls_failed"}),
+        (b"No space left on device private-path",
+         {"gradle_build_failed","disk_no_space"}),
+        (b"private-secret-value=private-path",
+         {"gradle_build_failed"}),
+    )
+    for raw,expected in gradle_composites:
+        diagnostic=flutter_drive_diagnostics(gradle_banner+raw,b"")
+        need(set(diagnostic["signals"])==expected and
+             len(diagnostic["signals"])==len(expected) and
+             all(value not in json.dumps(diagnostic) for value in
+                 ("private","https://","source.properties","token")),
+             "offline_gradle_composite_privacy_or_classification")
+        cases+=1
+    need(flutter_drive_diagnostics(b"UnknownHostException private-path",b"")["signals"]==["unclassified"],
+         "offline_gradle_context_required")
+    cases+=1
     drive_failure=child_failed_refusal(
         "flutter_drive",23,stdout=b"",stderr=b"Error: access_token=private-value")
     need(drive_failure.child_failure=={
