@@ -4,8 +4,8 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="91053fadb9fb1e68f0feb63a98f992bedd7a80f0"
-BASE_TREE="812d023f486ed423b6abc25dcd62851c3ae29fa3"
+BASE="9846d6ed43257a1a2bce77f47acedd1bf9217fea"
+BASE_TREE="ddb4846bcada4dc73442dfe5132f1aae9ad2548a"
 BASE_NATIVE_TREE="3401cfa0ba36f3ae06d0105fa4d0a04e200bb4fc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
@@ -137,7 +137,7 @@ CHILD_DIAGNOSTIC_OPERATIONS=frozenset((
     "sdkmanager_install_emulator","avdmanager_list_devices","avd_create","adb_start_server",
     "adb_wait_for_device","adb_boot_probe","adb_devices",
     "adb_set_font_scale","adb_read_display_size","adb_read_display_density",
-    "adb_read_font_scale",
+    "adb_read_font_scale","flutter_drive",
 ))
 class Refuse(Exception):
     def __init__(self, reason, *, child_failure=None):
@@ -197,11 +197,37 @@ def avd_create_diagnostics(stdout,stderr):
             "stdoutBytes":len(stdout),"stderrBytes":len(stderr),
             "signals":signals or ["unclassified"],"rawOutputIncluded":False}
 
+def flutter_driver_package_argument(repo_root):
+    root=Path(repo_root)
+    need(root.is_absolute(),"flutter_drive_package_root_invalid")
+    return "--test-arguments=--packages="+str(
+        root/APP/".dart_tool"/"package_config.json")
+
+def flutter_drive_diagnostics(stdout,stderr):
+    # Fixed hints only; never serialize child text, paths, argv, or environment.
+    need(type(stdout) is bytes and type(stderr) is bytes and
+         len(stdout)+len(stderr)<=OUTPUT_LIMIT,"flutter_drive_diagnostic_output_invalid")
+    combined=(stdout+b"\n"+stderr).lower()
+    signals=[]
+    # Fixed Flutter/Dart diagnostics; unknown text remains unclassified.
+    for label,marker in (
+        ("driver_package_import_unresolved",b"couldn't resolve the package 'integration_test'"),
+        ("driver_file_not_found",b"test file not found:"),
+        ("driver_target_is_driver_file",b"the file path passed to --target should be an app entrypoint"),
+        ("flutter_app_start_failed",b"application failed to start. will not run test. quitting."),
+    ):
+        if marker in combined and label not in signals: signals.append(label)
+    return {"schema":"supermega.flutter_drive_diagnostic.v1",
+            "stdoutBytes":len(stdout),"stderrBytes":len(stderr),
+            "signals":signals or ["unclassified"],"rawOutputIncluded":False}
+
 def child_failed_refusal(operation, exit_code, *, stdout=None, stderr=None):
     if operation is None: return Refuse("child_failed")
     child=child_failure_record(operation,exit_code)
     if operation=="avd_create" and stdout is not None and stderr is not None:
         child["avdDiagnostics"]=avd_create_diagnostics(stdout,stderr)
+    if operation=="flutter_drive" and stdout is not None and stderr is not None:
+        child["flutterDriveDiagnostics"]=flutter_drive_diagnostics(stdout,stderr)
     return Refuse("child_failed",child_failure=child)
 
 def libpulse_query_state(raw):
@@ -759,6 +785,47 @@ def run_self_tests():
     need(evidence=={"phase":"unknown","exceptionCategory":"TypeError","errno":None}
          and "secret" not in json.dumps(evidence),
          "offline_internal_failure_phase_fixture")
+    cases+=1
+    package_arg=flutter_driver_package_argument(Path("/workspace/repository"))
+    need(package_arg=="--test-arguments=--packages=/workspace/repository/mobile/shop_pos/.dart_tool/package_config.json",
+         "offline_flutter_drive_package_argument")
+    cases+=1
+    try: flutter_driver_package_argument(Path("relative/repository"))
+    except Refuse as error: need(str(error)=="flutter_drive_package_root_invalid",
+                                 "offline_flutter_drive_package_root_wrong_reason")
+    else: raise Refuse("offline_flutter_drive_package_root_expected_refusal")
+    cases+=1
+    drive_fixtures=(
+        (b"Error: Couldn't resolve the package 'integration_test' in 'package:integration_test/integration_test_driver.dart'. /private/path","driver_package_import_unresolved"),
+        (b"Test file not found: /private/driver-en/first_sale_persistence_test.dart","driver_file_not_found"),
+        (b"The file path passed to --target should be an app entrypoint: /private/path","driver_target_is_driver_file"),
+        (b"Application failed to start. Will not run test. Quitting. /private/path","flutter_app_start_failed"),
+        (b"access_token=private-value /private/path","unclassified"),
+    )
+    for raw,expected in drive_fixtures:
+        diagnostic=flutter_drive_diagnostics(raw,b"")
+        need(diagnostic["signals"]==[expected] and
+             diagnostic["stdoutBytes"]==len(raw) and diagnostic["stderrBytes"]==0 and
+             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","rawOutputIncluded"} and
+             not diagnostic["rawOutputIncluded"] and
+             all(secret not in json.dumps(diagnostic) for secret in
+                 ("private","access_token","integration_test_driver.dart")),
+             "offline_flutter_drive_diagnostic_redacted")
+        cases+=1
+    try: flutter_drive_diagnostics(b"x"*(OUTPUT_LIMIT+1),b"")
+    except Refuse as error: need(str(error)=="flutter_drive_diagnostic_output_invalid",
+                                 "offline_flutter_drive_diagnostic_wrong_reason")
+    else: raise Refuse("offline_flutter_drive_diagnostic_expected_refusal")
+    cases+=1
+    drive_failure=child_failed_refusal(
+        "flutter_drive",23,stdout=b"",stderr=b"Error: access_token=private-value")
+    need(drive_failure.child_failure=={
+             "operation":"flutter_drive","exitCode":23,
+             "flutterDriveDiagnostics":{
+                 "schema":"supermega.flutter_drive_diagnostic.v1","stdoutBytes":0,
+                 "stderrBytes":len(b"Error: access_token=private-value"),
+                 "signals":["unclassified"],"rawOutputIncluded":False}},
+         "offline_flutter_drive_child_failure")
     cases+=1
     diagnostic=avd_create_diagnostics(b"private-stdout-path",b"Error: Package path is not valid. private-stderr-path")
     need(diagnostic=={"schema":"supermega.avd_create_diagnostic.v1",
@@ -1690,6 +1757,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
         set_phase("test_running")
         RUN_PROGRESS["attemptedLocales"].append(locale)
         stdout_bytes,stderr_bytes=run(["flutter","drive","--no-pub",
+          flutter_driver_package_argument(root),
           "--device-id="+serial,"--driver="+str(driver),
           "--target="+str(TEST.relative_to(APP)),"--flavor=qa",
           "--dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1",
@@ -1697,7 +1765,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
           "--dart-define=SHOP_AVD_PROFILE_ID="+TABLET_DEVICE_ID,
           "--dart-define=SHOP_FIRST_SALE_LOCALE="+locale],
           root/APP,e,min(6*60,max(1,deadline-time.monotonic())),
-          capture=True,capture_pair=True)
+          capture=True,capture_pair=True,operation="flutter_drive")
         report=parse_report(stdout_bytes,stderr_bytes,locale)
         RUN_PROGRESS["completedLocales"].append(locale)
         RUN_PROGRESS["currentLocale"]=None
