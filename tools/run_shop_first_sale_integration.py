@@ -4,7 +4,7 @@ import argparse, hashlib, json, os, platform, re, selectors, shutil, signal, soc
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="fcf8f3190b6245097c1b828633adbd05cce26814"
+BASE="42f5ccdaa66557ae85451b25ea39d1f9c9942f12"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -67,18 +67,6 @@ REPORT_KEYS={
 ALLOWED_CHANGED={
   "tools/postgres17_toolchain_profile.mjs",
   "tools/postgres17_authenticode_transport.test.mjs",
-  ".github/workflows/shop-native-ci.yml",
-  ".gitattributes",
-  "hq/research/postgres17-publisher-policy.json",
-  "hq/research/postgres17-toolchain-profile.json",
-  "hq/research/postgres17-edb-source-authenticode-observation.json",
-  "tools/postgres17_publisher_policy_observation.test.mjs",
-  "mobile/shop_pos/pubspec.yaml",
-  "mobile/shop_pos/pubspec.lock",
-  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
-  "mobile/shop_pos/lib/shop_today_screen.dart",
-  "mobile/shop_pos/test/widget_test_support.dart",
-  ".github/workflows/shop-first-sale-integration.yml",
   "tools/run_shop_first_sale_integration.py",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip"
@@ -86,6 +74,7 @@ EMU_SIZE=349658551
 EMU_SHA="cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd"
 EMU_VERSION="37.2.13"
 PULSE="1:16.1+dfsg1-2ubuntu10.1"
+PULSE_QUERY_FORMAT="-f="+"$"+"{db:Status-Abbrev}\t"+"$"+"{Version}"
 RUN_PROGRESS={"currentLocale":None,"phase":"not_started","attemptedLocales":[],"completedLocales":[],"cleanupProven":True}
 CANCEL_PENDING=False
 FALSE={"authority":False,"fullReleaseCandidate":False,"installedQa":False,"osProcessRestartProven":False,
@@ -95,6 +84,11 @@ FALSE={"authority":False,"fullReleaseCandidate":False,"installedQa":False,"osPro
 class Refuse(Exception): pass
 def need(ok, reason):
     if not ok: raise Refuse(reason)
+def libpulse_query_state(raw):
+    expected=("ii \t"+PULSE).encode("ascii")
+    if raw==expected: return "installed_exact"
+    if raw in (b"",b"un \t"): return "absent"
+    return "invalid"
 def output(status, **facts):
     print(json.dumps({"schema":"supermega.first_sale_instrumented_qa.v2",
       "status":status, **FALSE, **facts}, sort_keys=True, separators=(",",":")))
@@ -341,6 +335,22 @@ def run_self_tests():
     encoded=json.dumps(valid,separators=(",",":")).encode()
     parse_report(REPORT_PREFIX.encode()+encoded+b"\n",b"","en")
     cases=2
+    need(PULSE_QUERY_FORMAT=="-f="+"$"+"{db:Status-Abbrev}\t"+"$"+"{Version}",
+         "offline_libpulse_format_fixture")
+    cases+=1
+    pulse_cases=(
+        (("ii \t"+PULSE).encode("ascii"),"installed_exact"),
+        (b"","absent"),
+        (b"un \t","absent"),
+        (("ii  "+PULSE).encode("ascii"),"invalid"),
+        (("ii \t"+PULSE+"\n").encode("ascii"),"invalid"),
+        (("ii \t"+PULSE+"\textra").encode("ascii"),"invalid"),
+        (("ii \t1:16.1+dfsg1-2ubuntu10.0").encode("ascii"),"invalid"),
+        (("iF \t"+PULSE).encode("ascii"),"invalid"),
+    )
+    for raw,expected in pulse_cases:
+        need(libpulse_query_state(raw)==expected,"offline_libpulse_query_fixture")
+        cases+=1
     invalid=[]
     invalid.append((b"no report",b"","test_report_missing_or_ambiguous","en"))
     invalid.append((REPORT_PREFIX.encode()+encoded+b"\n"+REPORT_PREFIX.encode()+encoded,b"",
@@ -808,18 +818,19 @@ def execute(root,head,lock):
                                bounded_time(deadline,15),True).decode("ascii","replace").strip()
         need(sdkmanager_version and len(sdkmanager_version)<=80,
              "android_sdkmanager_version_invalid")
-        fmt="-f="+"$"+"{db:Status-Abbrev} "+"$"+"{Version}"
-        q=run(["dpkg-query","-W",fmt,"libpulse0:amd64"],root,e,
-              bounded_time(deadline,10),True,accepted=(0,1)).decode("ascii","replace").strip()
-        if q!="ii "+PULSE:
-            need(q in ("","un "),"libpulse_state_invalid")
+        raw_query=run(["dpkg-query","-W",PULSE_QUERY_FORMAT,"libpulse0:amd64"],
+                      root,e,bounded_time(deadline,10),True,accepted=(0,1))
+        state=libpulse_query_state(raw_query)
+        if state!="installed_exact":
+            need(state=="absent","libpulse_state_invalid")
             run(["sudo","-n","apt-get","update"],root,e,bounded_time(deadline,180))
             run(["sudo","-n","apt-get","install","-y","--no-install-recommends",
                  "--no-upgrade","--no-remove","libpulse0:amd64="+PULSE],
                 root,e,bounded_time(deadline,180))
-            verified=run(["dpkg-query","-W",fmt,"libpulse0:amd64"],root,e,
-                         bounded_time(deadline,10),True).decode("ascii","replace").strip()
-            need(verified=="ii "+PULSE,"libpulse_postinstall_invalid")
+            verified=run(["dpkg-query","-W",PULSE_QUERY_FORMAT,"libpulse0:amd64"],root,e,
+                         bounded_time(deadline,10),True)
+            need(libpulse_query_state(verified)=="installed_exact",
+                 "libpulse_postinstall_invalid")
         emu=install_emulator(root,sdk,task,e,deadline)
         official=verify_official_image_manifest(deadline)
         image=sdkroot/"system-images/android-35/default/x86_64"

@@ -540,19 +540,18 @@ export async function inspectWindowsAuthenticode(artifactPath) {
     powershellPath,
     [
       '-NoLogo', '-NoProfile', '-NonInteractive',
-      '-Command', '-',
+      '-EncodedCommand', Buffer.from("$ProgressPreference = 'SilentlyContinue'\n" + inspectorSource, 'utf16le').toString('base64'),
     ],
     {
       encoding: 'utf8',
-      // Windows PowerShell stdin buffers a final compound statement until a
-      // blank line terminates it. Flush the JSON command without changing policy.
-      input: inspectorSource + '\n',
+      // Execute the exact inspector as one script. Line-at-a-time stdin can
+      // continue after a terminating command error and emit partial JSON.
       timeout: 30_000,
       windowsHide: true,
       env: { ...process.env, SUPERMEGA_AUTHENTICODE_TARGET: artifactPath },
     },
   )
-  if (result.error || result.status !== 0 || !result.stdout?.trim()) {
+  if (result.error || result.status !== 0 || result.stderr?.trim() || !result.stdout?.trim()) {
     fail('database_rehearsal_authenticode_inspection_failed')
   }
   const observation = parseJsonEvidence(
