@@ -287,9 +287,10 @@ void main() {
     await shop.main();
     final startNew = find.bySemanticsIdentifier('shop.setup.start-new');
     await waitFor(startNew);
-    await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
-      DeviceOrientation.portraitUp,
-    ]);
+    // Defer to the disposable tablet's real display rotation. The host accepts
+    // only these two fixed phase markers; measured view assertions stay below.
+    await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[]);
+    debugPrint('SUPERMEGA_TABLET_ROTATE_V1:setup_portrait');
     final portraitViewport = await waitForOrientation(
       startNew,
       landscape: false,
@@ -379,9 +380,7 @@ void main() {
       expect(find.byKey(const ValueKey('shop-cart-sheet')), findsNothing);
     }
 
-    await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
-      DeviceOrientation.landscapeLeft,
-    ]);
+    debugPrint('SUPERMEGA_TABLET_ROTATE_V1:basket_landscape');
     final landscapeViewport = await waitForOrientation(
       productRow,
       landscape: true,

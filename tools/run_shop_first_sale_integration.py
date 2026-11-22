@@ -5,14 +5,14 @@ import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="ea6eb464a80714552f2ee8b70b9b0b0fe8b606e0"
-BASE_TREE="69f4f9ff8054af370c0fe527f7e96990517a0206"
+BASE="3f0e34bd74bc2cda3cddb3927d4cd020c303778c"
+BASE_TREE="bee54320902ba3ab8a4f3dc458e76b07c07812c7"
 BASE_NATIVE_TREE="e3aa080b12880380274087c6c6fc042ef1ada348"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
 TEST=APP/"integration_test/first_sale_persistence_test.dart"
-TEST_SHA="60ceb100cc9de86db1691c43fc93ef336f17f9f67b84cd433fec1ea69e479576"
+TEST_SHA="50b0905164fe7f8c54636802fc5a2c9a69e1b0621f97adac84f33a9b031df52e"
 PUB=APP/"pubspec.yaml"
 PUB_SHA="228f2c2b2d1478d0546a80dbedf4c4393dd8d6700f01ff350b6ebe58a68c1f8a"
 LOCK=APP/"pubspec.lock"
@@ -73,6 +73,7 @@ REPORT_KEYS={
 }
 ALLOWED_CHANGED={
   "tools/run_shop_first_sale_integration.py",
+  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
 EMU_SIZE=350068887
@@ -239,6 +240,7 @@ CHILD_DIAGNOSTIC_OPERATIONS=frozenset((
     "adb_read_font_scale","flutter_drive",
     "adb_read_ignore_orientation","adb_read_fixed_rotation",
     "adb_allow_orientation_requests","adb_unfix_user_rotation",
+    "adb_lock_user_rotation","adb_read_user_rotation",
 ))
 class Refuse(Exception):
     def __init__(self, reason, *, child_failure=None, child_diagnostics=None,
@@ -552,7 +554,183 @@ def stop_group(p, stage="child_process_group_stop"):
     except BaseException:
         record_cleanup_failure(stage,process_uncertain=True)
         raise
-def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capture_pair=False,operation=None):
+TABLET_ROTATION_PREFIX=b"SUPERMEGA_TABLET_ROTATE"
+TABLET_ROTATION_STAGES=((b"setup_portrait",1),(b"basket_landscape",0))
+
+class TabletRotationController:
+    """Two fixed rotations on this run's disposable, natural-landscape tablet."""
+    def __init__(self,adb,serial,root,env,display):
+        need(serial=="emulator-5554" and type(display) is dict and
+             display=={"physicalWidth":2560,"physicalHeight":1600,
+                       "densityDpi":320,"fontScale":1.3},
+             "tablet_user_rotation_profile_invalid")
+        self.adb=str(adb); self.serial=serial; self.root=root; self.env=env
+        self.pending={"stdout":bytearray(),"stderr":bytearray()}
+        self.completed=[]
+
+    def feed(self,channel,chunk,deadline,*,owned_child):
+        need(channel in ("stdout","stderr") and type(chunk) is bytes,
+             "tablet_rotation_stream_invalid")
+        pending=self.pending[channel]
+        pending.extend(chunk)
+        need(len(pending)<=OUTPUT_LIMIT,"tablet_rotation_stream_limit")
+        while b"\n" in pending:
+            line,_,rest=pending.partition(b"\n")
+            pending[:]=rest
+            self._line(channel,bytes(line).removesuffix(b"\r"),deadline,owned_child)
+
+    def _line(self,channel,line,deadline,owned_child):
+        if TABLET_ROTATION_PREFIX not in line: return
+        need(channel=="stdout","tablet_rotation_wrong_channel")
+        need(owned_child.poll() is None,"tablet_rotation_child_not_running")
+        # Flutter forwards app debugPrint through its fixed logcat prefix.
+        # Child text selects only one of these two literals, never command args.
+        match=re.fullmatch(rb"(?:I/flutter\s*\(\s*[0-9]+\): )?"
+                           rb"SUPERMEGA_TABLET_ROTATE_V1:(setup_portrait|basket_landscape)",line)
+        need(match is not None,"tablet_rotation_marker_invalid")
+        index=len(self.completed)
+        need(index<len(TABLET_ROTATION_STAGES) and
+             match.group(1)==TABLET_ROTATION_STAGES[index][0],
+             "tablet_rotation_marker_order")
+        stage,rotation=TABLET_ROTATION_STAGES[index]
+        command=[self.adb,"-s",self.serial,"shell","wm","user-rotation"]
+        setter=run([*command,"lock",str(rotation)],self.root,self.env,
+                   bounded_time(deadline,5),True,operation="adb_lock_user_rotation")
+        need(type(setter) is bytes and len(setter)<=128 and not setter.strip(),
+             "tablet_rotation_setter_output_invalid")
+        need(owned_child.poll() is None,"tablet_rotation_child_not_running")
+        readback=run(command,self.root,self.env,bounded_time(deadline,5),True,
+                     operation="adb_read_user_rotation")
+        need(type(readback) is bytes and len(readback)<=32 and
+             readback.strip()==b"lock "+str(rotation).encode("ascii"),
+             "tablet_rotation_readback_mismatch")
+        need(owned_child.poll() is None,"tablet_rotation_child_not_running")
+        self.completed.append({"stage":stage.decode("ascii"),"rotation":rotation,
+                               "readbackVerified":True})
+        RUN_PROGRESS["tabletUserRotation"]=[dict(row) for row in self.completed]
+
+    def finish(self,deadline):
+        for channel,pending in self.pending.items():
+            if pending:
+                need(TABLET_ROTATION_PREFIX not in pending,
+                     "tablet_rotation_marker_unterminated")
+                pending.clear()
+        need(len(self.completed)==2,"tablet_rotation_markers_missing")
+        return [dict(row) for row in self.completed]
+
+def run_tablet_user_rotation_tests():
+    saved_run=globals()["run"]; saved_progress=dict(RUN_PROGRESS)
+    calls=[]; cases=0; failure_mode=None
+    display={"physicalWidth":2560,"physicalHeight":1600,"densityDpi":320,"fontScale":1.3}
+    class LiveChild:
+        def poll(self): return None
+    class ExitedChild:
+        def poll(self): return 0
+    live_child=LiveChild()
+    def make(): return TabletRotationController(Path("/fixed/adb"),"emulator-5554",Path("/fixed/repo"),{},dict(display))
+    def fake_run(argv,cwd,env,timeout,capture=False,*,operation=None):
+        calls.append((list(argv),operation,timeout,capture))
+        need(argv[:6]==["/fixed/adb","-s","emulator-5554","shell","wm","user-rotation"]
+             and 0<timeout<=5 and capture,"offline_rotation_fixed_command")
+        if operation=="adb_lock_user_rotation":
+            need(argv[6:] in (["lock","1"],["lock","0"]),"offline_rotation_fixed_setter")
+            if failure_mode=="setter_error": raise Refuse("synthetic_setter_failure")
+            return b"unexpected" if failure_mode=="setter_output" else b""
+        need(operation=="adb_read_user_rotation" and len(argv)==6,"offline_rotation_fixed_query")
+        if failure_mode=="query_error": raise Refuse("synthetic_query_failure")
+        value=b"lock "+calls[-2][0][-1].encode("ascii")+b"\n"
+        return {"free":b"free\n","wrong":b"lock 3\n","extra":value+b"private", "duplicate":value+value,
+                "oversize":b"x"*33,"binary":b"\xff","type":"lock 1"}.get(failure_mode,value)
+    def reject(action,reason):
+        nonlocal cases
+        try: action()
+        except Refuse as error: need(str(error)==reason,"offline_rotation_wrong_reason")
+        else: raise Refuse("offline_rotation_expected_refusal")
+        cases+=1
+    try:
+        globals()["run"]=fake_run
+        marker=b"SUPERMEGA_TABLET_ROTATE_V1:setup_portrait\n"
+        landscape=b"I/flutter (123): SUPERMEGA_TABLET_ROTATE_V1:basket_landscape\r\n"
+        # All stdout split positions, including split marker/version/stage/newline.
+        for split in range(len(marker)+1):
+            calls.clear(); controller=make(); deadline=time.monotonic()+30
+            controller.feed("stdout",marker[:split],deadline,owned_child=live_child)
+            controller.feed("stdout",marker[split:],deadline,owned_child=live_child)
+            for byte in landscape: controller.feed("stdout",bytes((byte,)),deadline,owned_child=live_child)
+            result=controller.finish(deadline)
+            need([r["rotation"] for r in result]==[1,0] and len(calls)==4,
+                 "offline_rotation_split_marker")
+            cases+=1
+        calls.clear(); controller=make(); deadline=time.monotonic()+30
+        controller.feed("stdout",b"x"*8192+b"\nordinary\n"+marker+landscape,deadline,owned_child=live_child)
+        controller.feed("stderr",b"ordinary stderr\n",deadline,owned_child=live_child)
+        need(len(controller.finish(deadline))==2 and len(calls)==4,"offline_rotation_final_line")
+        cases+=1
+        for fragment in (marker.rstrip(),marker+landscape.rstrip()):
+            calls.clear(); controller=make(); controller.feed("stdout",fragment,deadline,owned_child=live_child)
+            count=len(calls)
+            reject(lambda:controller.finish(deadline),"tablet_rotation_marker_unterminated")
+            need(len(calls)==count,"offline_rotation_no_eof_commands")
+        calls.clear(); controller=make()
+        reject(lambda:controller.feed("stdout",marker,deadline,owned_child=ExitedChild()),"tablet_rotation_child_not_running")
+        need(not calls,"offline_rotation_no_post_exit_commands")
+        for after in (1,2):
+            class ExitsDuringRotation:
+                def poll(self): return 0 if len(calls)>=after else None
+            calls.clear(); controller=make()
+            reject(lambda:controller.feed("stdout",marker,deadline,owned_child=ExitsDuringRotation()),
+                   "tablet_rotation_child_not_running")
+            need(len(calls)==after and not controller.completed,"offline_rotation_exit_during_commands")
+        for bad in (b"SUPERMEGA_TABLET_ROTATE_V2:setup_portrait",b"SUPERMEGA_TABLET_ROTATE_V1:unknown",
+                    marker.rstrip()+b" --shell",b"prefix "+marker.rstrip(),marker.rstrip()+b" ",
+                    b"\x1b[0m"+marker.rstrip()):
+            calls.clear(); controller=make()
+            reject(lambda:controller.feed("stdout",bad+b"\n",deadline,owned_child=live_child),"tablet_rotation_marker_invalid")
+            need(not calls,"offline_rotation_invalid_no_command")
+        for bad_channel in ("stderr",):
+            calls.clear(); controller=make()
+            reject(lambda:controller.feed(bad_channel,marker,deadline,owned_child=live_child),"tablet_rotation_wrong_channel")
+            need(not calls,"offline_rotation_channel_no_command")
+        for initial in (b"",marker,marker+landscape):
+            calls.clear(); controller=make(); controller.feed("stdout",initial,deadline,owned_child=live_child)
+            invalid=landscape if not initial else marker
+            count=len(calls)
+            reject(lambda:controller.feed("stdout",invalid,deadline,owned_child=live_child),"tablet_rotation_marker_order")
+            need(len(calls)==count,"offline_rotation_order_no_extra_command")
+        for initial in (b"",marker):
+            calls.clear(); controller=make(); controller.feed("stdout",initial,deadline,owned_child=live_child)
+            reject(lambda:controller.finish(deadline),"tablet_rotation_markers_missing")
+        for mode,reason in (("setter_error","synthetic_setter_failure"),("setter_output","tablet_rotation_setter_output_invalid"),
+                            ("query_error","synthetic_query_failure"),("free","tablet_rotation_readback_mismatch"),
+                            ("wrong","tablet_rotation_readback_mismatch"),("extra","tablet_rotation_readback_mismatch"),
+                            ("duplicate","tablet_rotation_readback_mismatch"),("oversize","tablet_rotation_readback_mismatch"),
+                            ("binary","tablet_rotation_readback_mismatch"),("type","tablet_rotation_readback_mismatch")):
+            calls.clear(); controller=make(); failure_mode=mode
+            reject(lambda:controller.feed("stdout",marker,deadline,owned_child=live_child),reason)
+            need(not controller.completed and len(calls)<3,"offline_rotation_failed_not_completed")
+        failure_mode=None
+        for invalid_display in ({**display,"physicalWidth":1600,"physicalHeight":2560},
+                                {**display,"densityDpi":240},{**display,"fontScale":1.0},
+                                {**display,"physicalWidth":2561},{**display,"extra":True}):
+            reject(lambda:TabletRotationController(Path("/fixed/adb"),"emulator-5554",Path("/fixed/repo"),{},invalid_display),
+                   "tablet_user_rotation_profile_invalid")
+        reject(lambda:TabletRotationController(Path("/fixed/adb"),"physical-device",Path("/fixed/repo"),{},display),
+               "tablet_user_rotation_profile_invalid")
+        controller=make()
+        reject(lambda:controller.feed("stdout","private",deadline,owned_child=live_child),"tablet_rotation_stream_invalid")
+        reject(lambda:controller.feed("other",marker,deadline,owned_child=live_child),"tablet_rotation_stream_invalid")
+        reject(lambda:controller.feed("stdout",b"x"*(OUTPUT_LIMIT+1),deadline,owned_child=live_child),"tablet_rotation_stream_limit")
+        reject(lambda:saved_run(["never-spawn"],Path("."),{},tablet_rotation=controller),
+               "tablet_rotation_controller_invalid")
+        return cases
+    finally:
+        globals()["run"]=saved_run
+        RUN_PROGRESS.clear(); RUN_PROGRESS.update(saved_progress)
+
+def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capture_pair=False,operation=None,tablet_rotation=None):
+    if tablet_rotation is not None:
+        need(type(tablet_rotation) is TabletRotationController and operation=="flutter_drive"
+             and capture and capture_pair,"tablet_rotation_controller_invalid")
     if operation is not None:
         need(type(operation) is str and operation in CHILD_DIAGNOSTIC_OPERATIONS,
              "child_operation_invalid")
@@ -605,6 +783,9 @@ def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capt
                                 raise cleanup_failure_refusal(primary,operation=operation) from None
                             raise primary
                         key.data.extend(chunk)
+                        if tablet_rotation is not None:
+                            tablet_rotation.feed("stdout" if key.data is out else "stderr",chunk,deadline,
+                                                 owned_child=p)
             p.wait(timeout=max(0.1,deadline-time.monotonic()))
         else:
             p.wait(timeout=max(0.1,deadline-time.monotonic()))
@@ -647,6 +828,7 @@ def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capt
             if stream is not None and not stream.closed: stream.close()
     if p.returncode not in accepted:
         raise child_failed_refusal(operation,p.returncode,stdout=bytes(out),stderr=bytes(err))
+    if tablet_rotation is not None: tablet_rotation.finish(deadline)
     if capture_pair: return bytes(out),bytes(err)
     return bytes(out) if capture else b""
 
@@ -1896,6 +2078,7 @@ def run_self_tests():
         except Refuse as error: need(str(error)==reason,"offline_fixture_wrong_reason")
         else: raise Refuse("offline_fixture_expected_refusal")
         cases+=1
+    cases+=run_tablet_user_rotation_tests()
     fs_cases=run_emulator_metadata_filesystem_tests()
     need(fs_cases==6,"offline_emulator_metadata_fs_case_count")
     cases+=fs_cases
@@ -2565,8 +2748,8 @@ def configure_tablet_rotation(adb,serial,root,e,deadline):
         return parse_tablet_rotation_policy(ignore,fixed)
     before=read_policy()
     RUN_PROGRESS["tabletRotationPolicy"]={"before":before,"after":None}
-    # Let the test's app orientation requests rotate the real display rather
-    # than produce a letterboxed portrait window on a fixed landscape display.
+    # Permit real display rotation; the test defers its app orientation to
+    # the two fixed host-controlled user rotations on this disposable tablet.
     run([str(adb),"-s",serial,"shell","wm","set-ignore-orientation-request","false"],
         root,e,bounded_time(deadline,10),operation="adb_allow_orientation_requests")
     run([str(adb),"-s",serial,"shell","wm","fixed-to-user-rotation","disabled"],
@@ -2581,6 +2764,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
     RUN_PROGRESS["currentLocale"]=locale
     RUN_PROGRESS.pop("tabletDisplay",None)
     RUN_PROGRESS.pop("tabletRotationPolicy",None)
+    RUN_PROGRESS.pop("tabletUserRotation",None)
     set_phase("avd_prepare")
     name="shopqa"+uuid.uuid4().hex[:12]
     avd=task/"avds"/locale
@@ -2640,6 +2824,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
              "capacity_before_test")
         set_phase("test_running")
         RUN_PROGRESS["attemptedLocales"].append(locale)
+        tablet_rotation=TabletRotationController(adb,serial,root,e,tablet_display)
         stdout_bytes,stderr_bytes=run(["flutter","drive","--no-pub",
           flutter_driver_package_argument(root),
           "--device-id="+serial,"--driver="+str(driver),
@@ -2649,7 +2834,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
           "--dart-define=SHOP_AVD_PROFILE_ID="+TABLET_DEVICE_ID,
           "--dart-define=SHOP_FIRST_SALE_LOCALE="+locale],
           root/APP,e,min(6*60,max(1,deadline-time.monotonic())),
-          capture=True,capture_pair=True,operation="flutter_drive")
+          capture=True,capture_pair=True,operation="flutter_drive",tablet_rotation=tablet_rotation)
         report=parse_report(stdout_bytes,stderr_bytes,locale)
         RUN_PROGRESS["completedLocales"].append(locale)
         RUN_PROGRESS["currentLocale"]=None
