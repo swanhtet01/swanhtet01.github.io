@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Guarded, one-shot first-sale integration runner; not release evidence."""
 import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signal, socket, stat, subprocess, sys, tempfile, time, uuid, zipfile
+import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="8d12468f4c460e8402350faf14d636fa01edcf7f"
-BASE_TREE="cc2f5cbdf32aeefa2e56c38c22139f1cf2b20f25"
-BASE_NATIVE_TREE="e783fe910fc381a4e93818088a27537c37ff8ffc"
+BASE="ea6eb464a80714552f2ee8b70b9b0b0fe8b606e0"
+BASE_TREE="69f4f9ff8054af370c0fe527f7e96990517a0206"
+BASE_NATIVE_TREE="e3aa080b12880380274087c6c6fc042ef1ada348"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -71,7 +72,6 @@ REPORT_KEYS={
  "tabletEvidence"
 }
 ALLOWED_CHANGED={
-  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
   "tools/run_shop_first_sale_integration.py",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
@@ -99,8 +99,106 @@ EMU_SOURCE_PROPERTIES=(
 )
 PULSE="1:16.1+dfsg1-2ubuntu10.1"
 PULSE_QUERY_FORMAT="-f="+"$"+"{db:Status-Abbrev}\t"+"$"+"{Version}"
-RUN_PROGRESS={"currentLocale":None,"phase":"not_started","attemptedLocales":[],"completedLocales":[],"cleanupProven":True}
+RUN_PROGRESS={"currentLocale":None,"phase":"not_started","attemptedLocales":[],"completedLocales":[],"cleanupProven":True,"cleanupFailureStages":[]}
 CANCEL_PENDING=False
+
+OWNED_CLEANUP_STAGES=frozenset((
+    "child_process_group_stop","emulator_process_group_stop",
+    "adb_server_stop","adb_server_port_still_open","adb_server_port_check",
+    "kvm_acl_close","build_identity_restore","task_directory_remove",
+    "checkout_clean_check","unknown_cleanup",
+))
+PRIMARY_FAILURE_CODES=frozenset(("child_failed","child_timeout","child_output_limit"))
+
+def record_cleanup_failure(stage, *, process_uncertain=False):
+    if type(stage) is not str or stage not in OWNED_CLEANUP_STAGES:
+        stage="unknown_cleanup"
+    stages=RUN_PROGRESS.get("cleanupFailureStages")
+    if type(stages) is not list:
+        stages=[]
+        RUN_PROGRESS["cleanupFailureStages"]=stages
+    if stage not in stages: stages.append(stage)
+    RUN_PROGRESS["cleanupProven"]=False
+    if process_uncertain:
+        RUN_PROGRESS["ownedChildCleanupUncertain"]=True
+
+def adb_server_port_closed(port):
+    try:
+        connection=socket.create_connection(("127.0.0.1",port),timeout=.5)
+    except ConnectionRefusedError:
+        return True
+    except BaseException:
+        record_cleanup_failure("adb_server_port_check")
+        return False
+    try:
+        connection.close()
+    except BaseException:
+        record_cleanup_failure("adb_server_port_check")
+        return False
+    record_cleanup_failure("adb_server_port_still_open")
+    return False
+
+def run_adb_server_port_check_tests():
+    saved_connect=socket.create_connection
+    saved_progress=dict(RUN_PROGRESS)
+    saved_progress["cleanupFailureStages"]=list(
+        RUN_PROGRESS.get("cleanupFailureStages",[]))
+    cases=0
+    class FakeSocket:
+        def __init__(self): self.closed=False
+        def close(self): self.closed=True
+    try:
+        fixtures=(
+            (ConnectionRefusedError("private-refused"),True,[]),
+            (TimeoutError("private-timeout"),False,["adb_server_port_check"]),
+            (PermissionError("private-permission"),False,["adb_server_port_check"]),
+            (OSError(errno.EHOSTUNREACH,"private-host"),False,["adb_server_port_check"]),
+            (ConnectionResetError("private-reset"),False,["adb_server_port_check"]),
+            (KeyboardInterrupt("private-interrupt"),False,["adb_server_port_check"]),
+        )
+        for failure,expected_closed,expected_stages in fixtures:
+            RUN_PROGRESS.clear()
+            RUN_PROGRESS.update({"cleanupProven":True,"cleanupFailureStages":[]})
+            observed=[]
+            def fail_connect(address,timeout):
+                observed.append((address,timeout))
+                raise failure
+            socket.create_connection=fail_connect
+            closed=adb_server_port_closed(15000)
+            need(closed is expected_closed and
+                 observed==[(("127.0.0.1",15000),.5)] and
+                 RUN_PROGRESS["cleanupFailureStages"]==expected_stages and
+                 RUN_PROGRESS["cleanupProven"] is expected_closed and
+                 "private-" not in json.dumps(RUN_PROGRESS),
+                 "offline_adb_server_port_error_classification")
+            cases+=1
+        RUN_PROGRESS.clear()
+        RUN_PROGRESS.update({"cleanupProven":True,"cleanupFailureStages":[]})
+        observed=[]
+        fake_socket=FakeSocket()
+        def open_connect(address,timeout):
+            observed.append((address,timeout))
+            return fake_socket
+        socket.create_connection=open_connect
+        closed=adb_server_port_closed(15000)
+        need(closed is False and fake_socket.closed and
+             observed==[(("127.0.0.1",15000),.5)] and
+             RUN_PROGRESS["cleanupFailureStages"]==["adb_server_port_still_open"] and
+             RUN_PROGRESS["cleanupProven"] is False,
+             "offline_adb_server_port_open_classification")
+        cases+=1
+    finally:
+        socket.create_connection=saved_connect
+        RUN_PROGRESS.clear()
+        RUN_PROGRESS.update(saved_progress)
+    return cases
+
+def mark_cleanup_proven():
+    if RUN_PROGRESS.get("cleanupFailureStages"):
+        RUN_PROGRESS["cleanupProven"]=False
+        return False
+    RUN_PROGRESS["cleanupProven"]=True
+    return True
 
 INTERNAL_FAILURE_PHASES=frozenset((
  "not_started","host_preflight","capacity_preflight","task_create","task_environment",
@@ -143,9 +241,64 @@ CHILD_DIAGNOSTIC_OPERATIONS=frozenset((
     "adb_allow_orientation_requests","adb_unfix_user_rotation",
 ))
 class Refuse(Exception):
-    def __init__(self, reason, *, child_failure=None):
+    def __init__(self, reason, *, child_failure=None, child_diagnostics=None,
+                 primary_failure=None, cleanup_failure_stages=()):
         super().__init__(reason)
         self.child_failure=child_failure
+        self.child_diagnostics=child_diagnostics
+        self.primary_failure=primary_failure
+        self.cleanup_failure_stages=tuple(cleanup_failure_stages)
+
+def primary_failure_facts(error, *, operation=None, child_exit_code=None):
+    if isinstance(error,Refuse) and error.primary_failure is not None:
+        return dict(error.primary_failure)
+    if child_exit_code is not None:
+        facts={"kind":"child_exit","exitCode":child_exit_code}
+        if operation in CHILD_DIAGNOSTIC_OPERATIONS: facts["operation"]=operation
+        return facts
+    if error is None:
+        return {"kind":"no_prior_failure"}
+    if isinstance(error,subprocess.TimeoutExpired) or (
+        isinstance(error,Refuse) and str(error)=="child_timeout"
+    ):
+        facts={"kind":"child_timeout"}
+        if operation in CHILD_DIAGNOSTIC_OPERATIONS: facts["operation"]=operation
+        return facts
+    if isinstance(error,Refuse):
+        reason=str(error)
+        return {"kind":"runner_refusal",
+                "reasonCode":reason if reason in PRIMARY_FAILURE_CODES else "runner_refusal"}
+    evidence=internal_failure_evidence(error)
+    return {"kind":"internal_failure","phase":evidence["phase"],
+            "exceptionCategory":evidence["exceptionCategory"],"errno":evidence["errno"]}
+
+def cleanup_failure_refusal(error=None, *, operation=None, child_exit_code=None,
+                            child_diagnostics=None):
+    if isinstance(error,Refuse) and error.primary_failure is not None:
+        primary=dict(error.primary_failure)
+    else:
+        primary=primary_failure_facts(error,operation=operation,
+                                      child_exit_code=child_exit_code)
+    stages=[]
+    if isinstance(error,Refuse):
+        stages.extend(error.cleanup_failure_stages)
+    stages.extend(RUN_PROGRESS.get("cleanupFailureStages",[]))
+    safe_stages=[]
+    for stage in stages:
+        if type(stage) is str and stage in OWNED_CLEANUP_STAGES and stage not in safe_stages:
+            safe_stages.append(stage)
+    if not safe_stages:
+        record_cleanup_failure("unknown_cleanup")
+        safe_stages=["unknown_cleanup"]
+    RUN_PROGRESS["cleanupFailureStages"]=safe_stages
+    RUN_PROGRESS["cleanupProven"]=False
+    child=error.child_failure if isinstance(error,Refuse) else None
+    diagnostics=(error.child_diagnostics if isinstance(error,Refuse) else None)
+    if diagnostics is None: diagnostics=child_diagnostics
+    return Refuse("owned_cleanup_unproven",child_failure=child,
+                  child_diagnostics=diagnostics,primary_failure=primary,
+                  cleanup_failure_stages=safe_stages)
+
 def need(ok, reason):
     if not ok: raise Refuse(reason)
 def child_failure_record(operation, exit_code):
@@ -354,6 +507,15 @@ def child_failed_refusal(operation, exit_code, *, stdout=None, stderr=None):
         child["flutterDriveDiagnostics"]=flutter_drive_diagnostics(stdout,stderr)
     return Refuse("child_failed",child_failure=child)
 
+def captured_child_diagnostics(operation,stdout,stderr):
+    if operation=="avd_create":
+        return {"operation":operation,
+                "avdDiagnostics":avd_create_diagnostics(stdout,stderr)}
+    if operation=="flutter_drive":
+        return {"operation":operation,
+                "flutterDriveDiagnostics":flutter_drive_diagnostics(stdout,stderr)}
+    return None
+
 def libpulse_query_state(raw):
     expected=("ii \t"+PULSE).encode("ascii")
     if raw==expected: return "installed_exact"
@@ -367,25 +529,29 @@ def file_sha(path):
     with open(path,"rb") as f:
         for b in iter(lambda:f.read(1024*1024),b""): h.update(b)
     return h.hexdigest()
-def stop_group(p):
-    pg=p.pid
-    try: os.killpg(pg,signal.SIGTERM)
-    except ProcessLookupError: pass
-    try: p.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        try: os.killpg(pg,signal.SIGKILL)
+def stop_group(p, stage="child_process_group_stop"):
+    try:
+        pg=p.pid
+        try: os.killpg(pg,signal.SIGTERM)
         except ProcessLookupError: pass
-        p.wait(timeout=5)
-    end=time.monotonic()+5
-    while True:
-        try: os.killpg(pg,0)
-        except ProcessLookupError: return
-        except PermissionError: pass
-        if time.monotonic()>=end: break
-        try: os.killpg(pg,signal.SIGKILL)
-        except ProcessLookupError: return
-        time.sleep(.05)
-    raise Refuse("owned_process_group_remains")
+        try: p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try: os.killpg(pg,signal.SIGKILL)
+            except ProcessLookupError: pass
+            p.wait(timeout=5)
+        end=time.monotonic()+5
+        while True:
+            try: os.killpg(pg,0)
+            except ProcessLookupError: return
+            except PermissionError: pass
+            if time.monotonic()>=end: break
+            try: os.killpg(pg,signal.SIGKILL)
+            except ProcessLookupError: return
+            time.sleep(.05)
+        raise Refuse("owned_process_group_remains")
+    except BaseException:
+        record_cleanup_failure(stage,process_uncertain=True)
+        raise
 def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capture_pair=False,operation=None):
     if operation is not None:
         need(type(operation) is str and operation in CHILD_DIAGNOSTIC_OPERATIONS,
@@ -397,15 +563,16 @@ def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capt
       stderr=subprocess.PIPE if capture else subprocess.DEVNULL,
       start_new_session=True,close_fds=True)
     out=bytearray(); err=bytearray(); total=0; deadline=time.monotonic()+timeout
-    stopped=False
+    stopped=False; cleanup_failed=False; cleanup_exception=None; process_completed=False
     def cleanup():
-        nonlocal stopped
+        nonlocal stopped,cleanup_failed,cleanup_exception
         if stopped: return
         stopped=True
-        try: stop_group(p)
-        except BaseException:
-            RUN_PROGRESS["cleanupProven"]=False
-            RUN_PROGRESS["ownedChildCleanupUncertain"]=True
+        try: stop_group(p,"child_process_group_stop")
+        except BaseException as error:
+            cleanup_failed=True
+            cleanup_exception=error
+            record_cleanup_failure("child_process_group_stop",process_uncertain=True)
             raise
     try:
         if input_data is not None:
@@ -430,20 +597,50 @@ def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capt
                             sel.unregister(key.fileobj); key.fileobj.close(); continue
                         total+=len(chunk)
                         if total>OUTPUT_LIMIT:
-                            cleanup()
-                            raise Refuse("child_output_limit")
+                            primary=Refuse("child_output_limit",
+                              child_diagnostics=captured_child_diagnostics(
+                                operation,bytes(out),bytes(err)))
+                            try: cleanup()
+                            except BaseException:
+                                raise cleanup_failure_refusal(primary,operation=operation) from None
+                            raise primary
                         key.data.extend(chunk)
             p.wait(timeout=max(0.1,deadline-time.monotonic()))
         else:
             p.wait(timeout=max(0.1,deadline-time.monotonic()))
+        process_completed=True
         cleanup()
     except subprocess.TimeoutExpired:
+        if cleanup_failed:
+            if process_completed and p.returncode not in accepted:
+                primary=child_failed_refusal(operation,p.returncode,
+                    stdout=bytes(out),stderr=bytes(err))
+                raise cleanup_failure_refusal(primary,operation=operation) from None
+            primary=None if process_completed else Refuse("child_timeout")
+            diagnostics=(captured_child_diagnostics(operation,bytes(out),bytes(err))
+                         if process_completed else None)
+            raise cleanup_failure_refusal(primary,operation=operation,
+                child_exit_code=p.returncode if process_completed else None,
+                child_diagnostics=diagnostics) from None
+        primary=Refuse("child_timeout",
+          child_diagnostics=captured_child_diagnostics(
+            operation,bytes(out),bytes(err)))
         try: cleanup()
-        except Exception: raise Refuse("owned_cleanup_unproven") from None
-        raise Refuse("child_timeout") from None
-    except BaseException:
+        except BaseException:
+            raise cleanup_failure_refusal(primary,operation=operation) from None
+        raise primary from None
+    except BaseException as error:
         try: cleanup()
-        except Exception: raise Refuse("owned_cleanup_unproven") from None
+        except BaseException: pass
+        if cleanup_failed:
+            if process_completed and error is cleanup_exception:
+                if p.returncode not in accepted:
+                    primary=child_failed_refusal(operation,p.returncode,
+                        stdout=bytes(out),stderr=bytes(err))
+                    raise cleanup_failure_refusal(primary,operation=operation) from None
+                raise cleanup_failure_refusal(None,operation=operation,
+                    child_exit_code=p.returncode) from None
+            raise cleanup_failure_refusal(error,operation=operation) from None
         raise
     finally:
         for stream in (p.stdin,p.stdout,p.stderr):
@@ -480,6 +677,265 @@ def run_child_diagnostic_process_tests():
                Path.cwd(),{},5,operation="avd_create")
     need(result==b"synthetic-success\n","offline_child_capture_success_changed")
     return cases+1
+
+def run_cleanup_failure_tests():
+    # Synthetic process objects only; no OS process, app, AVD, or SDK invocation.
+    saved_progress=dict(RUN_PROGRESS)
+    saved_progress["cleanupFailureStages"]=list(RUN_PROGRESS.get("cleanupFailureStages",[]))
+    saved_popen=subprocess.Popen
+    saved_stop=stop_group
+    saved_selector=selectors.DefaultSelector
+    saved_set_blocking=os.set_blocking
+    saved_read=os.read
+    saved_monotonic=time.monotonic
+    saved_output_limit=OUTPUT_LIMIT
+    cases=0
+    def reset_progress():
+        RUN_PROGRESS.clear()
+        RUN_PROGRESS.update({"currentLocale":None,"phase":"test_running",
+          "attemptedLocales":["en"],"completedLocales":[],"cleanupProven":True,
+          "cleanupFailureStages":[]})
+    class FixtureProcess:
+        def __init__(self,result):
+            self.pid=123456
+            self.result=result
+            self.returncode=None
+            self.stdin=self.stdout=self.stderr=None
+        def wait(self,timeout=None):
+            if self.result=="timeout":
+                raise subprocess.TimeoutExpired(["synthetic-child"],timeout)
+            self.returncode=self.result
+            return self.result
+        def poll(self): return self.returncode
+    class FixtureStream:
+        def __init__(self,fd): self.fd=fd; self.closed=False
+        def fileno(self): return self.fd
+        def close(self): self.closed=True
+    class FixtureCaptureProcess:
+        def __init__(self):
+            self.pid=123457; self.returncode=None; self.stdin=None
+            self.stdout=FixtureStream(101); self.stderr=FixtureStream(102)
+        def poll(self): return self.returncode
+        def wait(self,timeout=None): raise AssertionError("synthetic_capture_should_timeout")
+    class FixtureKey:
+        def __init__(self,stream,data):
+            self.fd=stream.fileno(); self.fileobj=stream; self.data=data
+    class FixtureSelector:
+        def __init__(self,events): self.events=list(events); self.entries={}
+        def __enter__(self): return self
+        def __exit__(self,*_args): return False
+        def register(self,stream,_event,data):
+            self.entries[stream.fileno()]=FixtureKey(stream,data)
+        def get_map(self): return self.entries
+        def select(self,_timeout):
+            if not self.events: return []
+            fd=self.events.pop(0)
+            return [(self.entries[fd],selectors.EVENT_READ)]
+        def unregister(self,stream): self.entries.pop(stream.fileno(),None)
+    def install_capture_fixture(raw_chunks,events,clock_values):
+        captured_process=FixtureCaptureProcess()
+        remaining={101:list(raw_chunks.get(101,[])),102:list(raw_chunks.get(102,[]))}
+        subprocess.Popen=lambda *_args,**_kwargs:captured_process
+        globals()["stop_group"]=lambda *_args,**_kwargs:(
+            (_ for _ in ()).throw(RuntimeError("PRIVATE_STOP_DETAIL")))
+        selectors.DefaultSelector=lambda:FixtureSelector(events)
+        os.set_blocking=lambda *_args:None
+        def fake_read(fd,_size):
+            values=remaining[fd]
+            return values.pop(0) if values else b""
+        os.read=fake_read
+        ticks=iter(clock_values)
+        time.monotonic=lambda:next(ticks)
+        return captured_process
+    try:
+        reset_progress()
+        timeout_process=FixtureProcess("timeout")
+        subprocess.Popen=lambda *_args,**_kwargs: timeout_process
+        def failing_stop(_process,stage="child_process_group_stop"):
+            record_cleanup_failure(stage,process_uncertain=True)
+            raise Refuse("owned_process_group_remains")
+        globals()["stop_group"]=failing_stop
+        try:
+            run(["synthetic-child"],Path("."),{},1,operation="flutter_drive")
+        except Refuse as error:
+            need(str(error)=="owned_cleanup_unproven" and
+                 error.primary_failure=={"kind":"child_timeout","operation":"flutter_drive"} and
+                 error.cleanup_failure_stages==("child_process_group_stop",) and
+                 RUN_PROGRESS["cleanupProven"] is False,
+                 "offline_timeout_cleanup_primary_lost")
+        else: raise Refuse("offline_timeout_cleanup_expected_failure")
+        cases+=1
+
+        reset_progress()
+        completed_process=FixtureProcess(0)
+        subprocess.Popen=lambda *_args,**_kwargs: completed_process
+        def timeout_during_stop(_process,stage="child_process_group_stop"):
+            record_cleanup_failure(stage,process_uncertain=True)
+            raise subprocess.TimeoutExpired(["synthetic-stop"],5)
+        globals()["stop_group"]=timeout_during_stop
+        try:
+            run(["synthetic-child"],Path("."),{},1,operation="flutter_drive")
+        except Refuse as error:
+            need(str(error)=="owned_cleanup_unproven" and
+                 error.primary_failure=={"kind":"child_exit","exitCode":0,
+                                         "operation":"flutter_drive"} and
+                 error.cleanup_failure_stages==("child_process_group_stop",) and
+                 RUN_PROGRESS["cleanupProven"] is False,
+                 "offline_lingering_group_cleanup_became_success")
+        else: raise Refuse("offline_lingering_group_expected_failure")
+        cases+=1
+
+        reset_progress()
+        failed_process=FixtureProcess(7)
+        subprocess.Popen=lambda *_args,**_kwargs: failed_process
+        globals()["stop_group"]=lambda *_args,**_kwargs: None
+        try:
+            run(["synthetic-child"],Path("."),{},1,operation="flutter_drive")
+        except Refuse as child_error:
+            need(str(child_error)=="child_failed" and
+                 child_error.child_failure["operation"]=="flutter_drive" and
+                 child_error.child_failure["exitCode"]==7 and
+                 "flutterDriveDiagnostics" in child_error.child_failure,
+                 "offline_child_failure_fixture_invalid")
+            record_cleanup_failure("emulator_process_group_stop",process_uncertain=True)
+            merged=cleanup_failure_refusal(child_error)
+            need(str(merged)=="owned_cleanup_unproven" and
+                 merged.primary_failure=={"kind":"runner_refusal","reasonCode":"child_failed"} and
+                 merged.child_failure==child_error.child_failure and
+                 merged.cleanup_failure_stages==("emulator_process_group_stop",),
+                 "offline_locale_finally_masked_child_failure")
+        else: raise Refuse("offline_child_failure_expected")
+        cases+=1
+
+        reset_progress()
+        for stage in ("emulator_process_group_stop","adb_server_stop",
+                      "adb_server_port_still_open","adb_server_stop"):
+            record_cleanup_failure(stage,process_uncertain=(stage=="emulator_process_group_stop"))
+        merged=cleanup_failure_refusal(Refuse("child_timeout"))
+        need(str(merged)=="owned_cleanup_unproven" and
+             merged.primary_failure=={"kind":"child_timeout"} and
+             merged.cleanup_failure_stages==("emulator_process_group_stop",
+               "adb_server_stop","adb_server_port_still_open") and
+             RUN_PROGRESS["cleanupProven"] is False,
+             "offline_multiple_cleanup_failures_not_sticky")
+        cases+=1
+
+        reset_progress()
+        viewport={"stage":"setup_portrait","physicalWidth":1000,"physicalHeight":1600,
+          "logicalWidth":500.0,"logicalHeight":800.0,"devicePixelRatio":2.0,
+          "textScaleAt14":18.2}
+        secret="PRIVATE_CUSTOMER_TOKEN_DO_NOT_EMIT"
+        raw=(secret.encode("ascii")+b"\n"+
+          b"integration_test/first_sale_persistence_test.dart:286:5\n"+
+          b"SUPERMEGA_TABLET_VIEWPORT_V1:"+json.dumps(viewport,separators=(",",":")).encode())
+        child=child_failed_refusal("flutter_drive",1,stdout=raw,stderr=b"")
+        record_cleanup_failure("adb_server_stop")
+        merged=cleanup_failure_refusal(child)
+        emitted=json.dumps({"reason":str(merged),"primaryFailure":merged.primary_failure,
+          "childFailure":merged.child_failure,
+          "runProgress":{"phase":RUN_PROGRESS.get("phase"),
+                         "cleanupProven":RUN_PROGRESS["cleanupProven"],
+                         "cleanupFailureStages":RUN_PROGRESS["cleanupFailureStages"]}})
+        diagnostic=merged.child_failure["flutterDriveDiagnostics"]
+        need(diagnostic["tabletViewport"]["value"]["logicalWidth"]==500.0 and
+             diagnostic["sourceLocations"]==[{"source":"integration_test","line":286,"column":5}] and
+             secret not in emitted and "first_sale_persistence_test.dart" not in emitted and
+             str(merged)=="owned_cleanup_unproven",
+             "offline_cleanup_failure_lost_numeric_or_emitted_raw_text")
+        cases+=1
+
+        reset_progress()
+        record_cleanup_failure("untrusted-stage-value:"+secret)
+        passed=mark_cleanup_proven()
+        merged=cleanup_failure_refusal(None)
+        emitted=json.dumps({"reason":str(merged),"primaryFailure":merged.primary_failure,
+                           "runProgress":RUN_PROGRESS})
+        need(passed is False and str(merged)=="owned_cleanup_unproven" and
+             RUN_PROGRESS["cleanupProven"] is False and
+             RUN_PROGRESS["cleanupFailureStages"]==["unknown_cleanup"] and
+             secret not in emitted and
+             merged.primary_failure=={"kind":"no_prior_failure"},
+             "offline_unknown_cleanup_must_not_pass")
+        cases+=1
+
+        # Captured bytes are parsed into existing finite diagnostics on timeout;
+        # the synthetic child and selector never own an OS process or file descriptor.
+        reset_progress()
+        viewport={"stage":"setup_portrait","physicalWidth":1000,"physicalHeight":1600,
+          "logicalWidth":500.0,"logicalHeight":800.0,"devicePixelRatio":2.0,
+          "textScaleAt14":18.2}
+        secret="PRIVATE_CUSTOMER_TOKEN_DO_NOT_EMIT"
+        raw=(secret.encode("ascii")+b"\n"+
+          b"integration_test/first_sale_persistence_test.dart:286:5\n"+
+          b"SUPERMEGA_TABLET_VIEWPORT_V1:"+json.dumps(viewport,separators=(",",":")).encode())
+        install_capture_fixture({101:[raw]},[101],(0.0,0.1,2.0))
+        try:
+            run(["synthetic-child"],Path("."),{},1,capture=True,capture_pair=True,
+                operation="flutter_drive")
+        except Refuse as error:
+            encoded=json.dumps({"primaryFailure":error.primary_failure,
+              "childFailure":error.child_failure,"childDiagnostics":error.child_diagnostics,
+              "stages":error.cleanup_failure_stages})
+            diagnostic=error.child_diagnostics["flutterDriveDiagnostics"]
+            need(str(error)=="owned_cleanup_unproven" and
+                 error.primary_failure=={"kind":"child_timeout","operation":"flutter_drive"} and
+                 error.child_failure is None and
+                 error.child_diagnostics["operation"]=="flutter_drive" and
+                 diagnostic["tabletViewport"]["value"]["logicalWidth"]==500.0 and
+                 diagnostic["sourceLocations"]==[{"source":"integration_test","line":286,"column":5}] and
+                 error.cleanup_failure_stages==("child_process_group_stop",) and
+                 RUN_PROGRESS["cleanupProven"] is False and
+                 secret not in encoded and "first_sale_persistence_test.dart" not in encoded,
+                 "offline_timeout_captured_diagnostics_lost_or_raw_text_emitted")
+            wrapped=cleanup_failure_refusal(error,operation="flutter_drive")
+            outer=cleanup_failure_refusal(wrapped,operation="flutter_drive")
+            need(wrapped.primary_failure==error.primary_failure and
+                 wrapped.child_diagnostics==error.child_diagnostics and
+                 wrapped.cleanup_failure_stages==error.cleanup_failure_stages and
+                 outer.primary_failure==error.primary_failure and
+                 outer.child_diagnostics==error.child_diagnostics and
+                 outer.cleanup_failure_stages==error.cleanup_failure_stages,
+                 "offline_cleanup_wrapper_dropped_timeout_diagnostics")
+        else: raise Refuse("offline_timeout_capture_expected_refusal")
+        cases+=1
+
+        # Output-limit handling reports only the already-buffered prefix.
+        reset_progress()
+        saved_limit=OUTPUT_LIMIT
+        globals()["OUTPUT_LIMIT"]=512
+        try:
+            install_capture_fixture({101:[raw,b"X"*512]},[101,101],(0.0,0.1,0.2))
+            try:
+                run(["synthetic-child"],Path("."),{},1,capture=True,capture_pair=True,
+                    operation="flutter_drive")
+            except Refuse as error:
+                encoded=json.dumps({"primaryFailure":error.primary_failure,
+                  "childFailure":error.child_failure,"childDiagnostics":error.child_diagnostics,
+                  "stages":error.cleanup_failure_stages})
+                diagnostic=error.child_diagnostics["flutterDriveDiagnostics"]
+                need(str(error)=="owned_cleanup_unproven" and
+                     error.primary_failure=={"kind":"runner_refusal","reasonCode":"child_output_limit"} and
+                     error.child_failure is None and
+                     diagnostic["tabletViewport"]["value"]["logicalWidth"]==500.0 and
+                     diagnostic["stdoutBytes"]==len(raw) and
+                     error.cleanup_failure_stages==("child_process_group_stop",) and
+                     secret not in encoded and "first_sale_persistence_test.dart" not in encoded,
+                     "offline_output_limit_prefix_diagnostics_unsafe")
+            else: raise Refuse("offline_output_limit_capture_expected_refusal")
+        finally:
+            globals()["OUTPUT_LIMIT"]=saved_limit
+        cases+=1
+        return cases
+    finally:
+        subprocess.Popen=saved_popen
+        globals()["stop_group"]=saved_stop
+        selectors.DefaultSelector=saved_selector
+        os.set_blocking=saved_set_blocking
+        os.read=saved_read
+        time.monotonic=saved_monotonic
+        globals()["OUTPUT_LIMIT"]=saved_output_limit
+        RUN_PROGRESS.clear()
+        RUN_PROGRESS.update(saved_progress)
 
 def git(root,*args):
     return run(["git",*args],root,os.environ,10,True).decode("ascii").strip()
@@ -949,6 +1405,8 @@ def run_self_tests():
         cases+=1
     saved_run=globals()["run"]
     saved_progress=dict(RUN_PROGRESS)
+    saved_progress["cleanupFailureStages"]=list(
+        RUN_PROGRESS.get("cleanupFailureStages",[]))
     expected_rotation_commands=(
         ("get-ignore-orientation-request",), ("fixed-to-user-rotation",),
         ("set-ignore-orientation-request","false"), ("fixed-to-user-rotation","disabled"),
@@ -1273,27 +1731,40 @@ def run_self_tests():
          "offline_avd_diagnostic_operation_scope")
     cases+=1
     saved_progress=dict(RUN_PROGRESS)
+    saved_progress["cleanupFailureStages"]=list(RUN_PROGRESS.get("cleanupFailureStages",[]))
     saved_popen=subprocess.Popen
     saved_stop_group=stop_group
     class CleanupFixtureProcess:
         stdin=None; stdout=None; stderr=None; returncode=1
         def wait(self,timeout=None): return self.returncode
-    def uncertain_stop(_process): raise RuntimeError("private-cleanup-detail")
+    def uncertain_stop(_process,stage="child_process_group_stop"):
+        raise RuntimeError("private-cleanup-detail")
     try:
-        globals()["RUN_PROGRESS"]={**saved_progress,"cleanupProven":True}
+        fixture_progress=dict(saved_progress)
+        fixture_progress["cleanupFailureStages"]=list(
+            saved_progress.get("cleanupFailureStages",[]))
+        globals()["RUN_PROGRESS"]={**fixture_progress,"cleanupProven":True}
         subprocess.Popen=lambda *_args,**_kwargs:CleanupFixtureProcess()
         globals()["stop_group"]=uncertain_stop
         try: run(["source-only-fixture"],Path("."),{},operation="adb_start_server")
-        except RuntimeError: pass
+        except Refuse as error:
+            need(str(error)=="owned_cleanup_unproven" and
+                 error.primary_failure=={"kind":"runner_refusal","reasonCode":"child_failed"} and
+                 error.child_failure=={"operation":"adb_start_server","exitCode":1} and
+                 error.cleanup_failure_stages==("child_process_group_stop",),
+                 "offline_uncertain_cleanup_semantics_invalid")
         else: raise Refuse("offline_uncertain_cleanup_expected_failure")
         need(RUN_PROGRESS.get("cleanupProven") is False and
-             RUN_PROGRESS.get("ownedChildCleanupUncertain") is True,
+             RUN_PROGRESS.get("ownedChildCleanupUncertain") is True and
+             RUN_PROGRESS.get("cleanupFailureStages")==["child_process_group_stop"],
              "offline_uncertain_cleanup_false_pass")
-        globals()["stop_group"]=lambda _process:None
+        globals()["stop_group"]=lambda _process,stage="child_process_group_stop":None
         CleanupFixtureProcess.returncode=0
         run(["source-only-fixture"],Path("."),{},operation="adb_start_server")
-        need(RUN_PROGRESS.get("cleanupProven") is False and
-             RUN_PROGRESS.get("ownedChildCleanupUncertain") is True,
+        need(mark_cleanup_proven() is False and
+             RUN_PROGRESS.get("cleanupProven") is False and
+             RUN_PROGRESS.get("ownedChildCleanupUncertain") is True and
+             RUN_PROGRESS.get("cleanupFailureStages")==["child_process_group_stop"],
              "offline_uncertain_cleanup_cleared_by_later_child")
     finally:
         subprocess.Popen=saved_popen
@@ -1437,6 +1908,12 @@ def run_self_tests():
     home_fs_cases=run_android_home_environment_filesystem_tests()
     need(home_fs_cases==4,"offline_android_home_case_count")
     cases+=home_fs_cases
+    cleanup_cases=run_cleanup_failure_tests()
+    need(cleanup_cases==8,"offline_cleanup_failure_case_count")
+    cases+=cleanup_cases
+    port_cases=run_adb_server_port_check_tests()
+    need(port_cases==7,"offline_adb_server_port_case_count")
+    cases+=port_cases
     print(json.dumps({"schema":"supermega.first_sale_runner_offline.v1",
                       "status":"passed","cases":cases},sort_keys=True,
                      separators=(",",":")))
@@ -2186,23 +2663,29 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
                                      "rotationPolicy":tablet_rotation_policy},
                 "reportData":report}
     finally:
+        primary_error=sys.exc_info()[1]
         cleanup_ok=True
         if proc is not None:
-            try: stop_group(proc)
-            except Exception: cleanup_ok=False
+            try: stop_group(proc,"emulator_process_group_stop")
+            except BaseException:
+                record_cleanup_failure("emulator_process_group_stop",process_uncertain=True)
+                cleanup_ok=False
         if adb_started:
             try: run([str(adb),"kill-server"],root,e,10)
-            except Exception: cleanup_ok=False
-            try:
-                with socket.create_connection(("127.0.0.1",port),timeout=.5):
-                    cleanup_ok=False
-            except OSError: pass
+            except BaseException:
+                record_cleanup_failure("adb_server_stop")
+                cleanup_ok=False
+            if not adb_server_port_closed(port):
+                cleanup_ok=False
         if RUN_PROGRESS.get("ownedChildCleanupUncertain") is True:
+            cleanup_ok=False
+        if RUN_PROGRESS.get("cleanupFailureStages"):
             cleanup_ok=False
         if not cleanup_ok:
             RUN_PROGRESS["cleanupProven"]=False
-            raise Refuse("owned_cleanup_unproven")
-        RUN_PROGRESS["cleanupProven"]=True
+            raise cleanup_failure_refusal(primary_error) from None
+        if not mark_cleanup_proven():
+            raise cleanup_failure_refusal(primary_error) from None
 
 def bounded_time(deadline,limit):
     remaining=deadline-time.monotonic()
@@ -2239,7 +2722,7 @@ def restore_tracked_identity(identity,preimage,generated_identity,generated_dige
 
 def execute(root,head,lock):
     global RUN_PROGRESS
-    RUN_PROGRESS={"currentLocale":None,"phase":"not_started","attemptedLocales":[],"completedLocales":[],"cleanupProven":True}
+    RUN_PROGRESS={"currentLocale":None,"phase":"not_started","attemptedLocales":[],"completedLocales":[],"cleanupProven":True,"cleanupFailureStages":[]}
     set_phase("host_preflight")
     temp=Path(os.environ.get("RUNNER_TEMP",""))
     sdk=os.environ.get("ANDROID_SDK_ROOT") or os.environ.get("ANDROID_HOME")
@@ -2363,27 +2846,38 @@ def execute(root,head,lock):
           "accelerationCheckPassed":True,"locales":results,"runProgress":dict(RUN_PROGRESS),
           "instrumentedTestOnly":True}
     finally:
+        primary_error=sys.exc_info()[1]
         try:
             if acl is not None: acl.close()
-        except Exception: clean=False
+        except BaseException:
+            record_cleanup_failure("kvm_acl_close")
+            clean=False
         uncertain_child=RUN_PROGRESS.get("ownedChildCleanupUncertain") is True
         if uncertain_child: clean=False
         if identity_preimage is not None and not uncertain_child:
             try:
                 restore_tracked_identity(identity,identity_preimage,identity_identity,identity_digest)
-            except Exception: clean=False
+            except BaseException:
+                record_cleanup_failure("build_identity_restore")
+                clean=False
         if clean and task is not None:
             try: shutil.rmtree(task)
-            except OSError: clean=False
+            except BaseException:
+                record_cleanup_failure("task_directory_remove")
+                clean=False
         if clean:
             try: need(git(root,"status","--porcelain","--untracked-files=all")=="",
                       "checkout_cleanup_unproven")
-            except Exception: clean=False
+            except BaseException:
+                record_cleanup_failure("checkout_clean_check")
+                clean=False
         if not clean:
+            if not RUN_PROGRESS.get("cleanupFailureStages"):
+                record_cleanup_failure("unknown_cleanup")
             RUN_PROGRESS["cleanupProven"]=False
-            raise Refuse("owned_cleanup_unproven")
-        if RUN_PROGRESS["cleanupProven"] is not False:
-            RUN_PROGRESS["cleanupProven"]=True
+            raise cleanup_failure_refusal(primary_error) from None
+        if not mark_cleanup_proven():
+            raise cleanup_failure_refusal(primary_error) from None
     result["cleanupProven"]=RUN_PROGRESS["cleanupProven"]
     result["testExecutionState"]="completed"
     return result
@@ -2427,8 +2921,14 @@ def main():
     except Refuse as error:
         progress=dict(RUN_PROGRESS)
         facts["cleanupProven"]=progress.get("cleanupProven",False)
+        if error.cleanup_failure_stages:
+            progress["cleanupFailureStages"]=list(error.cleanup_failure_stages)
+        if error.primary_failure is not None:
+            facts["primaryFailure"]=error.primary_failure
         if error.child_failure is not None:
             facts["childFailure"]=error.child_failure
+        if error.child_diagnostics is not None:
+            facts["childDiagnostics"]=error.child_diagnostics
         progress["executionState"]=("not_started" if not progress["attemptedLocales"] else
           "completed" if progress["completedLocales"]==["en","my"] else
           "possible" if progress["phase"]=="test_running" else "partial")
