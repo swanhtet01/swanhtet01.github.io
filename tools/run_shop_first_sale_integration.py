@@ -4,9 +4,9 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="b61c59bc38548fff5b4f53927352ed8376ece663"
-BASE_TREE="50248c73f5836d85d0464a7d272553a06ae751fb"
-BASE_NATIVE_TREE="3401cfa0ba36f3ae06d0105fa4d0a04e200bb4fc"
+BASE="91715ee3e1d5be6a967ea4fd72090f1d5f557b1c"
+BASE_TREE="6adbd994f17f6dbd590dcd356ff9a2ff21828681"
+BASE_NATIVE_TREE="e783fe910fc381a4e93818088a27537c37ff8ffc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -72,7 +72,6 @@ REPORT_KEYS={
 }
 ALLOWED_CHANGED={
   "tools/run_shop_first_sale_integration.py",
-  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
 EMU_SIZE=350068887
@@ -139,6 +138,8 @@ CHILD_DIAGNOSTIC_OPERATIONS=frozenset((
     "adb_wait_for_device","adb_boot_probe","adb_devices",
     "adb_set_font_scale","adb_read_display_size","adb_read_display_density",
     "adb_read_font_scale","flutter_drive",
+    "adb_read_ignore_orientation","adb_read_fixed_rotation",
+    "adb_allow_orientation_requests","adb_unfix_user_rotation",
 ))
 class Refuse(Exception):
     def __init__(self, reason, *, child_failure=None):
@@ -861,6 +862,90 @@ def run_self_tests():
                                  "offline_flutter_drive_package_root_wrong_reason")
     else: raise Refuse("offline_flutter_drive_package_root_expected_refusal")
     cases+=1
+    for ignore in (False,True):
+        for fixed in ("default","enabled","disabled","enabled_if_no_auto_rotation"):
+            raw=("ignoreOrientationRequest "+str(ignore).lower()+" for displayId=0\n").encode()
+            need(parse_tablet_rotation_policy(raw,(fixed+"\n").encode())==
+                 {"displayId":0,"ignoreOrientationRequests":ignore,"fixedToUserRotation":fixed},
+                 "offline_tablet_rotation_policy_positive")
+            cases+=1
+    for ignore_raw,fixed_raw in (
+        (b"",b"disabled"),(b"x"*257,b"disabled"),
+        (b"ignoreOrientationRequest true for displayId=1",b"disabled"),
+        (b"ignoreOrientationRequest 1 for displayId=0",b"disabled"),
+        (b"ignoreOrientationRequest false for displayId=0\nprivate-value",b"disabled"),
+        (b"ignoreOrientationRequest false for displayId=0",b"private-value"),
+        (b"ignoreOrientationRequest false for displayId=0",b"disabled\nprivate-value"),
+        (b"ignoreOrientationRequest false for displayId=0",b"x"*257),
+        (b"\xff",b"disabled"),("private-value",b"disabled"),
+        (b"ignoreOrientationRequest false for displayId=0",None),
+    ):
+        try: parse_tablet_rotation_policy(ignore_raw,fixed_raw)
+        except Refuse as error: need(str(error)=="tablet_rotation_policy_invalid",
+                                     "offline_tablet_rotation_policy_wrong_reason")
+        else: raise Refuse("offline_tablet_rotation_policy_expected_refusal")
+        cases+=1
+    for operation in ("adb_read_ignore_orientation","adb_read_fixed_rotation",
+                      "adb_allow_orientation_requests","adb_unfix_user_rotation"):
+        need(child_failure_record(operation,1)=={"operation":operation,"exitCode":1},
+             "offline_tablet_rotation_operation_not_admitted")
+        cases+=1
+    saved_run=globals()["run"]
+    saved_progress=dict(RUN_PROGRESS)
+    expected_rotation_commands=(
+        ("get-ignore-orientation-request",), ("fixed-to-user-rotation",),
+        ("set-ignore-orientation-request","false"), ("fixed-to-user-rotation","disabled"),
+        ("get-ignore-orientation-request",), ("fixed-to-user-rotation",))
+    try:
+        for refusal_mode in ("none","readback","setter"):
+            rotation_calls=[]
+            def rotation_fixture_run(args,*unused,**kwargs):
+                command=tuple(args[5:])
+                index=len(rotation_calls)
+                need(args[:5]==["/adb","-s","emulator-5554","shell","wm"] and
+                     index<len(expected_rotation_commands) and
+                     command==expected_rotation_commands[index],"offline_tablet_rotation_command_invalid")
+                rotation_calls.append((command,kwargs.get("operation")))
+                if refusal_mode=="setter" and index==3: raise Refuse("child_failed")
+                if index in (0,4):
+                    ignore=(index==0 or refusal_mode=="readback")
+                    return ("ignoreOrientationRequest "+str(ignore).lower()+" for displayId=0\n").encode()
+                if index in (1,5): return b"default\n" if index==1 else b"disabled\n"
+                return b""
+            globals()["run"]=rotation_fixture_run
+            RUN_PROGRESS.clear()
+            if refusal_mode=="none":
+                policy=configure_tablet_rotation(Path("/adb"),"emulator-5554",Path("/source"),{},time.monotonic()+60)
+                need(policy==RUN_PROGRESS.get("tabletRotationPolicy") and
+                     policy["before"]=={"displayId":0,"ignoreOrientationRequests":True,"fixedToUserRotation":"default"} and
+                     policy["after"]=={"displayId":0,"ignoreOrientationRequests":False,"fixedToUserRotation":"disabled"},
+                     "offline_tablet_rotation_configuration_proof_invalid")
+            else:
+                expected="tablet_rotation_policy_not_rotatable" if refusal_mode=="readback" else "child_failed"
+                try: configure_tablet_rotation(Path("/adb"),"emulator-5554",Path("/source"),{},time.monotonic()+60)
+                except Refuse as error: need(str(error)==expected,"offline_tablet_rotation_configuration_wrong_reason")
+                else: raise Refuse("offline_tablet_rotation_configuration_expected_refusal")
+                if refusal_mode=="setter":
+                    need(RUN_PROGRESS["tabletRotationPolicy"]["after"] is None,
+                         "offline_tablet_rotation_partial_false_proof")
+            operations=[op for command,op in rotation_calls]
+            expected_operations=["adb_read_ignore_orientation","adb_read_fixed_rotation",
+                "adb_allow_orientation_requests","adb_unfix_user_rotation",
+                "adb_read_ignore_orientation","adb_read_fixed_rotation"]
+            need(operations==expected_operations[:len(operations)] and
+                 len(operations)==(4 if refusal_mode=="setter" else 6),
+                 "offline_tablet_rotation_operations_invalid")
+            cases+=1
+        rotation_calls=[]
+        try: configure_tablet_rotation(Path("/adb"),"physical-device",Path("/source"),{},time.monotonic()+60)
+        except Refuse as error: need(str(error)=="tablet_rotation_device_invalid" and not rotation_calls,
+                                     "offline_tablet_rotation_physical_device_not_refused")
+        else: raise Refuse("offline_tablet_rotation_physical_device_expected_refusal")
+        cases+=1
+    finally:
+        globals()["run"]=saved_run
+        RUN_PROGRESS.clear()
+        RUN_PROGRESS.update(saved_progress)
     drive_fixtures=(
         (b"Error: Couldn't resolve the package 'integration_test' in 'package:integration_test/integration_test_driver.dart'. /private/path","driver_package_import_unresolved"),
         (b"Test file not found: /private/driver-en/first_sale_persistence_test.dart","driver_file_not_found"),
@@ -1888,9 +1973,50 @@ def read_tablet_display(adb,serial,root,e,deadline):
               root,e,bounded_time(deadline,10),True,operation="adb_read_font_scale")
     return parse_tablet_display(size,density,scale)
 
+def parse_tablet_rotation_policy(ignore_raw,fixed_raw):
+    need(type(ignore_raw) is bytes and type(fixed_raw) is bytes and
+         0<len(ignore_raw)<=256 and 0<len(fixed_raw)<=256,
+         "tablet_rotation_policy_invalid")
+    try:
+        ignore_text=ignore_raw.decode("ascii","strict").strip()
+        fixed_text=fixed_raw.decode("ascii","strict").strip()
+    except UnicodeError: raise Refuse("tablet_rotation_policy_invalid") from None
+    match=re.fullmatch(r"ignoreOrientationRequest (true|false) for displayId=0",ignore_text)
+    need(match is not None and fixed_text in
+         ("default","enabled","disabled","enabled_if_no_auto_rotation"),
+         "tablet_rotation_policy_invalid")
+    return {"displayId":0,"ignoreOrientationRequests":match.group(1)=="true",
+            "fixedToUserRotation":fixed_text}
+
+def configure_tablet_rotation(adb,serial,root,e,deadline):
+    # A disposable, already-verified emulator only; never a physical device.
+    need(serial=="emulator-5554","tablet_rotation_device_invalid")
+    def read_policy():
+        ignore=run([str(adb),"-s",serial,"shell","wm","get-ignore-orientation-request"],
+                   root,e,bounded_time(deadline,10),True,
+                   operation="adb_read_ignore_orientation")
+        fixed=run([str(adb),"-s",serial,"shell","wm","fixed-to-user-rotation"],
+                  root,e,bounded_time(deadline,10),True,
+                  operation="adb_read_fixed_rotation")
+        return parse_tablet_rotation_policy(ignore,fixed)
+    before=read_policy()
+    RUN_PROGRESS["tabletRotationPolicy"]={"before":before,"after":None}
+    # Let the test's app orientation requests rotate the real display rather
+    # than produce a letterboxed portrait window on a fixed landscape display.
+    run([str(adb),"-s",serial,"shell","wm","set-ignore-orientation-request","false"],
+        root,e,bounded_time(deadline,10),operation="adb_allow_orientation_requests")
+    run([str(adb),"-s",serial,"shell","wm","fixed-to-user-rotation","disabled"],
+        root,e,bounded_time(deadline,10),operation="adb_unfix_user_rotation")
+    after=read_policy()
+    RUN_PROGRESS["tabletRotationPolicy"]["after"]=after
+    need(after["ignoreOrientationRequests"] is False and
+         after["fixedToUserRotation"]=="disabled","tablet_rotation_policy_not_rotatable")
+    return {"before":before,"after":after}
+
 def run_locale(root,task,sdk,emulator,adb,locale,deadline):
     RUN_PROGRESS["currentLocale"]=locale
     RUN_PROGRESS.pop("tabletDisplay",None)
+    RUN_PROGRESS.pop("tabletRotationPolicy",None)
     set_phase("avd_prepare")
     name="shopqa"+uuid.uuid4().hex[:12]
     avd=task/"avds"/locale
@@ -1945,6 +2071,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
             root,e,bounded_time(deadline,10),operation="adb_set_font_scale")
         tablet_display=read_tablet_display(adb,serial,root,e,deadline)
         RUN_PROGRESS["tabletDisplay"]=dict(tablet_display)
+        tablet_rotation_policy=configure_tablet_rotation(adb,serial,root,e,deadline)
         need(shutil.disk_usage(os.environ["RUNNER_TEMP"]).free>=4*1024**3,
              "capacity_before_test")
         set_phase("test_running")
@@ -1968,7 +2095,8 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
         return {"locale":locale,"result":"passed",
                 "elapsedMs":int((time.monotonic()-start)*1000),
                 "tabletEnvironment":{"avdProfile":tablet_profile,
-                                     "hostDisplay":tablet_display},
+                                     "hostDisplay":tablet_display,
+                                     "rotationPolicy":tablet_rotation_policy},
                 "reportData":report}
     finally:
         cleanup_ok=True
