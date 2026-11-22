@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' as foundation;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,45 @@ void main() {
     final myanmar = _locale == 'my';
     var explicitTapCalls = 0;
     var textEntryCalls = 0;
+    void expectNoFlutterException(String stage) {
+      expect(
+        const <String>{
+          'setup_portrait',
+          'catalog_ready',
+          'portrait_basket',
+          'basket_landscape',
+          'cash_dialog',
+          'sale_completion',
+          'saved_receipt',
+        }.contains(stage),
+        isTrue,
+      );
+      final error = tester.takeException();
+      if (error != null) {
+        // Fixed type labels only. Never serialize the exception or its stack.
+        final category = error is foundation.FlutterError
+            ? 'flutter_error'
+            : error is MissingPluginException
+            ? 'missing_plugin'
+            : error is PlatformException
+            ? 'platform_exception'
+            : error is StateError
+            ? 'state_error'
+            : error is ArgumentError
+            ? 'argument_error'
+            : error is TypeError
+            ? 'type_error'
+            : error is AssertionError
+            ? 'assertion_error'
+            : 'unknown';
+        debugPrint(
+          'SUPERMEGA_TABLET_EXCEPTION_V1:'
+          '${jsonEncode(<String, String>{'stage': stage, 'category': category})}',
+        );
+      }
+      expect(error, isNull, reason: 'Unexpected Flutter exception at $stage.');
+    }
+
     Future<void> waitFor(Finder finder) async {
       final waiting = Stopwatch()..start();
       while (finder.evaluate().length != 1 &&
@@ -307,6 +347,7 @@ void main() {
       isTrue,
       reason: 'The isolated tablet must retain the enlarged-text setting.',
     );
+    expectNoFlutterException('setup_portrait');
     await tapId('shop.setup.start-new');
     await tapId('shop.setup.start-new.confirm');
     await tapOnce(find.text(shopCopy(myanmar, 'Sell', 'ရောင်းရန်')));
@@ -322,6 +363,8 @@ void main() {
             key.value.startsWith('shop-catalog-row:');
       }),
     );
+
+    expectNoFlutterException('catalog_ready');
 
     // Read the real UI-created row; never seed or write through this handle.
     late final String productId;
@@ -367,6 +410,8 @@ void main() {
     expect(beforeRotation['receipts'], 0);
     expect(beforeRotation['stock'], 3);
 
+    expectNoFlutterException('portrait_basket');
+
     // Close only the review sheet before rotating a compact layout. The
     // split-basket and compact-review paths are both inspected independently.
     if (basketLayoutBeforeRotation == 'compact') {
@@ -384,6 +429,13 @@ void main() {
     final landscapeViewport = await waitForOrientation(
       productRow,
       landscape: true,
+    );
+    debugPrint(
+      'SUPERMEGA_TABLET_LANDSCAPE_VIEWPORT_V1:'
+      '${jsonEncode(<String, Object>{
+        'stage': 'basket_landscape',
+        for (final key in const <String>['physicalWidth', 'physicalHeight', 'logicalWidth', 'logicalHeight', 'devicePixelRatio', 'textScaleAt14']) key: landscapeViewport[key]!,
+      })}',
     );
     final basketLayoutAfterRotation = await waitForBasketLayout();
     final basketAfterRotation = await inspectBasket(basketLayoutAfterRotation);
@@ -403,7 +455,7 @@ void main() {
       reason:
           'The visible basket must retain Tea, quantity 1, total 2,500 MMK.',
     );
-    expect(tester.takeException(), isNull);
+    expectNoFlutterException('basket_landscape');
     expect(
       (landscapeViewport['logicalWidth']! as num) >= 700 &&
           (landscapeViewport['logicalHeight']! as num) >= 600,
@@ -472,6 +524,7 @@ void main() {
     await tester.ensureVisible(confirm);
     await waitFor(confirm.hitTestable());
     final confirmTargetMinDp = expect48DpTarget(confirm);
+    expectNoFlutterException('cash_dialog');
     await tapOnce(confirm);
     await tester.pumpAndSettle(
       const Duration(milliseconds: 100),
@@ -480,7 +533,7 @@ void main() {
     );
     await waitFor(find.bySemanticsIdentifier('shop.sale-completion'));
     final firstSaleUiMilliseconds = launchTimer.elapsedMilliseconds;
-    expect(tester.takeException(), isNull);
+    expectNoFlutterException('sale_completion');
 
     // A new Drift connection reopens the same app-private database after the
     // UI commit and verifies the durable receipt and its single stock effect.
@@ -568,7 +621,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(tester.takeException(), isNull);
+    expectNoFlutterException('saved_receipt');
     launchTimer.stop();
     binding.reportData = <String, dynamic>{
       'scenario': 'first_product_and_cash_sale',

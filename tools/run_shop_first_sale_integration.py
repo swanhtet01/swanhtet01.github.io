@@ -5,14 +5,14 @@ import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="3f0e34bd74bc2cda3cddb3927d4cd020c303778c"
-BASE_TREE="bee54320902ba3ab8a4f3dc458e76b07c07812c7"
-BASE_NATIVE_TREE="e3aa080b12880380274087c6c6fc042ef1ada348"
+BASE="884e41302953ceda2925a327552c8cde6977a533"
+BASE_TREE="569d9698a13ee21e00f6ab16547369d0827d805a"
+BASE_NATIVE_TREE="b3b6f30d079ae922d21e0026afe6e05e69884c36"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
 TEST=APP/"integration_test/first_sale_persistence_test.dart"
-TEST_SHA="50b0905164fe7f8c54636802fc5a2c9a69e1b0621f97adac84f33a9b031df52e"
+TEST_SHA="f7198ec572e2d1759666e5fef8cd8cd0e3f9250dcce384bfe66a227a624054a7"
 PUB=APP/"pubspec.yaml"
 PUB_SHA="228f2c2b2d1478d0546a80dbedf4c4393dd8d6700f01ff350b6ebe58a68c1f8a"
 LOCK=APP/"pubspec.lock"
@@ -361,11 +361,13 @@ def flutter_driver_package_argument(repo_root):
     return "--test-arguments=--packages="+str(
         root/APP/".dart_tool"/"package_config.json")
 
-def tablet_viewport_diagnostic(raw):
+def tablet_viewport_diagnostic(raw,*,landscape=False):
     # Numeric hints only; never return child text, unknown keys, or parse errors.
-    need(type(raw) is bytes and len(raw)<=OUTPUT_LIMIT+1,
+    need(type(raw) is bytes and len(raw)<=OUTPUT_LIMIT+1 and type(landscape) is bool,
          "tablet_viewport_diagnostic_input_invalid")
-    marker=b"SUPERMEGA_TABLET_VIEWPORT_V1:"
+    marker=(b"SUPERMEGA_TABLET_LANDSCAPE_VIEWPORT_V1:" if landscape else
+            b"SUPERMEGA_TABLET_VIEWPORT_V1:")
+    expected_stage="basket_landscape" if landscape else "setup_portrait"
     count=raw.count(marker)
     if count==0: return {"status":"not_observed"}
     if count>4: return {"status":"ambiguous"}
@@ -377,7 +379,7 @@ def tablet_viewport_diagnostic(raw):
             data,_=json.JSONDecoder(object_pairs_hook=_unique_json_pairs).raw_decode(
                 chunk[:4096].decode("utf-8","replace").lstrip())
             valid=(type(data) is dict and set(data)==expected and
-                   data.get("stage")=="setup_portrait" and
+                   data.get("stage")==expected_stage and
                    all(type(data[k]) is int and 0<=data[k]<=16384
                        for k in ("physicalWidth","physicalHeight")) and
                    all(type(data[k]) in (int,float) and math.isfinite(data[k]) and
@@ -393,6 +395,82 @@ def tablet_viewport_diagnostic(raw):
         if record is not None and data!=record: return {"status":"ambiguous"}
         record=data
     return {"status":"captured","value":record}
+
+TABLET_EXCEPTION_STAGES=frozenset(("setup_portrait","catalog_ready","portrait_basket",
+    "basket_landscape","cash_dialog","sale_completion","saved_receipt"))
+TABLET_EXCEPTION_CATEGORIES=frozenset(("flutter_error","missing_plugin","platform_exception",
+    "state_error","argument_error","type_error","assertion_error","unknown"))
+
+def tablet_exception_diagnostic(raw):
+    # Closed labels only; no exception message, stack, customer data or raw text.
+    need(type(raw) is bytes and len(raw)<=OUTPUT_LIMIT+1,
+         "tablet_exception_diagnostic_input_invalid")
+    marker=b"SUPERMEGA_TABLET_EXCEPTION_V1:"
+    count=raw.count(marker)
+    if count==0: return {"status":"not_observed"}
+    if count!=1: return {"status":"ambiguous"}
+    try:
+        data,_=json.JSONDecoder(object_pairs_hook=_unique_json_pairs).raw_decode(
+            raw.split(marker,1)[1][:512].decode("utf-8","strict").lstrip())
+        valid=(type(data) is dict and set(data)=={"stage","category"} and
+               type(data.get("stage")) is str and data["stage"] in TABLET_EXCEPTION_STAGES and
+               type(data.get("category")) is str and data["category"] in TABLET_EXCEPTION_CATEGORIES)
+    except Exception: return {"status":"invalid"}
+    if not valid: return {"status":"invalid"}
+    return {"status":"captured","value":{"stage":data["stage"],"category":data["category"]}}
+
+def run_tablet_exception_diagnostic_tests():
+    cases=0;marker=b"SUPERMEGA_TABLET_EXCEPTION_V1:"
+    for stage in sorted(TABLET_EXCEPTION_STAGES):
+        for category in sorted(TABLET_EXCEPTION_CATEGORIES):
+            data={"stage":stage,"category":category}
+            raw=b"I/flutter (123): "+marker+json.dumps(data).encode()+b"\nPRIVATE_RAW_CUSTOMER_PAYLOAD"
+            value=tablet_exception_diagnostic(raw)
+            need(value=={"status":"captured","value":data} and
+                 "PRIVATE" not in json.dumps(value),"offline_tablet_exception_closed_values")
+            cases+=1
+    invalids=(b"",b"null",b"[]",b"not-json",b"\xff",
+        b'{"stage":"cash_dialog","category":"private-customer"}',
+        b'{"stage":"private-customer","category":"unknown"}',
+        b'{"stage":"cash_dialog","category":"unknown","message":"PRIVATE"}',
+        b'{"stage":"cash_dialog","stage":"cash_dialog","category":"unknown"}',
+        b'{"stage":false,"category":"unknown"}',b'{"stage":"cash_dialog","category":null}')
+    for raw in invalids:
+        need(tablet_exception_diagnostic(marker+raw)=={"status":"invalid"},
+             "offline_tablet_exception_invalid")
+        cases+=1
+    need(tablet_exception_diagnostic(b"ordinary PRIVATE")=={"status":"not_observed"},
+         "offline_tablet_exception_absent");cases+=1
+    need(tablet_exception_diagnostic(marker+b"{}"+marker+b"{}")=={"status":"ambiguous"},
+         "offline_tablet_exception_ambiguous");cases+=1
+    for invalid in ("PRIVATE",None,b"x"*(OUTPUT_LIMIT+2)):
+        try: tablet_exception_diagnostic(invalid)
+        except Refuse as error: need(str(error)=="tablet_exception_diagnostic_input_invalid",
+                                     "offline_tablet_exception_input_reason")
+        else: raise Refuse("offline_tablet_exception_expected_refusal")
+        cases+=1
+    landscape={"stage":"basket_landscape","physicalWidth":2560,"physicalHeight":1600,
+               "logicalWidth":1280,"logicalHeight":800,"devicePixelRatio":2,"textScaleAt14":18.2}
+    encoded=b"SUPERMEGA_TABLET_LANDSCAPE_VIEWPORT_V1:"+json.dumps(landscape).encode()
+    need(tablet_viewport_diagnostic(encoded,landscape=True)=={"status":"captured","value":landscape}
+         and tablet_viewport_diagnostic(encoded)=={"status":"not_observed"},
+         "offline_tablet_landscape_separate");cases+=1
+    wrong={**landscape,"stage":"setup_portrait"}
+    need(tablet_viewport_diagnostic(b"SUPERMEGA_TABLET_LANDSCAPE_VIEWPORT_V1:"+
+         json.dumps(wrong).encode(),landscape=True)=={"status":"invalid"},
+         "offline_tablet_landscape_wrong_stage");cases+=1
+    for marker_text,label in (
+        (b"A RenderFlex overflowed by 99 pixels PRIVATE","flutter_render_flex_overflow"),
+        (b"RenderBox was not laid out: PRIVATE","flutter_render_box_not_laid_out"),
+        (b"Vertical viewport was given unbounded height PRIVATE","flutter_unbounded_viewport"),
+        (b"BoxConstraints forces an infinite width PRIVATE","flutter_infinite_constraints"),
+        (b"MissingPluginException PRIVATE","flutter_missing_plugin"),
+        (b"Multiple exceptions PRIVATE","flutter_multiple_exceptions")):
+        diagnostic=flutter_drive_diagnostics(marker_text,b"")
+        need(label in diagnostic["signals"] and diagnostic["rawOutputIncluded"] is False and
+             "PRIVATE" not in json.dumps(diagnostic),"offline_tablet_fixed_failure_signals")
+        cases+=1
+    return cases
 
 def gradle_failure_signals(raw):
     # Fixed hints only, called within the bounded Flutter diagnostic buffer.
@@ -466,6 +544,12 @@ def flutter_drive_diagnostics(stdout,stderr):
         ("dart_test_failure",b"testfailure"),
         ("flutter_test_exception",b"exception caught by flutter test framework"),
         ("flutter_some_tests_failed",b"some tests failed"),
+        ("flutter_render_flex_overflow",b"a renderflex overflowed by "),
+        ("flutter_render_box_not_laid_out",b"renderbox was not laid out"),
+        ("flutter_unbounded_viewport",b"viewport was given unbounded "),
+        ("flutter_infinite_constraints",b"boxconstraints forces an infinite "),
+        ("flutter_missing_plugin",b"missingpluginexception"),
+        ("flutter_multiple_exceptions",b"multiple exceptions"),
         ("flutter_driver_tests_failed",b"driver tests failed"),
         ("flutter_asset_load_failed",b"unable to load asset:"),
         ("dart_service_connection_failed",b"error connecting to the service protocol"),
@@ -498,6 +582,8 @@ def flutter_drive_diagnostics(stdout,stderr):
             "stdoutBytes":len(stdout),"stderrBytes":len(stderr),
             "signals":signals or ["unclassified"],"sourceLocations":locations,
             "tabletViewport":tablet_viewport_diagnostic(stdout+b"\n"+stderr),
+            "tabletLandscapeViewport":tablet_viewport_diagnostic(stdout+b"\n"+stderr,landscape=True),
+            "tabletException":tablet_exception_diagnostic(stdout+b"\n"+stderr),
             "rawOutputIncluded":False}
 
 def child_failed_refusal(operation, exit_code, *, stdout=None, stderr=None):
@@ -1654,7 +1740,9 @@ def run_self_tests():
         diagnostic=flutter_drive_diagnostics(raw,b"")
         need(diagnostic["signals"]==[expected] and
              diagnostic["stdoutBytes"]==len(raw) and diagnostic["stderrBytes"]==0 and
-             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","sourceLocations","tabletViewport","rawOutputIncluded"} and
+             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","sourceLocations","tabletViewport","tabletLandscapeViewport","tabletException","rawOutputIncluded"} and
+             diagnostic["tabletLandscapeViewport"]=={"status":"not_observed"} and
+             diagnostic["tabletException"]=={"status":"not_observed"} and
              not diagnostic["rawOutputIncluded"] and
              all(secret not in json.dumps(diagnostic) for secret in
                  ("private","access_token","integration_test_driver.dart")),
@@ -1827,7 +1915,9 @@ def run_self_tests():
                  "schema":"supermega.flutter_drive_diagnostic.v3","stdoutBytes":0,
                  "stderrBytes":len(b"Error: access_token=private-value"),
                  "signals":["unclassified"],"sourceLocations":[],
-                 "tabletViewport":{"status":"not_observed"},"rawOutputIncluded":False}},
+                 "tabletViewport":{"status":"not_observed"},
+                 "tabletLandscapeViewport":{"status":"not_observed"},
+                 "tabletException":{"status":"not_observed"},"rawOutputIncluded":False}},
          "offline_flutter_drive_child_failure")
     cases+=1
     diagnostic=avd_create_diagnostics(b"private-stdout-path",b"Error: Package path is not valid. private-stderr-path")
@@ -2079,6 +2169,7 @@ def run_self_tests():
         else: raise Refuse("offline_fixture_expected_refusal")
         cases+=1
     cases+=run_tablet_user_rotation_tests()
+    cases+=run_tablet_exception_diagnostic_tests()
     fs_cases=run_emulator_metadata_filesystem_tests()
     need(fs_cases==6,"offline_emulator_metadata_fs_case_count")
     cases+=fs_cases
