@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """Guarded, one-shot first-sale integration runner; not release evidence."""
-import argparse, hashlib, json, os, platform, re, selectors, shutil, signal, socket, stat, subprocess, sys, tempfile, time, uuid, zipfile
+import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signal, socket, stat, subprocess, sys, tempfile, time, uuid, zipfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="ecfcf0a9c11b6177bd0a1835db0b1babf72cf2b2"
+BASE="fccb762548d6de7a6301acdaa53e5d6c6118f09c"
+BASE_TREE="07060d8a8c3a4a2725f94cce5cfc7470b1ea505b"
+BASE_NATIVE_TREE="14a26c0800cf6d198f79d54d6b661c162c933c48"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
 TEST=APP/"integration_test/first_sale_persistence_test.dart"
-TEST_SHA="7955754807e56ec9cc3dbf8ff3a4da73a3c90039fcc037dbb97310c17df011e3"
+TEST_SHA="97cd011a83642605690e23d592cb7dbae209df69144e46d46e66b557d97fc351"
 PUB=APP/"pubspec.yaml"
 PUB_SHA="228f2c2b2d1478d0546a80dbedf4c4393dd8d6700f01ff350b6ebe58a68c1f8a"
 LOCK=APP/"pubspec.lock"
 LOCK_SHA="772540b8f7fee17c0e7a9f0185c0366775ce5d61f7c94a5ab894beeb69605ccb"
 IMAGE="system-images;android-35;default;x86_64"
+TABLET_DEVICE_ID="medium_tablet"
+TABLET_DEVICE_NAME="Medium Tablet"
+TABLET_DEVICE_OEM="Generic"
 IMAGE_REVISION="2"
 IMAGE_ABI="x86_64"
 IMAGE_API_LEVEL="35"
@@ -62,11 +67,11 @@ REPORT_KEYS={
  "scenario","locale","productSeeded","explicitTestTapCalls","textEntryCalls",
  "appMainToSaleCompletionMilliseconds","appMainToFinalDatabaseAssertionsMilliseconds",
  "appMainToSavedReceiptAssertionsMilliseconds","savedReceiptUiBoundToPersistedSale",
- "newConnectionSameOsProcess","osProcessRestartProven","merchantAcceptance","promotionEligible"
+ "newConnectionSameOsProcess","osProcessRestartProven","merchantAcceptance","promotionEligible",
+ "tabletEvidence"
 }
 ALLOWED_CHANGED={
-  "tools/postgres17_toolchain_profile.mjs",
-  "tools/postgres17_authenticode_transport.test.mjs",
+  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
   "tools/run_shop_first_sale_integration.py",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip"
@@ -128,9 +133,28 @@ FALSE={"authority":False,"fullReleaseCandidate":False,"installedQa":False,"osPro
        "pgAcceptance":False,"hardwareAcceptance":False,"merchantAcceptance":False,
        "promotionEligible":False}
 
-class Refuse(Exception): pass
+CHILD_DIAGNOSTIC_OPERATIONS=frozenset((
+    "avdmanager_list_devices","avd_create","adb_start_server",
+    "adb_wait_for_device","adb_boot_probe","adb_devices",
+    "adb_set_font_scale","adb_read_display_size","adb_read_display_density",
+    "adb_read_font_scale",
+))
+class Refuse(Exception):
+    def __init__(self, reason, *, child_failure=None):
+        super().__init__(reason)
+        self.child_failure=child_failure
 def need(ok, reason):
     if not ok: raise Refuse(reason)
+def child_failure_record(operation, exit_code):
+    need(type(operation) is str and operation in CHILD_DIAGNOSTIC_OPERATIONS,
+         "child_operation_invalid")
+    need(type(exit_code) is int and -255<=exit_code<=255,
+         "child_exit_code_invalid")
+    return {"operation":operation,"exitCode":exit_code}
+def child_failed_refusal(operation, exit_code):
+    if operation is None: return Refuse("child_failed")
+    return Refuse("child_failed",
+                  child_failure=child_failure_record(operation,exit_code))
 def libpulse_query_state(raw):
     expected=("ii \t"+PULSE).encode("ascii")
     if raw==expected: return "installed_exact"
@@ -163,7 +187,10 @@ def stop_group(p):
         except ProcessLookupError: return
         time.sleep(.05)
     raise Refuse("owned_process_group_remains")
-def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capture_pair=False):
+def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capture_pair=False,operation=None):
+    if operation is not None:
+        need(type(operation) is str and operation in CHILD_DIAGNOSTIC_OPERATIONS,
+             "child_operation_invalid")
     p=subprocess.Popen(argv,cwd=str(cwd),env=env,
       stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
       stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
@@ -217,7 +244,8 @@ def run(argv,cwd,env,timeout=60,capture=False,input_data=None,accepted=(0,),capt
     finally:
         for stream in (p.stdin,p.stdout,p.stderr):
             if stream is not None and not stream.closed: stream.close()
-    need(p.returncode in accepted,"child_failed")
+    if p.returncode not in accepted:
+        raise child_failed_refusal(operation,p.returncode)
     if capture_pair: return bytes(out),bytes(err)
     return bytes(out) if capture else b""
 
@@ -236,6 +264,9 @@ def check_context(root):
     need(re.fullmatch("[0-9a-f]{40}",head) is not None,"head_invalid")
     need(git(root,"rev-parse","HEAD")==head and git(root,"rev-parse","HEAD^")==BASE,
          "source_binding_invalid")
+    need(git(root,"rev-parse",BASE+"^{tree}")==BASE_TREE and
+         git(root,"rev-parse",BASE+":mobile/shop_pos")==BASE_NATIVE_TREE,
+         "source_tree_binding_invalid")
     names=git(root,"diff-tree","--no-commit-id","--name-only","-r","HEAD").splitlines()
     need(len(names)==len(set(names)) and set(names)==ALLOWED_CHANGED,"changed_paths_invalid")
     need(git(root,"status","--porcelain","--untracked-files=all")=="","checkout_dirty")
@@ -254,7 +285,8 @@ def check_source(root):
         need(file_sha(full)==digest,"source_digest_mismatch")
     test_text=(root/TEST).read_text("utf-8")
     required=("binding.reportData",*sorted(REPORT_KEYS))
-    need(all(token in test_text for token in required),"test_report_contract_invalid")
+    need(all(token in test_text for token in required)
+         and "SHOP_AVD_PROFILE_ID" in test_text,"test_report_contract_invalid")
     pub_text=(root/PUB).read_text("utf-8")
     need(re.search(r"(?m)^dev_dependencies:\s*$",pub_text)
          and re.search(r"(?m)^  integration_test:\s*\n    sdk: flutter\s*$",pub_text),
@@ -290,6 +322,35 @@ const reportKeys = <String>{
   'osProcessRestartProven',
   'merchantAcceptance',
   'promotionEligible',
+  'tabletEvidence',
+};
+
+const tabletEvidenceKeys = <String>{
+  'profileId',
+  'portrait',
+  'landscape',
+  'basketPreservedOnRotation',
+  'basketLayoutBeforeRotation',
+  'basketLayoutAfterRotation',
+  'crossLayoutTransferObserved',
+  'basketContentsBeforeRotation',
+  'basketContentsAfterRotation',
+  'salesBeforeRotation',
+  'salesAfterRotation',
+  'receiptsBeforeRotation',
+  'receiptsAfterRotation',
+  'stockBeforeRotation',
+  'stockAfterRotation',
+  'reviewTargetMinDpBeforeRotation',
+  'reviewTargetMinDpAfterRotation',
+  'cashTargetMinDpBeforeRotation',
+  'cashTargetMinDpAfterRotation',
+  'confirmTargetMinDp',
+  'receiptTargetMinDp',
+  'imeStatus',
+  'imeViewInsetsBottom',
+  'dialogReachable',
+  'primaryCtaReachable',
 };
 
 Future<void> main() => integrationDriver(
@@ -312,8 +373,20 @@ Future<void> main() => integrationDriver(
         data['newConnectionSameOsProcess'] != true ||
         data['osProcessRestartProven'] != false ||
         data['merchantAcceptance'] != 'NOT_RUN' ||
-        data['promotionEligible'] != false) {
+        data['promotionEligible'] != false ||
+        data['tabletEvidence'] is! Map) {
       throw StateError('integration report values invalid');
+    }
+    final tablet = data['tabletEvidence'] as Map;
+    final beforeLayout = tablet['basketLayoutBeforeRotation'];
+    final afterLayout = tablet['basketLayoutAfterRotation'];
+    if (tablet.keys.toSet().length != tabletEvidenceKeys.length ||
+        !tablet.keys.toSet().containsAll(tabletEvidenceKeys) ||
+        tablet['profileId'] != 'medium_tablet' ||
+        !const {'compact', 'split'}.contains(beforeLayout) ||
+        !const {'compact', 'split'}.contains(afterLayout) ||
+        tablet['crossLayoutTransferObserved'] != (beforeLayout != afterLayout)) {
+      throw StateError('tablet report shape invalid');
     }
     stdout.writeln(reportPrefix + jsonEncode(<String, dynamic>{
       for (final String key in reportKeys) key: data[key],
@@ -328,6 +401,88 @@ def _unique_json_pairs(pairs):
         need(key not in result,"report_json_duplicate_key")
         result[key]=value
     return result
+
+TABLET_VIEWPORT_KEYS=frozenset((
+ "physicalWidth","physicalHeight","logicalWidth","logicalHeight","devicePixelRatio",
+ "paddingLeft","paddingTop","paddingRight","paddingBottom",
+ "viewPaddingLeft","viewPaddingTop","viewPaddingRight","viewPaddingBottom",
+ "viewInsetsLeft","viewInsetsTop","viewInsetsRight","viewInsetsBottom","textScaleAt14"))
+TABLET_BASKET_CONTENT_KEYS=frozenset(("productName","quantity","totalMmk"))
+TABLET_EVIDENCE_KEYS=frozenset((
+ "profileId","portrait","landscape","basketPreservedOnRotation",
+ "basketLayoutBeforeRotation","basketLayoutAfterRotation","crossLayoutTransferObserved",
+ "basketContentsBeforeRotation","basketContentsAfterRotation",
+ "salesBeforeRotation","salesAfterRotation","receiptsBeforeRotation","receiptsAfterRotation",
+ "stockBeforeRotation","stockAfterRotation",
+ "reviewTargetMinDpBeforeRotation","reviewTargetMinDpAfterRotation",
+ "cashTargetMinDpBeforeRotation","cashTargetMinDpAfterRotation",
+ "confirmTargetMinDp","receiptTargetMinDp","imeStatus","imeViewInsetsBottom",
+ "dialogReachable","primaryCtaReachable"))
+def _finite_number(value):
+ return type(value) in (int,float) and math.isfinite(value)
+def validate_tablet_evidence(value):
+ need(type(value) is dict and set(value)==TABLET_EVIDENCE_KEYS and
+      value.get("profileId")==TABLET_DEVICE_ID and
+      value.get("basketPreservedOnRotation") is True and
+      value.get("dialogReachable") is True and
+      value.get("primaryCtaReachable") is True,
+      "test_tablet_evidence_invalid")
+ for orientation,landscape in (("portrait",False),("landscape",True)):
+  view=value.get(orientation)
+  need(type(view) is dict and set(view)==TABLET_VIEWPORT_KEYS and
+       type(view.get("physicalWidth")) is int and view["physicalWidth"]>0 and
+       type(view.get("physicalHeight")) is int and view["physicalHeight"]>0,
+       "test_tablet_evidence_invalid")
+  numbers=[view[k] for k in TABLET_VIEWPORT_KEYS-{"physicalWidth","physicalHeight"}]
+  need(all(_finite_number(x) for x in numbers) and
+       view["logicalWidth"]>0 and view["logicalHeight"]>0 and
+       view["devicePixelRatio"]>0 and
+       abs(view["physicalWidth"]-view["logicalWidth"]*view["devicePixelRatio"])<=1.0 and
+       abs(view["physicalHeight"]-view["logicalHeight"]*view["devicePixelRatio"])<=1.0 and
+       all(view[k]>=0 for k in TABLET_VIEWPORT_KEYS if k.startswith(("padding","viewPadding","viewInsets"))) and
+       view["textScaleAt14"]>=16 and
+       ((view["logicalWidth"]>view["logicalHeight"]) is landscape) and
+       min(view["logicalWidth"],view["logicalHeight"])>=600 and
+       max(view["logicalWidth"],view["logicalHeight"])>=700,
+       "test_tablet_evidence_invalid")
+ for key in ("salesBeforeRotation","salesAfterRotation","receiptsBeforeRotation",
+             "receiptsAfterRotation","stockBeforeRotation","stockAfterRotation"):
+  need(type(value.get(key)) is int,"test_tablet_evidence_invalid")
+ need(value["salesBeforeRotation"]==value["salesAfterRotation"]==0 and
+      value["receiptsBeforeRotation"]==value["receiptsAfterRotation"]==0 and
+      value["stockBeforeRotation"]==value["stockAfterRotation"]==3,
+      "test_tablet_rotation_effect_invalid")
+ before_layout=value.get("basketLayoutBeforeRotation")
+ after_layout=value.get("basketLayoutAfterRotation")
+ need(before_layout in ("compact","split") and after_layout in ("compact","split") and
+      type(value.get("crossLayoutTransferObserved")) is bool and
+      value["crossLayoutTransferObserved"] is (before_layout != after_layout),
+      "test_tablet_layout_invalid")
+ expected_contents={"productName":"Tea","quantity":1,"totalMmk":2500}
+ for key in ("basketContentsBeforeRotation","basketContentsAfterRotation"):
+  contents=value.get(key)
+  need(type(contents) is dict and set(contents)==TABLET_BASKET_CONTENT_KEYS and
+       type(contents.get("productName")) is str and
+       type(contents.get("quantity")) is int and type(contents.get("totalMmk")) is int and
+       contents==expected_contents,
+       "test_tablet_basket_contents_invalid")
+ need(value["basketContentsBeforeRotation"]==value["basketContentsAfterRotation"],
+      "test_tablet_basket_contents_invalid")
+ for key,layout in (("reviewTargetMinDpBeforeRotation",before_layout),
+                    ("reviewTargetMinDpAfterRotation",after_layout)):
+  target=value.get(key)
+  if layout=="compact":
+   need(_finite_number(target) and target>=48,"test_tablet_target_invalid")
+  else:
+   need(target is None,"test_tablet_target_invalid")
+ for key in ("cashTargetMinDpBeforeRotation","cashTargetMinDpAfterRotation",
+             "confirmTargetMinDp","receiptTargetMinDp"):
+  need(_finite_number(value.get(key)) and value[key]>=48,"test_tablet_target_invalid")
+ need(value.get("imeStatus") in ("observed","NOT_RUN") and
+      _finite_number(value.get("imeViewInsetsBottom")) and value["imeViewInsetsBottom"]>=0 and
+      ((value["imeStatus"]=="observed" and value["imeViewInsetsBottom"]>0) or
+       (value["imeStatus"]=="NOT_RUN" and value["imeViewInsetsBottom"]==0)),
+      "test_tablet_ime_invalid")
 
 def parse_report(stdout_bytes,stderr_bytes,locale):
     marker=REPORT_PREFIX.encode("ascii")
@@ -344,6 +499,7 @@ def parse_report(stdout_bytes,stderr_bytes,locale):
     except Exception: raise Refuse("test_report_invalid") from None
     need(type(report) is dict and set(report)==REPORT_KEYS,
          "test_report_shape_invalid")
+    validate_tablet_evidence(report.get("tabletEvidence"))
     need(report.get("scenario")=="first_product_and_cash_sale"
          and report.get("locale")==locale and locale in ("en","my")
          and report.get("productSeeded") is False
@@ -371,6 +527,28 @@ def run_self_tests():
     need(len(IMAGE_FILES)==24 and sum(item[0] for item in IMAGE_FILES.values())==IMAGE_EXPANDED_BYTES
          and IMAGE_FILES["x86_64/system.img"]==(1622147072,IMAGE_SHA256),
          "offline_image_manifest_fixture")
+    common_view={"devicePixelRatio":1.0,"paddingLeft":0.0,"paddingTop":24.0,
+       "paddingRight":0.0,"paddingBottom":0.0,"viewPaddingLeft":0.0,
+       "viewPaddingTop":24.0,"viewPaddingRight":0.0,"viewPaddingBottom":0.0,
+       "viewInsetsLeft":0.0,"viewInsetsTop":0.0,"viewInsetsRight":0.0,
+       "viewInsetsBottom":0.0,"textScaleAt14":18.2}
+    tablet_fixture={"profileId":TABLET_DEVICE_ID,
+       "portrait":{**common_view,"physicalWidth":800,"physicalHeight":1280,
+                   "logicalWidth":800.0,"logicalHeight":1280.0},
+       "landscape":{**common_view,"physicalWidth":1280,"physicalHeight":800,
+                    "logicalWidth":1280.0,"logicalHeight":800.0},
+       "basketPreservedOnRotation":True,
+       "basketLayoutBeforeRotation":"split","basketLayoutAfterRotation":"split",
+       "crossLayoutTransferObserved":False,
+       "basketContentsBeforeRotation":{"productName":"Tea","quantity":1,"totalMmk":2500},
+       "basketContentsAfterRotation":{"productName":"Tea","quantity":1,"totalMmk":2500},
+       "salesBeforeRotation":0,"salesAfterRotation":0,
+       "receiptsBeforeRotation":0,"receiptsAfterRotation":0,"stockBeforeRotation":3,
+       "stockAfterRotation":3,"reviewTargetMinDpBeforeRotation":None,
+       "reviewTargetMinDpAfterRotation":None,"cashTargetMinDpBeforeRotation":48.0,
+       "cashTargetMinDpAfterRotation":48.0,"confirmTargetMinDp":48.0,
+       "receiptTargetMinDp":48.0,"imeStatus":"observed","imeViewInsetsBottom":300.0,
+       "dialogReachable":True,"primaryCtaReachable":True}
     valid={"scenario":"first_product_and_cash_sale","locale":"en","productSeeded":False,
        "explicitTestTapCalls":8,"textEntryCalls":5,
        "appMainToSaleCompletionMilliseconds":1000,
@@ -378,10 +556,57 @@ def run_self_tests():
        "appMainToSavedReceiptAssertionsMilliseconds":2500,
        "savedReceiptUiBoundToPersistedSale":True,"newConnectionSameOsProcess":True,
        "osProcessRestartProven":False,"merchantAcceptance":"NOT_RUN",
-       "promotionEligible":False}
+       "promotionEligible":False,"tabletEvidence":tablet_fixture}
     encoded=json.dumps(valid,separators=(",",":")).encode()
     parse_report(REPORT_PREFIX.encode()+encoded+b"\n",b"","en")
     cases=2
+    compact_fixture={**tablet_fixture,
+       "basketLayoutBeforeRotation":"compact","basketLayoutAfterRotation":"compact",
+       "reviewTargetMinDpBeforeRotation":48.0,"reviewTargetMinDpAfterRotation":48.0}
+    validate_tablet_evidence(compact_fixture)
+    cases+=1
+    transfer_fixture={**tablet_fixture,
+       "basketLayoutBeforeRotation":"compact","basketLayoutAfterRotation":"split",
+       "crossLayoutTransferObserved":True,"reviewTargetMinDpBeforeRotation":48.0,
+       "reviewTargetMinDpAfterRotation":None}
+    validate_tablet_evidence(transfer_fixture)
+    cases+=1
+    profile_listing=(b"---------\n"
+      b"id: 14 or \"medium_tablet\"\nName: Medium Tablet\nOEM : Generic\n"
+      b"Tag : default\n---------\n")
+    need(parse_tablet_profile_listing(profile_listing)=={
+      "profileId":"medium_tablet","name":"Medium Tablet","oem":"Generic"},
+      "offline_tablet_profile_positive")
+    cases+=1
+    invalid_profiles=(
+      (b"", "tablet_profile_listing_invalid"),
+      (b"id: 1 or \"pixel_2\"\nName: Pixel 2\nOEM : Google", "tablet_profile_unavailable"),
+      (profile_listing+profile_listing, "tablet_profile_unavailable"),
+      (b"x"*(1024*1024+1), "tablet_profile_listing_invalid"),
+      (b"\xff", "tablet_profile_listing_invalid"),
+    )
+    for raw,reason in invalid_profiles:
+        try: parse_tablet_profile_listing(raw)
+        except Refuse as error: need(str(error)==reason,"offline_tablet_profile_wrong_reason")
+        else: raise Refuse("offline_tablet_profile_expected_refusal")
+        cases+=1
+    display=parse_tablet_display(b"Physical size: 1280x800\n",
+      b"Physical density: 160\n",b"1.3\n")
+    need(display=={"physicalWidth":1280,"physicalHeight":800,
+      "densityDpi":160,"fontScale":1.3},"offline_tablet_display_positive")
+    cases+=1
+    invalid_displays=(
+      (b"Override size: 1280x800",b"Physical density: 160",b"1.3","tablet_display_invalid"),
+      (b"Physical size: 1280x800",b"Physical density: 160",b"1.0","tablet_display_invalid"),
+      (b"Physical size: 1280x800",b"Physical density: 160",b"nan","tablet_display_invalid"),
+      (b"Physical size: 1280x800",b"Physical density: 0",b"1.3","tablet_display_invalid"),
+    )
+    for size_raw,density_raw,scale_raw,reason in invalid_displays:
+        try: parse_tablet_display(size_raw,density_raw,scale_raw)
+        except Refuse as error: need(str(error)==reason,"offline_tablet_display_wrong_reason")
+        else: raise Refuse("offline_tablet_display_expected_refusal")
+        cases+=1
+    cases+=1
     need(PULSE_QUERY_FORMAT=="-f="+"$"+"{db:Status-Abbrev}\t"+"$"+"{Version}",
          "offline_libpulse_format_fixture")
     cases+=1
@@ -414,6 +639,22 @@ def run_self_tests():
          and "secret" not in json.dumps(evidence),
          "offline_internal_failure_phase_fixture")
     cases+=1
+    child=child_failure_record("avd_create",17)
+    refusal=child_failed_refusal("avd_create",17)
+    ordinary=child_failed_refusal(None,17)
+    need(child=={"operation":"avd_create","exitCode":17}
+         and str(refusal)=="child_failed" and refusal.child_failure==child
+         and str(ordinary)=="child_failed" and ordinary.child_failure is None
+         and "secret-path" not in json.dumps(child),
+         "offline_child_failure_detail_fixture")
+    cases+=1
+    for operation,code,reason in (("avd_create /secret-path",17,"child_operation_invalid"),
+                                  ("adb_start_server",True,"child_exit_code_invalid"),
+                                  ("adb_boot_probe",256,"child_exit_code_invalid")):
+        try: child_failure_record(operation,code)
+        except Refuse as error: need(str(error)==reason,"offline_child_failure_wrong_reason")
+        else: raise Refuse("offline_child_failure_expected_refusal")
+        cases+=1
     class SyntheticUnexpected(Exception): pass
     evidence=internal_failure_evidence(SyntheticUnexpected("secret"),"identity_prepare")
     need(evidence=={"phase":"identity_prepare","exceptionCategory":"Other","errno":None}
@@ -452,6 +693,35 @@ def run_self_tests():
                     "test_report_missing_or_ambiguous","en"))
     invalid.append((REPORT_PREFIX.encode()+json.dumps({**valid,"locale":"my"}).encode(),b"",
                     "test_report_values_invalid","en"))
+    bad_portrait={**tablet_fixture["portrait"],"logicalWidth":411.0}
+    bad_profile={**tablet_fixture,"profileId":"medium_phone"}
+    bad_viewport={**tablet_fixture,"portrait":bad_portrait}
+    short_viewports=[]
+    for logical_width in (480.0,533.0):
+        short_viewports.append({**tablet_fixture["portrait"],
+          "logicalWidth":logical_width,"devicePixelRatio":2.0,
+          "physicalWidth":int(logical_width*2),"physicalHeight":2560})
+    bad_effect={**tablet_fixture,"salesAfterRotation":1}
+    bad_target={**tablet_fixture,"confirmTargetMinDp":47.0}
+    bad_layout_claim={**tablet_fixture,"basketLayoutBeforeRotation":"compact"}
+    bad_contents={**tablet_fixture,"basketContentsAfterRotation":
+                  {"productName":"Tea","quantity":2,"totalMmk":5000}}
+    bad_split_review={**tablet_fixture,"reviewTargetMinDpBeforeRotation":48.0}
+    bad_compact_review={**compact_fixture,"reviewTargetMinDpBeforeRotation":None}
+    bad_ime={**tablet_fixture,"imeViewInsetsBottom":0.0}
+    for tablet,reason in ((bad_profile,"test_tablet_evidence_invalid"),
+                          (bad_viewport,"test_tablet_evidence_invalid"),
+                          *[( {**tablet_fixture,"portrait":view},
+                              "test_tablet_evidence_invalid") for view in short_viewports],
+                          (bad_effect,"test_tablet_rotation_effect_invalid"),
+                          (bad_target,"test_tablet_target_invalid"),
+                          (bad_layout_claim,"test_tablet_layout_invalid"),
+                          (bad_contents,"test_tablet_basket_contents_invalid"),
+                          (bad_split_review,"test_tablet_target_invalid"),
+                          (bad_compact_review,"test_tablet_target_invalid"),
+                          (bad_ime,"test_tablet_ime_invalid")):
+        invalid.append((REPORT_PREFIX.encode()+json.dumps({**valid,"tabletEvidence":tablet}).encode(),
+                        b"",reason,"en"))
     invalid.append((REPORT_PREFIX.encode()+json.dumps({**valid,"extra":"x"}).encode(),b"",
                     "test_report_shape_invalid","en"))
     invalid.append((REPORT_PREFIX.encode()+json.dumps({**valid,"explicitTestTapCalls":True}).encode(),b"",
@@ -847,6 +1117,47 @@ class ScopedKvm:
             run(["sudo","-n","setfacl","--restore="+str(self.backup)],self.root,self.e,10)
             after=run(["getfacl","-p","--","/dev/kvm"],self.root,self.e,10,True)
             need(after==self.before,"kvm_acl_restore_unproven"); self.changed=False
+def parse_tablet_profile_listing(raw):
+    need(type(raw) is bytes and 0<len(raw)<=1024*1024,"tablet_profile_listing_invalid")
+    try: text=raw.decode("utf-8","strict")
+    except UnicodeError: raise Refuse("tablet_profile_listing_invalid") from None
+    blocks=re.split(r"(?m)^-{3,}\s*$",text)
+    matches=[block for block in blocks if
+       re.search(r'(?m)^\s*id:\s*[^\r\n]*"medium_tablet"\s*$',block) and
+       re.search(r"(?m)^\s*Name:\s*Medium Tablet\s*$",block) and
+       re.search(r"(?m)^\s*OEM\s*:\s*Generic\s*$",block)]
+    need(len(matches)==1,"tablet_profile_unavailable")
+    return {"profileId":TABLET_DEVICE_ID,"name":TABLET_DEVICE_NAME,
+            "oem":TABLET_DEVICE_OEM}
+def verify_tablet_profile(manager,root,e,deadline):
+    raw=run([str(manager),"list","device"],root,e,
+            bounded_time(deadline,15),True,operation="avdmanager_list_devices")
+    return parse_tablet_profile_listing(raw)
+
+def parse_tablet_display(size_raw,density_raw,font_scale_raw):
+    try:
+        size_text=size_raw.decode("ascii","strict").strip()
+        density_text=density_raw.decode("ascii","strict").strip()
+        font_text=font_scale_raw.decode("ascii","strict").strip()
+    except (AttributeError,UnicodeError):
+        raise Refuse("tablet_display_invalid") from None
+    size=re.fullmatch(r"Physical size: ([1-9][0-9]{2,4})x([1-9][0-9]{2,4})",size_text)
+    density=re.fullmatch(r"Physical density: ([1-9][0-9]{2,3})",density_text)
+    try: scale=float(font_text)
+    except ValueError: raise Refuse("tablet_display_invalid") from None
+    need(size is not None and density is not None and math.isfinite(scale) and
+         math.isclose(scale,1.3,rel_tol=0,abs_tol=0.001),"tablet_display_invalid")
+    return {"physicalWidth":int(size.group(1)),"physicalHeight":int(size.group(2)),
+            "densityDpi":int(density.group(1)),"fontScale":scale}
+def read_tablet_display(adb,serial,root,e,deadline):
+    size=run([str(adb),"-s",serial,"shell","wm","size"],root,e,
+             bounded_time(deadline,10),True,operation="adb_read_display_size")
+    density=run([str(adb),"-s",serial,"shell","wm","density"],root,e,
+                bounded_time(deadline,10),True,operation="adb_read_display_density")
+    scale=run([str(adb),"-s",serial,"shell","settings","get","system","font_scale"],
+              root,e,bounded_time(deadline,10),True,operation="adb_read_font_scale")
+    return parse_tablet_display(size,density,scale)
+
 def run_locale(root,task,sdk,emulator,adb,locale,deadline):
     RUN_PROGRESS["currentLocale"]=locale
     set_phase("avd_prepare")
@@ -858,8 +1169,11 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
     with socket.socket() as sock: sock.bind(("127.0.0.1",port))
     avd.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     manager=Path(sdk)/"cmdline-tools/latest/bin/avdmanager"
-    run([str(manager),"create","avd","-n",name,"-k",IMAGE,"-p",str(avd),"-d","pixel_2"],
-        root,e,min(60,max(1,deadline-time.monotonic())),input_data=b"no\n")
+    tablet_profile=verify_tablet_profile(manager,root,e,deadline)
+    run([str(manager),"create","avd","-n",name,"-k",IMAGE,"-p",str(avd),
+         "-d",TABLET_DEVICE_ID],
+        root,e,min(60,max(1,deadline-time.monotonic())),input_data=b"no\n",
+        operation="avd_create")
     need(avd.is_dir() and not avd.is_symlink() and
          (avd/"config.ini").is_file() and not (avd/"config.ini").is_symlink(),
          "avd_creation_invalid")
@@ -873,7 +1187,8 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
     try:
         RUN_PROGRESS["cleanupProven"]=False
         adb_started=True
-        run([str(adb),"start-server"],root,e,bounded_time(deadline,15))
+        run([str(adb),"start-server"],root,e,bounded_time(deadline,15),
+            operation="adb_start_server")
         proc=subprocess.Popen([str(emulator),"-avd",name,"-port","5554","-wipe-data",
           "-no-snapshot","-no-window","-no-audio","-no-boot-anim",
           "-gpu","swiftshader_indirect","-accel","on"],
@@ -881,17 +1196,23 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
           stderr=subprocess.DEVNULL,start_new_session=True,close_fds=True)
         serial="emulator-5554"
         run([str(adb),"-s",serial,"wait-for-device"],root,e,
-            min(90,max(1,deadline-time.monotonic())))
+            min(90,max(1,deadline-time.monotonic())),
+            operation="adb_wait_for_device")
         boot=min(deadline,time.monotonic()+150)
         while time.monotonic()<boot:
             need(proc.poll() is None,"emulator_exited")
             if run([str(adb),"-s",serial,"shell","getprop","sys.boot_completed"],
-                   root,e,bounded_time(deadline,10),True).decode("ascii","replace").strip()=="1": break
+                   root,e,bounded_time(deadline,10),True,
+                   operation="adb_boot_probe").decode("ascii","replace").strip()=="1": break
             time.sleep(2)
         else: raise Refuse("emulator_boot_timeout")
-        lines=run([str(adb),"devices"],root,e,bounded_time(deadline,10),True).decode("ascii","replace").splitlines()[1:]
+        lines=run([str(adb),"devices"],root,e,bounded_time(deadline,10),True,
+                  operation="adb_devices").decode("ascii","replace").splitlines()[1:]
         need([line.split() for line in lines if line.strip()]==[[serial,"device"]],
              "adb_device_set")
+        run([str(adb),"-s",serial,"shell","settings","put","system","font_scale","1.3"],
+            root,e,bounded_time(deadline,10),operation="adb_set_font_scale")
+        tablet_display=read_tablet_display(adb,serial,root,e,deadline)
         need(shutil.disk_usage(os.environ["RUNNER_TEMP"]).free>=4*1024**3,
              "capacity_before_test")
         set_phase("test_running")
@@ -901,6 +1222,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
           "--target="+str(TEST.relative_to(APP)),"--flavor=qa",
           "--dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1",
           "--dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1",
+          "--dart-define=SHOP_AVD_PROFILE_ID="+TABLET_DEVICE_ID,
           "--dart-define=SHOP_FIRST_SALE_LOCALE="+locale],
           root/APP,e,min(6*60,max(1,deadline-time.monotonic())),
           capture=True,capture_pair=True)
@@ -912,6 +1234,8 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
              "capacity_after_test")
         return {"locale":locale,"result":"passed",
                 "elapsedMs":int((time.monotonic()-start)*1000),
+                "tabletEnvironment":{"avdProfile":tablet_profile,
+                                     "hostDisplay":tablet_display},
                 "reportData":report}
     finally:
         cleanup_ok=True
@@ -1137,7 +1461,9 @@ def main():
     try:
         root=Path(__file__).resolve().parents[1]
         head=check_context(root); lock=check_source(root)
-        facts={"sourceCommit":head,"testSha256":TEST_SHA,"pubspecSha256":PUB_SHA,
+        facts={"sourceCommit":head,"sourceParent":BASE,
+               "sourceTree":BASE_TREE,"nativeSourceTree":BASE_NATIVE_TREE,
+               "testSha256":TEST_SHA,"pubspecSha256":PUB_SHA,
                "lockSha256":lock,"systemImagePackage":IMAGE,
                "systemImageManifestSha256":IMAGE_MANIFEST_SHA256,
                "systemImageArchiveSha256StaticPin":IMAGE_ARCHIVE_SHA256}
@@ -1149,6 +1475,8 @@ def main():
     except Refuse as error:
         progress=dict(RUN_PROGRESS)
         facts["cleanupProven"]=progress.get("cleanupProven",False)
+        if error.child_failure is not None:
+            facts["childFailure"]=error.child_failure
         progress["executionState"]=("not_started" if not progress["attemptedLocales"] else
           "completed" if progress["completedLocales"]==["en","my"] else
           "possible" if progress["phase"]=="test_running" else "partial")
