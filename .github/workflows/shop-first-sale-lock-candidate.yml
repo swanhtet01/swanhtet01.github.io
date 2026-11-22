@@ -1,0 +1,130 @@
+name: Shop first-sale dependency candidate
+
+on:
+  push:
+    branches: [codex/postgres17-provenance-integration-20261031]
+    paths: [.github/workflows/shop-first-sale-lock-candidate.yml]
+
+permissions: {}
+
+concurrency:
+  group: shop-first-sale-lock-candidate
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: >-
+      github.repository == 'swanhtet01/swanhtet01.github.io' &&
+      github.event.repository.id == 1034056731 &&
+      github.actor_id == '98728123' &&
+      github.event.sender.id == 98728123 &&
+      github.event.sender.type == 'User' &&
+      github.run_attempt == '1' &&
+      github.event.before == '4d105653eb578addb0c26637d891f7008e979c47' &&
+      github.event.after == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Admit the one-file source-only successor
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          read -ra parents <<< "$(git rev-list --parents -n 1 HEAD)"
+          [[ "${#parents[@]}" == 2 && "${parents[1]}" == 4d105653eb578addb0c26637d891f7008e979c47 ]]
+          [[ "$(git diff --name-only HEAD^ HEAD --)" == .github/workflows/shop-first-sale-lock-candidate.yml ]]
+          [[ "$(git rev-parse HEAD:mobile/shop_pos)" == 2a6c9ad5bc5cd56a26513558aedac82cf7d2bb64 ]]
+          printf '%s\n' 'cd8fa200e756a121d26f9880a7e48fabd0743a958ece8049026891f53e68d88d  mobile/shop_pos/pubspec.yaml' \
+            'e9fa068260995e89ad84aec2f34da4233b9222582440069e89943f2ad048ec00  mobile/shop_pos/pubspec.lock' | sha256sum --check --strict
+
+      - name: Set up the existing pinned Flutter toolchain
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Generate a dependency candidate in a separate copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export SHOP_CI_LOCK_CANDIDATE_ROOT="$RUNNER_TEMP/shop-first-sale-lock-candidate"
+          [[ ! -e "$SHOP_CI_LOCK_CANDIDATE_ROOT" ]]
+          mkdir -m 700 "$SHOP_CI_LOCK_CANDIDATE_ROOT"
+          mkdir -m 700 "$SHOP_CI_LOCK_CANDIDATE_ROOT/app" "$SHOP_CI_LOCK_CANDIDATE_ROOT/out"
+          cp -a -- "$GITHUB_WORKSPACE/mobile/shop_pos/." "$SHOP_CI_LOCK_CANDIDATE_ROOT/app/"
+          (
+            cd "$SHOP_CI_LOCK_CANDIDATE_ROOT/app"
+            timeout --kill-after=10s 360s flutter pub add 'dev:integration_test:{sdk: flutter}'
+            timeout --kill-after=10s 30s flutter --version --machine > "$SHOP_CI_LOCK_CANDIDATE_ROOT/out/flutter-version.json"
+          )
+          [[ -z "$(git status --porcelain --untracked-files=no)" ]]
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const root = process.env.SHOP_CI_LOCK_CANDIDATE_ROOT;
+          const out = path.join(root, 'out');
+          const sha = value => crypto.createHash('sha256').update(value).digest('hex');
+          const flutter = JSON.parse(fs.readFileSync(path.join(out, 'flutter-version.json'), 'utf8'));
+          if (flutter.frameworkVersion !== '3.47.8') throw Error('flutter_version_mismatch');
+          const expected = {
+            'pubspec.yaml': 'cd8fa200e756a121d26f9880a7e48fabd0743a958ece8049026891f53e68d88d',
+            'pubspec.lock': 'e9fa068260995e89ad84aec2f34da4233b9222582440069e89943f2ad048ec00',
+          };
+          const files = [];
+          for (const name of Object.keys(expected)) {
+            const original = fs.readFileSync(path.join(process.env.GITHUB_WORKSPACE, 'mobile/shop_pos', name));
+            const candidate = fs.readFileSync(path.join(root, 'app', name));
+            if (sha(original) !== expected[name]) throw Error('original_source_changed');
+            if (candidate.length === 0 || candidate.length > 131072) throw Error('candidate_size_invalid');
+            if (!/^  integration_test:$/m.test(candidate.toString('utf8'))) throw Error('integration_test_missing');
+            if (name === 'pubspec.lock') {
+              const urls = candidate.toString('utf8').match(/https?:\/\/[^\s"']+/g) || [];
+              if (urls.some(value => new URL(value).origin !== 'https://pub.dev')) throw Error('unexpected_package_host');
+            }
+            fs.writeFileSync(path.join(out, 'original-' + name), original, { mode: 0o600 });
+            fs.writeFileSync(path.join(out, 'candidate-' + name), candidate, { mode: 0o600 });
+            files.push({ path: name, originalBytes: original.length, originalSha256: sha(original), candidateBytes: candidate.length, candidateSha256: sha(candidate) });
+          }
+          const receipt = {
+            contract: 'supermega.shop.first-sale-dependency-candidate.v1',
+            sourceCommit: process.env.GITHUB_SHA,
+            sourceParent: '4d105653eb578addb0c26637d891f7008e979c47',
+            nativeTree: '2a6c9ad5bc5cd56a26513558aedac82cf7d2bb64',
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            flutterVersion: flutter.frameworkVersion,
+            files,
+            status: 'CANDIDATE_GENERATED_REVIEW_REQUIRED',
+            shopAppLaunched: false,
+            installedAcceptance: 'NOT_RUN',
+            promotionEligible: false,
+          };
+          fs.writeFileSync(path.join(out, 'receipt.json'), JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
+          console.log(JSON.stringify(receipt));
+          for (const name of Object.keys(expected)) {
+            const encoded = fs.readFileSync(path.join(out, 'candidate-' + name)).toString('base64');
+            console.log('SMG_CANDIDATE_BEGIN ' + name);
+            for (let i = 0; i < encoded.length; i += 4096) console.log(encoded.slice(i, i + 4096));
+            console.log('SMG_CANDIDATE_END ' + name);
+          }
+          NODE
+          printf '%s\n' 'Dependency metadata candidate only. Shop/AVD/PG not launched; no acceptance or release proof.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain metadata only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: shop-first-sale-dependency-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/shop-first-sale-lock-candidate/out/
+          if-no-files-found: error
+          retention-days: 7
