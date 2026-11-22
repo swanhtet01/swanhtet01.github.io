@@ -12,7 +12,7 @@
     {
       "certificateSha256": "558b34d97944a53cefc13c031ea46845be00f0b9bb87f47dc3110eaee07f82d3",
       "subject": "CN=EnterpriseDB Corporation, O=EnterpriseDB Corporation, L=Wilmington, S=Delaware, C=US",
-      "issuer": "DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1"
+      "issuer": "CN=DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1, O=\"DigiCert, Inc.\", C=US"
     }
   ],
   "approvedTimestampCertificateSha256": [
@@ -20,7 +20,7 @@
   ],
   "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
   "blockers": [
-    "The exact EDB PostgreSQL 17.11-5 installer bytes and Authenticode identities were observed read-only on Windows, but the canonical observer record has not been retained and hashed.",
+    "The canonical EDB PostgreSQL 17.11-5 signature observation is retained and digest-bound; the publisher policy and isolated-host runtime re-observation remain pending independent review.",
     "The signer and timestamp raw-DER SHA-256 values remain pending independent policy review.",
     "This pending policy cannot approve a rehearsal profile or authorize installer execution."
   ]

@@ -74,6 +74,8 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   drift_dev: ^2.35.1
   build_runner: ^2.16.2
+  integration_test:
+    sdk: flutter
 
 dependency_overrides:
   # Pinned upstream 3.4.0 source with one Android build compatibility patch:

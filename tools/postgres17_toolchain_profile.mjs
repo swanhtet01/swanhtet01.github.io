@@ -544,7 +544,9 @@ export async function inspectWindowsAuthenticode(artifactPath) {
     ],
     {
       encoding: 'utf8',
-      input: inspectorSource,
+      // Windows PowerShell stdin buffers a final compound statement until a
+      // blank line terminates it. Flush the JSON command without changing policy.
+      input: inspectorSource + '\n',
       timeout: 30_000,
       windowsHide: true,
       env: { ...process.env, SUPERMEGA_AUTHENTICODE_TARGET: artifactPath },

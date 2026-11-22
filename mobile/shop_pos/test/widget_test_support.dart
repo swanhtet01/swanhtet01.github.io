@@ -4052,6 +4052,111 @@ void registerWidgetTests(WidgetTestPartition partition) {
       }
     });
 
+    for (final width in <double>[390, 1200]) {
+      for (final myanmar in <bool>[false, true]) {
+        for (final reversed in <bool>[false, true]) {
+          testWidgets(
+            'Today gross detail is useful at $width (Myanmar $myanmar, reversed $reversed)',
+            (tester) async {
+              tester.view.physicalSize = Size(width, 840);
+              tester.view.devicePixelRatio = 1;
+              addTearDown(tester.view.resetPhysicalSize);
+              addTearDown(tester.view.resetDevicePixelRatio);
+              SharedPreferences.setMockInitialValues({});
+              final database = ShopDatabase.withCorrectionReceiptVerifier(
+                executor: NativeDatabase.memory(),
+                correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+                testOnlyAllowUnconsumedAuthorization: true,
+              );
+              try {
+                await _attachWidgetWorkspace(database);
+                await database.addProduct(
+                  id: 'summary-tea',
+                  name: 'Tea',
+                  priceMmk: 2500,
+                  openingStock: 2,
+                );
+                await database.openManagedTestCashShift(
+                  operationId: 'summary-shift',
+                  operatorLabel: 'May',
+                  openingFloatMmk: 5000,
+                );
+                final sale = await database.recordManagedTestCashSale(
+                  operationId: 'summary-sale',
+                  lines: const [
+                    ShopSaleLineInput(productId: 'summary-tea', quantity: 1),
+                  ],
+                );
+                if (reversed) {
+                  final command = await database.previewFullSaleReversal(
+                    operationId: 'summary-correction',
+                    saleId: sale.id,
+                    restockItems: true,
+                    reason: 'Customer returned the full sale',
+                    confirmCashReturned: true,
+                  );
+                  await database.recordAuthorizedFullSaleReversal(
+                    command: command,
+                    authorization: await _widgetCorrectionAuthorization(
+                      command.commandDigest,
+                      capability: 'shop.sale.reverse',
+                      receiptId: 'summary-correction-receipt',
+                    ),
+                  );
+                }
+                await tester.pumpWidget(
+                  ShopApp(
+                    testOnlyAllowMissingRuntimeScope: true,
+                    database: database,
+                    authClient: null,
+                    apiBaseUrl: '',
+                    initialMyanmar: myanmar,
+                  ),
+                );
+                await tester.pumpAndSettle(
+                  const Duration(milliseconds: 100),
+                  EnginePhase.sendSemanticsUpdate,
+                  const Duration(seconds: 20),
+                );
+                expect(
+                  find.text(
+                    myanmar ? 'ယနေ့အသားတင်ရောင်းအား' : 'Net sales today',
+                  ),
+                  findsOneWidget,
+                );
+                expect(
+                  find.textContaining(
+                    myanmar ? 'စုစုပေါင်းမှတ်တမ်း:' : 'Gross recorded:',
+                  ),
+                  reversed ? findsOneWidget : findsNothing,
+                );
+                final netCard = find.ancestor(
+                  of: find.text(
+                    myanmar ? 'ယနေ့အသားတင်ရောင်းအား' : 'Net sales today',
+                  ),
+                  matching: find.byType(Card),
+                );
+                expect(netCard, findsOneWidget);
+                expect(
+                  find.descendant(
+                    of: netCard,
+                    matching: find.text(
+                      shopMmk(reversed ? 0 : 2500, myanmar: myanmar),
+                    ),
+                  ),
+                  findsOneWidget,
+                );
+                expect(tester.takeException(), isNull);
+              } finally {
+                await tester.pumpWidget(const SizedBox.shrink());
+                await database.close();
+              }
+            },
+          );
+        }
+      }
+    }
+
     testWidgets(
       'cash reversal reports net and audit detail without ordinary reprint',
       (tester) async {

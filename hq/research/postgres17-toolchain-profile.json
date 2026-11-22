@@ -21,13 +21,13 @@
       "bytes": 413001200,
       "sha256": "612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072",
       "authentication": {
-        "status": "observed-unretained",
+        "status": "observed-retained-pending-review",
         "method": "windows-authenticode-v1",
         "reference": "https://get.enterprisedb.com/postgresql/postgresql-17.11-5-windows-x64.exe",
         "policyId": "edb-postgresql-windows-authenticode-v1-pending-review",
-        "evidencePath": null,
-        "evidenceBytes": null,
-        "evidenceSha256": null
+        "evidencePath": "postgres17-edb-source-authenticode-observation.json",
+        "evidenceBytes": 876,
+        "evidenceSha256": "1ff57d5e9252bcba1cf31c2eb8466f35adb3315174c4f4cc05c1394dfd9e6437"
       }
     }
   ],
@@ -44,7 +44,7 @@
   },
   "approval": { "status": "pending", "reviewedBy": null, "reviewedAt": null },
   "blockers": [
-    "The exact EDB 17.11-5 installer digest, valid Authenticode signature, code-signing EKU, signer raw-DER SHA-256 and timestamp raw-DER SHA-256 were observed twice read-only on Windows, but no canonical observer record is retained yet.",
+    "The retained canonical EDB 17.11-5 signature observation matches the pinned installer, signer, timestamp and code-signing EKU; publisher-policy approval, isolated-host re-observation and complete runtime closure remain pending.",
     "Authenticated Python, Psycopg/native-extension, OpenSSL, Node and Git artifacts are not retained or bound.",
     "The isolated runtime bindings and complete executed, imported and loaded non-system closure are not recorded.",
     "Independent profile and publisher-policy approvals are absent.",

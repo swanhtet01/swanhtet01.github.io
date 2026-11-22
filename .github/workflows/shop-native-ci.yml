@@ -1232,6 +1232,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check canonical read-only Windows signature transport
+        working-directory: ${{ github.workspace }}
+        timeout-minutes: 2
+        run: node --test tools/postgres17_authenticode_transport.test.mjs
+
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:

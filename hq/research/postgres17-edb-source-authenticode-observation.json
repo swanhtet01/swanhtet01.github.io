@@ -1,0 +1,16 @@
+{
+  "contract": "supermega.windows-authenticode-observation.v1",
+  "artifactFileName": "postgresql-17.11-5-windows-x64.exe",
+  "artifactBytes": 413001200,
+  "artifactSha256": "612c7f5400a003aaffa0372cb273eed52278f93c680ab911eb9cb2229e329072",
+  "signatureStatus": "Valid",
+  "signatureType": "Authenticode",
+  "signerCertificateSha256": "558b34d97944a53cefc13c031ea46845be00f0b9bb87f47dc3110eaee07f82d3",
+  "signerSubject": "CN=EnterpriseDB Corporation, O=EnterpriseDB Corporation, L=Wilmington, S=Delaware, C=US",
+  "signerIssuer": "CN=DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1, O=\"DigiCert, Inc.\", C=US",
+  "timestampCertificateSha256": "2da09da7f4131f9fe72db6c5e6e9c9656755af043f1ea742cc0d2120e141ebfc",
+  "timestampSubject": "CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1, O=\"DigiCert, Inc.\", C=US",
+  "ekuOids": [
+    "1.3.6.1.5.5.7.3.3"
+  ]
+}
