@@ -204,22 +204,53 @@ def flutter_driver_package_argument(repo_root):
         root/APP/".dart_tool"/"package_config.json")
 
 def flutter_drive_diagnostics(stdout,stderr):
-    # Fixed hints only; never serialize child text, paths, argv, or environment.
+    # Hints only: fixed labels and whitelisted source aliases/integers, never text.
     need(type(stdout) is bytes and type(stderr) is bytes and
          len(stdout)+len(stderr)<=OUTPUT_LIMIT,"flutter_drive_diagnostic_output_invalid")
-    combined=(stdout+b"\n"+stderr).lower()
+    combined=(stdout+b"\n"+stderr).lower().replace(b"\\",b"/")
     signals=[]
-    # Fixed Flutter/Dart diagnostics; unknown text remains unclassified.
     for label,marker in (
         ("driver_package_import_unresolved",b"couldn't resolve the package 'integration_test'"),
         ("driver_file_not_found",b"test file not found:"),
         ("driver_target_is_driver_file",b"the file path passed to --target should be an app entrypoint"),
         ("flutter_app_start_failed",b"application failed to start. will not run test. quitting."),
+        ("gradle_build_failed",b"failure: build failed with an exception"),
+        ("dart_compilation_error",b": error: "),
+        ("dart_compilation_failed",b"compilation failed"),
+        ("dart_unhandled_exception",b"unhandled exception:"),
+        ("dart_test_failure",b"testfailure"),
+        ("flutter_test_exception",b"exception caught by flutter test framework"),
+        ("flutter_some_tests_failed",b"some tests failed"),
+        ("flutter_driver_tests_failed",b"driver tests failed"),
+        ("flutter_asset_load_failed",b"unable to load asset:"),
+        ("dart_service_connection_failed",b"error connecting to the service protocol"),
+        ("driver_report_shape_invalid",b"bad state: integration report shape invalid"),
+        ("driver_report_values_invalid",b"bad state: integration report values invalid"),
+        ("driver_tablet_report_shape_invalid",b"bad state: tablet report shape invalid"),
     ):
-        if marker in combined and label not in signals: signals.append(label)
-    return {"schema":"supermega.flutter_drive_diagnostic.v1",
+        if marker in combined: signals.append(label)
+    if b"gradle task" in combined and b"failed with exit code" in combined:
+        signals.append("gradle_task_failed")
+    # A source location is diagnostic context, not evidence of causation or success.
+    locations=[]
+    for path,alias in (
+        (b"integration_test/first_sale_persistence_test.dart","integration_test"),
+        (b"driver-en/first_sale_persistence_test.dart","driver_en"),
+        (b"driver-my/first_sale_persistence_test.dart","driver_my"),
+    ):
+        pattern=(rb"(?<![a-z0-9_.-])"+re.escape(path)+
+                 rb"(?::|[ \t]+)([0-9]{1,6}):([0-9]{1,6})(?![0-9])")
+        for match in re.finditer(pattern,combined):
+            line,column=(int(value) for value in match.groups())
+            location={"source":alias,"line":line,"column":column}
+            if line>0 and column>0 and location not in locations:
+                locations.append(location)
+            if len(locations)==8: break
+        if len(locations)==8: break
+    return {"schema":"supermega.flutter_drive_diagnostic.v2",
             "stdoutBytes":len(stdout),"stderrBytes":len(stderr),
-            "signals":signals or ["unclassified"],"rawOutputIncluded":False}
+            "signals":signals or ["unclassified"],"sourceLocations":locations,
+            "rawOutputIncluded":False}
 
 def child_failed_refusal(operation, exit_code, *, stdout=None, stderr=None):
     if operation is None: return Refuse("child_failed")
@@ -806,7 +837,7 @@ def run_self_tests():
         diagnostic=flutter_drive_diagnostics(raw,b"")
         need(diagnostic["signals"]==[expected] and
              diagnostic["stdoutBytes"]==len(raw) and diagnostic["stderrBytes"]==0 and
-             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","rawOutputIncluded"} and
+             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","sourceLocations","rawOutputIncluded"} and
              not diagnostic["rawOutputIncluded"] and
              all(secret not in json.dumps(diagnostic) for secret in
                  ("private","access_token","integration_test_driver.dart")),
@@ -817,14 +848,78 @@ def run_self_tests():
                                  "offline_flutter_drive_diagnostic_wrong_reason")
     else: raise Refuse("offline_flutter_drive_diagnostic_expected_refusal")
     cases+=1
+    drive_more_fixtures=(
+        (b"FAILURE: Build failed with an exception. /private/path",["gradle_build_failed"]),
+        (b"/private/file.dart:9:2: Error: private-value",["dart_compilation_error"]),
+        (b"Compilation failed private-value",["dart_compilation_failed"]),
+        (b"Unhandled exception: private-value",["dart_unhandled_exception"]),
+        (b"TestFailure private-value",["dart_test_failure"]),
+        (b"EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK private-value",["flutter_test_exception"]),
+        (b"Some tests failed private-value",["flutter_some_tests_failed"]),
+        (b"Driver tests failed private-value",["flutter_driver_tests_failed"]),
+        (b"Unable to load asset: private-value",["flutter_asset_load_failed"]),
+        (b"Error connecting to the service protocol: private-value",["dart_service_connection_failed"]),
+        (b"Bad state: integration report shape invalid private-value",["driver_report_shape_invalid"]),
+        (b"Bad state: integration report values invalid private-value",["driver_report_values_invalid"]),
+        (b"Bad state: tablet report shape invalid private-value",["driver_tablet_report_shape_invalid"]),
+        (b"Gradle task assembleProductionDebug failed with exit code 1 private-value",["gradle_task_failed"]),
+        (b"Running Gradle task assembleProductionDebug private-value",["unclassified"]),
+        (b"failed with exit code 1 private-value",["unclassified"]),
+    )
+    for raw,expected in drive_more_fixtures:
+        diagnostic=flutter_drive_diagnostics(raw,b"")
+        need(diagnostic["signals"]==expected and diagnostic["sourceLocations"]==[] and
+             "private" not in json.dumps(diagnostic),"offline_flutter_drive_more_labels")
+        cases+=1
+    location_fixtures=(
+        (b"/private/repo/integration_test/first_sale_persistence_test.dart:123:4",
+         [{"source":"integration_test","line":123,"column":4}]),
+        (b"file:///private/driver-en/first_sale_persistence_test.dart:9:2",
+         [{"source":"driver_en","line":9,"column":2}]),
+        (b"C:\\private\\driver-my\\first_sale_persistence_test.dart 15:3",
+         [{"source":"driver_my","line":15,"column":3}]),
+        (b"/private/unknown.dart:10:20 private-value",[]),
+        (b"unknown-integration_test/first_sale_persistence_test.dart:1:2",[]),
+        (b"integration_test/first_sale_persistence_test.dart:0:2",[]),
+        (b"integration_test/first_sale_persistence_test.dart:2:0",[]),
+        (b"integration_test/first_sale_persistence_test.dart:1000000:2",[]),
+        (b"integration_test/first_sale_persistence_test.dart:2:1000000",[]),
+        (b"driver-my/first_sale_persistence_test.dart:999999:999999",
+         [{"source":"driver_my","line":999999,"column":999999}]),
+        (b"\xff\xfe access_token=private-value",[]),
+    )
+    for raw,expected in location_fixtures:
+        diagnostic=flutter_drive_diagnostics(raw,b"")
+        need(diagnostic["sourceLocations"]==expected and
+             diagnostic["signals"]==["unclassified"] and
+             all(secret not in json.dumps(diagnostic) for secret in
+                 ("private","unknown.dart","access_token","first_sale_persistence_test.dart")),
+             "offline_flutter_drive_source_location_privacy")
+        cases+=1
+    repeated=b"\n".join(b"driver-en/first_sale_persistence_test.dart:2:3" for _ in range(12))
+    need(flutter_drive_diagnostics(repeated,b"")["sourceLocations"]==[
+         {"source":"driver_en","line":2,"column":3}],"offline_flutter_drive_location_unique")
+    cases+=1
+    many=b"\n".join(b"driver-en/first_sale_persistence_test.dart:"+str(i).encode()+b":2"
+                     for i in range(1,20))
+    need(flutter_drive_diagnostics(many,b"")["sourceLocations"]==[
+         {"source":"driver_en","line":i,"column":2} for i in range(1,9)],
+         "offline_flutter_drive_location_cap")
+    cases+=1
+    for bad_stdout,bad_stderr in (("private",b""),(b"",None),(bytearray(b"private"),b"")):
+        try: flutter_drive_diagnostics(bad_stdout,bad_stderr)
+        except Refuse as error: need(str(error)=="flutter_drive_diagnostic_output_invalid",
+                                     "offline_flutter_drive_diagnostic_type_reason")
+        else: raise Refuse("offline_flutter_drive_diagnostic_type_expected_refusal")
+        cases+=1
     drive_failure=child_failed_refusal(
         "flutter_drive",23,stdout=b"",stderr=b"Error: access_token=private-value")
     need(drive_failure.child_failure=={
              "operation":"flutter_drive","exitCode":23,
              "flutterDriveDiagnostics":{
-                 "schema":"supermega.flutter_drive_diagnostic.v1","stdoutBytes":0,
+                 "schema":"supermega.flutter_drive_diagnostic.v2","stdoutBytes":0,
                  "stderrBytes":len(b"Error: access_token=private-value"),
-                 "signals":["unclassified"],"rawOutputIncluded":False}},
+                 "signals":["unclassified"],"sourceLocations":[],"rawOutputIncluded":False}},
          "offline_flutter_drive_child_failure")
     cases+=1
     diagnostic=avd_create_diagnostics(b"private-stdout-path",b"Error: Package path is not valid. private-stderr-path")
