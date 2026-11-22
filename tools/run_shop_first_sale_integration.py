@@ -4,7 +4,7 @@ import argparse, hashlib, json, os, platform, re, selectors, shutil, signal, soc
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="42f5ccdaa66557ae85451b25ea39d1f9c9942f12"
+BASE="ecfcf0a9c11b6177bd0a1835db0b1babf72cf2b2"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -73,10 +73,57 @@ EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16740729.zi
 EMU_SIZE=349658551
 EMU_SHA="cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd"
 EMU_VERSION="37.2.13"
+EMU_BUILD_ID="16740729"
+EMU_METADATA_PATH="source.properties"
+EMU_METADATA_SIZE=103
+EMU_METADATA_LIMIT=4096
+EMU_METADATA_SHA256="f7562ee75ef359fc20b64727a0977c6306c6bac2dab60c8d7ced7c9e372a7cc7"
+EMU_METADATA_FIELDS={
+    "Pkg.UserSrc":"false",
+    "Pkg.Revision":"37.2.13",
+    "Pkg.Path":"emulator",
+    "Pkg.Desc":"Android Emulator",
+    "Pkg.BuildId":"16740729",
+}
+EMU_SOURCE_PROPERTIES=(
+    b"Pkg.UserSrc=false\n"
+    b"Pkg.Revision=37.2.13\n"
+    b"Pkg.Path=emulator\n"
+    b"Pkg.Desc=Android Emulator\n"
+    b"Pkg.BuildId=16740729"
+)
 PULSE="1:16.1+dfsg1-2ubuntu10.1"
 PULSE_QUERY_FORMAT="-f="+"$"+"{db:Status-Abbrev}\t"+"$"+"{Version}"
 RUN_PROGRESS={"currentLocale":None,"phase":"not_started","attemptedLocales":[],"completedLocales":[],"cleanupProven":True}
 CANCEL_PENDING=False
+
+INTERNAL_FAILURE_PHASES=frozenset((
+ "not_started","host_preflight","capacity_preflight","task_create","task_environment",
+ "flutter_version","dependency_resolution","identity_prepare","identity_generate",
+ "android_toolchain_validation","libpulse_query","libpulse_install","emulator_install",
+ "image_manifest","image_license","image_install","image_validation","post_sdk_capacity",
+ "kvm_admission","acceleration_check","avd_prepare","test_running","locale_complete",
+))
+def set_phase(value):
+    RUN_PROGRESS["phase"]=value if value in INTERNAL_FAILURE_PHASES else "unknown"
+
+def internal_failure_evidence(error,phase=None):
+    phase=RUN_PROGRESS.get("phase") if phase is None else phase
+    if type(phase) is not str or phase not in INTERNAL_FAILURE_PHASES:
+        phase="unknown"
+    categories=(
+        (OSError,"OSError"),(UnicodeError,"UnicodeError"),(ValueError,"ValueError"),
+        (TypeError,"TypeError"),(KeyError,"KeyError"),(IndexError,"IndexError"),
+        (AttributeError,"AttributeError"),(RuntimeError,"RuntimeError"),
+        (ImportError,"ImportError"),(MemoryError,"MemoryError"),
+        (OverflowError,"OverflowError"),(AssertionError,"AssertionError"),
+        (EOFError,"EOFError"),(StopIteration,"StopIteration"),
+    )
+    category=next((label for cls,label in categories if isinstance(error,cls)),"Other")
+    code=getattr(error,"errno",None) if isinstance(error,OSError) else None
+    if type(code) is not int or not 1<=code<=4095:
+        code=None
+    return {"phase":phase,"exceptionCategory":category,"errno":code}
 FALSE={"authority":False,"fullReleaseCandidate":False,"installedQa":False,"osProcessRestartProven":False,
        "pgAcceptance":False,"hardwareAcceptance":False,"merchantAcceptance":False,
        "promotionEligible":False}
@@ -351,6 +398,54 @@ def run_self_tests():
     for raw,expected in pulse_cases:
         need(libpulse_query_state(raw)==expected,"offline_libpulse_query_fixture")
         cases+=1
+    # Diagnostics use a fixed phase/category schema and never serialize exception text.
+    evidence=internal_failure_evidence(OSError(13,"synthetic-secret-path"),"image_install")
+    need(evidence=={"phase":"image_install","exceptionCategory":"OSError","errno":13}
+         and "synthetic-secret-path" not in json.dumps(evidence),
+         "offline_internal_failure_os_fixture")
+    cases+=1
+    evidence=internal_failure_evidence(ValueError("synthetic-secret-message"),"flutter_version")
+    need(evidence=={"phase":"flutter_version","exceptionCategory":"ValueError","errno":None}
+         and "synthetic-secret-message" not in json.dumps(evidence),
+         "offline_internal_failure_builtin_fixture")
+    cases+=1
+    evidence=internal_failure_evidence(TypeError("secret"),"not_a_phase")
+    need(evidence=={"phase":"unknown","exceptionCategory":"TypeError","errno":None}
+         and "secret" not in json.dumps(evidence),
+         "offline_internal_failure_phase_fixture")
+    cases+=1
+    class SyntheticUnexpected(Exception): pass
+    evidence=internal_failure_evidence(SyntheticUnexpected("secret"),"identity_prepare")
+    need(evidence=={"phase":"identity_prepare","exceptionCategory":"Other","errno":None}
+         and "SyntheticUnexpected" not in json.dumps(evidence)
+         and "secret" not in json.dumps(evidence),
+         "offline_internal_failure_other_fixture")
+    cases+=1
+    # These pins are the exact vendor source.properties member bytes, not a synthesized file.
+    metadata=parse_emulator_source_properties(EMU_SOURCE_PROPERTIES)
+    need(len(EMU_SOURCE_PROPERTIES)==103 and
+         hashlib.sha256(EMU_SOURCE_PROPERTIES).hexdigest()==EMU_METADATA_SHA256 and
+         metadata==EMU_METADATA_FIELDS,
+         "offline_emulator_metadata_positive")
+    cases+=1
+    metadata_cases=(
+        (EMU_SOURCE_PROPERTIES.replace(b"37.2.13",b"37.2.12"),"emulator_revision_invalid"),
+        (EMU_SOURCE_PROPERTIES.replace(b"16740729",b"16740728"),"emulator_revision_invalid"),
+        (b"\n".join(line for line in EMU_SOURCE_PROPERTIES.splitlines()
+                      if not line.startswith(b"Pkg.BuildId=")),"emulator_revision_invalid"),
+        (EMU_SOURCE_PROPERTIES+b"\nPkg.Path=emulator","emulator_metadata_duplicate"),
+        (EMU_SOURCE_PROPERTIES+b"\n","emulator_metadata_digest_invalid"),
+        (b"", "emulator_metadata_size_invalid"),
+        (b"x"*(EMU_METADATA_LIMIT+1),"emulator_metadata_size_invalid"),
+    )
+    for raw,reason in metadata_cases:
+        try:
+            parse_emulator_source_properties(raw)
+        except Refuse as error:
+            need(str(error)==reason,"offline_emulator_metadata_wrong_reason")
+        else:
+            raise Refuse("offline_emulator_metadata_expected_refusal")
+        cases+=1
     invalid=[]
     invalid.append((b"no report",b"","test_report_missing_or_ambiguous","en"))
     invalid.append((REPORT_PREFIX.encode()+encoded+b"\n"+REPORT_PREFIX.encode()+encoded,b"",
@@ -372,6 +467,9 @@ def run_self_tests():
         except Refuse as error: need(str(error)==reason,"offline_fixture_wrong_reason")
         else: raise Refuse("offline_fixture_expected_refusal")
         cases+=1
+    fs_cases=run_emulator_metadata_filesystem_tests()
+    need(fs_cases==6,"offline_emulator_metadata_fs_case_count")
+    cases+=fs_cases
     print(json.dumps({"schema":"supermega.first_sale_runner_offline.v1",
                       "status":"passed","cases":cases},sort_keys=True,
                      separators=(",",":")))
@@ -436,6 +534,106 @@ def extract_checked(archive,dest,deadline):
                     mode=(i.external_attr>>16)&0o111
                     os.fchmod(fd,0o700 if mode else 0o600)
                 finally: os.close(fd)
+def parse_emulator_source_properties(raw):
+    need(type(raw) is bytes and 0<len(raw)<=EMU_METADATA_LIMIT,
+         "emulator_metadata_size_invalid")
+    try:
+        text=raw.decode("ascii","strict")
+    except UnicodeDecodeError:
+        raise Refuse("emulator_metadata_invalid") from None
+    fields={}
+    for line in text.splitlines():
+        need(line and "=" in line,"emulator_metadata_invalid")
+        key,value=line.split("=",1)
+        need(key and key not in fields,"emulator_metadata_duplicate")
+        fields[key]=value
+    need(fields==EMU_METADATA_FIELDS,"emulator_revision_invalid")
+    need(len(raw)==EMU_METADATA_SIZE and
+         hashlib.sha256(raw).hexdigest()==EMU_METADATA_SHA256,
+         "emulator_metadata_digest_invalid")
+    return fields
+
+def read_emulator_source_properties(path,deadline):
+    fd=None
+    try:
+        before_path=os.stat(path,follow_symlinks=False)
+        need(stat.S_ISREG(before_path.st_mode) and
+             0<before_path.st_size<=EMU_METADATA_LIMIT,
+             "emulator_metadata_file_invalid")
+        fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+        before=os.fstat(fd)
+        need(stat.S_ISREG(before.st_mode) and
+             (before.st_dev,before.st_ino,before.st_size)==
+             (before_path.st_dev,before_path.st_ino,before_path.st_size),
+             "emulator_metadata_identity_invalid")
+        raw=bytearray()
+        while True:
+            need(time.monotonic()<deadline,"job_budget")
+            chunk=os.read(fd,min(1024,EMU_METADATA_LIMIT+1-len(raw)))
+            if not chunk: break
+            raw.extend(chunk)
+            need(len(raw)<=EMU_METADATA_LIMIT,"emulator_metadata_size_invalid")
+        after=os.fstat(fd)
+        after_path=os.stat(path,follow_symlinks=False)
+        need(len(raw)==before.st_size and
+             (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)==
+             (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns) and
+             (after.st_dev,after.st_ino,after.st_size)==
+             (after_path.st_dev,after_path.st_ino,after_path.st_size),
+             "emulator_metadata_identity_changed")
+        return parse_emulator_source_properties(bytes(raw))
+    except Refuse:
+        raise
+    except OSError:
+        raise Refuse("emulator_metadata_file_invalid") from None
+    finally:
+        if fd is not None: os.close(fd)
+
+def expect_metadata_refusal(action,reason):
+    try:
+        action()
+    except Refuse as error:
+        need(str(error)==reason,"offline_emulator_metadata_fs_wrong_reason")
+    else:
+        raise Refuse("offline_emulator_metadata_fs_expected_refusal")
+
+def run_emulator_metadata_filesystem_tests():
+    count=0
+    with tempfile.TemporaryDirectory(prefix="shop-emulator-metadata-") as temporary:
+        root=Path(temporary)
+        regular=root/"source.properties"
+        regular.write_bytes(EMU_SOURCE_PROPERTIES)
+        need(read_emulator_source_properties(regular,time.monotonic()+5)==EMU_METADATA_FIELDS,
+             "offline_emulator_metadata_fs_regular")
+        count+=1
+        symlink=root/"source-link.properties"
+        symlink.symlink_to(regular.name)
+        expect_metadata_refusal(
+            lambda:read_emulator_source_properties(symlink,time.monotonic()+5),
+            "emulator_metadata_file_invalid")
+        count+=1
+        expect_metadata_refusal(
+            lambda:read_emulator_source_properties(root/"missing.properties",time.monotonic()+5),
+            "emulator_metadata_file_invalid")
+        count+=1
+        directory=root/"directory.properties"
+        directory.mkdir()
+        expect_metadata_refusal(
+            lambda:read_emulator_source_properties(directory,time.monotonic()+5),
+            "emulator_metadata_file_invalid")
+        count+=1
+        oversized=root/"oversized.properties"
+        oversized.write_bytes(b"x"*(EMU_METADATA_LIMIT+1))
+        expect_metadata_refusal(
+            lambda:read_emulator_source_properties(oversized,time.monotonic()+5),
+            "emulator_metadata_file_invalid")
+        count+=1
+        expect_metadata_refusal(
+            lambda:read_emulator_source_properties(regular,time.monotonic()-1),
+            "job_budget")
+        count+=1
+    return count
+
 def install_emulator(root,sdk,task,e,deadline):
     stage=task/"pinned-emulator-sdk"
     target=stage/"emulator"
@@ -457,12 +655,13 @@ def install_emulator(root,sdk,task,e,deadline):
         extract_checked(archive,stage,deadline)
     except Refuse: raise
     except Exception: raise Refuse("emulator_unavailable") from None
-    pkg=ET.parse(target/"package.xml").getroot().find(".//localPackage")
-    rev=pkg.find("revision") if pkg is not None else None
-    version=".".join(rev.findtext(k,"0") for k in ("major","minor","micro")) if rev is not None else ""
+    metadata=read_emulator_source_properties(target/EMU_METADATA_PATH,deadline)
     binary=target/"emulator"
-    need(pkg is not None and pkg.get("path")=="emulator" and version==EMU_VERSION
-         and binary.is_file() and os.access(binary,os.X_OK),"emulator_revision_invalid")
+    need(metadata["Pkg.Path"]=="emulator" and
+         metadata["Pkg.Revision"]==EMU_VERSION and
+         metadata["Pkg.BuildId"]==EMU_BUILD_ID and
+         binary.is_file() and not binary.is_symlink() and os.access(binary,os.X_OK),
+         "emulator_revision_invalid")
     return binary
 def xml_name(element):
     return element.tag.rsplit("}",1)[-1]
@@ -650,7 +849,7 @@ class ScopedKvm:
             need(after==self.before,"kvm_acl_restore_unproven"); self.changed=False
 def run_locale(root,task,sdk,emulator,adb,locale,deadline):
     RUN_PROGRESS["currentLocale"]=locale
-    RUN_PROGRESS["phase"]="avd_prepare"
+    set_phase("avd_prepare")
     name="shopqa"+uuid.uuid4().hex[:12]
     avd=task/"avds"/locale
     need(not avd.exists() and not avd.is_symlink(),"avd_target_exists")
@@ -695,7 +894,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
              "adb_device_set")
         need(shutil.disk_usage(os.environ["RUNNER_TEMP"]).free>=4*1024**3,
              "capacity_before_test")
-        RUN_PROGRESS["phase"]="test_running"
+        set_phase("test_running")
         RUN_PROGRESS["attemptedLocales"].append(locale)
         stdout_bytes,stderr_bytes=run(["flutter","drive","--no-pub",
           "--device-id="+serial,"--driver="+str(driver),
@@ -708,7 +907,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
         report=parse_report(stdout_bytes,stderr_bytes,locale)
         RUN_PROGRESS["completedLocales"].append(locale)
         RUN_PROGRESS["currentLocale"]=None
-        RUN_PROGRESS["phase"]="locale_complete"
+        set_phase("locale_complete")
         need(shutil.disk_usage(os.environ["RUNNER_TEMP"]).free>=2*1024**3,
              "capacity_after_test")
         return {"locale":locale,"result":"passed",
@@ -767,6 +966,7 @@ def restore_tracked_identity(identity,preimage,generated_identity,generated_dige
 def execute(root,head,lock):
     global RUN_PROGRESS
     RUN_PROGRESS={"currentLocale":None,"phase":"not_started","attemptedLocales":[],"completedLocales":[],"cleanupProven":True}
+    set_phase("host_preflight")
     temp=Path(os.environ.get("RUNNER_TEMP",""))
     sdk=os.environ.get("ANDROID_SDK_ROOT") or os.environ.get("ANDROID_HOME")
     need(os.environ.get("RUNNER_OS")=="Linux" and os.environ.get("RUNNER_ARCH")=="X64"
@@ -776,18 +976,24 @@ def execute(root,head,lock):
     need(temp.is_absolute() and temp.is_dir() and not temp.is_symlink()
          and sdk and Path(sdk).is_dir() and not Path(sdk).is_symlink(),
          "runner_paths_invalid")
+    set_phase("capacity_preflight")
     free=shutil.disk_usage(temp).free; sdkfree=shutil.disk_usage(sdk).free
     need(free>=16*1024**3 and sdkfree>=16*1024**3,"capacity_insufficient")
     need(temp.stat().st_dev==Path(sdk).stat().st_dev,"sdk_device_mismatch")
-    task=Path(tempfile.mkdtemp(prefix="shop-first-sale-",dir=temp)); os.chmod(task,0o700)
+    task=None
     deadline=time.monotonic()+18*60; results=[]; acl=None; clean=True; result=None
     identity=root/APP/"lib/shop_build_identity.g.dart"
     identity_preimage=None; identity_identity=None; identity_digest=None
     try:
+        set_phase("task_create")
+        task=Path(tempfile.mkdtemp(prefix="shop-first-sale-",dir=temp)); os.chmod(task,0o700)
+        set_phase("task_environment")
         e=child_env(task,15000+int(os.environ["QA_RUN_ID"])%10000)
+        set_phase("flutter_version")
         fv=json.loads(run(["flutter","--version","--machine"],root,e,
                           bounded_time(deadline,15),True))
         need(fv.get("frameworkVersion")=="3.47.8","flutter_version")
+        set_phase("dependency_resolution")
         before=file_sha(root/LOCK)
         run(["flutter","pub","get","--enforce-lockfile"],root/APP,e,
             bounded_time(deadline,180))
@@ -801,13 +1007,16 @@ def execute(root,head,lock):
           "ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_ALIAS","ORG_GRADLE_PROJECT_SHOP_ANDROID_STORE_PASSWORD",
           "ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_PASSWORD")
         need(not any(os.environ.get(k) for k in forbidden),"external_capability_env_present")
+        set_phase("identity_prepare")
         identity_preimage=capture_tracked_identity(root,identity)
+        set_phase("identity_generate")
         run(["node","tools/generate_shop_build_identity.mjs","--platform","android",
              "--profile","synthetic_qa_v1"],root,e,bounded_time(deadline,30))
         need(identity.is_file() and not identity.is_symlink(),"qa_identity_missing")
         st=os.stat(identity,follow_symlinks=False)
         identity_identity=(st.st_dev,st.st_ino)
         identity_digest=file_sha(identity)
+        set_phase("android_toolchain_validation")
         sdkroot=Path(sdk); adb=sdkroot/"platform-tools/adb"
         manager=sdkroot/"cmdline-tools/latest/bin/sdkmanager"
         avdm=sdkroot/"cmdline-tools/latest/bin/avdmanager"
@@ -818,11 +1027,13 @@ def execute(root,head,lock):
                                bounded_time(deadline,15),True).decode("ascii","replace").strip()
         need(sdkmanager_version and len(sdkmanager_version)<=80,
              "android_sdkmanager_version_invalid")
+        set_phase("libpulse_query")
         raw_query=run(["dpkg-query","-W",PULSE_QUERY_FORMAT,"libpulse0:amd64"],
                       root,e,bounded_time(deadline,10),True,accepted=(0,1))
         state=libpulse_query_state(raw_query)
         if state!="installed_exact":
             need(state=="absent","libpulse_state_invalid")
+            set_phase("libpulse_install")
             run(["sudo","-n","apt-get","update"],root,e,bounded_time(deadline,180))
             run(["sudo","-n","apt-get","install","-y","--no-install-recommends",
                  "--no-upgrade","--no-remove","libpulse0:amd64="+PULSE],
@@ -831,10 +1042,13 @@ def execute(root,head,lock):
                          bounded_time(deadline,10),True)
             need(libpulse_query_state(verified)=="installed_exact",
                  "libpulse_postinstall_invalid")
+        set_phase("emulator_install")
         emu=install_emulator(root,sdk,task,e,deadline)
+        set_phase("image_manifest")
         official=verify_official_image_manifest(deadline)
         image=sdkroot/"system-images/android-35/default/x86_64"
         license_file=sdkroot/"licenses/android-sdk-license"
+        set_phase("image_license")
         need(license_file.is_file() and not license_file.is_symlink(),
              "android_license_not_preaccepted")
         if image.exists() or image.is_symlink():
@@ -842,11 +1056,16 @@ def execute(root,head,lock):
                  (image/"package.xml").is_file(),
                  "android_image_partial_or_conflicting")
         else:
+            set_phase("image_install")
             run([str(manager),"--sdk_root="+str(sdk),"--channel=0","--install",IMAGE],
                 root,e,bounded_time(deadline,300))
+        set_phase("image_validation")
         installed=verify_installed_image(image,deadline)
+        set_phase("post_sdk_capacity")
         need(shutil.disk_usage(temp).free>=8*1024**3,"capacity_after_sdk_setup")
+        set_phase("kvm_admission")
         acl=ScopedKvm(root,task,e); acl.open()
+        set_phase("acceleration_check")
         run([str(emu),"-accel-check"],root,e,bounded_time(deadline,15))
         for locale in ("en","my"):
             need(time.monotonic()<deadline,"job_budget")
@@ -876,7 +1095,7 @@ def execute(root,head,lock):
             try:
                 restore_tracked_identity(identity,identity_preimage,identity_identity,identity_digest)
             except Exception: clean=False
-        if clean:
+        if clean and task is not None:
             try: shutil.rmtree(task)
             except OSError: clean=False
         if clean:
@@ -934,9 +1153,10 @@ def main():
           "completed" if progress["completedLocales"]==["en","my"] else
           "possible" if progress["phase"]=="test_running" else "partial")
         output("blocked_or_failed",reason=str(error),runProgress=progress,**facts); return 3
-    except Exception:
+    except Exception as error:
         progress=dict(RUN_PROGRESS)
         facts["cleanupProven"]=progress.get("cleanupProven",False)
+        facts["internalFailure"]=internal_failure_evidence(error)
         progress["executionState"]=("not_started" if not progress["attemptedLocales"] else
           "completed" if progress["completedLocales"]==["en","my"] else
           "possible" if progress["phase"]=="test_running" else "partial")

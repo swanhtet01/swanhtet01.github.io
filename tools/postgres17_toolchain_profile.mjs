@@ -536,11 +536,22 @@ export async function inspectWindowsAuthenticode(artifactPath) {
   // Non-standard Windows installations fail closed until explicitly reviewed.
   const powershellPath = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
   const inspectorSource = await readFile(authenticodeInspectorPath, 'utf8')
+  // Windows PowerShell must not inherit PowerShell 7 or caller module paths.
+  // Keep the trust inspector on Windows' own built-in module directory only.
+  const childEnvironment = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) =>
+      !['psmodulepath', 'supermega_authenticode_target'].includes(key.toLowerCase())),
+  )
+  const trustedModulesPath = resolve(dirname(powershellPath), 'Modules')
+  childEnvironment.PSModulePath = trustedModulesPath
+  childEnvironment.SUPERMEGA_AUTHENTICODE_TARGET = artifactPath
   const result = spawnSync(
     powershellPath,
     [
       '-NoLogo', '-NoProfile', '-NonInteractive',
-      '-EncodedCommand', Buffer.from("$ProgressPreference = 'SilentlyContinue'\n" + inspectorSource, 'utf16le').toString('base64'),
+      '-EncodedCommand', Buffer.from("$ProgressPreference = 'SilentlyContinue'\n" +
+        "$env:PSModulePath = '" + trustedModulesPath + "'\n" + inspectorSource,
+      'utf16le').toString('base64'),
     ],
     {
       encoding: 'utf8',
@@ -548,7 +559,7 @@ export async function inspectWindowsAuthenticode(artifactPath) {
       // continue after a terminating command error and emit partial JSON.
       timeout: 30_000,
       windowsHide: true,
-      env: { ...process.env, SUPERMEGA_AUTHENTICODE_TARGET: artifactPath },
+      env: childEnvironment,
     },
   )
   if (result.error || result.status !== 0 || result.stderr?.trim() || !result.stdout?.trim()) {
