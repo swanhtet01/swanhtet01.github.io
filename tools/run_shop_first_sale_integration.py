@@ -5,9 +5,9 @@ import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="a14a385cae5db10f230d4ca9764ca219e6e0404d"
-BASE_TREE="fcfc472f6f19cb2efd727430818392ef24249a35"
-BASE_NATIVE_TREE="e2d558ac2c28509e845b5c638f16c3b65d1ab882"
+BASE="491caffe25467d0df95b098058357f217c6b32f6"
+BASE_TREE="88d379edf90d205bda63204a93ea8166038f417b"
+BASE_NATIVE_TREE="00d3260efd16ed562e4b6f4109d3314c8c3e0a7b"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -20,7 +20,7 @@ LOCK_SHA="772540b8f7fee17c0e7a9f0185c0366775ce5d61f7c94a5ab894beeb69605ccb"
 # Diagnostic source head only. Full instrumented authority requires a separate review.
 SOURCE_WIDGET_ONLY=True
 WIDGET_TEST=APP/"test/widget_test_support.dart"
-WIDGET_TEST_SHA="46626abbd25358db3798e8870ca9510725644b586c3cbc812d9a4a4b0deb162a"
+WIDGET_TEST_SHA="9ddcd12e4419076c2eaaefa1e5d049e509e674f828e4d06af4005365c88e675c"
 IMAGE="system-images;android-35;default;x86_64"
 TABLET_DEVICE_ID="medium_tablet"
 TABLET_DEVICE_NAME="Medium Tablet"

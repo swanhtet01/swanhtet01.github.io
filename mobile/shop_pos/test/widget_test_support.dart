@@ -8513,6 +8513,7 @@ END
             final receiptAction = find.byKey(
               const ValueKey('shop-sale-completion-view'),
             );
+            late final String savedReceiptId;
             final originalViewInsets = tester.view.viewInsets;
             try {
               // TestFlutterView.viewInsets is physical pixels: at DPR 2, 600
@@ -8548,6 +8549,7 @@ END
               final receipts = await database.readRecentSales();
               expect(receipts, hasLength(1));
               final receipt = receipts.single;
+              savedReceiptId = receipt.id;
               expect(receipt.totalMmk, 2500);
               expect(receipt.lines, hasLength(1));
               expect(receipt.lines.single.productId, product.id);
@@ -8599,7 +8601,7 @@ END
                 of: receiptDialog,
                 matching: find.byWidgetPredicate(
                   (widget) =>
-                      widget is SelectableText && widget.data == receipt.id,
+                      widget is SelectableText && widget.data == savedReceiptId,
                 ),
               ),
               findsOneWidget,
