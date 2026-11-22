@@ -5,9 +5,9 @@ import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="c478e9da94e8a9d93f78c646b58437c5b7712b8b"
-BASE_TREE="a68a11fa59f3934a2d382d1d5e2c83dc25f85832"
-BASE_NATIVE_TREE="97fa0b4a86dd3c0782c42e3a4d464b7fc7d5ca12"
+BASE="a14a385cae5db10f230d4ca9764ca219e6e0404d"
+BASE_TREE="fcfc472f6f19cb2efd727430818392ef24249a35"
+BASE_NATIVE_TREE="e2d558ac2c28509e845b5c638f16c3b65d1ab882"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -20,7 +20,7 @@ LOCK_SHA="772540b8f7fee17c0e7a9f0185c0366775ce5d61f7c94a5ab894beeb69605ccb"
 # Diagnostic source head only. Full instrumented authority requires a separate review.
 SOURCE_WIDGET_ONLY=True
 WIDGET_TEST=APP/"test/widget_test_support.dart"
-WIDGET_TEST_SHA="5d1c285231676a1f0fed5eba5dbeb4226ca99242eeedeffdc3f17ef7acf2a23e"
+WIDGET_TEST_SHA="46626abbd25358db3798e8870ca9510725644b586c3cbc812d9a4a4b0deb162a"
 IMAGE="system-images;android-35;default;x86_64"
 TABLET_DEVICE_ID="medium_tablet"
 TABLET_DEVICE_NAME="Medium Tablet"
@@ -78,7 +78,6 @@ REPORT_KEYS={
 ALLOWED_CHANGED={
   "tools/run_shop_first_sale_integration.py",
   "mobile/shop_pos/test/widget_test_support.dart",
-  ".github/workflows/shop-first-sale-integration.yml",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
 EMU_SIZE=350068887

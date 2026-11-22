@@ -5715,296 +5715,6 @@ void registerWidgetTests(WidgetTestPartition partition) {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets(
-      'tablet first sale survives portrait to landscape in EN and MY',
-      (tester) async {
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        final semantics = tester.ensureSemantics();
-        addTearDown(semantics.dispose);
-
-        const settleStep = Duration(milliseconds: 100);
-        const settleLimit = Duration(seconds: 5);
-        for (final myanmar in [false, true]) {
-          final locale = myanmar ? 'MY' : 'EN';
-          tester.view.physicalSize = const Size(1600, 2560);
-          tester.view.devicePixelRatio = 2;
-          tester.platformDispatcher.textScaleFactorTestValue = 1.3;
-          final database = ShopDatabase(NativeDatabase.memory());
-
-          Future<void> checkStage(
-            String stage,
-            Future<void> Function() action,
-          ) async {
-            Object? actionFailure;
-            StackTrace? actionStack;
-            final reportedErrors = await _captureFlutterErrors(() async {
-              try {
-                await action();
-              } catch (error, stackTrace) {
-                actionFailure = error;
-                actionStack = stackTrace;
-              }
-            });
-            final renderOrigin = _boundedRenderOrigin(reportedErrors);
-            final flexErrors = reportedErrors.where(
-              (details) => details.exception.toString().contains(
-                'RenderFlex overflowed',
-              ),
-            );
-            expect(
-              flexErrors,
-              isEmpty,
-              reason: 'stage=$stage locale=$locale; renderOrigin=$renderOrigin',
-            );
-            expect(
-              tester.takeException(),
-              isNull,
-              reason: 'stage=$stage locale=$locale; renderOrigin=$renderOrigin',
-            );
-            if (actionFailure != null) {
-              debugPrintSynchronously(
-                'Tablet regression action failed: stage=$stage locale=$locale; '
-                'renderOrigin=$renderOrigin',
-              );
-              Error.throwWithStackTrace(actionFailure!, actionStack!);
-            }
-          }
-
-          Future<void> settle() async {
-            await tester.pumpAndSettle(
-              settleStep,
-              EnginePhase.sendSemanticsUpdate,
-              settleLimit,
-            );
-          }
-
-          void expectAppViewport(Size expected) {
-            final appContext = tester.element(
-              find.byKey(const ValueKey('shop-split-catalog')),
-            );
-            expect(MediaQuery.sizeOf(appContext), expected);
-            expect(
-              MediaQuery.textScalerOf(appContext).scale(14),
-              closeTo(18.2, 0.01),
-            );
-          }
-
-          try {
-            await checkStage('portrait startup', () async {
-              await tester.pumpWidget(
-                ShopApp(
-                  testOnlyAllowMissingRuntimeScope: true,
-                  initialCounter: true,
-                  database: database,
-                  authClient: null,
-                  apiBaseUrl: 'https://app.supermega.dev',
-                  initialMyanmar: myanmar,
-                ),
-              );
-              await settle();
-            });
-            expectAppViewport(const Size(800, 1280));
-
-            final addFirstProduct = find.text(
-              myanmar ? 'ပထမကုန်ပစ္စည်းထည့်ရန်' : 'Add first product',
-            );
-            await checkStage('open first-product form', () async {
-              await tester.ensureVisible(addFirstProduct);
-              await tester.tap(addFirstProduct);
-              await settle();
-            });
-            await tester.enterText(
-              find.byKey(const ValueKey('shop-product-name')),
-              'Tea',
-            );
-            await tester.enterText(
-              find.byKey(const ValueKey('shop-product-price')),
-              '2500',
-            );
-            await tester.enterText(
-              find.byKey(const ValueKey('shop-product-stock')),
-              '3',
-            );
-            await checkStage('save first product', () async {
-              await tester.tap(
-                find.text(myanmar ? 'သိမ်းရန်' : 'Save product'),
-              );
-              await settle();
-            });
-
-            final product = (await database.readActiveProducts()).single;
-            expect(product.name, 'Tea');
-            expect(product.priceMmk, 2500);
-            expect(product.onHand, 3);
-            expect(await database.countSales(), 0);
-
-            await checkStage('add Tea to basket in portrait', () async {
-              final addToSale = find.byTooltip(
-                myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale',
-              );
-              await tester.ensureVisible(addToSale);
-              await tester.tap(addToSale);
-              await settle();
-            });
-            expect((await database.readCounterSaleDraft())?.quantities, {
-              product.id: 1,
-            });
-            expect(await database.countSales(), 0);
-            expect((await database.readActiveProducts()).single.onHand, 3);
-            final stockMovementsBeforeSale = await database
-                .countStockMovements();
-
-            tester.view.physicalSize = const Size(2560, 1600);
-            await checkStage('landscape basket', settle);
-            expectAppViewport(const Size(1280, 800));
-            final basket = find.byKey(const ValueKey('shop-split-basket'));
-            expect(basket, findsOneWidget);
-            expect(
-              find.descendant(of: basket, matching: find.text('Tea')),
-              findsOneWidget,
-            );
-            expect(
-              find.text(myanmar ? 'လက်ရှိအရောင်း' : 'Current sale'),
-              findsOneWidget,
-            );
-            final money = myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK';
-            expect(
-              find.descendant(
-                of: find.byKey(const ValueKey('shop-checkout-summary')),
-                matching: find.text(money),
-              ),
-              findsOneWidget,
-            );
-            final cashLabel = myanmar ? 'ငွေသား' : 'Cash sale';
-            final cashControl = find.widgetWithText(FilledButton, cashLabel);
-            expect(cashControl.hitTestable(), findsOneWidget);
-            expect(
-              tester.getSize(cashControl).shortestSide,
-              greaterThanOrEqualTo(48),
-            );
-            expect(await database.countSales(), 0);
-            expect((await database.readActiveProducts()).single.onHand, 3);
-
-            await checkStage('open cash confirmation', () async {
-              await tester.tap(cashControl);
-              await settle();
-            });
-            expect(
-              find.text(myanmar ? 'ငွေသားရပြီလား။' : 'Cash received?'),
-              findsOneWidget,
-            );
-            final completeLabel = myanmar ? 'အတည်ပြုရန်' : 'Complete sale';
-            final confirmControl = find.widgetWithText(
-              FilledButton,
-              completeLabel,
-            );
-            expect(confirmControl.hitTestable(), findsOneWidget);
-            expect(
-              tester.getSize(confirmControl).shortestSide,
-              greaterThanOrEqualTo(48),
-            );
-            expect(await database.countSales(), 0);
-            expect((await database.readActiveProducts()).single.onHand, 3);
-
-            await checkStage('complete one cash sale', () async {
-              await tester.tap(confirmControl);
-              await settle();
-            });
-            expect(await database.countSales(), 1);
-            expect((await database.readActiveProducts()).single.onHand, 2);
-            expect(
-              await database.countStockMovements(),
-              stockMovementsBeforeSale + 1,
-            );
-            final receipts = await database.readRecentSales();
-            expect(receipts, hasLength(1));
-            final receipt = receipts.single;
-            expect(receipt.totalMmk, 2500);
-            expect(receipt.lines, hasLength(1));
-            expect(receipt.lines.single.productId, product.id);
-            expect(receipt.lines.single.quantity, 1);
-            expect(receipt.lines.single.productName, 'Tea');
-            expect(receipt.lines.single.unitPriceMmk, 2500);
-            expect(receipt.lines.single.lineTotalMmk, 2500);
-            final saleEffects = await (database.select(
-              database.shopStockMovements,
-            )..where((movement) => movement.saleId.equals(receipt.id))).get();
-            expect(saleEffects, hasLength(1));
-            expect(saleEffects.single.quantityDelta, -1);
-            expect(saleEffects.single.productId, product.id);
-            final receiptAction = find.byKey(
-              const ValueKey('shop-sale-completion-view'),
-            );
-            expect(receiptAction.hitTestable(), findsOneWidget);
-            expect(
-              tester.getSize(receiptAction).shortestSide,
-              greaterThanOrEqualTo(48),
-            );
-            expect(
-              find.textContaining(
-                myanmar ? 'ပရင်တာသို့ မပို့ရသေးပါ' : 'not sent to a printer',
-              ),
-              findsOneWidget,
-            );
-
-            await checkStage('open saved receipt', () async {
-              await tester.tap(receiptAction);
-              await settle();
-            });
-            final savedReceiptTitle = find.bySemanticsIdentifier(
-              'shop.saved-receipt',
-            );
-            expect(savedReceiptTitle, findsOneWidget);
-            final receiptDialog = find.ancestor(
-              of: savedReceiptTitle,
-              matching: find.byType(AlertDialog),
-            );
-            expect(receiptDialog, findsOneWidget);
-            expect(
-              find.descendant(
-                of: receiptDialog,
-                matching: find.byWidgetPredicate(
-                  (widget) =>
-                      widget is SelectableText && widget.data == receipt.id,
-                ),
-              ),
-              findsOneWidget,
-            );
-            expect(
-              find.descendant(
-                of: receiptDialog,
-                matching: find.text(myanmar ? 'Tea × ၁' : 'Tea × 1'),
-              ),
-              findsOneWidget,
-            );
-            final totalRow = find.ancestor(
-              of: find.descendant(
-                of: receiptDialog,
-                matching: find.text(myanmar ? 'စုစုပေါင်း' : 'Total'),
-              ),
-              matching: find.byType(Row),
-            );
-            expect(totalRow, findsOneWidget);
-            expect(
-              find.descendant(of: totalRow, matching: find.text(money)),
-              findsOneWidget,
-            );
-            expect(await database.countSales(), 1);
-            expect((await database.readActiveProducts()).single.onHand, 2);
-          } finally {
-            try {
-              await tester.pumpWidget(const SizedBox.shrink());
-              await tester.pump(const Duration(milliseconds: 1));
-            } finally {
-              await database.close();
-            }
-          }
-        }
-      },
-    );
-
     testWidgets('task shell opens the exact saved receipt on repeat visits', (
       tester,
     ) async {
@@ -8529,6 +8239,400 @@ END
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 1));
           await database.close();
+        }
+      },
+    );
+
+    // This regression loads real bundled fonts; keep it last in checkoutFirst
+    // because font families remain registered for this test isolate.
+    testWidgets(
+      'tablet first sale survives portrait to landscape in EN and MY',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetViewInsets);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        // Use the bundled text faces from visual_capture_test.dart. FontLoader
+        // registration is isolate-wide, so keep this regression last in
+        // checkoutFirst to leave preceding widget tests on their normal fonts.
+        final fontsLoaded = await tester.runAsync<String>(() async {
+          final inter = FontLoader('Inter')
+            ..addFont(rootBundle.load('assets/fonts/Inter/Inter-Variable.ttf'));
+          final myanmarFont = FontLoader('NotoSansMyanmar')
+            ..addFont(
+              rootBundle.load(
+                'assets/fonts/NotoSansMyanmar/NotoSansMyanmar-Variable.ttf',
+              ),
+            );
+          final myanmarUi = FontLoader('NotoSansMyanmarUI')
+            ..addFont(
+              rootBundle.load(
+                'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Regular.ttf',
+              ),
+            )
+            ..addFont(
+              rootBundle.load(
+                'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-SemiBold.ttf',
+              ),
+            )
+            ..addFont(
+              rootBundle.load(
+                'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Bold.ttf',
+              ),
+            );
+          await Future.wait<void>([
+            inter.load(),
+            myanmarFont.load(),
+            myanmarUi.load(),
+          ]);
+          return 'bundled-fonts-loaded';
+        });
+        expect(tester.takeException(), isNull);
+        expect(fontsLoaded, 'bundled-fonts-loaded');
+        final semantics = tester.ensureSemantics();
+        addTearDown(semantics.dispose);
+
+        const settleStep = Duration(milliseconds: 100);
+        const settleLimit = Duration(seconds: 5);
+        for (final myanmar in [false, true]) {
+          final locale = myanmar ? 'MY' : 'EN';
+          tester.view.physicalSize = const Size(1600, 2560);
+          tester.view.devicePixelRatio = 2;
+          tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+          final database = ShopDatabase(NativeDatabase.memory());
+
+          Future<void> checkStage(
+            String stage,
+            Future<void> Function() action,
+          ) async {
+            Object? actionFailure;
+            StackTrace? actionStack;
+            final reportedErrors = await _captureFlutterErrors(() async {
+              try {
+                await action();
+              } catch (error, stackTrace) {
+                actionFailure = error;
+                actionStack = stackTrace;
+              }
+            });
+            final renderOrigin = _boundedRenderOrigin(reportedErrors);
+            final flexErrors = reportedErrors.where(
+              (details) => details.exception.toString().contains(
+                'RenderFlex overflowed',
+              ),
+            );
+            expect(
+              flexErrors,
+              isEmpty,
+              reason: 'stage=$stage locale=$locale; renderOrigin=$renderOrigin',
+            );
+            expect(
+              tester.takeException(),
+              isNull,
+              reason: 'stage=$stage locale=$locale; renderOrigin=$renderOrigin',
+            );
+            if (actionFailure != null) {
+              debugPrintSynchronously(
+                'Tablet regression action failed: stage=$stage locale=$locale; '
+                'renderOrigin=$renderOrigin',
+              );
+              Error.throwWithStackTrace(actionFailure!, actionStack!);
+            }
+          }
+
+          Future<void> settle() async {
+            await tester.pumpAndSettle(
+              settleStep,
+              EnginePhase.sendSemanticsUpdate,
+              settleLimit,
+            );
+          }
+
+          void expectAppViewport(Size expected) {
+            final appContext = tester.element(
+              find.byKey(const ValueKey('shop-split-catalog')),
+            );
+            expect(MediaQuery.sizeOf(appContext), expected);
+            expect(
+              MediaQuery.textScalerOf(appContext).scale(14),
+              closeTo(18.2, 0.01),
+            );
+          }
+
+          BuildContext appScaffoldContext() {
+            final appScaffold = find.ancestor(
+              of: find.byKey(const ValueKey('shop-split-catalog')),
+              matching: find.byType(Scaffold),
+            );
+            expect(appScaffold, findsOneWidget);
+            return tester.element(appScaffold);
+          }
+
+          void expectOuterScaffoldInsets(double physicalBottom) {
+            expect(tester.view.viewInsets.bottom, physicalBottom);
+            expect(
+              MediaQuery.viewInsetsOf(appScaffoldContext()).bottom,
+              closeTo(physicalBottom / tester.view.devicePixelRatio, 0.01),
+            );
+          }
+
+          void expectControlAboveSimulatedKeyboard(Finder control) {
+            const keyboardTop = 500.0;
+            final devicePixelRatio = tester.view.devicePixelRatio;
+            final logicalWidth =
+                tester.view.physicalSize.width / devicePixelRatio;
+            final logicalHeight =
+                tester.view.physicalSize.height / devicePixelRatio;
+            final logicalInset =
+                tester.view.viewInsets.bottom / devicePixelRatio;
+            expect(logicalHeight - logicalInset, closeTo(keyboardTop, 0.01));
+            final rect = tester.getRect(control);
+            expect(rect.left, greaterThanOrEqualTo(0));
+            expect(rect.right, lessThanOrEqualTo(logicalWidth));
+            expect(rect.top, greaterThanOrEqualTo(0));
+            expect(rect.bottom, lessThanOrEqualTo(keyboardTop));
+          }
+
+          try {
+            await checkStage('portrait startup', () async {
+              await tester.pumpWidget(
+                ShopApp(
+                  testOnlyAllowMissingRuntimeScope: true,
+                  initialCounter: true,
+                  database: database,
+                  authClient: null,
+                  apiBaseUrl: 'https://app.supermega.dev',
+                  initialMyanmar: myanmar,
+                ),
+              );
+              await settle();
+            });
+            expectAppViewport(const Size(800, 1280));
+
+            final addFirstProduct = find.text(
+              myanmar ? 'ပထမကုန်ပစ္စည်းထည့်ရန်' : 'Add first product',
+            );
+            await checkStage('open first-product form', () async {
+              await tester.ensureVisible(addFirstProduct);
+              await tester.tap(addFirstProduct);
+              await settle();
+            });
+            await tester.enterText(
+              find.byKey(const ValueKey('shop-product-name')),
+              'Tea',
+            );
+            await tester.enterText(
+              find.byKey(const ValueKey('shop-product-price')),
+              '2500',
+            );
+            await tester.enterText(
+              find.byKey(const ValueKey('shop-product-stock')),
+              '3',
+            );
+            await checkStage('save first product', () async {
+              await tester.tap(
+                find.text(myanmar ? 'သိမ်းရန်' : 'Save product'),
+              );
+              await settle();
+            });
+
+            final product = (await database.readActiveProducts()).single;
+            expect(product.name, 'Tea');
+            expect(product.priceMmk, 2500);
+            expect(product.onHand, 3);
+            expect(await database.countSales(), 0);
+
+            await checkStage('add Tea to basket in portrait', () async {
+              final addToSale = find.byTooltip(
+                myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale',
+              );
+              await tester.ensureVisible(addToSale);
+              await tester.tap(addToSale);
+              await settle();
+            });
+            expect((await database.readCounterSaleDraft())?.quantities, {
+              product.id: 1,
+            });
+            expect(await database.countSales(), 0);
+            expect((await database.readActiveProducts()).single.onHand, 3);
+            final stockMovementsBeforeSale = await database
+                .countStockMovements();
+
+            tester.view.physicalSize = const Size(2560, 1600);
+            await checkStage('landscape basket', settle);
+            expectAppViewport(const Size(1280, 800));
+            final basket = find.byKey(const ValueKey('shop-split-basket'));
+            expect(basket, findsOneWidget);
+            expect(
+              find.descendant(of: basket, matching: find.text('Tea')),
+              findsOneWidget,
+            );
+            expect(
+              find.text(myanmar ? 'လက်ရှိအရောင်း' : 'Current sale'),
+              findsOneWidget,
+            );
+            final money = myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK';
+            expect(
+              find.descendant(
+                of: find.byKey(const ValueKey('shop-checkout-summary')),
+                matching: find.text(money),
+              ),
+              findsOneWidget,
+            );
+            final cashLabel = myanmar ? 'ငွေသား' : 'Cash sale';
+            final cashControl = find.widgetWithText(FilledButton, cashLabel);
+            expect(cashControl.hitTestable(), findsOneWidget);
+            expect(
+              tester.getSize(cashControl).shortestSide,
+              greaterThanOrEqualTo(48),
+            );
+            expect(await database.countSales(), 0);
+            expect((await database.readActiveProducts()).single.onHand, 3);
+
+            await checkStage('open cash confirmation', () async {
+              await tester.tap(cashControl);
+              await settle();
+            });
+            expect(
+              find.text(myanmar ? 'ငွေသားရပြီလား။' : 'Cash received?'),
+              findsOneWidget,
+            );
+            final completeLabel = myanmar ? 'အတည်ပြုရန်' : 'Complete sale';
+            final confirmControl = find.widgetWithText(
+              FilledButton,
+              completeLabel,
+            );
+            expect(confirmControl.hitTestable(), findsOneWidget);
+            expect(
+              tester.getSize(confirmControl).shortestSide,
+              greaterThanOrEqualTo(48),
+            );
+            expect(await database.countSales(), 0);
+            expect((await database.readActiveProducts()).single.onHand, 3);
+
+            final receiptAction = find.byKey(
+              const ValueKey('shop-sale-completion-view'),
+            );
+            final originalViewInsets = tester.view.viewInsets;
+            try {
+              // TestFlutterView.viewInsets is physical pixels: at DPR 2, 600
+              // pixels represent a 300 logical-pixel IME layout inset. This
+              // simulates geometry only; it does not show or test an OS IME.
+              tester.view.viewInsets = const FakeViewPadding(bottom: 600);
+              await checkStage('simulated IME cash dialog', settle);
+              expect(
+                find.text(myanmar ? 'ငွေသားရပြီလား။' : 'Cash received?'),
+                findsOneWidget,
+              );
+              expectOuterScaffoldInsets(600);
+              expectControlAboveSimulatedKeyboard(confirmControl);
+              expect(confirmControl.hitTestable(), findsOneWidget);
+              expect(
+                tester.getSize(confirmControl).shortestSide,
+                greaterThanOrEqualTo(48),
+              );
+
+              await checkStage(
+                'complete one cash sale under simulated IME inset',
+                () async {
+                  await tester.tap(confirmControl);
+                  await settle();
+                },
+              );
+              expect(await database.countSales(), 1);
+              expect((await database.readActiveProducts()).single.onHand, 2);
+              expect(
+                await database.countStockMovements(),
+                stockMovementsBeforeSale + 1,
+              );
+              final receipts = await database.readRecentSales();
+              expect(receipts, hasLength(1));
+              final receipt = receipts.single;
+              expect(receipt.totalMmk, 2500);
+              expect(receipt.lines, hasLength(1));
+              expect(receipt.lines.single.productId, product.id);
+              expect(receipt.lines.single.quantity, 1);
+              expect(receipt.lines.single.productName, 'Tea');
+              expect(receipt.lines.single.unitPriceMmk, 2500);
+              expect(receipt.lines.single.lineTotalMmk, 2500);
+              final saleEffects = await (database.select(
+                database.shopStockMovements,
+              )..where((movement) => movement.saleId.equals(receipt.id))).get();
+              expect(saleEffects, hasLength(1));
+              expect(saleEffects.single.quantityDelta, -1);
+              expect(saleEffects.single.productId, product.id);
+              await checkStage('simulated IME sale completion', settle);
+              expectOuterScaffoldInsets(600);
+              expectControlAboveSimulatedKeyboard(receiptAction);
+              expect(receiptAction.hitTestable(), findsOneWidget);
+              expect(
+                tester.getSize(receiptAction).shortestSide,
+                greaterThanOrEqualTo(48),
+              );
+              expect(
+                find.textContaining(
+                  myanmar ? 'ပရင်တာသို့ မပို့ရသေးပါ' : 'not sent to a printer',
+                ),
+                findsOneWidget,
+              );
+            } finally {
+              tester.view.viewInsets = originalViewInsets;
+            }
+            await checkStage('restore simulated IME insets', settle);
+            expectOuterScaffoldInsets(originalViewInsets.bottom);
+
+            await checkStage('open saved receipt', () async {
+              await tester.tap(receiptAction);
+              await settle();
+            });
+            final savedReceiptTitle = find.bySemanticsIdentifier(
+              'shop.saved-receipt',
+            );
+            expect(savedReceiptTitle, findsOneWidget);
+            final receiptDialog = find.ancestor(
+              of: savedReceiptTitle,
+              matching: find.byType(AlertDialog),
+            );
+            expect(receiptDialog, findsOneWidget);
+            expect(
+              find.descendant(
+                of: receiptDialog,
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is SelectableText && widget.data == receipt.id,
+                ),
+              ),
+              findsOneWidget,
+            );
+            expect(
+              find.descendant(
+                of: receiptDialog,
+                matching: find.text(myanmar ? 'Tea × ၁' : 'Tea × 1'),
+              ),
+              findsOneWidget,
+            );
+            final totalRow = find.ancestor(
+              of: find.descendant(
+                of: receiptDialog,
+                matching: find.text(myanmar ? 'စုစုပေါင်း' : 'Total'),
+              ),
+              matching: find.byType(Row),
+            );
+            expect(totalRow, findsOneWidget);
+            expect(
+              find.descendant(of: totalRow, matching: find.text(money)),
+              findsOneWidget,
+            );
+            expect(await database.countSales(), 1);
+            expect((await database.readActiveProducts()).single.onHand, 2);
+          } finally {
+            try {
+              await tester.pumpWidget(const SizedBox.shrink());
+              await tester.pump(const Duration(milliseconds: 1));
+            } finally {
+              await database.close();
+            }
+          }
         }
       },
     );
