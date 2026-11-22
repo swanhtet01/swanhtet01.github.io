@@ -5,9 +5,9 @@ import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="651b07dda3659759f586f228948e5cac42502602"
-BASE_TREE="63e36fcaef4b38acbc6019e1e33992942ae17441"
-BASE_NATIVE_TREE="c5163469171c5f25792d9c496864d9ea4388bda1"
+BASE="e0e94d0a114f2ce14054f6e75289ec05a202d1ac"
+BASE_TREE="d2dca60246848c92e0bdee67549b5f7db607a4a4"
+BASE_NATIVE_TREE="72aad0648279170ae748dd94ec68733905416568"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
@@ -20,7 +20,7 @@ LOCK_SHA="772540b8f7fee17c0e7a9f0185c0366775ce5d61f7c94a5ab894beeb69605ccb"
 # Diagnostic source head only. Full instrumented authority requires a separate review.
 SOURCE_WIDGET_ONLY=True
 WIDGET_TEST=APP/"test/widget_test_support.dart"
-WIDGET_TEST_SHA="5ead108573e7035f8a9b2ad59c5008803723d0b883d0b4af6ad401a081b50edc"
+WIDGET_TEST_SHA="915bb5f5d77df01fbdeb41f74ea5b7055dad70580a0c9c1a75b18a1767cf6db8"
 MAIN=APP/"lib/main.dart"
 MAIN_SHA="df039755d0cdd9349bb66a5cc38b1764dd35e9212aa4168af3960f9a6a18d1b3"
 IMAGE="system-images;android-35;default;x86_64"
@@ -80,7 +80,6 @@ REPORT_KEYS={
 ALLOWED_CHANGED={
   "tools/run_shop_first_sale_integration.py",
   "mobile/shop_pos/test/widget_test_support.dart",
-  "mobile/shop_pos/lib/main.dart",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
 EMU_SIZE=350068887

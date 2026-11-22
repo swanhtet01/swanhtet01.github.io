@@ -8289,9 +8289,6 @@ END
         });
         expect(tester.takeException(), isNull);
         expect(fontsLoaded, 'bundled-fonts-loaded');
-        final semantics = tester.ensureSemantics();
-        addTearDown(semantics.dispose);
-
         const settleStep = Duration(milliseconds: 100);
         const settleLimit = Duration(seconds: 5);
         for (final myanmar in [false, true]) {
@@ -8300,6 +8297,7 @@ END
           tester.view.devicePixelRatio = 2;
           tester.platformDispatcher.textScaleFactorTestValue = 1.3;
           final database = ShopDatabase(NativeDatabase.memory());
+          final semantics = tester.ensureSemantics();
 
           Future<void> checkStage(
             String stage,
@@ -8688,7 +8686,11 @@ END
               await tester.pumpWidget(const SizedBox.shrink());
               await tester.pump(const Duration(milliseconds: 1));
             } finally {
-              await database.close();
+              try {
+                await database.close();
+              } finally {
+                semantics.dispose();
+              }
             }
           }
         }
