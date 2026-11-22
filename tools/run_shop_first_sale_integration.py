@@ -4,8 +4,8 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="13332897b3a62caed1000c3eff9b6a45b9660513"
-BASE_TREE="0aaf1cbb3c35364c037eec2df0ea4ed1458b53fe"
+BASE="07f8867052f2a161913ca26fc2935bff3c0de3dd"
+BASE_TREE="be1824e1019a3ddebbc3b8dc0dd8e43cc73c549c"
 BASE_NATIVE_TREE="3401cfa0ba36f3ae06d0105fa4d0a04e200bb4fc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
@@ -71,7 +71,6 @@ REPORT_KEYS={
  "tabletEvidence"
 }
 ALLOWED_CHANGED={
-  ".github/workflows/shop-native-ci.yml",
   "tools/run_shop_first_sale_integration.py",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
@@ -1612,7 +1611,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
     avd.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     manager=Path(sdk)/"cmdline-tools/latest/bin/avdmanager"
     tablet_profile=verify_tablet_profile(manager,root,e,deadline)
-    run([str(manager),"create","avd","-n",name,"-k",IMAGE,"-p",str(avd),
+    run([str(manager),"--verbose","create","avd","-n",name,"-k",IMAGE,"-p",str(avd),
          "-d",TABLET_DEVICE_ID],
         root,e,min(60,max(1,deadline-time.monotonic())),input_data=b"no\n",
         operation="avd_create")
