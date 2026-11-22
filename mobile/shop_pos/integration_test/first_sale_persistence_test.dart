@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -274,6 +275,13 @@ void main() {
     final portraitViewport = await waitForOrientation(
       startNew,
       landscape: false,
+    );
+    debugPrint(
+      'SUPERMEGA_TABLET_VIEWPORT_V1:'
+      '${jsonEncode(<String, Object>{
+        'stage': 'setup_portrait',
+        for (final key in const <String>['physicalWidth', 'physicalHeight', 'logicalWidth', 'logicalHeight', 'devicePixelRatio', 'textScaleAt14']) key: portraitViewport[key]!,
+      })}',
     );
     expect(
       (portraitViewport['logicalHeight']! as num) >= 700 &&

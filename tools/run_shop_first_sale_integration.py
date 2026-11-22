@@ -4,14 +4,14 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="89514cafcac21654ab615fc0d7d1cc302bb1ec8b"
-BASE_TREE="2e340c9c498817847f79eb17d903b9572123a016"
+BASE="b61c59bc38548fff5b4f53927352ed8376ece663"
+BASE_TREE="50248c73f5836d85d0464a7d272553a06ae751fb"
 BASE_NATIVE_TREE="3401cfa0ba36f3ae06d0105fa4d0a04e200bb4fc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
 TEST=APP/"integration_test/first_sale_persistence_test.dart"
-TEST_SHA="9967990406149a9cb09e5710ed55f1407b4cc9636e2c572358e52a74c22302fb"
+TEST_SHA="ed3bf3e07f5899fa1e64d59bb70897cbc89b3cb88586dd5fd5a23e0c9a28502f"
 PUB=APP/"pubspec.yaml"
 PUB_SHA="228f2c2b2d1478d0546a80dbedf4c4393dd8d6700f01ff350b6ebe58a68c1f8a"
 LOCK=APP/"pubspec.lock"
@@ -72,6 +72,7 @@ REPORT_KEYS={
 }
 ALLOWED_CHANGED={
   "tools/run_shop_first_sale_integration.py",
+  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
 EMU_SIZE=350068887
@@ -203,6 +204,39 @@ def flutter_driver_package_argument(repo_root):
     return "--test-arguments=--packages="+str(
         root/APP/".dart_tool"/"package_config.json")
 
+def tablet_viewport_diagnostic(raw):
+    # Numeric hints only; never return child text, unknown keys, or parse errors.
+    need(type(raw) is bytes and len(raw)<=OUTPUT_LIMIT+1,
+         "tablet_viewport_diagnostic_input_invalid")
+    marker=b"SUPERMEGA_TABLET_VIEWPORT_V1:"
+    count=raw.count(marker)
+    if count==0: return {"status":"not_observed"}
+    if count>4: return {"status":"ambiguous"}
+    expected={"stage","physicalWidth","physicalHeight","logicalWidth",
+              "logicalHeight","devicePixelRatio","textScaleAt14"}
+    record=None
+    for chunk in raw.split(marker)[1:]:
+        try:
+            data,_=json.JSONDecoder(object_pairs_hook=_unique_json_pairs).raw_decode(
+                chunk[:4096].decode("utf-8","replace").lstrip())
+            valid=(type(data) is dict and set(data)==expected and
+                   data.get("stage")=="setup_portrait" and
+                   all(type(data[k]) is int and 0<=data[k]<=16384
+                       for k in ("physicalWidth","physicalHeight")) and
+                   all(type(data[k]) in (int,float) and math.isfinite(data[k]) and
+                       0<=data[k]<=16384 for k in ("logicalWidth","logicalHeight")) and
+                   type(data["devicePixelRatio"]) in (int,float) and
+                   math.isfinite(data["devicePixelRatio"]) and
+                   0<data["devicePixelRatio"]<=16 and
+                   type(data["textScaleAt14"]) in (int,float) and
+                   math.isfinite(data["textScaleAt14"]) and
+                   0<=data["textScaleAt14"]<=140)
+        except Exception: return {"status":"invalid"}
+        if not valid: return {"status":"invalid"}
+        if record is not None and data!=record: return {"status":"ambiguous"}
+        record=data
+    return {"status":"captured","value":record}
+
 def flutter_drive_diagnostics(stdout,stderr):
     # Hints only: fixed labels and whitelisted source aliases/integers, never text.
     need(type(stdout) is bytes and type(stderr) is bytes and
@@ -247,9 +281,10 @@ def flutter_drive_diagnostics(stdout,stderr):
                 locations.append(location)
             if len(locations)==8: break
         if len(locations)==8: break
-    return {"schema":"supermega.flutter_drive_diagnostic.v2",
+    return {"schema":"supermega.flutter_drive_diagnostic.v3",
             "stdoutBytes":len(stdout),"stderrBytes":len(stderr),
             "signals":signals or ["unclassified"],"sourceLocations":locations,
+            "tabletViewport":tablet_viewport_diagnostic(stdout+b"\n"+stderr),
             "rawOutputIncluded":False}
 
 def child_failed_refusal(operation, exit_code, *, stdout=None, stderr=None):
@@ -837,7 +872,7 @@ def run_self_tests():
         diagnostic=flutter_drive_diagnostics(raw,b"")
         need(diagnostic["signals"]==[expected] and
              diagnostic["stdoutBytes"]==len(raw) and diagnostic["stderrBytes"]==0 and
-             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","sourceLocations","rawOutputIncluded"} and
+             set(diagnostic)=={"schema","stdoutBytes","stderrBytes","signals","sourceLocations","tabletViewport","rawOutputIncluded"} and
              not diagnostic["rawOutputIncluded"] and
              all(secret not in json.dumps(diagnostic) for secret in
                  ("private","access_token","integration_test_driver.dart")),
@@ -912,14 +947,75 @@ def run_self_tests():
                                      "offline_flutter_drive_diagnostic_type_reason")
         else: raise Refuse("offline_flutter_drive_diagnostic_type_expected_refusal")
         cases+=1
+    viewport={"stage":"setup_portrait","physicalWidth":1600,"physicalHeight":2560,
+              "logicalWidth":800.0,"logicalHeight":1280.0,
+              "devicePixelRatio":2.0,"textScaleAt14":18.2}
+    viewport_marker=b"SUPERMEGA_TABLET_VIEWPORT_V1:"
+    viewport_raw=viewport_marker+json.dumps(viewport).encode("ascii")
+    need(tablet_viewport_diagnostic(b"private-prefix "+viewport_raw+b" private-suffix")==
+         {"status":"captured","value":viewport},"offline_tablet_numeric_positive")
+    cases+=1
+    for changed in (
+        {**viewport,"logicalWidth":0},
+        {**viewport,"physicalWidth":0,"physicalHeight":0,"logicalWidth":0,"logicalHeight":0},
+        {**viewport,"physicalWidth":16384,"logicalWidth":16384},
+    ):
+        need(tablet_viewport_diagnostic(viewport_marker+json.dumps(changed).encode())==
+             {"status":"captured","value":changed},"offline_tablet_numeric_zero_bound")
+        cases+=1
+    for changed in (
+        {**viewport,"stage":"private-value"},
+        {**viewport,"customer":"private-value"},
+        {k:v for k,v in viewport.items() if k!="logicalWidth"},
+        {**viewport,"physicalWidth":True},
+        {**viewport,"physicalWidth":1.5},
+        {**viewport,"physicalWidth":-1},
+        {**viewport,"physicalWidth":16385},
+        {**viewport,"logicalWidth":-1},
+        {**viewport,"logicalHeight":float("inf")},
+        {**viewport,"logicalWidth":float("nan")},
+        {**viewport,"logicalWidth":"private-value"},
+        {**viewport,"devicePixelRatio":0},
+        {**viewport,"devicePixelRatio":17},
+        {**viewport,"textScaleAt14":141},
+        {**viewport,"textScaleAt14":True},
+    ):
+        diagnostic=tablet_viewport_diagnostic(viewport_marker+json.dumps(changed).encode())
+        need(diagnostic=={"status":"invalid"} and "private" not in json.dumps(diagnostic),
+             "offline_tablet_numeric_invalid_redacted")
+        cases+=1
+    for raw,status in (
+        (b"private-value", "not_observed"),
+        (viewport_marker+b"{private-value}","invalid"),
+        (viewport_marker+b"[]", "invalid"),
+        (viewport_marker+b'{"stage":"setup_portrait","stage":"private-value"}',"invalid"),
+        (viewport_raw*5,"ambiguous"),
+        (viewport_raw+viewport_marker+json.dumps({**viewport,"logicalWidth":600}).encode(),"ambiguous"),
+    ):
+        need(tablet_viewport_diagnostic(raw)=={"status":status},
+             "offline_tablet_numeric_marker_bounds")
+        cases+=1
+    need(tablet_viewport_diagnostic(viewport_raw+b"\n"+viewport_raw)==
+         {"status":"captured","value":viewport},"offline_tablet_numeric_repeat_identical")
+    cases+=1
+    need(flutter_drive_diagnostics(viewport_raw,b"")["tabletViewport"]==
+         {"status":"captured","value":viewport},"offline_tablet_numeric_child_binding")
+    cases+=1
+    for bad in ("private",None,b"x"*(OUTPUT_LIMIT+2)):
+        try: tablet_viewport_diagnostic(bad)
+        except Refuse as error: need(str(error)=="tablet_viewport_diagnostic_input_invalid",
+                                     "offline_tablet_numeric_input_reason")
+        else: raise Refuse("offline_tablet_numeric_input_expected_refusal")
+        cases+=1
     drive_failure=child_failed_refusal(
         "flutter_drive",23,stdout=b"",stderr=b"Error: access_token=private-value")
     need(drive_failure.child_failure=={
              "operation":"flutter_drive","exitCode":23,
              "flutterDriveDiagnostics":{
-                 "schema":"supermega.flutter_drive_diagnostic.v2","stdoutBytes":0,
+                 "schema":"supermega.flutter_drive_diagnostic.v3","stdoutBytes":0,
                  "stderrBytes":len(b"Error: access_token=private-value"),
-                 "signals":["unclassified"],"sourceLocations":[],"rawOutputIncluded":False}},
+                 "signals":["unclassified"],"sourceLocations":[],
+                 "tabletViewport":{"status":"not_observed"},"rawOutputIncluded":False}},
          "offline_flutter_drive_child_failure")
     cases+=1
     diagnostic=avd_create_diagnostics(b"private-stdout-path",b"Error: Package path is not valid. private-stderr-path")
@@ -1794,6 +1890,7 @@ def read_tablet_display(adb,serial,root,e,deadline):
 
 def run_locale(root,task,sdk,emulator,adb,locale,deadline):
     RUN_PROGRESS["currentLocale"]=locale
+    RUN_PROGRESS.pop("tabletDisplay",None)
     set_phase("avd_prepare")
     name="shopqa"+uuid.uuid4().hex[:12]
     avd=task/"avds"/locale
@@ -1847,6 +1944,7 @@ def run_locale(root,task,sdk,emulator,adb,locale,deadline):
         run([str(adb),"-s",serial,"shell","settings","put","system","font_scale","1.3"],
             root,e,bounded_time(deadline,10),operation="adb_set_font_scale")
         tablet_display=read_tablet_display(adb,serial,root,e,deadline)
+        RUN_PROGRESS["tabletDisplay"]=dict(tablet_display)
         need(shutil.disk_usage(os.environ["RUNNER_TEMP"]).free>=4*1024**3,
              "capacity_before_test")
         set_phase("test_running")
