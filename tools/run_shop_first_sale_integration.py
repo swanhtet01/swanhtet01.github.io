@@ -4,14 +4,14 @@ import argparse, hashlib, json, math, os, platform, re, selectors, shutil, signa
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="c17383ac455ccda86e500a22afaa3ee58d18d760"
-BASE_TREE="777bc7639f0ff2bf67813c3a400f06710b65fd07"
+BASE="8d12468f4c460e8402350faf14d636fa01edcf7f"
+BASE_TREE="cc2f5cbdf32aeefa2e56c38c22139f1cf2b20f25"
 BASE_NATIVE_TREE="e783fe910fc381a4e93818088a27537c37ff8ffc"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
 TEST=APP/"integration_test/first_sale_persistence_test.dart"
-TEST_SHA="ed3bf3e07f5899fa1e64d59bb70897cbc89b3cb88586dd5fd5a23e0c9a28502f"
+TEST_SHA="60ceb100cc9de86db1691c43fc93ef336f17f9f67b84cd433fec1ea69e479576"
 PUB=APP/"pubspec.yaml"
 PUB_SHA="228f2c2b2d1478d0546a80dbedf4c4393dd8d6700f01ff350b6ebe58a68c1f8a"
 LOCK=APP/"pubspec.lock"
@@ -71,6 +71,7 @@ REPORT_KEYS={
  "tabletEvidence"
 }
 ALLOWED_CHANGED={
+  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
   "tools/run_shop_first_sale_integration.py",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"

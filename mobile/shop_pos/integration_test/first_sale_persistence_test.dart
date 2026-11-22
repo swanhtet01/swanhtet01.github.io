@@ -81,22 +81,40 @@ void main() {
     Future<Map<String, Object>> waitForOrientation(
       Finder anchor, {
       required bool landscape,
+      bool reportSetupViewport = false,
     }) async {
       final waiting = Stopwatch()..start();
       var snapshot = viewportSnapshot(anchor);
-      bool matches(Map<String, Object> value) =>
-          ((value['logicalWidth']! as num) >
-              (value['logicalHeight']! as num)) ==
-          landscape;
+      // Orientation may be reported before the app window finishes resizing.
+      // Keep the existing tablet thresholds inside the bounded wait as well.
+      bool matches(Map<String, Object> value) {
+        final width = value['logicalWidth']! as num;
+        final height = value['logicalHeight']! as num;
+        return width.isFinite &&
+            height.isFinite &&
+            (landscape
+                ? width > height && width >= 700 && height >= 600
+                : height > width && width >= 600 && height >= 700);
+      }
+
       while (!matches(snapshot) &&
           waiting.elapsed < const Duration(seconds: 20)) {
         await tester.pump(const Duration(milliseconds: 100));
         snapshot = viewportSnapshot(anchor);
       }
+      if (reportSetupViewport) {
+        debugPrint(
+          'SUPERMEGA_TABLET_VIEWPORT_V1:'
+          '${jsonEncode(<String, Object>{
+            'stage': 'setup_portrait',
+            for (final key in const <String>['physicalWidth', 'physicalHeight', 'logicalWidth', 'logicalHeight', 'devicePixelRatio', 'textScaleAt14']) key: snapshot[key]!,
+          })}',
+        );
+      }
       expect(
         matches(snapshot),
         isTrue,
-        reason: 'Requested orientation did not reach the app view.',
+        reason: 'Requested orientation did not reach a tablet-sized app view.',
       );
       return snapshot;
     }
@@ -275,13 +293,7 @@ void main() {
     final portraitViewport = await waitForOrientation(
       startNew,
       landscape: false,
-    );
-    debugPrint(
-      'SUPERMEGA_TABLET_VIEWPORT_V1:'
-      '${jsonEncode(<String, Object>{
-        'stage': 'setup_portrait',
-        for (final key in const <String>['physicalWidth', 'physicalHeight', 'logicalWidth', 'logicalHeight', 'devicePixelRatio', 'textScaleAt14']) key: portraitViewport[key]!,
-      })}',
+      reportSetupViewport: true,
     );
     expect(
       (portraitViewport['logicalHeight']! as num) >= 700 &&
