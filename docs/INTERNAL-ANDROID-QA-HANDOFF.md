@@ -18,17 +18,22 @@ and `app.supermega.dev`; it is not a handoff for this APK. Use
 ## Before a run
 
 Retain the original GitHub artifact archive without repacking it. Extract the
-three original Android files:
+six original Android files:
 
 - `app-qa-debug.apk`
 - `app-qa-debug.apk.sha256`
+- `app-qa-debug.apk.identity.json`
+- `app-qa-debug.apk.signing.json`
+- `app-qa-debug.apk.toolchain.json`
 - `app-qa-debug.apk.manifest`
 
 Prepare a private metadata JSON file containing the exact PR head SHA, artifact
 source/merge SHA, native tree, Actions run ID, artifact ID and URL, original archive SHA-256,
-artifact expiry, passed producer `apkanalyzer` application-ID/label evidence,
-and the truthful debug-signing classification. Do not include credentials,
-customer data, or a signing key.
+and artifact expiry. For the canonical v3 handoff, application identity,
+capabilities, SDK/ABI observations, and debug-signing evidence are derived from
+the retained canonical manifest and its receipt digests rather than trusted from
+this private metadata. Do not include credentials, customer data, or a signing
+key.
 
 For pull-request Actions, `github.sha` is the tested merge commit and is the
 `source-sha` written into the artifact manifest. Record the PR head separately;
@@ -55,17 +60,19 @@ node tools/prepare_shop_android_qa_handoff.mjs \
 ```
 
 The tool hashes the supplied archive and APK, parses the ZIP central directory,
-requires exactly the three expected safe entry names, proves the supplied APK,
-checksum, and manifest bytes came from that archive, checks the exact QA identity
-evidence, requires the
+requires exactly the six expected safe entry names, proves the supplied APK,
+checksum, canonical manifest, identity, signing, and toolchain receipts came
+from that archive, rehashes every receipt, checks the exact QA identity and
+capability evidence, requires a verified debug signer certificate and the
 debug/non-production signing classification, and rejects expired evidence or
 premature acceptance claims. A successful result is only
 `ready_for_internal_install_run`.
 
-Application-ID and label evidence is reported producer-CI evidence bound to the
-exact run and pull-request merge SHA. This dependency-free tool does not rerun
-`apkanalyzer` against the APK. Installed acceptance must observe the identity
-again on the disposable target.
+Application-ID, label, version, SDK, ABI, capability, and signer evidence is
+producer-CI evidence bound through the canonical manifest to the exact artifact,
+source tree, run, and pull-request merge SHA. This dependency-free tool does not
+rerun `apkanalyzer` or `apksigner` against the APK. Installed acceptance must
+observe the identity and signer again on the disposable target.
 
 ## Allowed internal run
 

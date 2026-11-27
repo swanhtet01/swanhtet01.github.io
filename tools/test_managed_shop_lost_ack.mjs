@@ -77,7 +77,8 @@ test('rendered recovery controls distinguish uncertain writes from setup and acc
       commerceCanWrite: false, commerceStorageError: 'Synthetic failure',
       managedIdentity: { workspaceId: 'synthetic', userId: 'synthetic' },
       workspaceMode: 'managed-ready', commerceSync: { status: 'ready', message: '' },
-      managedVersion: 2, notice: '', window: { location: { reload: () => { reloads++ } } },
+      managedVersion: 2, notice: '', localEvictionWarningReplacesWriteBanner: false,
+      window: { location: { reload: () => { reloads++ } } },
       ...overrides,
     })
     const html = renderToStaticMarkup(element)

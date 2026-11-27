@@ -1,0 +1,101 @@
+name: First-sale instrumented QA (guarded)
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shop-first-sale-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  first-sale:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'synchronize' &&
+      github.repository == 'swanhtet01/swanhtet01.github.io' &&
+      github.repository_id == '1034056731' &&
+      github.event.pull_request.number == 752 &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.base.repo.id == 1034056731 &&
+      github.event.pull_request.head.repo.id == 1034056731 &&
+      github.event.pull_request.base.ref == 'codex/shop-main-integration-20261022' &&
+      github.event.pull_request.base.sha == '4977d4caafa6921e83c97c950a154d3bd8aaf584' &&
+      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031' &&
+      github.actor_id == '98728123' &&
+      github.event.sender.id == 98728123 &&
+      github.event.sender.type == 'User' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact PR head without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+          submodules: false
+
+      - name: Run offline runner contract fixtures
+        run: python3 tools/run_shop_first_sale_integration.py --self-test
+
+      - name: Fail closed on source, lock, or image bindings
+        env:
+          QA_EVENT: ${{ github.event_name }}
+          QA_ACTION: ${{ github.event.action }}
+          QA_REPOSITORY: ${{ github.repository }}
+          QA_REPOSITORY_ID: ${{ github.repository_id }}
+          QA_PR_NUMBER: ${{ github.event.pull_request.number }}
+          QA_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          QA_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          QA_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          QA_BASE_REPOSITORY_ID: ${{ github.event.pull_request.base.repo.id }}
+          QA_HEAD_REPOSITORY_ID: ${{ github.event.pull_request.head.repo.id }}
+          QA_DRAFT: ${{ github.event.pull_request.draft }}
+          QA_ACTOR_ID: ${{ github.actor_id }}
+          QA_SENDER_ID: ${{ github.event.sender.id }}
+          QA_SENDER_TYPE: ${{ github.event.sender.type }}
+          QA_ATTEMPT: ${{ github.run_attempt }}
+          QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/run_shop_first_sale_integration.py --preflight-only
+
+      - name: Set up pinned Flutter SDK
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        timeout-minutes: 4
+        with:
+          flutter-version: '3.47.8'
+          cache: false
+
+      - name: Run source preflight and bounded instrumented first-sale trial
+        env:
+          QA_EVENT: ${{ github.event_name }}
+          QA_ACTION: ${{ github.event.action }}
+          QA_REPOSITORY: ${{ github.repository }}
+          QA_REPOSITORY_ID: ${{ github.repository_id }}
+          QA_PR_NUMBER: ${{ github.event.pull_request.number }}
+          QA_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          QA_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          QA_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          QA_BASE_REPOSITORY_ID: ${{ github.event.pull_request.base.repo.id }}
+          QA_HEAD_REPOSITORY_ID: ${{ github.event.pull_request.head.repo.id }}
+          QA_DRAFT: ${{ github.event.pull_request.draft }}
+          QA_ACTOR_ID: ${{ github.actor_id }}
+          QA_SENDER_ID: ${{ github.event.sender.id }}
+          QA_SENDER_TYPE: ${{ github.event.sender.type }}
+          QA_ATTEMPT: ${{ github.run_attempt }}
+          QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          QA_RUN_ID: ${{ github.run_id }}
+          SUPABASE_URL: ''
+          SUPABASE_PUBLISHABLE_KEY: ''
+          SHOP_API_BASE_URL: ''
+          SHOP_CONNECTED_ORDERS_ENABLED: ''
+        run: python3 tools/run_shop_first_sale_integration.py --run
+      - name: Verify source checkout remains clean
+        if: always()
+        run: test -z "$(git status --porcelain --untracked-files=all)"

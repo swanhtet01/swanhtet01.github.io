@@ -1,0 +1,83 @@
+name: PostgreSQL 17 PR Windows Observer Probe
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgres17-pr-observer-probe-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  observer-probe:
+    if: >-
+      github.event.pull_request.number == 752 &&
+      github.event.label.name == 'pg17-observer-probe' &&
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031' &&
+      github.event.pull_request.base.ref == 'codex/shop-main-integration-20261022'
+    runs-on: windows-2025
+    timeout-minutes: 15
+    env:
+      EXACT_SHA: ${{ github.event.pull_request.head.sha }}
+      REPOSITORY_ROOT: ${{ github.workspace }}
+    steps:
+      - name: Validate exact PR head
+        shell: pwsh
+        run: |
+          if ($env:EXACT_SHA -cnotmatch '^[0-9a-f]{40}$') { throw 'observer_pr_head_invalid' }
+      - name: Checkout exact PR head without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify clean exact source
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -cne $env:EXACT_SHA) { throw 'observer_pr_checkout_sha_mismatch' }
+          if (git status --porcelain=v1 --untracked-files=all) { throw 'observer_pr_checkout_not_clean' }
+      - name: Validate checked-out observer PowerShell syntax
+        shell: powershell
+        run: |
+          try {
+            $source = Join-Path -Path $env:REPOSITORY_ROOT -ChildPath 'tools/postgres17_windows_trace_observer.ps1' -ErrorAction Stop
+            $tokens = $null
+            $parseErrors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($source, [ref]$tokens, [ref]$parseErrors)
+            if ($null -eq $ast -or $null -eq $parseErrors -or $parseErrors.Count -ne 0) {
+              throw 'observer_pr_script_parse_invalid'
+            }
+          } catch {
+            throw 'observer_pr_script_parse_invalid'
+          }
+      - name: Run non-authoritative observer probe only
+        shell: pwsh
+        env:
+          EVIDENCE_OUTPUT: ${{ runner.temp }}\supermega-sanitized-evidence
+        run: |
+          & ./tools/postgres17_windows_trace_observer.ps1 `
+            -Mode Probe `
+            -ExactSha $env:EXACT_SHA `
+            -RepositoryRoot $env:REPOSITORY_ROOT `
+            -OutputDirectory $env:EVIDENCE_OUTPUT
+      - name: Verify sanitized observer evidence
+        shell: pwsh
+        env:
+          EVIDENCE_OUTPUT: ${{ runner.temp }}\supermega-sanitized-evidence
+        run: node tools/postgres17_windows_evidence_contract.mjs $env:EVIDENCE_OUTPUT observer-probe $env:EXACT_SHA
+      - name: Upload sanitized observer evidence only
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: postgres17-pr-observer-probe-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}\supermega-sanitized-evidence\postgres17-observer-probe.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false

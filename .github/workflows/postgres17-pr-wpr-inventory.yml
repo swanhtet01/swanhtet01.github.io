@@ -1,0 +1,81 @@
+name: PostgreSQL 17 PR WPR Capability Inventory Only
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgres17-pr-wpr-inventory-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  inventory-only:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'labeled' &&
+      github.run_attempt == 1 &&
+      github.repository == 'swanhtet01/swanhtet01.github.io' &&
+      github.actor_id == '98728123' &&
+      github.event.sender.id == 98728123 &&
+      github.event.pull_request.number == 752 &&
+      github.event.label.name == 'pg17-wpr-inventory' &&
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/postgres17-provenance-integration-20261031' &&
+      github.event.pull_request.base.ref == 'codex/shop-main-integration-20261022'
+    runs-on: windows-2025
+    timeout-minutes: 10
+    env:
+      EXACT_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Validate exact PR head
+        shell: pwsh
+        run: |
+          if ($env:EXACT_SHA -cnotmatch '^[0-9a-f]{40}$') { throw 'inventory_pr_head_invalid' }
+      - name: Checkout exact PR head without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify clean exact source
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -cne $env:EXACT_SHA) { throw 'inventory_pr_checkout_sha_mismatch' }
+          if (git status --porcelain=v1 --untracked-files=all) { throw 'inventory_pr_checkout_not_clean' }
+      - name: Verify pinned inventory script bytes
+        shell: pwsh
+        run: |
+          $path = './tools/postgres17_wpr_capability_inventory.ps1'
+          $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+          if ($item -isnot [System.IO.FileInfo] -or
+              (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) -or
+              ($null -ne $item.PSObject.Properties['LinkType'] -and
+               -not [string]::IsNullOrEmpty([string]$item.LinkType)) -or
+              $item.Length -lt 1 -or $item.Length -gt 32768) {
+            throw 'inventory_script_shape_invalid'
+          }
+          $digest = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($digest -cne '35450e9f8006147b90e08fefc137215356bdd9df1d4116a4205f6caca5058d62') {
+            Write-Output ('inventory_script_observed bytes={0} sha256={1}' -f [int64]$item.Length, $digest)
+            throw 'inventory_script_digest_mismatch'
+          }
+      - name: Collect pinned WPR metadata only
+        id: inventory
+        shell: pwsh
+        run: |
+          & ./tools/postgres17_wpr_capability_inventory.ps1 -ExactSha $env:EXACT_SHA
+      - name: Upload bounded inventory only
+        if: ${{ success() && steps.inventory.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: postgres17-wpr-inventory-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}\supermega-wpr-inventory\wpr-capability.json
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false

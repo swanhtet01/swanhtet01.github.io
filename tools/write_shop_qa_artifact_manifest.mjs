@@ -1,16 +1,34 @@
 #!/usr/bin/env node
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { lstat, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { link, lstat, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { validateShopQaArtifactManifest } from './shop_android_qa_handoff_validator.mjs'
+
+export { validateShopQaArtifactManifest } from './shop_android_qa_handoff_validator.mjs'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SHA40 = /^[0-9a-f]{40}$/
 const SHA256 = /^[0-9a-f]{64}$/
 
 const contracts = Object.freeze({
+  android: Object.freeze({
+    artifact: 'app-qa-debug.apk',
+    runnerOs: 'Linux',
+    identity: Object.freeze({
+      applicationId: 'dev.supermega.supermega_shop.qa',
+      applicationLabel: 'Shop QA',
+      capabilityContract: 'supermega.shop.android-qa-capabilities.v1',
+      evidenceContract: 'supermega.shop.synthetic-qa-evidence.v1',
+      scopedEncryptedRestore: true,
+      scopedSyntheticExport: true,
+      generalExternalFileAccess: false,
+    }),
+    signing: 'android_debug',
+  }),
   ios: Object.freeze({
     artifact: 'Runner.app.zip',
     runnerOs: 'macOS',
@@ -61,65 +79,13 @@ function defaultExec(command, args, cwd) {
   return execFileSync(command, args, { cwd, encoding: 'utf8' }).trim()
 }
 
-function canonicalBody(manifest) {
-  const { digest: _digest, ...body } = manifest
-  return JSON.stringify(body)
-}
-
-export function validateShopQaArtifactManifest(manifest) {
-  if (!exactKeys(manifest, [
-    'contract', 'digestScope', 'platform', 'buildProfile', 'source', 'artifact',
-    'toolchain', 'signing', 'claimBoundary', 'digest',
-  ])) fail('shop_qa_manifest_keys_invalid')
-  if (manifest.contract !== 'supermega.shop.synthetic-qa-artifact.v1'
-    || manifest.digestScope !== 'utf8_compact_json_without_digest'
-    || manifest.buildProfile !== 'synthetic_qa_v1'
-    || !Object.hasOwn(contracts, manifest.platform)) fail('shop_qa_manifest_contract_invalid')
-  const contract = contracts[manifest.platform]
-  if (!exactKeys(manifest.source, ['sourceSha', 'sourceTree', 'nativeTree'])
-    || !Object.values(manifest.source).every(value => SHA40.test(value))) fail('shop_qa_manifest_source_invalid')
-  if (!exactKeys(manifest.artifact, ['fileName', 'sha256', 'bytes', 'identity'])
-    || manifest.artifact.fileName !== contract.artifact
-    || !SHA256.test(manifest.artifact.sha256)
-    || !Number.isSafeInteger(manifest.artifact.bytes)
-    || manifest.artifact.bytes <= 0
-    || JSON.stringify(manifest.artifact.identity) !== JSON.stringify(contract.identity)) fail('shop_qa_manifest_artifact_invalid')
-  if (!exactKeys(manifest.toolchain, [
-    'flutterVersion', 'flutterRevision', 'dartVersion', 'runnerOs', 'runnerArch',
-    'runnerImageOs', 'runnerImageVersion', 'receiptSha256',
-  ])
-    || !/^\d+\.\d+\.\d+/.test(manifest.toolchain.flutterVersion)
-    || !SHA40.test(manifest.toolchain.flutterRevision)
-    || typeof manifest.toolchain.dartVersion !== 'string'
-    || !manifest.toolchain.dartVersion.trim()
-    || manifest.toolchain.runnerOs !== contract.runnerOs
-    || !SHA256.test(manifest.toolchain.receiptSha256)
-    || !['runnerArch', 'runnerImageOs', 'runnerImageVersion'].every(key => (
-      typeof manifest.toolchain[key] === 'string' && manifest.toolchain[key].trim()
-    ))) fail('shop_qa_manifest_toolchain_invalid')
-  if (!exactKeys(manifest.signing, ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'receiptSha256'])
-    || manifest.signing.classification !== contract.signing
-    || manifest.signing.productionSigned !== false
-    || manifest.signing.stableUpdateIdentityProven !== false
-    || !SHA256.test(manifest.signing.receiptSha256)) fail('shop_qa_manifest_signing_invalid')
-  if (!exactKeys(manifest.claimBoundary, [
-    'internalSyntheticQaOnly', 'installedAcceptanceProven', 'hardwareAcceptanceProven',
-    'merchantAcceptanceProven', 'productionReady', 'promotionEligible',
-  ])
-    || manifest.claimBoundary.internalSyntheticQaOnly !== true
-    || ['installedAcceptanceProven', 'hardwareAcceptanceProven', 'merchantAcceptanceProven', 'productionReady', 'promotionEligible']
-      .some(key => manifest.claimBoundary[key] !== false)) fail('shop_qa_manifest_claim_boundary_invalid')
-  const expectedDigest = `sha256:${sha256(canonicalBody(manifest))}`
-  if (manifest.digest !== expectedDigest) fail('shop_qa_manifest_digest_invalid')
-  return manifest
-}
-
 export async function writeShopQaArtifactManifest({
   platform,
   artifactPath,
   checksumPath,
   toolchainPath,
   signingPath,
+  identityPath,
   outputPath,
   root = repositoryRoot,
   environment = process.env,
@@ -132,19 +98,24 @@ export async function writeShopQaArtifactManifest({
   const checksum = resolve(checksumPath)
   const toolchainReceipt = resolve(toolchainPath)
   const signingReceipt = resolve(signingPath)
+  const identityReceipt = identityPath ? resolve(identityPath) : null
   const output = resolve(outputPath)
-  if (![artifact, checksum, toolchainReceipt, signingReceipt, output].every(path => withinRoot(absoluteRoot, path))) fail('shop_qa_manifest_path_outside_repository')
+  if (![artifact, checksum, toolchainReceipt, signingReceipt, output, ...(identityReceipt ? [identityReceipt] : [])]
+    .every(path => withinRoot(absoluteRoot, path))) fail('shop_qa_manifest_path_outside_repository')
   if (basename(artifact) !== contract.artifact
     || basename(checksum) !== `${contract.artifact}.sha256`
     || basename(toolchainReceipt) !== `${contract.artifact}.toolchain.json`
     || basename(signingReceipt) !== `${contract.artifact}.signing.json`
-    || basename(output) !== `${contract.artifact}.manifest`) fail('shop_qa_manifest_path_contract_invalid')
+    || basename(output) !== `${contract.artifact}.manifest`
+    || (platform === 'android' && basename(identityReceipt || '') !== `${contract.artifact}.identity.json`)
+    || (platform !== 'android' && identityReceipt !== null)) fail('shop_qa_manifest_path_contract_invalid')
   const realRoot = await realpath(absoluteRoot)
   for (const [path, code] of [
     [artifact, 'artifact'],
     [checksum, 'checksum'],
     [toolchainReceipt, 'toolchain'],
     [signingReceipt, 'signing'],
+    ...(identityReceipt ? [[identityReceipt, 'identity']] : []),
   ]) {
     const info = await lstat(path).catch(error => error?.code === 'ENOENT' ? null : Promise.reject(error))
     if (!info?.isFile() || info.isSymbolicLink()) fail(`shop_qa_manifest_${code}_invalid`)
@@ -195,10 +166,52 @@ export async function writeShopQaArtifactManifest({
   } catch {
     fail('shop_qa_manifest_signing_evidence_invalid')
   }
-  if (!exactKeys(signingEvidence, ['classification', 'productionSigned', 'stableUpdateIdentityProven'])
+  const android = platform === 'android'
+  const signingEvidenceKeys = android
+    ? ['classification', 'productionSigned', 'stableUpdateIdentityProven', 'certificateSha256', 'signatureVerified', 'apksignerBuildToolsVersion', 'apksignerSha256', 'apksignerJarSha256', 'buildToolsSourcePropertiesSha256']
+    : ['classification', 'productionSigned', 'stableUpdateIdentityProven']
+  if (!exactKeys(signingEvidence, signingEvidenceKeys)
     || signingEvidence.classification !== contract.signing
     || signingEvidence.productionSigned !== false
-    || signingEvidence.stableUpdateIdentityProven !== false) fail('shop_qa_manifest_signing_evidence_invalid')
+    || signingEvidence.stableUpdateIdentityProven !== false
+    || (android && (!SHA256.test(signingEvidence.certificateSha256)
+      || signingEvidence.signatureVerified !== true
+      || !/^\d+\.\d+\.\d+$/.test(signingEvidence.apksignerBuildToolsVersion)
+      || !SHA256.test(signingEvidence.apksignerSha256)
+      || !SHA256.test(signingEvidence.apksignerJarSha256)
+      || !SHA256.test(signingEvidence.buildToolsSourcePropertiesSha256)))) {
+    fail('shop_qa_manifest_signing_evidence_invalid')
+  }
+
+  let artifactIdentity = contract.identity
+  let identityReceiptSha256
+  if (android) {
+    const identityBytes = await readFile(identityReceipt)
+    let identityEvidence
+    try {
+      identityEvidence = JSON.parse(identityBytes.toString('utf8'))
+    } catch {
+      fail('shop_qa_manifest_android_identity_evidence_invalid')
+    }
+    if (!exactKeys(identityEvidence, [
+      ...Object.keys(contract.identity), 'versionCode', 'versionName', 'compileSdk', 'minSdk', 'targetSdk', 'abis', 'buildIdentitySha256',
+    ])
+      || Object.entries(contract.identity).some(([key, value]) => identityEvidence[key] !== value)
+      || !/^[1-9][0-9]*$/.test(identityEvidence.versionCode)
+      || typeof identityEvidence.versionName !== 'string' || !identityEvidence.versionName.trim()
+      || !Number.isSafeInteger(identityEvidence.compileSdk)
+      || !Number.isSafeInteger(identityEvidence.minSdk) || identityEvidence.minSdk <= 0
+      || !Number.isSafeInteger(identityEvidence.targetSdk) || identityEvidence.targetSdk < identityEvidence.minSdk
+      || identityEvidence.compileSdk < identityEvidence.targetSdk
+      || !Array.isArray(identityEvidence.abis) || identityEvidence.abis.length === 0
+      || identityEvidence.abis.some((abi, index, values) => (
+        !['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'].includes(abi)
+        || (index > 0 && values[index - 1] >= abi)
+      ))
+      || !SHA256.test(identityEvidence.buildIdentitySha256)) fail('shop_qa_manifest_android_identity_evidence_invalid')
+    artifactIdentity = identityEvidence
+    identityReceiptSha256 = sha256(identityBytes)
+  }
 
   const body = {
     contract: 'supermega.shop.synthetic-qa-artifact.v1',
@@ -210,7 +223,8 @@ export async function writeShopQaArtifactManifest({
       fileName: contract.artifact,
       sha256: artifactDigest,
       bytes: artifactBytes.byteLength,
-      identity: contract.identity,
+      identity: artifactIdentity,
+      ...(android ? { identityReceiptSha256 } : {}),
     },
     toolchain: {
       flutterVersion,
@@ -237,12 +251,14 @@ export async function writeShopQaArtifactManifest({
   }
   const manifest = { ...body, digest: `sha256:${sha256(JSON.stringify(body))}` }
   validateShopQaArtifactManifest(manifest)
-  const temporary = `${output}.${process.pid}.tmp`
+  const temporary = `${output}.${process.pid}.${randomUUID()}.tmp`
+  let temporaryCreated = false
   try {
     await writeFile(temporary, `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
-    await rename(temporary, output)
+    temporaryCreated = true
+    await link(temporary, output)
   } finally {
-    await rm(temporary, { force: true })
+    if (temporaryCreated) await rm(temporary, { force: true })
   }
   return manifest
 }
@@ -252,18 +268,23 @@ function parseArguments(argv) {
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index]
     const value = argv[index + 1]
-    if (!['--platform', '--artifact', '--checksum', '--toolchain', '--signing', '--output'].includes(key) || !value || values.has(key)) {
-      fail('usage: write_shop_qa_artifact_manifest.mjs --platform ios|windows --artifact path --checksum path --toolchain path --signing path --output path')
+    if (!['--platform', '--artifact', '--checksum', '--toolchain', '--signing', '--identity', '--output'].includes(key) || !value || values.has(key)) {
+      fail('usage: write_shop_qa_artifact_manifest.mjs --platform android|ios|windows --artifact path --checksum path --toolchain path --signing path [--identity path] --output path')
     }
     values.set(key, value)
   }
-  if (values.size !== 6) fail('usage: write_shop_qa_artifact_manifest.mjs --platform ios|windows --artifact path --checksum path --toolchain path --signing path --output path')
+  const platform = values.get('--platform')
+  const expectedSize = platform === 'android' ? 7 : 6
+  if (values.size !== expectedSize || (platform === 'android') !== values.has('--identity')) {
+    fail('usage: write_shop_qa_artifact_manifest.mjs --platform android|ios|windows --artifact path --checksum path --toolchain path --signing path [--identity path] --output path')
+  }
   return {
-    platform: values.get('--platform'),
+    platform,
     artifactPath: values.get('--artifact'),
     checksumPath: values.get('--checksum'),
     toolchainPath: values.get('--toolchain'),
     signingPath: values.get('--signing'),
+    identityPath: values.get('--identity'),
     outputPath: values.get('--output'),
   }
 }

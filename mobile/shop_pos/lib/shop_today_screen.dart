@@ -96,7 +96,10 @@ class ShopTaskRail extends StatelessWidget {
           label: Text(shopCopy(myanmar, 'Sell', 'ရောင်းရန်')),
         ),
         NavigationRailDestination(
-          icon: const Icon(Icons.receipt_long_outlined),
+          icon: Semantics(
+            identifier: 'shop.open-recent-sales',
+            child: Icon(Icons.receipt_long_outlined),
+          ),
           label: Text(shopCopy(myanmar, 'Sales', 'အရောင်း')),
         ),
         NavigationRailDestination(
@@ -157,7 +160,10 @@ class ShopTaskBottomBar extends StatelessWidget {
               label: shopCopy(myanmar, 'Sell', 'ရောင်းရန်'),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.receipt_long_outlined),
+              icon: Semantics(
+                identifier: 'shop.open-recent-sales',
+                child: Icon(Icons.receipt_long_outlined),
+              ),
               label: shopCopy(myanmar, 'Sales', 'အရောင်း'),
             ),
             NavigationDestination(
@@ -423,10 +429,12 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         width: smallCardWidth,
         label: _copy('Net sales today', 'ယနေ့အသားတင်ရောင်းအား'),
         value: _money(snapshot.salesSummary.netSalesMmk),
-        detail: _copy(
-          'Gross recorded: ${_money(snapshot.salesSummary.grossSalesMmk)}',
-          'စုစုပေါင်းမှတ်တမ်း: ${_money(snapshot.salesSummary.grossSalesMmk)}',
-        ),
+        detail: hasReversalMetric
+            ? _copy(
+                'Gross recorded: ${_money(snapshot.salesSummary.grossSalesMmk)}',
+                'စုစုပေါင်းမှတ်တမ်း: ${_money(snapshot.salesSummary.grossSalesMmk)}',
+              )
+            : null,
         icon: Icons.payments_outlined,
         emphasized: true,
       ),
@@ -853,16 +861,18 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
             style: Theme.of(context).textTheme.headlineSmall
                 ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
           ),
-          const SizedBox(height: 4),
-          Text(
-            _copy(
-              'Gross recorded: ${_money(snapshot.salesSummary.grossSalesMmk)}',
-              'စုစုပေါင်းမှတ်တမ်း: ${_money(snapshot.salesSummary.grossSalesMmk)}',
+          if (snapshot.salesSummary.reversalCount > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              _copy(
+                'Gross recorded: ${_money(snapshot.salesSummary.grossSalesMmk)}',
+                'စုစုပေါင်းမှတ်တမ်း: ${_money(snapshot.salesSummary.grossSalesMmk)}',
+              ),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
+          ],
           const Divider(height: 22),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

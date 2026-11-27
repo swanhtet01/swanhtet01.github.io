@@ -23,6 +23,8 @@ class RecentSalesScreen extends StatefulWidget {
     this.testOnlyAllowMissingRuntimeScope = false,
     this.embeddedTaskShell = false,
     this.refreshToken = 0,
+    this.savedReceiptToOpen,
+    this.savedReceiptRequest = 0,
     super.key,
   }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
@@ -37,6 +39,8 @@ class RecentSalesScreen extends StatefulWidget {
   final bool testOnlyAllowMissingRuntimeScope;
   final bool embeddedTaskShell;
   final int refreshToken;
+  final ShopSaleReceipt? savedReceiptToOpen;
+  final int savedReceiptRequest;
 
   @override
   State<RecentSalesScreen> createState() => _RecentSalesScreenState();
@@ -55,6 +59,33 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
       ReceiptReprintService(runtimeScope: widget.runtimeScope);
   bool _reprinting = false;
   bool _openingCorrection = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleSavedReceipt();
+  }
+
+  void _scheduleSavedReceipt() {
+    final receipt = widget.savedReceiptToOpen;
+    if (receipt == null) return;
+    final request = widget.savedReceiptRequest;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.savedReceiptRequest != request ||
+          widget.savedReceiptToOpen?.id != receipt.id) {
+        return;
+      }
+      unawaited(
+        _showSale(
+          receipt,
+          stillRequested: () =>
+              widget.savedReceiptRequest == request &&
+              widget.savedReceiptToOpen?.id == receipt.id,
+        ),
+      );
+    });
+  }
 
   Future<ShopManagedWorkspaceBinding?> _correctionBinding() async {
     final authorizer = widget.correctionAuthorizer;
@@ -90,6 +121,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   void didUpdateWidget(RecentSalesScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshToken != widget.refreshToken) _sales = _readPage();
+    if (oldWidget.savedReceiptRequest != widget.savedReceiptRequest) {
+      _scheduleSavedReceipt();
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -326,18 +360,22 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                               ),
                                               const SizedBox(width: 10),
                                               Expanded(
-                                                child: Text(
-                                                  '$firstItem$more',
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodyMedium
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
+                                                child: Semantics(
+                                                  identifier:
+                                                      'shop.recent-sale.$index',
+                                                  child: Text(
+                                                    '$firstItem$more',
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodyMedium
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                  ),
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
@@ -429,14 +467,19 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                     horizontal: 16,
                                     vertical: 8,
                                   ),
-                                  title: Text(
-                                    '$firstItem$more',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  title: Semantics(
+                                    identifier: 'shop.recent-sale.$index',
+                                    child: Text(
+                                      '$firstItem$more',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
                                   ),
                                   subtitle: Text(
                                     sale.reversal == null
@@ -583,11 +626,14 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     ),
   };
 
-  Future<void> _showSale(ShopSaleReceipt sale) async {
+  Future<void> _showSale(
+    ShopSaleReceipt sale, {
+    bool Function()? stillRequested,
+  }) async {
     final correctionBinding = sale.reversal == null
         ? await _correctionBinding()
         : null;
-    if (!mounted) return;
+    if (!mounted || (stillRequested != null && !stillRequested())) return;
     final soldTimeLabel = shopCopy(
       widget.myanmar,
       sale.reversal == null ? 'Sold' : 'Original sale',
@@ -596,8 +642,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     final action = await showDialog<_SaleDetailsAction>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          shopCopy(widget.myanmar, 'Sale details', 'အရောင်းအသေးစိတ်'),
+        title: Semantics(
+          identifier: 'shop.saved-receipt',
+          child: Text(
+            shopCopy(widget.myanmar, 'Sale details', 'အရောင်းအသေးစိတ်'),
+          ),
         ),
         content: SizedBox(
           width: 480,
@@ -799,11 +848,14 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                       unawaited(_reprintSale(sale));
                     },
               icon: const Icon(Icons.print_outlined),
-              label: Text(
-                shopCopy(
-                  widget.myanmar,
-                  'Reprint receipt',
-                  'ပြေစာပြန်ပုံနှိပ်ရန်',
+              label: Semantics(
+                identifier: 'shop.saved-receipt.reprint',
+                child: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Reprint receipt',
+                    'ပြေစာပြန်ပုံနှိပ်ရန်',
+                  ),
                 ),
               ),
             ),
@@ -893,15 +945,23 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
         sent = await _reprinter.printIfTrusted(sale, myanmar: widget.myanmar);
       }
       if (!mounted) return;
+      final syntheticCapture =
+          widget.runtimeScope?.capabilities.loopbackPrinter == true;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             sent
-                ? shopCopy(
-                    widget.myanmar,
-                    'Receipt sent to printer.',
-                    'ပြေစာကို ပရင်တာသို့ ပို့ပြီးပါပြီ။',
-                  )
+                ? syntheticCapture
+                      ? shopCopy(
+                          widget.myanmar,
+                          'Synthetic QA receipt captured. No physical printer was used.',
+                          'စမ်းသပ်ပြေစာကို သိမ်းပြီးပါပြီ။ ပရင်တာအစစ် မသုံးပါ။',
+                        )
+                      : shopCopy(
+                          widget.myanmar,
+                          'Receipt sent to printer.',
+                          'ပြေစာကို ပရင်တာသို့ ပို့ပြီးပါပြီ။',
+                        )
                 : shopCopy(
                     widget.myanmar,
                     'Test and confirm a printer before reprinting this sale.',
@@ -912,14 +972,22 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
       );
     } catch (_) {
       if (!mounted) return;
+      final syntheticCapture =
+          widget.runtimeScope?.capabilities.loopbackPrinter == true;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            shopCopy(
-              widget.myanmar,
-              'Sale is saved. Printing is unconfirmed; the receipt may have printed. Check the paper before trying again.',
-              'အရောင်းသိမ်းပြီးပါပြီ။ ပုံနှိပ်မှု မသေချာပါ။ ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည်။ ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ။',
-            ),
+            syntheticCapture
+                ? shopCopy(
+                    widget.myanmar,
+                    'Synthetic receipt capture failed. The sale remains saved; no physical printer was used.',
+                    'စမ်းသပ်ပြေစာ သိမ်းခြင်း မအောင်မြင်ပါ။ အရောင်းကို သိမ်းထားပြီး ပရင်တာအစစ် မသုံးခဲ့ပါ။',
+                  )
+                : shopCopy(
+                    widget.myanmar,
+                    'Sale is saved. Printing is unconfirmed; the receipt may have printed. Check the paper before trying again.',
+                    'အရောင်းသိမ်းပြီးပါပြီ။ ပုံနှိပ်မှု မသေချာပါ။ ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည်။ ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ။',
+                  ),
           ),
         ),
       );

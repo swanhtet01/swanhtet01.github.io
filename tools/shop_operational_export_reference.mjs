@@ -105,6 +105,7 @@ export function buildReferenceRows(fixture) {
     if (!isEventInWindow(shift, sale.createdAtMillis)) throw new Error('reference_linked_sale_outside_shift_window')
     if (!['cash', 'kbzpay', 'wavepay'].includes(sale.paymentMethod)) throw new Error('reference_payment_method_invalid')
     money(sale.totalMmk, 'sale_total')
+    if (!Array.isArray(sale.lines) || sale.lines.length === 0) throw new Error('reference_sale_lines_required')
     const lineTotal = (sale.lines ?? []).reduce((sum, line) => {
       text(line.id, 'sale_line_id'); text(line.productId, 'sale_line_product_id'); text(line.productName, 'sale_line_product_name')
       integer(line.quantity, 'sale_line_quantity', 1, 1000); money(line.unitPriceMmk, 'sale_line_price', 0)
@@ -138,6 +139,7 @@ export function buildReferenceRows(fixture) {
     integer(reversal.cashDrawerDeltaMmk, 'cash_drawer_delta', -MAX_MMK, 0)
     if (!['cash', 'kbzpay', 'wavepay'].includes(reversal.originalPaymentMethod)) throw new Error('reference_reversal_payment_invalid')
     if ((reversal.originalPaymentMethod === 'cash' && reversal.cashDrawerDeltaMmk !== -reversal.originalTotalMmk) || (reversal.originalPaymentMethod !== 'cash' && reversal.cashDrawerDeltaMmk !== 0)) throw new Error('reference_reversal_cash_effect_invalid')
+    if (!Array.isArray(reversal.lines) || reversal.lines.length === 0) throw new Error('reference_reversal_lines_required')
     const lineTotal = (reversal.lines ?? []).reduce((sum, line) => {
       text(line.id, 'reversal_line_id'); text(line.productId, 'reversal_line_product_id'); text(line.productName, 'reversal_line_product_name')
       integer(line.quantity, 'reversal_line_quantity', 1, 1000); money(line.unitPriceMmk, 'reversal_line_price'); integer(line.restockQuantity, 'reversal_line_restock', 0, line.quantity)

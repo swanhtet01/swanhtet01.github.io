@@ -25,9 +25,11 @@ from the self-serve activation framing in this brief to the owner-named Shop
 pilot sequence captured in `COMPETITIVE-EXECUTION-CUT.md`,
 `AI-NATIVE-ARCHITECTURE.md`, and
 `hq/readiness/managed-pilot-readiness.json`: historical hosted schema v11;
-current hosted state not revalidated. The accepted rehearsal proves local schema
-v13; hosted parity is unproven. Prior hosted quarantine/security receipts remain
-historical, managed writes remain disabled, and pilot mode is `owner_named`.
+current hosted state not revalidated. The source contract targets local schema
+v14; the accepted v13 rehearsal is historical, and a fresh v14 PostgreSQL 17
+rehearsal is not run. Hosted parity is unproven. Prior hosted
+quarantine/security receipts remain historical, managed writes remain disabled,
+and pilot mode is `owner_named`.
 All six hosted gates remain blocked. The remainder of this dated brief is
 historical analysis, not an executable activation checklist. Reconfirm migration
 sets, runtime versions, account flows, payment policy and release identity against

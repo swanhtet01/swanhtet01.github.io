@@ -7,6 +7,103 @@ import 'package:supermega_shop/main.dart';
 import 'package:supermega_shop/shop_database.dart';
 
 void main() {
+  for (final myanmar in [false, true]) {
+    testWidgets(
+      'installed QA selectors drive ${myanmar ? 'MY tablet' : 'EN phone'} sale',
+      (tester) async {
+        tester.view.physicalSize = myanmar
+            ? const Size(768, 1024)
+            : const Size(390, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await tester.pumpWidget(
+            ShopApp(
+              testOnlyAllowMissingRuntimeScope: true,
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://app.supermega.dev',
+              initialMyanmar: myanmar,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(
+            find.bySemanticsIdentifier('shop.product.empty.add'),
+          );
+          await tester.pumpAndSettle();
+          expect(find.bySemanticsIdentifier('shop.product.name'), findsOne);
+          expect(find.bySemanticsIdentifier('shop.product.category'), findsOne);
+          expect(find.bySemanticsIdentifier('shop.product.price'), findsOne);
+          expect(find.bySemanticsIdentifier('shop.product.stock'), findsOne);
+          await tester.enterText(
+            find.bySemanticsIdentifier('shop.product.name'),
+            myanmar ? 'လက်ဖက်' : 'Tea',
+          );
+          await tester.enterText(
+            find.bySemanticsIdentifier('shop.product.category'),
+            myanmar ? 'အဖျော်ယမကာ' : 'Drinks',
+          );
+          await tester.enterText(
+            find.bySemanticsIdentifier('shop.product.price'),
+            '2500',
+          );
+          await tester.enterText(
+            find.bySemanticsIdentifier('shop.product.stock'),
+            '2',
+          );
+          await tester.tap(
+            find.bySemanticsIdentifier('shop.product.barcode.reveal'),
+          );
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.bySemanticsIdentifier('shop.product.barcode'),
+            '0012345678905',
+          );
+          await tester.tap(find.bySemanticsIdentifier('shop.product.save'));
+          await tester.pumpAndSettle();
+
+          final product = (await database.readActiveProducts()).single;
+          await tester.tap(
+            find.bySemanticsIdentifier('shop.catalog.product.${product.id}'),
+          );
+          await tester.pumpAndSettle();
+          final cartReview = find.bySemanticsIdentifier('shop.cart.review');
+          if (myanmar) {
+            expect(cartReview, findsNothing);
+          } else {
+            expect(cartReview, findsOne);
+            await tester.tap(cartReview);
+            await tester.pumpAndSettle();
+          }
+          await tester.tap(find.bySemanticsIdentifier('shop.checkout.cash'));
+          await tester.pumpAndSettle();
+          expect(
+            find.bySemanticsIdentifier('shop.checkout.cash.given'),
+            findsOne,
+          );
+          await tester.tap(
+            find.bySemanticsIdentifier('shop.checkout.cash.confirm'),
+          );
+          await tester.pumpAndSettle();
+          expect(await database.countSales(), 1);
+          expect((await database.readActiveProducts()).single.onHand, 1);
+          expect(
+            find.bySemanticsIdentifier('shop.sale-completion.view-receipt'),
+            findsOne,
+          );
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
   testWidgets('duplicate barcode keeps every English add-product entry', (
     tester,
   ) async {

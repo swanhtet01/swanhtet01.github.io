@@ -11,6 +11,7 @@ import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_qa_evidence_store.dart';
 import 'package:supermega_shop/shop_runtime_profile.dart';
 import 'package:supermega_shop/shop_runtime_scope.dart';
+import 'package:supermega_shop/shop_startup.dart';
 
 const _password = 'synthetic qa recovery password';
 
@@ -72,6 +73,17 @@ void main() {
             .toList(),
         isEmpty,
       );
+
+      // The debug-only run-as receipt evidence sidecar shares the private
+      // evidence envelope without becoming a restore candidate.
+      await File(
+        '${scope.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
+        '$shopQaLoopbackReceiptEvidenceFileName',
+      ).writeAsString('{}', flush: true);
+      await File(
+        '${scope.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
+        '$shopQaMetricsEvidenceFileName',
+      ).writeAsString('{}', flush: true);
 
       final staged = await store.stageLatestEncryptedBackup();
       expect(staged, isNotNull);
@@ -359,7 +371,7 @@ void main() {
         myanmar: false,
         runtimeScope: scope,
       ).backupSavingAllowed,
-      isFalse,
+      Platform.isAndroid || Platform.isWindows,
     );
 
     final foreignSupport = await Directory.systemTemp.createTemp(
@@ -385,6 +397,75 @@ void main() {
       isFalse,
     );
   });
+
+  test(
+    'Windows QA enables only app-private evidence, not external files',
+    () async {
+      expect(scope.configuration.isSyntheticQa, isTrue);
+      expect(scope.capabilities.externalFileSaving, isFalse);
+      expect(scope.capabilities.connectedOrders, isFalse);
+      expect(scope.capabilities.connectedSite, isFalse);
+      expect(scope.capabilities.remoteImport, isFalse);
+
+      bool available(ShopRuntimeScope candidate, {required bool windows}) =>
+          ShopQaEvidenceStore.availableForRuntime(
+            candidate,
+            isAndroid: false,
+            isWindows: windows,
+          );
+
+      expect(available(scope, windows: true), isTrue);
+      expect(available(scope, windows: false), isFalse);
+      expect(
+        ShopQaEvidenceStore.availableForRuntime(
+          scope,
+          isAndroid: true,
+          isWindows: false,
+        ),
+        isTrue,
+      );
+      expect(
+        ShopQaEvidenceStore.availableForRuntime(
+          scope,
+          evidenceStore: store,
+          isAndroid: false,
+          isWindows: false,
+        ),
+        isTrue,
+      );
+
+      final productionDocuments = await Directory.systemTemp.createTemp(
+        'shop-qa-evidence-policy-production-docs-',
+      );
+      final productionTemporary = await Directory.systemTemp.createTemp(
+        'shop-qa-evidence-policy-production-temp-',
+      );
+      addTearDown(() async {
+        await productionDocuments.delete(recursive: true);
+        await productionTemporary.delete(recursive: true);
+      });
+      final production = await ShopRuntimeScope.resolve(
+        ShopRuntimeProfile.production,
+        configuration: _productionConfiguration(),
+        documentsProvider: () async => productionDocuments,
+        temporaryProvider: () async => productionTemporary,
+      );
+      expect(available(production, windows: true), isFalse);
+
+      var externalPickerCalled = false;
+      await expectLater(
+        pickShopBackupForRuntime(
+          runtimeScope: scope,
+          pickBackup: () async {
+            externalPickerCalled = true;
+            return null;
+          },
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(externalPickerCalled, isFalse);
+    },
+  );
 }
 
 Future<ShopRuntimeScope> _qaScope(Directory support, Directory temporary) =>

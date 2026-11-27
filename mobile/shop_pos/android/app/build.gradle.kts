@@ -1,3 +1,5 @@
+import java.time.Instant
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -72,6 +74,10 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -90,6 +96,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        buildConfigField("boolean", "CONNECTED_SITE_PLATFORM_SECURITY_ENABLED", "false")
     }
 
     flavorDimensions += "runtimeProfile"
@@ -131,4 +138,164 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+val verifyConnectedPlatformSecuritySourceContract by tasks.registering {
+    val source = file("src/main/kotlin/dev/supermega/supermega_shop/MainActivity.kt")
+    val coordinator = file(
+        "src/main/kotlin/dev/supermega/supermega_shop/ConnectedCoordinatorForegroundService.kt",
+    )
+    val manifest = file("src/main/AndroidManifest.xml")
+    inputs.files(source, coordinator, manifest)
+    doLast {
+        val text = source.readText() + coordinator.readText()
+        val manifestText = manifest.readText()
+        val required = listOf(
+            "BuildConfig.CONNECTED_SITE_PLATFORM_SECURITY_ENABLED",
+            "Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU",
+            "ED25519_ALGORITHM = \"Ed25519\"",
+            "KeyProperties.KEY_ALGORITHM_AES",
+            "setRandomizedEncryptionRequired(true)",
+            "platform_identity_pending_conflict",
+            "platform_identity_bundle_conflict",
+            "incomplete-only",
+            "private val APPROVED_ISSUERS: Map<String, IssuerTrust> = emptyMap()",
+            "certificateChainSha256",
+            "parseCertificateChain",
+            "certificates.forEach { it.checkValidity(validationDate) }",
+            "certificate.verify(issuer.publicKey)",
+            "certificate.issuerX500Principal != issuer.subjectX500Principal",
+            "issuer.basicConstraints < index",
+            "canSignCertificates(issuer)",
+            "certificateDigests.toSet().size != certificateDigests.size",
+            "root.verify(root.publicKey)",
+            "sha256(root.encoded) != expectedRootDerSha256",
+            "platform_certificate_root_mismatch",
+            "(value[\"privateKeyPem\"] as? ByteArray)?.fill(0)",
+            "encoded.fill(0)",
+            "val output = ByteArray(header.size + encoded.size + lineCount + footer.size)",
+            "expectedBundleDigest",
+            "expectedIdentity",
+            "PENDING_TTL_MINUTES = 10L",
+            "\"readTrustedTimeClock\" -> readTrustedTimeClock(arguments(call))",
+            "Settings.Global.BOOT_COUNT",
+            "SystemClock.elapsedRealtime()",
+            "supermega.android-boot-count.v1|",
+            "android_system_clock_elapsed_realtime_boot_count_v1",
+        )
+        check(required.all(text::contains)) {
+            "connected_platform_security_source_contract_missing"
+        }
+        check(!text.contains("BEGIN PRIVATE KEY")) {
+            "connected_platform_security_embedded_private_key_forbidden"
+        }
+        check(!text.contains("ByteArrayOutputStream")) {
+            "connected_platform_security_unwiped_output_buffer_forbidden"
+        }
+        check(!text.contains("CONNECTED_SITE_PLATFORM_SECURITY_ENABLED\", \"true")) {
+            "connected_platform_security_must_remain_default_off"
+        }
+        val coordinatorRequired = listOf(
+            "ConnectedCoordinatorForegroundService",
+            "startForeground",
+            "START_STICKY",
+            "POST_NOTIFICATIONS",
+            "issuer_trust_unavailable",
+            "identity_unavailable",
+            "requestMarkListening",
+            "updateVisibleNotification",
+            "Coordinator active · private LAN",
+            "listener_transition_invalid",
+            "lanListenerActive\" to lanListenerActive",
+            "connectedOperationEnabled\" to connectedOperationEnabled",
+            "state != ConnectedCoordinatorForegroundService.STATE_RUNNING && listenerActive",
+            "sticky_when_ready",
+            "ACTION_START",
+            "ACTION_STOP",
+            "coordinatorIdentityFailure",
+            "IdentityRecord.fromJson",
+            "record.isValid()",
+            "sha256(certificateBytes) != record.certificateChainSha256",
+            "sha256(leaf.publicKey.encoded) != record.tlsFingerprint",
+            "Signature.getInstance(\"SHA256withECDSA\")",
+            "Signature.getInstance(\"Ed25519\")",
+            "identity_custody_invalid",
+            "identity_enrollment_expired",
+            "record.enrollmentIssuedAt",
+            "record.enrollmentExpiresAt",
+            "record.enrollmentSignatureAlgorithm",
+            "record.issuerSignatureBase64Url",
+            "enrollmentIssuedAt.isAfter(currentTime.plusSeconds(CLOCK_SKEW_SECONDS))",
+            "!enrollmentExpiresAt.isAfter(currentTime)",
+            "enrollmentExpiresAt.isBefore(pendingExpiresAt)",
+            "CANONICAL_UTC_TIMESTAMP.matches(value)",
+            "(?:\\.\\d{3,6})?Z$",
+            "signedBundlePayload +",
+            "reconstructedBundleDigest != record.bundleDigest",
+            "initVerify(issuerPublicKey)",
+            "canonicalJson(signedBundlePayload)",
+            "leaf.notBefore.toInstant().isAfter(enrollmentIssuedAt)",
+            "leaf.notAfter.toInstant().isBefore(enrollmentExpiresAt)",
+            "leaf.notAfter.toInstant().isBefore(pendingExpiresAt)",
+            "record.signingKeyId != signingAliasFor(alias)",
+            "record.tlsKeyId != tlsKeyIdFor(alias)",
+            "record.sealedTlsMaterialId != sealedTlsMaterialIdFor(alias)",
+            "signingKeyId == signingAliasFor(alias)",
+            "tlsKeyId == tlsKeyIdFor(alias)",
+            "sealedTlsMaterialId == sealedTlsMaterialIdFor(alias)",
+            "supermega.coordinator-signing-custody.v1",
+            "notificationPermissionStatus",
+            "requestNotificationPermission",
+            "requestPermissions(",
+            "arrayOf(Manifest.permission.POST_NOTIFICATIONS)",
+            "request_pending",
+            "supermega.connected-coordinator-notification-permission.v1",
+        )
+        check(coordinatorRequired.all(text::contains)) {
+            "connected_coordinator_service_contract_missing"
+        }
+        check(!text.contains("ServerSocket") && !text.contains("DatagramSocket")) {
+            "connected_coordinator_listener_forbidden"
+        }
+        val timestampGrammar = Regex(
+            """^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3,6})?Z$""",
+        )
+        val acceptedTimestamps = listOf(
+            "2026-11-01T12:34:56Z",
+            "2026-11-01T12:34:56.000Z",
+            "2026-11-01T12:34:56.123Z",
+            "2026-11-01T12:34:56.123456Z",
+        )
+        check(acceptedTimestamps.all {
+            timestampGrammar.matches(it) && runCatching { Instant.parse(it) }.isSuccess
+        }) {
+            "connected_coordinator_timestamp_compatibility_fixture_rejected"
+        }
+        val rejectedTimestamps = listOf(
+            "2026-11-01T12:34:56z",
+            "2026-11-01T12:34:56+00:00",
+            "2026-11-01T12:34:56.1Z",
+            "2026-11-01T12:34:56.12Z",
+            "2026-11-01T12:34:56.1234567Z",
+            "2026-13-01T12:34:56.000Z",
+        )
+        check(rejectedTimestamps.none {
+            timestampGrammar.matches(it) && runCatching { Instant.parse(it) }.isSuccess
+        }) {
+            "connected_coordinator_timestamp_compatibility_fixture_accepted"
+        }
+        check(!text.contains("hasCommittedIdentity")) {
+            "connected_coordinator_shallow_identity_check_forbidden"
+        }
+        check(text.contains(
+            "ConnectedPlatformSecurityAndroid.coordinatorIdentityFailure(context, alias)",
+        )) {
+            "connected_coordinator_custody_readiness_binding_missing"
+        }
+        check(manifestText.contains("android:foregroundServiceType=\"connectedDevice\"") &&
+            manifestText.contains("android:exported=\"false\"") &&
+            manifestText.contains("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE")) {
+            "connected_coordinator_manifest_contract_missing"
+        }
+    }
 }

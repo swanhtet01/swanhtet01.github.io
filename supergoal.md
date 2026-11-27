@@ -1,8 +1,8 @@
 # SuperMega Supergoal
 
-- Version: 2.3.4
+- Version: 2.4.0
 - Owners: Swan Htet (technical) and Vivian (operations and business)
-- Updated: 2026-10-27
+- Updated: 2026-10-31
 - Status: ACTIVE — Shop is the core product; its supporting public website,
   shared infrastructure, and company operations remain release support
 
@@ -37,6 +37,13 @@ The final release additionally requires signed installed recovery evidence,
 applicable physical-hardware evidence, independent security/human review,
 merchant acceptance, and controlled domain promotion. Mocks and software
 fixtures never satisfy installed, physical, merchant, or production gates.
+
+The owner-approved next pilot is one retail merchant and one cafe using an
+explicit designated coordinator over private shop Wi-Fi. Its connected-site
+capability remains default-off until its issuer, platform key storage, LAN,
+cloud reconciliation, signed artifacts, installed recovery, hardware,
+two-merchant acceptance, and joint go/no-go evidence all pass. Source-level
+protocol or database tests alone do not enable or launch it.
 
 Keep one active critical-path item with explicit acceptance criteria and one
 next eligible item. When an item is blocked, record the exact missing approval
@@ -182,7 +189,9 @@ Outside the current launch lane:
   custom/enterprise package and server-enforced entitlement;
 - standalone Spa, SOL, or client-specific product work;
 - new UI forks and speculative feature branches;
-- Connected Orders server/synchronization work, which stays default-off;
+- general Connected Orders expansion outside the approved two-merchant
+  connected-site pilot; the pilot implementation itself stays default-off
+  until its complete acceptance gate passes;
 - autonomous customer communication, pricing commitments, production writes,
   or infrastructure expansion.
 

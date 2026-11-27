@@ -784,19 +784,34 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       const result = await mutateCommerceWorkspace((latest) => JSON.stringify(validateCommerceState(latest)) === baseRaw ? candidate : null)
       if (!result.ok) {
         if (result.error === 'The Commerce state changed or the requested transition is not valid. Nothing was written.') {
+          let settlement: Awaited<ReturnType<typeof abandonLocalCommerceSyncIntent>>
           try {
-            await abandonLocalCommerceSyncIntent(commandId)
-            updateSyncStatus({ status: 'ready', pendingCount: 0, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: '' })
+            settlement = await abandonLocalCommerceSyncIntent(commandId)
           } catch (syncError) {
             updateSyncStatus({ status: 'pending', pendingCount: 1, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: syncError instanceof Error ? syncError.message : 'The stale Shop recovery record could not be closed.' })
+            const latest = loadCommerceWorkspace()
+            const refreshed = { state: latest.state, mode: 'local' as const, workspaceId: '', version: null, error: latest.error, writeReady: false }
+            snapshotRef.current = refreshed
+            setLocalSnapshot(refreshed)
+            throw new ShopReviewRequiredError('Shop changed while this action was being confirmed. Its outcome is not yet known; reload to reconcile the saved recovery record before retrying.')
           }
           const latest = loadCommerceWorkspace()
           const refreshed = { state: latest.state, mode: 'local' as const, workspaceId: '', version: null, error: latest.error, writeReady: !latest.error && commerceWorkspaceCanWrite() }
           snapshotRef.current = refreshed
           setLocalSnapshot(refreshed)
+          if (settlement.receipt.status === 'local_applied') {
+            if (!latest.error && JSON.stringify(latest.state) === staged.intent.candidateRaw) {
+              updateSyncStatus({ status: 'ready', pendingCount: 0, recoveredCount: 1, replayedCount: settlement.replayed ? 1 : 0, conflictCount: 0, message: 'Recovered the reviewed Shop change after another tab confirmed the local write.' })
+              return
+            }
+            const message = 'This Shop change was applied, but the workspace changed again before confirmation. The latest record is loaded for review.'
+            updateSyncStatus({ status: 'conflict', pendingCount: 0, recoveredCount: 1, replayedCount: settlement.replayed ? 1 : 0, conflictCount: 1, message })
+            throw new ShopReviewRequiredError(message)
+          }
+          updateSyncStatus({ status: 'ready', pendingCount: 0, recoveredCount: 0, replayedCount: settlement.replayed ? 1 : 0, conflictCount: 0, message: '' })
           throw new ShopReviewRequiredError(latest.error
-            ? `Shop changed before this action was applied. Nothing was written; reload to recover the current record. ${latest.error}`
-            : 'Shop changed before this action was applied. Nothing was written; the latest record is loaded for fresh review.')
+            ? `Shop changed before this action could be confirmed. Recovery did not confirm it was applied; reload to review the current record. ${latest.error}`
+            : 'Shop changed before this action could be confirmed. Recovery did not confirm it was applied; the latest record is loaded for fresh review.')
         }
         updateSyncStatus({ status: 'pending', pendingCount: 1, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: 'The reviewed Shop change is retained for recovery because the workspace write was not confirmed.' })
         const rejected = { ...snapshotRef.current, error: result.error }

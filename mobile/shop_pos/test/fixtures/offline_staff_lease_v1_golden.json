@@ -1,0 +1,44 @@
+{
+  "contract": "supermega.shop.offline-staff-lease-golden.v1",
+  "issuerPublicKeyBase64Url": "Zr5-Myx6RTMyvZ0Kf32wVfXF7xoGraZtmLOftoEMRzo",
+  "unsignedPayload": {
+    "protocolVersion": 1,
+    "leaseId": "lease-golden-v1",
+    "workspaceId": "workspace-golden",
+    "siteId": "site-golden",
+    "actorId": "actor-golden",
+    "role": "cashierCounter",
+    "capabilities": [
+      "cashShiftManage",
+      "counterSale"
+    ],
+    "deviceId": "device-golden",
+    "sessionGeneration": 7,
+    "revocationGeneration": 12,
+    "issuedAt": "2026-11-01T00:00:00.000Z",
+    "expiresAt": "2026-11-08T00:00:00.000Z",
+    "issuerKeyId": "issuer-golden-1"
+  },
+  "payloadDigest": "3f4bed7391eb3fe8896fac683bc779e2452805ccb3c0e3b8a8d6897c1fe9da72",
+  "signature": "6Ike-mWzE2frUpzH0_-tP8P5vKUFv_oSd-ao9TyvA_MhekazbgrzolHKBLsbk1h9FvOu89MfKf-hHH_Fks8MBg",
+  "lease": {
+    "protocolVersion": 1,
+    "leaseId": "lease-golden-v1",
+    "workspaceId": "workspace-golden",
+    "siteId": "site-golden",
+    "actorId": "actor-golden",
+    "role": "cashierCounter",
+    "capabilities": [
+      "cashShiftManage",
+      "counterSale"
+    ],
+    "deviceId": "device-golden",
+    "sessionGeneration": 7,
+    "revocationGeneration": 12,
+    "issuedAt": "2026-11-01T00:00:00.000Z",
+    "expiresAt": "2026-11-08T00:00:00.000Z",
+    "issuerKeyId": "issuer-golden-1",
+    "payloadDigest": "3f4bed7391eb3fe8896fac683bc779e2452805ccb3c0e3b8a8d6897c1fe9da72",
+    "signature": "6Ike-mWzE2frUpzH0_-tP8P5vKUFv_oSd-ao9TyvA_MhekazbgrzolHKBLsbk1h9FvOu89MfKf-hHH_Fks8MBg"
+  }
+}

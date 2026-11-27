@@ -603,6 +603,26 @@ def _cron_result(path: str) -> dict[str, object]:
             }
             return result
 
+        reported_counts = (
+            worker_payload.get("claimed_count"),
+            worker_payload.get("processed_count"),
+            worker_payload.get("count"),
+        )
+        if (
+            any(type(count) is not int for count in reported_counts)
+            or any(count < 0 or count > int(route["limit"]) for count in reported_counts)
+            or reported_counts[0] != budget_accounting["reserved_runs"]
+            or reported_counts[1] != budget_accounting["consumed_runs"]
+            or reported_counts[2] != reported_counts[1]
+        ):
+            result["execution"] = "worker_response_invalid"
+            result["worker_error"] = "worker_run_counts_invalid"
+            result["side_effects"] = {
+                "worker_invoked": True,
+                "reporting": "incomplete",
+            }
+            return result
+
         result["status"] = "accepted"
         result["execution"] = "hosted_runtime_forwarded"
         result["budget_accounting"] = budget_accounting

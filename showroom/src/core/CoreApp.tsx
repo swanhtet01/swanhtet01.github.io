@@ -4,7 +4,7 @@ import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
 import { initialShopCashTenderGateState, reduceShopCashTenderGate, reviewShopCashTenderGate, shopCashTenderGateCanSubmit, shopCashTenderGateValue } from './shop-cash-tender'
 import { ShopCashTenderFields } from './ShopCashTenderFields'
-import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
+import { COUNTER_TICKET_STALE_PREWRITE_MESSAGE, CounterTicketStalePrewriteError, createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
   shopBusinessTemplateCommerceItems,
@@ -975,6 +975,8 @@ const ownerFacingActionErrors: readonly { match: RegExp; message: string }[] = [
 const technicalErrorShape = /\[\d+\]|\b[a-z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*\b/
 
 function ownerFacingActionError(detail: string) {
+  // bi() retains English until this outcome's Myanmar wording receives native review.
+  if (detail === COUNTER_TICKET_STALE_PREWRITE_MESSAGE) return bi(detail)
   const known = ownerFacingActionErrors.find((entry) => entry.match.test(detail))
   if (known) return known.message
   return technicalErrorShape.test(detail)
@@ -1372,12 +1374,18 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             && tickets.getSnapshot().state.revision === reviewedRevision + 1
             && tickets.checkpoint(orderId)
         }
-        if (!tickets.checkpoint() || tickets.getSnapshot().state.revision !== reviewedRevision) return false
-        if (!persistLocalDraft) return true
+        const currentTicket = tickets.getSnapshot()
+        if (currentTicket.blocked || currentTicket.pending || currentTicket.state.checkoutOrderId
+          || currentTicket.state.revision !== reviewedRevision) return false
+        if (!persistLocalDraft) return tickets.checkpoint()
+        // The stored ticket comparison belongs to begin_checkout's existing lock.
+        // A pre-lock checkpoint would discard the exact pre-write conflict cause.
         if (!tickets.dispatch({ kind: 'begin_checkout', orderId })) return false
         securedCheckoutId = orderId
         await tickets.settled()
-        return tickets.checkpoint(orderId)
+        if (tickets.checkpoint(orderId)) return true
+        if (tickets.getSnapshot().prewriteFailure === 'stale_ticket_revision') throw new CounterTicketStalePrewriteError()
+        return false
       },
       onCommitted: (orderId) => {
         if (persistLocalDraft) tickets.dispatch({ kind: 'resolve_checkout', orderId })
@@ -1454,7 +1462,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             const describedBy = [priceId, stockId, quantity ? quantityId : ''].filter(Boolean).join(' ')
             return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
-              <span className="shop-product-copy"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}<b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
+              <span className="shop-product-copy"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small className="shop-product-variant" id={variantId}>{item.variant}</small> : null}<b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
           })}
@@ -1486,7 +1494,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           {ticketSnapshot.pending ? <p role="status">Saving on this device…</p> : null}
         </details> : null}
         <div className="shop-cart-lines">
-          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}<small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>{bi('Your sale is empty')}</strong><small>{bi('Tap any product to begin.')}</small></div>}
+          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}{item.variant ? <small className="shop-product-variant">{item.variant}</small> : null}<small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}${item.variant ? ` · ${item.variant}` : ''}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}${item.variant ? ` · ${item.variant}` : ''}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>{bi('Your sale is empty')}</strong><small>{bi('Tap any product to begin.')}</small></div>}
         </div>
         {unitCount ? <><div className="shop-sale-details">
           <label>{bi('Customer')} <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
@@ -1605,6 +1613,8 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
+type PendingCommerceAction = PendingAccountableAction & { requiresConfirmedLocalShop?: boolean }
+
 function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
   ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
   ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
@@ -1703,7 +1713,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     return () => { active = false }
   }, [confirmedLocalShop, managedIdentity])
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
-  const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingCommerceAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
   const [quantity, setQuantity] = useState(1)
   const [extraOrderLines, setExtraOrderLines] = useState<Array<{ sku: string; quantity: number }>>([])
@@ -1763,9 +1773,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const orderDraftResetEpochRef = useRef(0)
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
-  const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
+  const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', nameMy: '', variant: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
-  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', nameMy: '', variant: '', onHand: '', reorderAt: '', price: '' })
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
@@ -3027,12 +3037,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (!managedIdentity) return
     const skuValue = catalogDraft.sku.trim().toUpperCase()
     const name = catalogDraft.name.trim()
+    const nameMy = catalogDraft.nameMy.trim()
+    const variant = catalogDraft.variant.trim()
     const onHand = Number(catalogDraft.onHand)
     const reorderAt = Number(catalogDraft.reorderAt)
     const price = Number(catalogDraft.price)
     const reason = catalogDraft.reason.trim()
     const evidenceReference = catalogDraft.evidenceReference.trim()
-    if (!skuValue || !name || !reason || !evidenceReference || ![onHand, reorderAt, price].every(Number.isSafeInteger) || onHand < 0 || reorderAt < 0 || price < 1) {
+    if (nameMy) {
+      setCatalogError('This company Shop cannot record a Myanmar item name. Reload setup to clear that unsent field; no product was created.')
+      return
+    }
+    if (!skuValue || !name || variant.length > 180 || !reason || !evidenceReference || ![onHand, reorderAt, price].every(Number.isSafeInteger) || onHand < 0 || reorderAt < 0 || price < 1) {
       setCatalogError('Enter a valid item, whole-number stock boundaries, price, reason, and evidence reference.')
       return
     }
@@ -3048,7 +3064,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     try {
       await mutateCommerce('commerce.workspace.initialized', commandUuid(), proof, (current) => current.items.length || current.orders.length || current.movements.length || current.closes.length || commerceWebsiteIntakes(current).length ? null : validateCommerceState({
         ...current,
-        items: [{ sku: skuValue, name, onHand, reorderAt, price }],
+        items: [{ sku: skuValue, name, ...(variant ? { variant } : {}), onHand, reorderAt, price }],
         catalogBaselines: [createCommerceCatalogBaseline({ sku: skuValue, price, reorderAt }, proof)],
       }))
       setNotice(`Managed catalog initialized with ${skuValue}.`)
@@ -3109,6 +3125,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       const catalogForm = <form className="core-form compact-form shop-first-product-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <fieldset><legend>Product</legend>
         <div className="form-row"><label>Barcode or product code<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Product name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label></div>
+        <div className="form-row"><label>Variant (optional)<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, variant: inputEvent.target.value }))} value={catalogDraft.variant} /></label></div>
         <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
         </fieldset>
         <fieldset><legend>Opening stock</legend>
@@ -3285,6 +3302,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     : null
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
+  const catalogCreateDisabled = commerceControlsDisabled || (!managedIdentity && !confirmedLocalShop)
   // The appointment book is NOT a commerce control. ShopServiceSchedule has its own storage
   // key and does not read commerce state at all, but it was gated on commerceCanWrite -- so a
   // company account that had not provisioned a Shop catalog yet, or a local device before
@@ -3630,7 +3648,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     // actionIdPrefix lets a caller mark the resulting proof's actionId with a
     // structural, greppable prefix (e.g. the loyalty redemption marker) — the
     // repo identifies record kinds by actionId prefix, never by display copy.
-    action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'> & { actionIdPrefix?: string },
+    action: Omit<PendingCommerceAction, 'id' | 'commandId' | 'domain'> & { actionIdPrefix?: string },
     returnFocus?: HTMLElement | null,
   ): boolean {
     if (!commerceCanWrite) {
@@ -3660,10 +3678,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     event.preventDefault()
     const itemSku = itemDraft.sku.trim().toUpperCase()
     const name = itemDraft.name.trim()
+    const nameMy = itemDraft.nameMy.trim()
+    const variant = itemDraft.variant.trim()
     const onHand = Number(itemDraft.onHand)
     const reorderAt = Number(itemDraft.reorderAt)
     const price = Number(itemDraft.price)
-    if (!itemSku || !name
+    if (!managedIdentity && !confirmedLocalShop) {
+      setNotice('Checking Shop access. Wait for workspace confirmation before reviewing a catalog item. Nothing was queued.')
+      return
+    }
+    if (nameMy && !confirmedLocalShop) {
+      setNotice('This company Shop cannot record a Myanmar item name. Your draft is unchanged; no item was queued. Reload Shop to clear the unsent name.')
+      return
+    }
+    if (!itemSku || !name || nameMy.length > 180 || variant.length > 180
       || !Number.isSafeInteger(onHand) || onHand < 0
       || !Number.isSafeInteger(reorderAt) || reorderAt < 0
       || !Number.isSafeInteger(price) || price < 1) {
@@ -3674,17 +3702,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`${itemSku} already exists. No catalog item was queued.`)
       return
     }
-    const item: CommerceItem = { sku: itemSku, name, onHand, reorderAt, price }
+    const item: CommerceItem = { sku: itemSku, name, ...(nameMy ? { nameMy } : {}), ...(variant ? { variant } : {}), onHand, reorderAt, price }
     queueAction({
       kind: 'catalog_item_create',
+      requiresConfirmedLocalShop: Boolean(item.nameMy),
       subjectId: item.sku,
       summary: `Add ${item.sku} to the catalog`,
       before: 'No catalog item',
-      after: `${item.name} · ${item.onHand.toLocaleString()} opening units`,
+      after: `${item.name}${item.nameMy ? ` · Myanmar name: ${item.nameMy}` : ''}${item.variant ? ` · Variant: ${item.variant}` : ''} · ${item.onHand.toLocaleString()} opening units`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.item.created', action.commandId, proof, (current) => registerCommerceItem(current, item, proof))
-        setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+        setItemDraft({ sku: '', name: '', nameMy: '', variant: '', onHand: '', reorderAt: '', price: '' })
         setSku(item.sku)
       },
     })
@@ -3785,6 +3814,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   async function confirmAction(details: ActionDetails) {
     if (!pendingAction) return
+    if (pendingAction.requiresConfirmedLocalShop && !confirmedLocalShop) {
+      throw new ShopReviewRequiredError(pendingAction.confirmation
+        ? 'This submitted catalog change may already be saved. Check Shop records and recovery before trying again.'
+        : 'Shop context changed before this labeled catalog item was confirmed. This attempt added no item; review the current workspace and draft before trying again.')
+    }
     const counterSettlement = pendingAction.presentation === 'counter' && pendingAction.kind === 'order_settle'
     if (pendingAction.evidenceReferenceLocked
       && details.evidenceReference.trim() !== pendingAction.evidenceReferenceSuggestion) {
@@ -4038,7 +4072,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       apply: async (action) => {
         const proof = commerceActionProof(action)
         const ownedOrder = { ...order, owner: action.actor }
-        if (!await review.beforeCommit(order.id)) throw new Error('Counter recovery could not be secured. No new sale was attempted.')
+        if (!await review.beforeCommit(order.id)) throw new Error('Counter recovery could not be secured. Review Orders and recovery before trying again; an earlier attempt may have saved.')
         // Browser-local counter settlement is one crash-safe workspace write. The same
         // pure lifecycle transitions used by Orders are composed inside one recovery
         // intent, with a unique proof id per recorded step. Managed workspaces stay on
@@ -6586,11 +6620,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function cancelCommerceActionReview() {
     const restorePreparedEcommerce = pendingAction?.kind === 'order_create' && Boolean(preparedEcommerceDraft)
+    const uncertainCatalogSubmission = pendingAction?.kind === 'catalog_item_create'
+      && Boolean(pendingAction.confirmation)
     if (pendingAction?.kind === 'order_create' && !restorePreparedEcommerce) {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
     }
     setPendingAction(null)
+    if (uncertainCatalogSubmission) {
+      setNotice('Review closed. This submitted catalog change may already be saved. Check Stock records and recovery before trying again.')
+      return
+    }
     if (!restorePreparedEcommerce) {
       setNotice('Change cancelled. Shop data was not modified.')
       return
@@ -7462,10 +7502,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <details className="compact-disclosure catalog-disclosure" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
-          <div className="form-row"><label>SKU<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan the product barcode into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
-          <div className="form-row"><label>Opening stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
-          <label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
-          <div className="form-actions"><button className="core-button primary compact" disabled={commerceControlsDisabled} type="submit">Review catalog item</button></div>
+          <div className="form-row"><label>SKU<span className="sku-scan-row"><input disabled={catalogCreateDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /><BarcodeScanButton disabled={catalogCreateDisabled} label="Scan the product barcode into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input disabled={catalogCreateDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
+          <div className="form-row">{confirmedLocalShop ? <label>Myanmar item name (optional)<input disabled={catalogCreateDisabled} lang="my" maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, nameMy: event.target.value }))} value={itemDraft.nameMy} /></label> : null}<label>Variant (optional)<input disabled={catalogCreateDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, variant: event.target.value }))} value={itemDraft.variant} /></label></div>
+          <div className="form-row"><label>Opening stock<input disabled={catalogCreateDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={catalogCreateDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
+          <label>Price (MMK)<input disabled={catalogCreateDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
+          <div className="form-actions"><button className="core-button primary compact" disabled={catalogCreateDisabled} type="submit">Review catalog item</button></div>
           <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
         </form>
       </details>

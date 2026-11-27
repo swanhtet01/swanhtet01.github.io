@@ -1,0 +1,4 @@
+tools/postgres17_wpr_capability_inventory.ps1 text eol=lf
+tools/shop_windows_uia_capability.ps1 text eol=lf
+tools/shop_windows_uia_fixture.ps1 text eol=lf
+hq/research/postgres17-edb-source-authenticode-observation.json text eol=lf

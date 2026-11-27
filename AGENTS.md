@@ -54,6 +54,16 @@ authority, product scope, or infrastructure actions by implication.
 - One agent owns integration. Parallel agents default to read-only research,
   diagnosis, or review. Concurrent edits require explicitly disjoint paths and
   a named integrator.
+- Use the cloud integration environment as the default writer and evidence
+  producer. Use Local for independent Windows, installed-device, physical
+  hardware, or other machine-specific proof when it materially adds evidence;
+  Local does not become a competing integration writer by implication.
+- After an interruption, first read `CURRENT.md`, re-read the active remote PR
+  and ref, inspect the named worktree and live processes, and compare the last
+  attributable commit/tree before resuming. Continue the same bounded item only
+  when no writer or test is still active; otherwise monitor or review it. Never
+  reconstruct progress from a status label, start duplicate work, or combine
+  tests from different trees.
 - Every handoff records outcome, changed paths, candidate identity, checks,
   unresolved risk, owner, and next action.
 - Close work as **Keep**, **Merge**, **Pause**, **Archive**, or
