@@ -5,24 +5,26 @@ import errno
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-BASE="e0e94d0a114f2ce14054f6e75289ec05a202d1ac"
-BASE_TREE="d2dca60246848c92e0bdee67549b5f7db607a4a4"
-BASE_NATIVE_TREE="72aad0648279170ae748dd94ec68733905416568"
+BASE="ec11e752b741a8ddcda1574697fe9ec10ce9f8bc"
+BASE_TREE="b8a0c781b3c082330b032a9b9570891f78664e8e"
+BASE_NATIVE_TREE="fec4df9a3f85d357c10068e8927a1ad9945cc75a"
 BASE_REF="codex/shop-main-integration-20261022"
 BASE_SHA="4977d4caafa6921e83c97c950a154d3bd8aaf584"
 APP=Path("mobile/shop_pos")
 TEST=APP/"integration_test/first_sale_persistence_test.dart"
-TEST_SHA="f7198ec572e2d1759666e5fef8cd8cd0e3f9250dcce384bfe66a227a624054a7"
+TEST_SHA="14d1ce7c4975bca5c1c392027d778d7c110dfe147e9d70d276863b93ec8baeec"
 PUB=APP/"pubspec.yaml"
 PUB_SHA="228f2c2b2d1478d0546a80dbedf4c4393dd8d6700f01ff350b6ebe58a68c1f8a"
 LOCK=APP/"pubspec.lock"
 LOCK_SHA="772540b8f7fee17c0e7a9f0185c0366775ce5d61f7c94a5ab894beeb69605ccb"
-# Diagnostic source head only. Full instrumented authority requires a separate review.
-SOURCE_WIDGET_ONLY=True
+# The guarded runner executes the passing source widget regression before AVD setup.
+SOURCE_WIDGET_ONLY=False
 WIDGET_TEST=APP/"test/widget_test_support.dart"
 WIDGET_TEST_SHA="915bb5f5d77df01fbdeb41f74ea5b7055dad70580a0c9c1a75b18a1767cf6db8"
 MAIN=APP/"lib/main.dart"
 MAIN_SHA="df039755d0cdd9349bb66a5cc38b1764dd35e9212aa4168af3960f9a6a18d1b3"
+WORKFLOW=Path(".github/workflows/shop-first-sale-integration.yml")
+WORKFLOW_SHA="d772082750980877fdf29a798cfdca0920d7da71052928eabd84a31874f1370b"
 IMAGE="system-images;android-35;default;x86_64"
 TABLET_DEVICE_ID="medium_tablet"
 TABLET_DEVICE_NAME="Medium Tablet"
@@ -78,8 +80,9 @@ REPORT_KEYS={
  "tabletEvidence"
 }
 ALLOWED_CHANGED={
+  "mobile/shop_pos/integration_test/first_sale_persistence_test.dart",
   "tools/run_shop_first_sale_integration.py",
-  "mobile/shop_pos/test/widget_test_support.dart",
+  ".github/workflows/shop-first-sale-integration.yml",
 }
 EMU_URL="https://dl.google.com/android/repository/emulator-linux_x64-16970787.zip"
 EMU_SIZE=350068887
@@ -209,7 +212,8 @@ def mark_cleanup_proven():
 
 INTERNAL_FAILURE_PHASES=frozenset((
  "not_started","host_preflight","capacity_preflight","task_create","task_environment",
- "flutter_version","dependency_resolution","identity_prepare","identity_generate",
+ "flutter_version","dependency_resolution","source_widget_preflight",
+ "identity_prepare","identity_generate",
  "android_toolchain_validation","libpulse_query","libpulse_install","emulator_install",
  "emulator_sdk_registration",
  "image_manifest","image_license","image_install","image_validation","post_sdk_capacity",
@@ -247,6 +251,7 @@ CHILD_DIAGNOSTIC_OPERATIONS=frozenset((
     "adb_read_ignore_orientation","adb_read_fixed_rotation",
     "adb_allow_orientation_requests","adb_unfix_user_rotation",
     "adb_lock_user_rotation","adb_read_user_rotation",
+    "dart_format_check","flutter_widget_preflight",
 ))
 class Refuse(Exception):
     def __init__(self, reason, *, child_failure=None, child_diagnostics=None,
@@ -950,7 +955,22 @@ def run_child_diagnostic_process_tests():
     result=run([sys.executable,"-I","-S","-c","print('synthetic-success')"],
                Path.cwd(),{},5,operation="avd_create")
     need(result==b"synthetic-success\n","offline_child_capture_success_changed")
-    return cases+1
+    cases+=1
+    for operation,channel in (("dart_format_check","stdout"),
+                              ("flutter_widget_preflight","stderr")):
+        source=("import sys;sys."+channel+".write('PRIVATE_SOURCE_PREFLIGHT');sys.exit(23)")
+        try:
+            run([sys.executable,"-I","-S","-c",source],Path.cwd(),{},5,
+                capture=True,operation=operation)
+        except Refuse as error:
+            need(str(error)=="child_failed" and error.child_failure=={
+                 "operation":operation,"exitCode":23} and
+                 error.child_diagnostics is None and
+                 "PRIVATE_SOURCE_PREFLIGHT" not in json.dumps(error.child_failure),
+                 "offline_source_widget_preflight_output_leaked")
+        else: raise Refuse("offline_source_widget_preflight_expected_failure")
+        cases+=1
+    return cases
 
 def run_cleanup_failure_tests():
     # Synthetic process objects only; no OS process, app, AVD, or SDK invocation.
@@ -1249,9 +1269,9 @@ def valid_sha(value):
     return type(value) is str and re.fullmatch("[0-9a-f]{64}",value) is not None
 
 def check_source(root):
-    need(all(valid_sha(v) for v in (TEST_SHA,PUB_SHA,LOCK_SHA,WIDGET_TEST_SHA,MAIN_SHA,IMAGE_SHA256,
+    need(all(valid_sha(v) for v in (TEST_SHA,PUB_SHA,LOCK_SHA,WIDGET_TEST_SHA,MAIN_SHA,WORKFLOW_SHA,IMAGE_SHA256,
          IMAGE_ARCHIVE_SHA256,IMAGE_MANIFEST_SHA256)),"source_bindings_pending")
-    for path,digest in ((TEST,TEST_SHA),(PUB,PUB_SHA),(LOCK,LOCK_SHA),(WIDGET_TEST,WIDGET_TEST_SHA),(MAIN,MAIN_SHA)):
+    for path,digest in ((TEST,TEST_SHA),(PUB,PUB_SHA),(LOCK,LOCK_SHA),(WIDGET_TEST,WIDGET_TEST_SHA),(MAIN,MAIN_SHA),(WORKFLOW,WORKFLOW_SHA)):
         full=root/path
         need(full.is_file() and not full.is_symlink(),"source_file_invalid")
         run(["git","ls-files","--error-unmatch",str(path)],root,os.environ,10)
@@ -2180,7 +2200,7 @@ def run_self_tests():
     need(fs_cases==6,"offline_emulator_metadata_fs_case_count")
     cases+=fs_cases
     process_cases=run_child_diagnostic_process_tests()
-    need(process_cases==4,"offline_child_process_case_count")
+    need(process_cases==6,"offline_child_process_case_count")
     cases+=process_cases
     registered_fs_cases=run_registered_emulator_filesystem_tests()
     need(registered_fs_cases==12,"offline_registered_fs_case_count")
@@ -3042,6 +3062,14 @@ def execute(root,head,lock):
         sdkdep=[p for p in deps.get("packages",[]) if p.get("name")=="integration_test"]
         need(len(sdkdep)==1 and sdkdep[0].get("source")=="sdk","integration_test_sdk")
         need(file_sha(root/LOCK)==before==lock,"lock_changed")
+        set_phase("source_widget_preflight")
+        run(["dart","format","--output=none","--set-exit-if-changed",
+             str(TEST.relative_to(APP)),str(WIDGET_TEST.relative_to(APP))],
+            root/APP,e,bounded_time(deadline,30),operation="dart_format_check")
+        run(["flutter","test","--no-pub","test/widget_checkout_test.dart",
+             "--plain-name","tablet first sale survives portrait to landscape in EN and MY",
+             "--reporter","expanded","--timeout","60s"],
+            root/APP,e,bounded_time(deadline,90),operation="flutter_widget_preflight")
         forbidden=("SUPABASE_URL","SUPABASE_PUBLISHABLE_KEY","SHOP_API_BASE_URL",
           "SHOP_CONNECTED_ORDERS_ENABLED","ORG_GRADLE_PROJECT_SHOP_ANDROID_KEYSTORE_PATH",
           "ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_ALIAS","ORG_GRADLE_PROJECT_SHOP_ANDROID_STORE_PASSWORD",
@@ -3123,7 +3151,10 @@ def execute(root,head,lock):
           "systemImageExpandedBytesStaticPin":IMAGE_EXPANDED_BYTES,
           "systemImageVerifiedVendorFiles":installed["verifiedVendorFiles"],
           "systemImageSha256":installed["systemImageSha256"],
-          "generatedIdentitySha256":identity_digest,"runnerImageOS":os.environ.get("ImageOS","unknown"),
+          "generatedIdentitySha256":identity_digest,
+          "widgetTestSha256":WIDGET_TEST_SHA,"mainSha256":MAIN_SHA,
+          "workflowSha256":WORKFLOW_SHA,"sourceWidgetPreflightPassed":True,
+          "runnerImageOS":os.environ.get("ImageOS","unknown"),
           "runnerImageVersion":os.environ.get("ImageVersion","unknown"),
           "freeBytesBefore":free,"sdkFreeBytesBefore":sdkfree,"kvmAccessVerified":True,
           "accelerationCheckPassed":True,"locales":results,"runProgress":dict(RUN_PROGRESS),
@@ -3192,8 +3223,10 @@ def main():
         root=Path(__file__).resolve().parents[1]
         head=check_context(root); lock=check_source(root)
         facts={**source_identity_facts(root,head),
-               "testSha256":TEST_SHA,"pubspecSha256":PUB_SHA,
-               "lockSha256":lock,"systemImagePackage":IMAGE,
+               "testSha256":TEST_SHA,"widgetTestSha256":WIDGET_TEST_SHA,
+               "mainSha256":MAIN_SHA,"workflowSha256":WORKFLOW_SHA,
+               "pubspecSha256":PUB_SHA,"lockSha256":lock,
+               "systemImagePackage":IMAGE,
                "systemImageManifestSha256":IMAGE_MANIFEST_SHA256,
                "systemImageArchiveSha256StaticPin":IMAGE_ARCHIVE_SHA256}
         if SOURCE_WIDGET_ONLY:
